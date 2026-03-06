@@ -1,0 +1,17 @@
+# Build / dependencies
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Editor
+.vscode/*.log
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db

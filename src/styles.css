@@ -1,0 +1,203 @@
+/* DataLab-Web — global styles
+ * Layout inspired by the desktop DataLab Qt application:
+ *   ┌────────── menu bar ──────────┐
+ *   │ list │      central plot     │
+ *   │      │                       │
+ *   └──────┴───────────────────────┘
+ */
+
+:root {
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --panel-alt: #2d2d30;
+  --border: #3c3c3c;
+  --text: #d4d4d4;
+  --text-dim: #858585;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --danger: #c4302b;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button {
+  background: var(--panel-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+button:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+select,
+input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+
+.menubar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.menubar h1 {
+  margin: 0 12px 0 0;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+.menubar-brand {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+}
+.menubar-logo {
+  height: 22px;
+  width: 22px;
+  display: block;
+  user-select: none;
+  flex-shrink: 0;
+}
+.menubar .spacer {
+  flex: 1;
+}
+.menubar .status {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  min-height: 0;
+}
+.panel-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+}
+.panel-body {
+  flex: 1;
+  overflow: auto;
+}
+.panel-footer {
+  padding: 6px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+}
+
+.signal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.signal-list li {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.signal-list li.selected {
+  background: var(--accent);
+}
+.signal-list .meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.signal-list li.selected .meta {
+  color: #cce6ff;
+}
+
+.plot-area {
+  position: relative;
+  background: #ffffff;
+  min-height: 0;
+}
+.plot-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.overlay .card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 18px 24px;
+  min-width: 320px;
+}
+.overlay h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.overlay .row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.overlay .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.overlay .error {
+  color: #f48771;
+  font-size: 12px;
+}
