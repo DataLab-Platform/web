@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { SigimaRuntime } from "./runtime";
-import bootstrapSource from "./bootstrap.py?raw";
 
 interface SigimaContextValue {
   runtime: SigimaRuntime | null;

@@ -24,6 +24,12 @@ import numpy as np
 import sigima
 import sigima.params
 import sigima.proc.signal as sips
+from guidata.dataset import (
+    DataSet,
+    dataset_to_schema_with_values,
+    resolve_dynamic_choices,
+    update_dataset,
+)
 from sigima.objects import SignalObj
 
 # ---------------------------------------------------------------------------
@@ -126,59 +132,119 @@ def delete_signal(oid: str) -> None:
 # Processing
 # ---------------------------------------------------------------------------
 
-#: Catalogue of processings exposed to the front-end.  The MVP wraps a few
-#: 1-to-1 functions; extending it is a one-line change.
+#: Catalogue of processings exposed to the front-end. Each entry has:
+#:   - ``label``: human-readable name for the menu
+#:   - ``func``: the Sigima processing callable
+#:   - ``paramclass``: optional ``guidata.dataset.DataSet`` subclass; when
+#:     present, the front-end renders a parameter dialog generated from
+#:     ``dataset_to_schema_with_values`` before applying the processing.
 _PROCESSINGS: dict[str, dict[str, Any]] = {
-    "normalize_minmax": {
-        "label": "Normalize (min/max)",
+    "normalize": {
+        "label": "Normalize\u2026",
         "func": sips.normalize,
-        "kwargs": {"method": "minmax"},
+        "paramclass": sigima.params.NormalizeParam,
     },
-    "normalize_maximum": {
-        "label": "Normalize (maximum)",
-        "func": sips.normalize,
-        "kwargs": {"method": "maximum"},
+    "moving_average": {
+        "label": "Moving average\u2026",
+        "func": sips.moving_average,
+        "paramclass": sigima.params.MovingAverageParam,
     },
     "derivative": {
         "label": "Derivative",
         "func": sips.derivative,
-        "kwargs": {},
+        "paramclass": None,
     },
     "integral": {
         "label": "Integral",
         "func": sips.integral,
-        "kwargs": {},
+        "paramclass": None,
     },
     "fft": {
         "label": "FFT",
         "func": sips.fft,
-        "kwargs": {},
+        "paramclass": None,
     },
     "absolute": {
         "label": "Absolute value",
         "func": sips.absolute,
-        "kwargs": {},
+        "paramclass": None,
     },
     "log10": {
         "label": "Log10",
         "func": sips.log10,
-        "kwargs": {},
+        "paramclass": None,
     },
 }
 
 
-def list_processings() -> list[dict[str, str]]:
-    """Return the human-readable processing catalogue."""
-    return [{"id": pid, "label": meta["label"]} for pid, meta in _PROCESSINGS.items()]
+def list_processings() -> list[dict[str, Any]]:
+    """Return the human-readable processing catalogue.
+
+    Each entry carries ``has_params`` so the front-end knows whether to
+    open a parameter dialog before invoking the processing.
+    """
+    return [
+        {
+            "id": pid,
+            "label": meta["label"],
+            "has_params": meta["paramclass"] is not None,
+        }
+        for pid, meta in _PROCESSINGS.items()
+    ]
 
 
-def apply_processing(oid: str, processing_id: str) -> str:
-    """Apply *processing_id* to signal *oid* and return the new object id."""
+def _get_paramclass(processing_id: str) -> type[DataSet] | None:
+    if processing_id not in _PROCESSINGS:
+        raise ValueError(f"Unknown processing: {processing_id!r}")
+    return _PROCESSINGS[processing_id]["paramclass"]
+
+
+def get_processing_schema(processing_id: str) -> dict[str, Any] | None:
+    """Return ``{schema, values}`` for *processing_id*, or ``None`` if the
+    processing takes no parameters.
+    """
+    paramclass = _get_paramclass(processing_id)
+    if paramclass is None:
+        return None
+    return dataset_to_schema_with_values(paramclass())
+
+
+def resolve_processing_choices(
+    processing_id: str, item_name: str, values: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Resolve a dynamic ChoiceItem against the current dialog state."""
+    paramclass = _get_paramclass(processing_id)
+    if paramclass is None:
+        raise ValueError(f"Processing {processing_id!r} has no parameters.")
+    instance = paramclass()
+    if values:
+        update_dataset(instance, values)
+    return resolve_dynamic_choices(instance, item_name)
+
+
+def apply_processing(
+    oid: str, processing_id: str, params: dict[str, Any] | None = None
+) -> str:
+    """Apply *processing_id* to signal *oid* and return the new object id.
+
+    Args:
+        oid: Source signal id.
+        processing_id: Catalogue entry id.
+        params: Optional dict of user-edited parameter values. Used when
+            the catalogue entry declares a ``paramclass``.
+    """
     if processing_id not in _PROCESSINGS:
         raise ValueError(f"Unknown processing: {processing_id!r}")
     spec = _PROCESSINGS[processing_id]
     src = _STORE[oid]
-    dst = spec["func"](src, **spec["kwargs"])
+    paramclass = spec["paramclass"]
+    if paramclass is None:
+        dst = spec["func"](src)
+    else:
+        instance = paramclass()
+        if params:
+            update_dataset(instance, params)
+        dst = spec["func"](src, instance)
     new_oid = _new_id()
     _STORE[new_oid] = dst
     return new_oid
@@ -190,5 +256,7 @@ __all__ = [
     "get_signal_xy",
     "delete_signal",
     "list_processings",
+    "get_processing_schema",
+    "resolve_processing_choices",
     "apply_processing",
 ]

@@ -7,6 +7,10 @@
  */
 
 import bootstrapSource from "./bootstrap.py?raw";
+// Until the released ``guidata`` ships the new JSON Schema helpers, we
+// pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
+// monkey-patch the ``guidata.dataset`` namespace.
+import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
 
 // Pyodide is loaded from a CDN <script> tag in index.html; declare its global.
 declare global {
@@ -55,6 +59,28 @@ export interface SignalData extends SignalMeta {
 export interface ProcessingDescriptor {
   id: string;
   label: string;
+  has_params: boolean;
+}
+
+/**
+ * JSON Schema 2020-12 document augmented with ``x-guidata-*`` extensions,
+ * as produced by :func:`guidata.dataset.dataset_to_schema`.
+ *
+ * Treated as a loose dictionary on the JS side: each frontend widget
+ * inspects only the keys it cares about. The shape is documented in
+ * ``guidata/dataset/jsonschema.py``.
+ */
+export type JsonSchema = Record<string, unknown>;
+
+export interface SchemaWithValues {
+  schema: JsonSchema;
+  values: Record<string, unknown>;
+}
+
+export interface DynamicChoice {
+  value: unknown;
+  label: string;
+  icon?: string;
 }
 
 export interface SignalCreationParams {
@@ -106,6 +132,7 @@ await micropip.install(["sigima", "guidata"])
 `);
 
     onProgress?.("Initialising Sigima namespace…");
+    await py.runPythonAsync(guidataJsonSchemaShim);
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
@@ -160,10 +187,33 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("list_processings")) as ProcessingDescriptor[];
   }
 
-  async applyProcessing(id: string, processingId: string): Promise<string> {
+  async getProcessingSchema(processingId: string): Promise<SchemaWithValues | null> {
+    return (await this.callPy("get_processing_schema", {
+      processing_id: processingId,
+    })) as SchemaWithValues | null;
+  }
+
+  async resolveProcessingChoices(
+    processingId: string,
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<DynamicChoice[]> {
+    return (await this.callPy("resolve_processing_choices", {
+      processing_id: processingId,
+      item_name: itemName,
+      values,
+    })) as DynamicChoice[];
+  }
+
+  async applyProcessing(
+    id: string,
+    processingId: string,
+    params?: Record<string, unknown>,
+  ): Promise<string> {
     return (await this.callPy("apply_processing", {
       oid: id,
       processing_id: processingId,
+      params: params ?? null,
     })) as string;
   }
 

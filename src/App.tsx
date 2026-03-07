@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSigima } from "./sigima/SigimaContext";
 import type {
   ProcessingDescriptor,
+  SchemaWithValues,
   SignalData,
   SignalMeta,
 } from "./sigima/runtime";
@@ -9,6 +10,7 @@ import { MenuBar } from "./components/MenuBar";
 import { SignalList } from "./components/SignalList";
 import { SignalPlot } from "./components/SignalPlot";
 import { NewSignalDialog } from "./components/NewSignalDialog";
+import { DataSetDialog } from "./components/DataSetDialog";
 import type { SignalCreationParams } from "./sigima/runtime";
 
 export default function App() {
@@ -19,6 +21,11 @@ export default function App() {
   const [processings, setProcessings] = useState<ProcessingDescriptor[]>([]);
   const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingProcessing, setPendingProcessing] = useState<{
+    id: string;
+    label: string;
+    payload: SchemaWithValues;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
@@ -71,6 +78,18 @@ export default function App() {
   const handleApply = useCallback(
     async (processingId: string) => {
       if (!runtime || !selectedId) return;
+      const descriptor = processings.find((p) => p.id === processingId);
+      if (descriptor?.has_params) {
+        const payload = await runtime.getProcessingSchema(processingId);
+        if (payload) {
+          setPendingProcessing({
+            id: processingId,
+            label: descriptor.label.replace(/\u2026$/, ""),
+            payload,
+          });
+          return;
+        }
+      }
       setBusy(true);
       try {
         const newId = await runtime.applyProcessing(selectedId, processingId);
@@ -80,7 +99,27 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, selectedId, refresh],
+    [runtime, selectedId, processings, refresh],
+  );
+
+  const handleSubmitProcessing = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!runtime || !selectedId || !pendingProcessing) return;
+      setBusy(true);
+      try {
+        const newId = await runtime.applyProcessing(
+          selectedId,
+          pendingProcessing.id,
+          values,
+        );
+        await refresh();
+        setSelectedId(newId);
+        setPendingProcessing(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, selectedId, pendingProcessing, refresh],
   );
 
   const handleDelete = useCallback(async () => {
@@ -146,6 +185,21 @@ export default function App() {
         <NewSignalDialog
           onCreate={handleCreate}
           onCancel={() => setShowNew(false)}
+        />
+      )}
+      {pendingProcessing && runtime && (
+        <DataSetDialog
+          title={pendingProcessing.label}
+          payload={pendingProcessing.payload}
+          resolveChoices={(itemName, currentValues) =>
+            runtime.resolveProcessingChoices(
+              pendingProcessing.id,
+              itemName,
+              currentValues,
+            )
+          }
+          onSubmit={handleSubmitProcessing}
+          onCancel={() => setPendingProcessing(null)}
         />
       )}
     </div>

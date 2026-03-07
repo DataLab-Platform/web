@@ -201,3 +201,115 @@ input {
   color: #f48771;
   font-size: 12px;
 }
+
+/* DataSetForm — generic schema-driven parameter editor */
+.dataset-dialog {
+  min-width: 380px;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow: auto;
+}
+.dataset-dialog-desc {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.dataset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dataset-form-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+}
+.dataset-form-label {
+  font-size: 12px;
+  color: var(--text);
+}
+.dataset-form-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dataset-form-control > input,
+.dataset-form-control > select,
+.dataset-form-control > textarea {
+  flex: 1;
+  min-width: 0;
+}
+.dataset-form-unit {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.dataset-form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+.dataset-form-group {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  margin: 4px 0;
+}
+.dataset-form-group > legend {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.dataset-form-separator {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+.dataset-form-tabs {
+  display: flex;
+  flex-direction: column;
+}
+.dataset-form-tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+.dataset-form-tab-bar button {
+  border-bottom: none;
+}
+.dataset-form-tab-bar button.active {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}
+.dataset-form-tab-body {
+  padding-top: 8px;
+}
+.dataset-form-multichoice,
+.dataset-form-imagechoice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dataset-form-imagechoice button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+}
+.dataset-form-imagechoice button.selected {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}
+.dataset-form-imagechoice img {
+  height: 32px;
+  width: 32px;
+}
+.dataset-form-json {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dataset-form-error {
+  color: #f48771;
+  font-size: 11px;
+}
