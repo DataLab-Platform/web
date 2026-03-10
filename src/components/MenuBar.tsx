@@ -1,71 +1,141 @@
-import type { ProcessingDescriptor } from "../sigima/runtime";
+import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
+import type { ActionDescriptor, ActionState, MenuNode } from "../actions/types";
+import { buildMenuTree } from "../actions/buildMenu";
 
 interface Props {
   status: string;
   statusKind: "loading" | "ready" | "error";
-  canAct: boolean;
-  canDelete: boolean;
-  canProcess: boolean;
-  processings: ProcessingDescriptor[];
-  onNewSignal: () => void;
-  onDeleteSignal: () => void;
-  onApplyProcessing: (processingId: string) => void;
+  state: ActionState;
+  actions: ActionDescriptor[];
+}
+
+/** Recursive submenu rendering. */
+function SubmenuList({
+  nodes,
+  state,
+  onClose,
+}: {
+  nodes: MenuNode[];
+  state: ActionState;
+  onClose: () => void;
+}) {
+  const [openChild, setOpenChild] = useState<string | null>(null);
+  return (
+    <ul className="menu-dropdown" role="menu">
+      {nodes.map((node) => {
+        if (node.children && node.children.length > 0) {
+          const isOpen = openChild === node.path;
+          return (
+            <li
+              key={node.path}
+              className="menu-item menu-item-submenu"
+              role="menuitem"
+              aria-haspopup="true"
+              aria-expanded={isOpen}
+              onMouseEnter={() => setOpenChild(node.path)}
+              onMouseLeave={() =>
+                setOpenChild((c) => (c === node.path ? null : c))
+              }
+            >
+              <span className="menu-label">{node.label}</span>
+              <span className="menu-arrow">›</span>
+              {isOpen && (
+                <SubmenuList
+                  nodes={node.children}
+                  state={state}
+                  onClose={onClose}
+                />
+              )}
+            </li>
+          );
+        }
+        const action = node.action!;
+        const enabled = action.enabled(state);
+        return (
+          <li
+            key={node.path}
+            className={
+              "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
+            }
+            role="menuitem"
+            aria-disabled={!enabled}
+            onClick={() => {
+              if (!enabled) return;
+              onClose();
+              void action.run();
+            }}
+            title={action.menuPath}
+          >
+            <span className="menu-label">{node.label}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function MenuBar(props: Props) {
-  const {
-    status,
-    statusKind,
-    canAct,
-    canDelete,
-    canProcess,
-    processings,
-    onNewSignal,
-    onDeleteSignal,
-    onApplyProcessing,
-  } = props;
+  const { status, statusKind, state, actions } = props;
+  const tree = useMemo(() => buildMenuTree(actions), [actions]);
+  const [openTop, setOpenTop] = useState<string | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
 
-  const onSelectProcessing = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    if (value) {
-      onApplyProcessing(value);
-      e.target.value = "";
-    }
-  };
+  // Close on outside-click / Escape.
+  useEffect(() => {
+    if (openTop === null) return;
+    const handleDown = (event: MouseEvent) => {
+      if (barRef.current && !barRef.current.contains(event.target as Node)) {
+        setOpenTop(null);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenTop(null);
+    };
+    document.addEventListener("mousedown", handleDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [openTop]);
 
   return (
-    <div className="menubar">
+    <div className="menubar" ref={barRef}>
       <div className="menubar-brand">
-        <img
-          className="menubar-logo"
-          src={logoUrl}
-          alt=""
-          aria-hidden="true"
-        />
+        <img className="menubar-logo" src={logoUrl} alt="" aria-hidden="true" />
         <h1>DataLab Web</h1>
       </div>
-      <button onClick={onNewSignal} disabled={!canAct}>
-        New signal…
-      </button>
-      <select
-        onChange={onSelectProcessing}
-        disabled={!canAct || !canProcess}
-        defaultValue=""
-        title="Apply processing to selected signal"
-      >
-        <option value="" disabled>
-          Processing…
-        </option>
-        {processings.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
-      <button onClick={onDeleteSignal} disabled={!canAct || !canDelete}>
-        Delete
-      </button>
+      <nav className="menubar-nav" role="menubar">
+        {tree.map((node) => {
+          const isOpen = openTop === node.label;
+          return (
+            <div
+              key={node.label}
+              className={"menubar-top" + (isOpen ? " open" : "")}
+              role="menuitem"
+              aria-haspopup="true"
+              aria-expanded={isOpen}
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpenTop((c) => (c === node.label ? null : node.label));
+              }}
+              onMouseEnter={() => {
+                if (openTop !== null) setOpenTop(node.label);
+              }}
+            >
+              <span className="menubar-top-label">{node.label}</span>
+              {isOpen && node.children && node.children.length > 0 && (
+                <SubmenuList
+                  nodes={node.children}
+                  state={state}
+                  onClose={() => setOpenTop(null)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </nav>
       <span className="spacer" />
       <span
         className="status"

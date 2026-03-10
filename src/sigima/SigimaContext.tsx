@@ -57,9 +57,11 @@ export function SigimaProvider({ children }: { children: ReactNode }) {
     if (!import.meta.hot || !runtime) return;
     const handler = (data: { path: string; source: string }) => {
       if (!data?.source) return;
-      runtime
-        .reloadBootstrap(data.source)
-        .catch((err) => console.error("[sigima] hot-reload failed", err));
+      const isProcessor = data.path.endsWith("processor.py");
+      const promise = isProcessor
+        ? runtime.reloadProcessor(data.source)
+        : runtime.reloadBootstrap(data.source);
+      promise.catch((err) => console.error("[sigima] hot-reload failed", err));
     };
     import.meta.hot.on("datalab-web:python-update", handler);
     return () => {

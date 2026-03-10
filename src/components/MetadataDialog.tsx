@@ -1,0 +1,64 @@
+import { useState } from "react";
+import type { ObjectMeta } from "../sigima/runtime";
+
+interface Props {
+  initial: ObjectMeta;
+  onSubmit: (values: ObjectMeta) => void;
+  onCancel: () => void;
+}
+
+export function MetadataDialog({ initial, onSubmit, onCancel }: Props) {
+  const [values, setValues] = useState<ObjectMeta>(initial);
+
+  const update = (key: keyof ObjectMeta, value: string) =>
+    setValues((v) => ({ ...v, [key]: value }));
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onSubmit(values);
+  };
+
+  return (
+    <div className="dialog-backdrop" onClick={onCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <form onSubmit={handleSubmit}>
+          <h2>Edit metadata</h2>
+          <div className="dialog-form">
+            <label>Title</label>
+            <input
+              autoFocus
+              value={values.title}
+              onChange={(e) => update("title", e.target.value)}
+            />
+            <label>X label</label>
+            <input
+              value={values.xlabel}
+              onChange={(e) => update("xlabel", e.target.value)}
+            />
+            <label>X unit</label>
+            <input
+              value={values.xunit}
+              onChange={(e) => update("xunit", e.target.value)}
+            />
+            <label>Y label</label>
+            <input
+              value={values.ylabel}
+              onChange={(e) => update("ylabel", e.target.value)}
+            />
+            <label>Y unit</label>
+            <input
+              value={values.yunit}
+              onChange={(e) => update("yunit", e.target.value)}
+            />
+          </div>
+          <div className="dialog-actions">
+            <button type="button" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit">OK</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

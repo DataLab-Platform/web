@@ -7,6 +7,7 @@
  */
 
 import bootstrapSource from "./bootstrap.py?raw";
+import processorSource from "./processor.py?raw";
 // Until the released ``guidata`` ships the new JSON Schema helpers, we
 // pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
 // monkey-patch the ``guidata.dataset`` namespace.
@@ -24,6 +25,10 @@ export interface PyodideAPI {
   loadPackage: (names: string | string[]) => Promise<void>;
   globals: {
     get: (name: string) => PyProxy | undefined;
+  };
+  FS: {
+    writeFile: (path: string, data: string | Uint8Array) => void;
+    mkdirTree?: (path: string) => void;
   };
   // Pyodide exposes more, but the MVP only needs the above.
 }
@@ -60,6 +65,87 @@ export interface ProcessingDescriptor {
   id: string;
   label: string;
   has_params: boolean;
+}
+
+export type Pattern = "1_to_1" | "2_to_1" | "n_to_1";
+
+export interface FeatureDescriptor {
+  id: string;
+  label: string;
+  menu_path: string;
+  pattern: Pattern;
+  icon: string | null;
+  has_params: boolean;
+  operand_label: string;
+  object_kind: string;
+}
+
+export type PanelKind = "signal" | "image";
+
+export interface ObjectNode extends SignalMeta {
+  kind: PanelKind;
+}
+
+export interface GroupNode {
+  gid: string;
+  name: string;
+  objects: ObjectNode[];
+}
+
+export interface PanelTree {
+  kind: PanelKind;
+  groups: GroupNode[];
+}
+
+/** Editable metadata fields of a signal object (Phase 4). */
+export interface ObjectMeta {
+  title: string;
+  xlabel: string;
+  ylabel: string;
+  xunit: string;
+  yunit: string;
+}
+
+/** Plotly shapes/annotations payload persisted alongside a signal. */
+export interface PlotlyAnnotations {
+  shapes: unknown[];
+  annotations: unknown[];
+}
+
+/** A single ROI segment on a 1D signal (Phase 5). */
+export interface SignalRoiSegment {
+  xmin: number;
+  xmax: number;
+  title?: string;
+}
+
+/** Image data payload returned by ``get_image_data`` (Phase 7). */
+export interface ImageData {
+  id: string;
+  title: string;
+  width: number;
+  height: number;
+  data: number[][];
+  xlabel: string;
+  ylabel: string;
+  xunit: string;
+  yunit: string;
+}
+
+/** Parameters for the synthetic image creator (Phase 7 spike). */
+export interface ImageCreationParams {
+  kind: "gauss" | "ramp" | "random";
+  title: string;
+  width: number;
+  height: number;
+  a?: number;
+  sigma?: number;
+}
+
+/** Diagnostic info returned by ``loadProject``. */
+export interface ProjectLoadResult {
+  signals: number;
+  groups: number;
 }
 
 /**
@@ -133,6 +219,8 @@ await micropip.install(["sigima", "guidata"])
 
     onProgress?.("Initialising Sigima namespace…");
     await py.runPythonAsync(guidataJsonSchemaShim);
+    // Make ``processor.py`` importable from bootstrap.py via Pyodide's FS.
+    py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
@@ -181,6 +269,170 @@ await micropip.install(["sigima", "guidata"])
 
   async deleteSignal(id: string): Promise<void> {
     await this.callPy("delete_signal", { oid: id });
+  }
+
+  // ------------------------------------------------------------------
+  // Object model (groups + objects per panel kind)
+  // ------------------------------------------------------------------
+
+  async getPanelTree(kind: PanelKind = "signal"): Promise<PanelTree> {
+    return (await this.callPy("get_panel_tree", { kind })) as PanelTree;
+  }
+
+  async createGroup(kind: PanelKind = "signal", name?: string): Promise<string> {
+    return (await this.callPy("create_group", {
+      kind,
+      name: name ?? null,
+    })) as string;
+  }
+
+  async renameGroup(gid: string, name: string, kind: PanelKind = "signal"): Promise<void> {
+    await this.callPy("rename_group", { gid, name, kind });
+  }
+
+  async deleteGroup(gid: string, kind: PanelKind = "signal"): Promise<void> {
+    await this.callPy("delete_group", { gid, kind });
+  }
+
+  async renameObject(oid: string, name: string): Promise<void> {
+    await this.callPy("rename_object", { oid, name });
+  }
+
+  async moveObject(oid: string, targetGroupId: string): Promise<void> {
+    await this.callPy("move_object", { oid, target_group_id: targetGroupId });
+  }
+
+  async deleteObject(oid: string): Promise<void> {
+    await this.callPy("delete_object", { oid });
+  }
+
+  // ------------------------------------------------------------------
+  // Metadata & annotations (Phase 4)
+  // ------------------------------------------------------------------
+
+  async getObjectMeta(oid: string): Promise<ObjectMeta> {
+    return (await this.callPy("get_object_meta", { oid })) as ObjectMeta;
+  }
+
+  async setObjectMeta(oid: string, fields: Partial<ObjectMeta>): Promise<void> {
+    await this.callPy("set_object_meta", { oid, fields });
+  }
+
+  async getPlotlyAnnotations(oid: string): Promise<PlotlyAnnotations> {
+    return (await this.callPy("get_plotly_annotations", {
+      oid,
+    })) as PlotlyAnnotations;
+  }
+
+  async setPlotlyAnnotations(
+    oid: string,
+    payload: PlotlyAnnotations,
+  ): Promise<void> {
+    await this.callPy("set_plotly_annotations", { oid, payload });
+  }
+
+  // ------------------------------------------------------------------
+  // Signal ROI (Phase 5)
+  // ------------------------------------------------------------------
+
+  async getSignalRoi(oid: string): Promise<SignalRoiSegment[]> {
+    return (await this.callPy("get_signal_roi", { oid })) as SignalRoiSegment[];
+  }
+
+  async setSignalRoi(
+    oid: string,
+    segments: SignalRoiSegment[],
+  ): Promise<void> {
+    await this.callPy("set_signal_roi", { oid, segments });
+  }
+
+  // ------------------------------------------------------------------
+  // Project save / load + CSV I/O (Phase 6)
+  // ------------------------------------------------------------------
+
+  async saveProject(): Promise<string> {
+    return (await this.callPy("save_project")) as string;
+  }
+
+  async loadProject(content: string, replace: boolean = true): Promise<ProjectLoadResult> {
+    return (await this.callPy("load_project", {
+      content,
+      replace,
+    })) as ProjectLoadResult;
+  }
+
+  async exportSignalCsv(oid: string, separator: string = ","): Promise<string> {
+    return (await this.callPy("export_signal_csv", {
+      oid,
+      separator,
+    })) as string;
+  }
+
+  async importSignalCsv(
+    content: string,
+    title: string | null = null,
+    separator: string = ",",
+  ): Promise<string> {
+    return (await this.callPy("import_signal_csv", {
+      content,
+      title,
+      separator,
+    })) as string;
+  }
+
+  // ------------------------------------------------------------------
+  // Image panel (Phase 7 spike)
+  // ------------------------------------------------------------------
+
+  async createImage(params: ImageCreationParams): Promise<string> {
+    return (await this.callPy(
+      "create_image",
+      params as unknown as Record<string, unknown>,
+    )) as string;
+  }
+
+  async getImageData(oid: string): Promise<ImageData> {
+    return (await this.callPy("get_image_data", { oid })) as ImageData;
+  }
+
+  // ------------------------------------------------------------------
+  // Feature catalogue & processing dispatch
+  // ------------------------------------------------------------------
+
+  async listFeatures(): Promise<FeatureDescriptor[]> {
+    return (await this.callPy("list_features")) as FeatureDescriptor[];
+  }
+
+  async getFeatureSchema(featureId: string): Promise<SchemaWithValues | null> {
+    return (await this.callPy("get_feature_schema", {
+      feature_id: featureId,
+    })) as SchemaWithValues | null;
+  }
+
+  async resolveFeatureChoices(
+    featureId: string,
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<DynamicChoice[]> {
+    return (await this.callPy("resolve_feature_choices", {
+      feature_id: featureId,
+      item_name: itemName,
+      values,
+    })) as DynamicChoice[];
+  }
+
+  async applyFeature(
+    featureId: string,
+    sourceIds: string[],
+    operandId: string | null = null,
+    params: Record<string, unknown> | null = null,
+  ): Promise<string[]> {
+    return (await this.callPy("apply_feature", {
+      feature_id: featureId,
+      source_ids: sourceIds,
+      operand_id: operandId,
+      params,
+    })) as string[];
   }
 
   async listProcessings(): Promise<ProcessingDescriptor[]> {
@@ -236,5 +488,26 @@ await micropip.install(["sigima", "guidata"])
   async reloadBootstrap(source: string = bootstrapSource): Promise<void> {
     await this.py.runPythonAsync(source);
     console.info("[sigima] bootstrap.py re-executed (store preserved)");
+  }
+
+  /**
+   * Update ``dlw_processor`` in Pyodide's filesystem and ask the live
+   * bootstrap to refresh its catalogue.  Called by the Python HMR handler
+   * when ``processor.py`` is edited.
+   */
+  async reloadProcessor(source: string = processorSource): Promise<void> {
+    this.py.FS.writeFile("/home/pyodide/dlw_processor.py", source);
+    await this.py.runPythonAsync(`
+import importlib
+import dlw_processor
+importlib.reload(dlw_processor)
+import sys
+if "__main__" in sys.modules:
+    pass
+# Refresh the bootstrap-side catalog reference in-place.
+_CATALOG.clear()
+_CATALOG.update(dlw_processor.build_signal_catalog())
+`);
+    console.info("[sigima] dlw_processor.py reloaded; catalog refreshed");
   }
 }

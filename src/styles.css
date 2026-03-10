@@ -101,6 +101,65 @@ input {
   color: var(--text-dim);
 }
 
+/* Hierarchical menu bar (Phase 3) */
+.menubar-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.menubar-top {
+  position: relative;
+  padding: 4px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+.menubar-top:hover,
+.menubar-top.open {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}
+.menu-dropdown {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+.menu-item-submenu > .menu-dropdown {
+  top: -5px;
+  left: 100%;
+}
+.menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.menu-item:hover:not(.disabled) {
+  background: var(--accent);
+}
+.menu-item.disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+.menu-arrow {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -150,6 +209,114 @@ input {
 }
 .signal-list li.selected .meta {
   color: #cce6ff;
+}
+
+/* Object tree (hierarchical, multi-selection) */
+.object-tree {
+  display: flex;
+  flex-direction: column;
+}
+.object-tree-empty {
+  padding: 10px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.object-tree-group + .object-tree-group {
+  border-top: 1px solid var(--border);
+}
+.object-tree-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--panel-alt);
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+.object-tree-group-header:hover {
+  background: #353537;
+}
+.object-tree-toggle {
+  background: transparent;
+  border: none;
+  padding: 0 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.object-tree-toggle:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+.object-tree-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.object-tree-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: normal;
+  padding: 0 4px;
+}
+.object-tree-group-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.object-tree-group-delete:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+.object-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.object-tree-item {
+  padding: 4px 10px 4px 22px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.object-tree-item:hover {
+  background: var(--panel-alt);
+}
+.object-tree-item.selected {
+  background: rgba(14, 99, 156, 0.45);
+}
+.object-tree-item.current {
+  background: var(--accent);
+}
+.object-tree-item.current .object-tree-meta {
+  color: #cce6ff;
+}
+.object-tree-title {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.object-tree-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.object-tree-empty-group {
+  padding: 6px 10px 6px 22px;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.object-tree-edit {
+  flex: 1;
+  font-size: 12px;
+  padding: 1px 4px;
 }
 
 .plot-area {
