@@ -162,8 +162,54 @@ input {
 
 .workspace {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px 1fr 360px;
   min-height: 0;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  min-height: 0;
+  min-width: 0;
+}
+.side-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+}
+.side-panel-tab {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 10px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.side-panel-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent, #2d7ff9);
+  background: var(--panel);
+}
+.side-panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 10px;
+}
+.side-panel-empty,
+.side-panel-info {
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 0;
+}
+.side-panel-form .dataset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .panel {

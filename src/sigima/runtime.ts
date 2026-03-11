@@ -169,6 +169,19 @@ export interface DynamicChoice {
   icon?: string;
 }
 
+/** One entry of the "Create" menu, returned by
+ *  :meth:`SigimaRuntime.listSignalCreationTypes`. */
+export interface SignalCreationType {
+  /** Stable id (matches a ``SignalTypes`` enum value on the Python side). */
+  value: string;
+  /** Translated, human-readable label. */
+  label: string;
+  /** Icon hint (frontend may map this to an SVG / unicode glyph). */
+  icon: string;
+  /** Submenu category: ``"Waveform"`` | ``"Peak"`` | ``"Noise"`` | ``"Other"``. */
+  category: string;
+}
+
 export interface SignalCreationParams {
   kind: "sine" | "cosine" | "gauss" | "noise";
   title: string;
@@ -257,6 +270,64 @@ await micropip.install(["sigima", "guidata"])
   async createSignal(params: SignalCreationParams): Promise<string> {
     const id = (await this.callPy("create_signal", params as unknown as Record<string, unknown>)) as string;
     return id;
+  }
+
+  /** List the supported signal-generation types (mirrors DataLab's
+   *  desktop "Create" menu).  Every entry maps to a guidata
+   *  ``NewSignalParam`` subclass on the Python side. */
+  async listSignalCreationTypes(): Promise<SignalCreationType[]> {
+    return (await this.callPy(
+      "list_signal_creation_types",
+    )) as SignalCreationType[];
+  }
+
+  /** Create a signal of the given type with default parameters and
+   *  return the new object id.  The originating ``NewSignalParam``
+   *  instance is cached so it can be edited via the Creation panel. */
+  async createSignalTyped(stype: string, groupId?: string): Promise<string> {
+    return (await this.callPy("create_signal_typed", {
+      stype,
+      group_id: groupId ?? null,
+    })) as string;
+  }
+
+  /** Return the JSON Schema + values for the cached creation
+   *  parameters of *id*, or ``null`` when the object was not created
+   *  through ``createSignalTyped``. */
+  async getCreationParamSchema(
+    id: string,
+  ): Promise<(SchemaWithValues & { stype: string }) | null> {
+    return (await this.callPy("get_creation_param_schema", {
+      oid: id,
+    })) as (SchemaWithValues & { stype: string }) | null;
+  }
+
+  /** Apply *values* to the cached creation parameters and rebuild the
+   *  signal in place. */
+  async updateSignalCreationParams(
+    id: string,
+    values: Record<string, unknown>,
+  ): Promise<{ size: number; title: string }> {
+    return (await this.callPy("update_signal_creation_params", {
+      oid: id,
+      values,
+    })) as { size: number; title: string };
+  }
+
+  /** Return the JSON Schema + values for the underlying object DataSet
+   *  itself (used by the "Properties" side panel). */
+  async getObjectPropertySchema(id: string): Promise<SchemaWithValues> {
+    return (await this.callPy("get_object_property_schema", {
+      oid: id,
+    })) as SchemaWithValues;
+  }
+
+  /** Apply *values* directly to the underlying object DataSet. */
+  async setObjectPropertyValues(
+    id: string,
+    values: Record<string, unknown>,
+  ): Promise<void> {
+    await this.callPy("set_object_property_values", { oid: id, values });
   }
 
   async listSignals(): Promise<SignalMeta[]> {

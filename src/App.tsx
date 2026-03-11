@@ -4,24 +4,25 @@ import type {
   FeatureDescriptor,
   PanelTree,
   SchemaWithValues,
-  SignalCreationParams,
   SignalData,
 } from "./sigima/runtime";
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
+  buildSignalCreationActions,
   buildStaticActions,
 } from "./actions/registry";
 import { ObjectTree } from "./components/ObjectTree";
 import { SignalPlot } from "./components/SignalPlot";
-import { NewSignalDialog } from "./components/NewSignalDialog";
 import { DataSetDialog } from "./components/DataSetDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
+import { SidePanel } from "./components/SidePanel";
 import type {
   ObjectMeta,
   PlotlyAnnotations,
+  SignalCreationType,
   SignalRoiSegment,
 } from "./sigima/runtime";
 
@@ -39,7 +40,6 @@ export default function App() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [data, setData] = useState<SignalData | null>(null);
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
-  const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingFeature | null>(null);
   const [pendingOperand, setPendingOperand] = useState<{
@@ -53,6 +53,11 @@ export default function App() {
   });
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
   const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
+  const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
+  const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
+  const [preferredSideTab, setPreferredSideTab] = useState<
+    "creation" | "properties"
+  >("properties");
 
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
@@ -79,6 +84,7 @@ export default function App() {
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
     runtime.listFeatures().then(setFeatures);
+    runtime.listSignalCreationTypes().then(setSignalTypes);
     refresh();
   }, [status, runtime, refresh]);
 
@@ -127,17 +133,34 @@ export default function App() {
     [],
   );
 
-  const handleCreate = useCallback(
-    async (params: SignalCreationParams) => {
+  const handleCreateTyped = useCallback(
+    async (stype: string) => {
       if (!runtime) return;
       setBusy(true);
       try {
-        const id = await runtime.createSignal(params);
+        const id = await runtime.createSignalTyped(stype);
+        setPreferredSideTab("creation");
         await refresh(id);
+        setSideRefreshNonce((n) => n + 1);
       } finally {
         setBusy(false);
-        setShowNew(false);
       }
+    },
+    [runtime, refresh],
+  );
+
+  const handleSideObjectChanged = useCallback(
+    async (oid: string) => {
+      if (!runtime) return;
+      // The Creation/Properties form just mutated the object — refresh
+      // the plot data and the tree (title / size may have changed).
+      try {
+        const updated = await runtime.getSignalData(oid);
+        setData(updated);
+      } catch {
+        /* ignore — object may have been deleted */
+      }
+      await refresh(oid);
     },
     [runtime, refresh],
   );
@@ -465,7 +488,6 @@ export default function App() {
   const actions = useMemo(
     () => [
       ...buildStaticActions({
-        onNewSignal: () => setShowNew(true),
         onNewGroup: handleNewGroup,
         onDeleteSelection: handleDelete,
         onEditProperties: handleEditProperties,
@@ -476,10 +498,13 @@ export default function App() {
         onExportCsv: handleExportCsv,
         onNewImage: handleNewImage,
       }),
+      ...buildSignalCreationActions(signalTypes, handleCreateTyped),
       ...buildFeatureActions(features, handleApplyFeature),
     ],
     [
       features,
+      signalTypes,
+      handleCreateTyped,
       handleNewGroup,
       handleDelete,
       handleApplyFeature,
@@ -556,13 +581,16 @@ export default function App() {
             />
           )}
         </main>
+        {runtime && (
+          <SidePanel
+            runtime={runtime}
+            currentId={currentId}
+            refreshNonce={sideRefreshNonce}
+            onObjectChanged={handleSideObjectChanged}
+            preferredTab={preferredSideTab}
+          />
+        )}
       </div>
-      {showNew && (
-        <NewSignalDialog
-          onCreate={handleCreate}
-          onCancel={() => setShowNew(false)}
-        />
-      )}
       {pendingOperand && (
         <OperandPicker
           title={pendingOperand.feature.label.replace(/\u2026$/, "")}

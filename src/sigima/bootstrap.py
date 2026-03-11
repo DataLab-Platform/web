@@ -29,6 +29,12 @@ from typing import Any, Iterable
 import numpy as np
 import sigima
 from sigima.objects import SignalObj
+from sigima.objects.signal.creation import (
+    SIGNAL_TYPE_PARAM_CLASSES,
+    SignalTypes,
+    NewSignalParam,
+    create_signal_parameters,
+)
 from sigima.objects.signal.roi import SignalROI, create_signal_roi
 
 import dlw_processor as _proc
@@ -307,6 +313,210 @@ def get_signal_xy(oid: str) -> dict[str, Any]:
         "y": obj.y.tolist(),
         **_object_meta(_ObjectEntry(oid=oid, kind="signal", obj=obj)),
     }
+
+
+# ---------------------------------------------------------------------------
+# Typed signal creation (mirrors DataLab desktop's "Create" menu)
+# ---------------------------------------------------------------------------
+
+
+# Curated icon hints per signal type — purely a UI suggestion (Plotly /
+# inline SVG name).  The desktop uses Qt PNGs which we don't ship here.
+_SIGNAL_TYPE_ICONS: dict[str, str] = {
+    "zero": "wave-zero",
+    "sine": "wave-sine",
+    "cosine": "wave-cosine",
+    "sawtooth": "wave-sawtooth",
+    "triangle": "wave-triangle",
+    "square": "wave-square",
+    "sinc": "wave-sinc",
+    "linearchirp": "wave-chirp",
+    "step": "wave-step",
+    "exponential": "wave-exp",
+    "logistic": "wave-logistic",
+    "pulse": "wave-pulse",
+    "step_pulse": "wave-step-pulse",
+    "square_pulse": "wave-square-pulse",
+    "polynomial": "wave-poly",
+    "custom": "wave-custom",
+    "gauss": "peak-gauss",
+    "lorentz": "peak-lorentz",
+    "voigt": "peak-voigt",
+    "planck": "peak-planck",
+    "normal_distribution": "noise-normal",
+    "poisson_distribution": "noise-poisson",
+    "uniform_distribution": "noise-uniform",
+}
+
+
+# Per-object cached creation parameter instance.  Keyed by oid; populated
+# when a signal is created via :func:`create_signal_typed` and consumed
+# by :func:`get_creation_param_schema` / :func:`update_signal_creation_params`.
+_CREATION_PARAMS: dict[str, NewSignalParam] = globals().get(
+    "_CREATION_PARAMS", {}
+)
+
+
+def _signal_type_label(stype: SignalTypes) -> str:
+    """Return the human-readable label for *stype* (translated)."""
+    # ``LabeledEnum`` keeps the label as second tuple item; fall back to
+    # the python attr name if anything weird shows up.
+    try:
+        return stype.value if isinstance(stype.value, str) else str(stype)
+    except Exception:  # pylint: disable=broad-except
+        return str(stype)
+
+
+def list_signal_creation_types() -> list[dict[str, Any]]:
+    """Return the curated list of supported signal generation types.
+
+    Each entry: ``{"value": str, "label": str, "icon": str, "category": str}``.
+
+    Categories mirror the DataLab desktop "Create" submenus:
+    *Waveform*, *Peak*, *Noise*.
+    """
+    waveforms = {
+        "zero", "sine", "cosine", "sawtooth", "triangle", "square",
+        "sinc", "linearchirp", "step", "exponential", "logistic",
+        "pulse", "step_pulse", "square_pulse", "polynomial", "custom",
+    }
+    peaks = {"gauss", "lorentz", "voigt", "planck"}
+    noise = {
+        "normal_distribution", "poisson_distribution", "uniform_distribution"
+    }
+    out: list[dict[str, Any]] = []
+    for stype in SignalTypes:
+        if stype not in SIGNAL_TYPE_PARAM_CLASSES:
+            continue
+        value = stype.value
+        # ``LabeledEnum``: second tuple item is the translated label.
+        try:
+            label = stype.label  # type: ignore[attr-defined]
+        except AttributeError:
+            label = value
+        if value in waveforms:
+            category = "Waveform"
+        elif value in peaks:
+            category = "Peak"
+        elif value in noise:
+            category = "Noise"
+        else:
+            category = "Other"
+        out.append(
+            {
+                "value": value,
+                "label": label,
+                "icon": _SIGNAL_TYPE_ICONS.get(value, "wave-generic"),
+                "category": category,
+            }
+        )
+    return out
+
+
+def _stype_from_value(value: str) -> SignalTypes:
+    for stype in SignalTypes:
+        if stype.value == value:
+            return stype
+    raise ValueError(f"Unknown signal type: {value!r}")
+
+
+def create_signal_typed(stype: str, group_id: str | None = None) -> str:
+    """Create a signal of *stype* with default parameters and store it.
+
+    Returns the new object id.  The originating :class:`NewSignalParam`
+    instance is cached in :data:`_CREATION_PARAMS` so the UI can later
+    display & edit those parameters live.
+    """
+    typ = _stype_from_value(stype)
+    param = create_signal_parameters(typ)
+    obj = sigima.create_signal_from_param(param)
+    oid = _MODEL.add_object("signal", obj, group_id=group_id)
+    _CREATION_PARAMS[oid] = param
+    obj.metadata["_dlw_creation_stype_"] = stype
+    return oid
+
+
+def get_creation_param_schema(oid: str) -> dict[str, Any] | None:
+    """Return the JSON Schema + values for the creation parameters of *oid*.
+
+    Returns ``None`` when the signal was not created through the typed
+    creation path (e.g. legacy ``create_signal`` or CSV import).
+    """
+    from guidata.dataset import dataset_to_schema_with_values
+
+    param = _CREATION_PARAMS.get(oid)
+    if param is None:
+        return None
+    payload = dataset_to_schema_with_values(param)
+    payload["stype"] = _MODEL.get(oid).metadata.get("_dlw_creation_stype_")
+    return payload
+
+
+def update_signal_creation_params(
+    oid: str, values: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply *values* to the cached creation parameters and rebuild *oid*.
+
+    The signal's ``x`` / ``y`` arrays are regenerated in place.  When the
+    parameter class implements ``generate_title()``, the object title is
+    refreshed too (mirrors desktop behaviour).
+    """
+    from guidata.dataset import update_dataset
+
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    param = _CREATION_PARAMS.get(oid)
+    if param is None:
+        raise ValueError(
+            f"Object {oid!r} has no cached creation parameters; "
+            "use create_signal_typed first."
+        )
+    update_dataset(param, values)
+    obj = _MODEL.get(oid)
+    x, y = param.generate_1d_data()
+    obj.set_xydata(x, y)
+    # Mirror ``create_signal_from_param``: if the user kept the default
+    # title, regenerate it from ``param.generate_title()``.
+    from sigima.objects.signal.creation import DEFAULT_TITLE
+
+    use_generated = not param.title or param.title == DEFAULT_TITLE
+    if use_generated:
+        gen = getattr(param, "generate_title", lambda: "")()
+        obj.title = gen or param.title
+    else:
+        obj.title = param.title
+    obj.xlabel = param.xlabel
+    obj.ylabel = param.ylabel
+    obj.xunit = param.xunit
+    obj.yunit = param.yunit
+    return {"size": int(obj.x.size), "title": obj.title}
+
+
+# ---------------------------------------------------------------------------
+# Object property panel (full SignalObj DataSet edition)
+# ---------------------------------------------------------------------------
+
+
+def get_object_property_schema(oid: str) -> dict[str, Any]:
+    """Return the JSON Schema + values for *oid* itself.
+
+    The underlying :class:`SignalObj` inherits from
+    :class:`guidata.dataset.DataSet`, so its full layout (tabs, groups,
+    units, etc.) is reused to render the "Properties" side panel.
+    """
+    from guidata.dataset import dataset_to_schema_with_values
+
+    return dataset_to_schema_with_values(_MODEL.get(oid))
+
+
+def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
+    """Apply *values* to the underlying :class:`SignalObj` instance."""
+    from guidata.dataset import update_dataset
+
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    obj = _MODEL.get(oid)
+    update_dataset(obj, values)
 
 
 # ---------------------------------------------------------------------------
@@ -864,6 +1074,12 @@ def apply_processing(
 __all__ = [
     "ObjectModel",
     "create_signal",
+    "create_signal_typed",
+    "list_signal_creation_types",
+    "get_creation_param_schema",
+    "update_signal_creation_params",
+    "get_object_property_schema",
+    "set_object_property_values",
     "list_signals",
     "get_signal_xy",
     "delete_signal",

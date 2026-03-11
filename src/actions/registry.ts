@@ -1,9 +1,8 @@
-import type { FeatureDescriptor } from "../sigima/runtime";
+import type { FeatureDescriptor, SignalCreationType } from "../sigima/runtime";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
 export interface StaticActionCallbacks {
-  onNewSignal: () => void;
   onNewGroup: () => void;
   onDeleteSelection: () => void;
   onEditProperties: () => void;
@@ -21,13 +20,6 @@ export function buildStaticActions(
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
   return [
-    {
-      id: "file.new_signal",
-      label: "New signal…",
-      menuPath: "File/New signal…",
-      enabled: ready,
-      run: cb.onNewSignal,
-    },
     {
       id: "file.new_image",
       label: "New image…",
@@ -111,5 +103,21 @@ export function buildFeatureActions(
       return true;
     },
     run: () => onApply(f.id),
+  }));
+}
+
+/** Wire one Create-menu entry per Sigima signal generation type.  Mirrors
+ *  the desktop app's "Create > Signal > <category> > <type>" submenus. */
+export function buildSignalCreationActions(
+  types: SignalCreationType[],
+  onCreate: (stype: string) => void,
+): ActionDescriptor[] {
+  const ready = (s: ActionState) => s.status === "ready" && !s.busy;
+  return types.map((t) => ({
+    id: `create.signal.${t.value}`,
+    label: t.label,
+    menuPath: `Create/Signal/${t.category}/${t.label}`,
+    enabled: ready,
+    run: () => onCreate(t.value),
   }));
 }
