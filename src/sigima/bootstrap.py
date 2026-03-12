@@ -320,33 +320,64 @@ def get_signal_xy(oid: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-# Curated icon hints per signal type — purely a UI suggestion (Plotly /
-# inline SVG name).  The desktop uses Qt PNGs which we don't ship here.
+# Curated icon hints per signal type — matches DataLab desktop's
+# ``datalab/data/icons/create/*.svg`` filenames so the React UI can
+# resolve them via Vite's ``import.meta.glob``.
 _SIGNAL_TYPE_ICONS: dict[str, str] = {
-    "zero": "wave-zero",
-    "sine": "wave-sine",
-    "cosine": "wave-cosine",
-    "sawtooth": "wave-sawtooth",
-    "triangle": "wave-triangle",
-    "square": "wave-square",
-    "sinc": "wave-sinc",
-    "linearchirp": "wave-chirp",
-    "step": "wave-step",
-    "exponential": "wave-exp",
-    "logistic": "wave-logistic",
-    "pulse": "wave-pulse",
-    "step_pulse": "wave-step-pulse",
-    "square_pulse": "wave-square-pulse",
-    "polynomial": "wave-poly",
-    "custom": "wave-custom",
-    "gauss": "peak-gauss",
-    "lorentz": "peak-lorentz",
-    "voigt": "peak-voigt",
-    "planck": "peak-planck",
-    "normal_distribution": "noise-normal",
-    "poisson_distribution": "noise-poisson",
-    "uniform_distribution": "noise-uniform",
+    "zero": "1d-zero.svg",
+    "normal_distribution": "1d-normal.svg",
+    "poisson_distribution": "1d-poisson.svg",
+    "uniform_distribution": "1d-uniform.svg",
+    "gauss": "gaussian.svg",
+    "lorentz": "lorentzian.svg",
+    "voigt": "voigt.svg",
+    "planck": "planck.svg",
+    "sine": "sine.svg",
+    "cosine": "cosine.svg",
+    "sawtooth": "sawtooth.svg",
+    "triangle": "triangle.svg",
+    "square": "square.svg",
+    "sinc": "sinc.svg",
+    "linearchirp": "linear_chirp.svg",
+    "step": "step.svg",
+    "exponential": "exponential.svg",
+    "logistic": "logistic.svg",
+    "pulse": "pulse.svg",
+    "step_pulse": "step_pulse.svg",
+    "square_pulse": "square_pulse.svg",
+    "polynomial": "polynomial.svg",
+    "custom": "",  # no icon in DataLab desktop either
 }
+
+
+# Flat ordering matching DataLab desktop's "Create" menu (``actionhandler.py``
+# ``SignalActionHandler.create_first_actions``).  ``True`` in the ``separator``
+# column means a separator is drawn *before* the entry.
+_SIGNAL_TYPE_ORDER: list[tuple[str, bool]] = [
+    ("zero", False),
+    ("normal_distribution", False),
+    ("poisson_distribution", False),
+    ("uniform_distribution", False),
+    ("gauss", True),
+    ("lorentz", False),
+    ("voigt", False),
+    ("planck", False),
+    ("sine", True),
+    ("cosine", False),
+    ("sawtooth", False),
+    ("triangle", False),
+    ("square", False),
+    ("sinc", False),
+    ("linearchirp", False),
+    ("step", True),
+    ("exponential", False),
+    ("logistic", False),
+    ("pulse", False),
+    ("step_pulse", False),
+    ("square_pulse", False),
+    ("polynomial", True),
+    ("custom", False),
+]
 
 
 # Per-object cached creation parameter instance.  Keyed by oid; populated
@@ -368,46 +399,31 @@ def _signal_type_label(stype: SignalTypes) -> str:
 
 
 def list_signal_creation_types() -> list[dict[str, Any]]:
-    """Return the curated list of supported signal generation types.
+    """Return the flat list of supported signal generation types.
 
-    Each entry: ``{"value": str, "label": str, "icon": str, "category": str}``.
+    Order and separators mirror DataLab desktop's "Create" menu
+    (``SignalActionHandler.create_first_actions``).  Each entry:
+    ``{"value": str, "label": str, "icon": str, "separator_before": bool}``.
 
-    Categories mirror the DataLab desktop "Create" submenus:
-    *Waveform*, *Peak*, *Noise*.
+    ``icon`` is the bare SVG filename — the React UI maps it to a URL via
+    Vite's ``import.meta.glob`` over ``src/assets/icons/create``.
     """
-    waveforms = {
-        "zero", "sine", "cosine", "sawtooth", "triangle", "square",
-        "sinc", "linearchirp", "step", "exponential", "logistic",
-        "pulse", "step_pulse", "square_pulse", "polynomial", "custom",
-    }
-    peaks = {"gauss", "lorentz", "voigt", "planck"}
-    noise = {
-        "normal_distribution", "poisson_distribution", "uniform_distribution"
-    }
+    by_value = {stype.value: stype for stype in SignalTypes}
     out: list[dict[str, Any]] = []
-    for stype in SignalTypes:
-        if stype not in SIGNAL_TYPE_PARAM_CLASSES:
+    for value, separator in _SIGNAL_TYPE_ORDER:
+        stype = by_value.get(value)
+        if stype is None or stype not in SIGNAL_TYPE_PARAM_CLASSES:
             continue
-        value = stype.value
-        # ``LabeledEnum``: second tuple item is the translated label.
         try:
             label = stype.label  # type: ignore[attr-defined]
         except AttributeError:
             label = value
-        if value in waveforms:
-            category = "Waveform"
-        elif value in peaks:
-            category = "Peak"
-        elif value in noise:
-            category = "Noise"
-        else:
-            category = "Other"
         out.append(
             {
                 "value": value,
                 "label": label,
-                "icon": _SIGNAL_TYPE_ICONS.get(value, "wave-generic"),
-                "category": category,
+                "icon": _SIGNAL_TYPE_ICONS.get(value, ""),
+                "separator_before": separator,
             }
         )
     return out
@@ -517,6 +533,128 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
         values = values.to_py()
     obj = _MODEL.get(oid)
     update_dataset(obj, values)
+
+
+# ---------------------------------------------------------------------------
+# Generic file I/O (mirrors DataLab's "Open"/"Save" actions).
+# ---------------------------------------------------------------------------
+
+
+def list_signal_io_formats() -> dict[str, Any]:
+    """Return the supported signal I/O formats.
+
+    The shape mimics what DataLab desktop builds for its Qt file dialog:
+
+    .. code:: python
+
+        {
+            "read": [{"name": str, "extensions": ["csv", "txt", ...]}, ...],
+            "write": [...],
+            "all_read_extensions": ["csv", "txt", "h5sig", ...],
+            "all_write_extensions": [...],
+        }
+    """
+    from sigima.io.signal.base import SignalIORegistry
+
+    read: list[dict[str, Any]] = []
+    write: list[dict[str, Any]] = []
+    all_read: list[str] = []
+    all_write: list[str] = []
+    for fmt in SignalIORegistry.get_formats():
+        entry = {
+            "name": fmt.info.name,
+            "extensions": list(fmt.extlist),
+        }
+        if fmt.info.readable:
+            read.append(entry)
+            all_read.extend(fmt.extlist)
+        if fmt.info.writeable:
+            write.append(entry)
+            all_write.extend(fmt.extlist)
+    return {
+        "read": read,
+        "write": write,
+        "all_read_extensions": sorted(set(all_read)),
+        "all_write_extensions": sorted(set(all_write)),
+    }
+
+
+def open_signal_from_bytes(
+    filename: str, data: Any, group_id: str | None = None
+) -> list[str]:
+    """Decode *data* (a Pyodide ``Uint8Array`` / Python ``bytes``) as a signal
+    file and add every signal it contains to the model.
+
+    Dispatches by extension via Sigima's :class:`SignalIORegistry`, so every
+    format DataLab desktop supports (HDF5 ``.h5sig``, CSV, NumPy ``.npy``,
+    MATLAB ``.mat``, FT-Lab ``.sig``, MCA ``.mca``, …) Just Works.
+
+    Args:
+        filename: Original file name; only the basename + extension matter.
+        data: Raw bytes from the browser ``File`` object.
+        group_id: Optional group to put the new signals into.
+
+    Returns:
+        List of newly created object ids (one per signal in the file).
+    """
+    import os
+    import tempfile
+    from sigima.io import read_signals
+
+    # Pyodide passes ``Uint8Array`` as a ``memoryview``-like JsProxy: convert
+    # to ``bytes`` for write_bytes().
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        # ``Uint8Array.toJs()`` returns a list of ints in some Pyodide
+        # versions — coerce to bytes.
+        data = bytes(data)
+    base = os.path.basename(filename) or "upload.bin"
+    tmpdir = tempfile.mkdtemp(prefix="dlw_open_")
+    path = os.path.join(tmpdir, base)
+    with open(path, "wb") as fh:
+        fh.write(bytes(data))
+    try:
+        signals = read_signals(path)
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+    if not signals:
+        raise ValueError(f"No signal could be read from {base!r}")
+    oids: list[str] = []
+    for sig in signals:
+        oids.append(_MODEL.add_object("signal", sig, group_id=group_id))
+    return oids
+
+
+def save_signal_to_bytes(oid: str, filename: str) -> bytes:
+    """Serialise *oid* into a byte string in the format implied by *filename*.
+
+    The extension drives format selection via Sigima's
+    :class:`SignalIORegistry` (CSV, HDF5 ``.h5sig``, NumPy ``.npy``,
+    MATLAB ``.mat``, …).
+    """
+    import os
+    import tempfile
+    from sigima.io import write_signal
+
+    obj = _MODEL.get(oid)
+    base = os.path.basename(filename) or "signal.csv"
+    tmpdir = tempfile.mkdtemp(prefix="dlw_save_")
+    path = os.path.join(tmpdir, base)
+    try:
+        write_signal(path, obj)
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -1080,6 +1218,9 @@ __all__ = [
     "update_signal_creation_params",
     "get_object_property_schema",
     "set_object_property_values",
+    "list_signal_io_formats",
+    "open_signal_from_bytes",
+    "save_signal_to_bytes",
     "list_signals",
     "get_signal_xy",
     "delete_signal",

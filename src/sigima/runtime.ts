@@ -176,10 +176,26 @@ export interface SignalCreationType {
   value: string;
   /** Translated, human-readable label. */
   label: string;
-  /** Icon hint (frontend may map this to an SVG / unicode glyph). */
+  /** Bare SVG filename (e.g. ``"sine.svg"``) — the React UI maps it to a
+   *  bundled URL via Vite's ``import.meta.glob``. */
   icon: string;
-  /** Submenu category: ``"Waveform"`` | ``"Peak"`` | ``"Noise"`` | ``"Other"``. */
-  category: string;
+  /** When true, draw a separator *before* this entry in the menu (mirrors
+   *  the desktop "Create" menu's grouping). */
+  separator_before: boolean;
+}
+
+/** One I/O format descriptor returned by
+ *  :meth:`SigimaRuntime.listSignalIoFormats`. */
+export interface SignalIoFormat {
+  name: string;
+  extensions: string[];
+}
+
+export interface SignalIoFormats {
+  read: SignalIoFormat[];
+  write: SignalIoFormat[];
+  all_read_extensions: string[];
+  all_write_extensions: string[];
 }
 
 export interface SignalCreationParams {
@@ -328,6 +344,38 @@ await micropip.install(["sigima", "guidata"])
     values: Record<string, unknown>,
   ): Promise<void> {
     await this.callPy("set_object_property_values", { oid: id, values });
+  }
+
+  /** List every signal I/O format supported by Sigima.  Used to drive
+   *  the "Open"/"Save" file dialog accept lists. */
+  async listSignalIoFormats(): Promise<SignalIoFormats> {
+    return (await this.callPy("list_signal_io_formats")) as SignalIoFormats;
+  }
+
+  /** Decode *bytes* as a signal file and add the resulting signals to
+   *  the model.  Returns the new object ids. */
+  async openSignalFromBytes(
+    filename: string,
+    bytes: Uint8Array,
+    groupId?: string,
+  ): Promise<string[]> {
+    return (await this.callPy("open_signal_from_bytes", {
+      filename,
+      data: bytes,
+      group_id: groupId ?? null,
+    })) as string[];
+  }
+
+  /** Serialise *id* into the format implied by *filename*'s extension.
+   *  Returns a ``Uint8Array`` ready to hand to a browser ``Blob``. */
+  async saveSignalToBytes(id: string, filename: string): Promise<Uint8Array> {
+    const result = (await this.callPy("save_signal_to_bytes", {
+      oid: id,
+      filename,
+    })) as Uint8Array | ArrayBuffer | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
   }
 
   async listSignals(): Promise<SignalMeta[]> {

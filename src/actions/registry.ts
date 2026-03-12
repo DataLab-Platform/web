@@ -1,4 +1,5 @@
 import type { FeatureDescriptor, SignalCreationType } from "../sigima/runtime";
+import { getCreateIconUrl } from "../assets/createIcons";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -9,8 +10,8 @@ export interface StaticActionCallbacks {
   onEditRoi: () => void;
   onSaveProject: () => void;
   onLoadProject: () => void;
-  onImportCsv: () => void;
-  onExportCsv: () => void;
+  onOpenFile: () => void;
+  onSaveFile: () => void;
   onNewImage: () => void;
 }
 
@@ -21,9 +22,26 @@ export function buildStaticActions(
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
   return [
     {
+      id: "file.open",
+      label: "Open signal…",
+      menuPath: "File/Open signal…",
+      shortcut: "Ctrl+O",
+      enabled: ready,
+      run: cb.onOpenFile,
+    },
+    {
+      id: "file.save",
+      label: "Save signal…",
+      menuPath: "File/Save signal…",
+      shortcut: "Ctrl+S",
+      enabled: (s) => ready(s) && s.currentId !== null,
+      run: cb.onSaveFile,
+    },
+    {
       id: "file.new_image",
       label: "New image…",
       menuPath: "File/New image…",
+      beginGroup: true,
       enabled: ready,
       run: cb.onNewImage,
     },
@@ -35,23 +53,10 @@ export function buildStaticActions(
       run: cb.onNewGroup,
     },
     {
-      id: "file.import_csv",
-      label: "Import CSV…",
-      menuPath: "File/Import CSV…",
-      enabled: ready,
-      run: cb.onImportCsv,
-    },
-    {
-      id: "file.export_csv",
-      label: "Export CSV…",
-      menuPath: "File/Export CSV…",
-      enabled: (s) => ready(s) && s.currentId !== null,
-      run: cb.onExportCsv,
-    },
-    {
       id: "file.open_project",
       label: "Open project…",
       menuPath: "File/Open project…",
+      beginGroup: true,
       enabled: ready,
       run: cb.onLoadProject,
     },
@@ -107,7 +112,8 @@ export function buildFeatureActions(
 }
 
 /** Wire one Create-menu entry per Sigima signal generation type.  Mirrors
- *  the desktop app's "Create > Signal > <category> > <type>" submenus. */
+ *  the desktop app's flat "Create" menu — entry order *and* group
+ *  separators come straight from the Python catalogue. */
 export function buildSignalCreationActions(
   types: SignalCreationType[],
   onCreate: (stype: string) => void,
@@ -116,7 +122,9 @@ export function buildSignalCreationActions(
   return types.map((t) => ({
     id: `create.signal.${t.value}`,
     label: t.label,
-    menuPath: `Create/Signal/${t.category}/${t.label}`,
+    menuPath: `Create/${t.label}`,
+    iconUrl: getCreateIconUrl(t.icon),
+    beginGroup: t.separator_before,
     enabled: ready,
     run: () => onCreate(t.value),
   }));

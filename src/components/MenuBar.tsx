@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
 import type { ActionDescriptor, ActionState, MenuNode } from "../actions/types";
 import { buildMenuTree } from "../actions/buildMenu";
@@ -23,52 +23,78 @@ function SubmenuList({
   const [openChild, setOpenChild] = useState<string | null>(null);
   return (
     <ul className="menu-dropdown" role="menu">
-      {nodes.map((node) => {
+      {nodes.map((node, idx) => {
+        const sep =
+          node.action?.beginGroup && idx > 0 ? (
+            <li
+              key={node.path + ":sep"}
+              className="menu-separator"
+              role="separator"
+              aria-hidden="true"
+            />
+          ) : null;
         if (node.children && node.children.length > 0) {
           const isOpen = openChild === node.path;
           return (
-            <li
-              key={node.path}
-              className="menu-item menu-item-submenu"
-              role="menuitem"
-              aria-haspopup="true"
-              aria-expanded={isOpen}
-              onMouseEnter={() => setOpenChild(node.path)}
-              onMouseLeave={() =>
-                setOpenChild((c) => (c === node.path ? null : c))
-              }
-            >
-              <span className="menu-label">{node.label}</span>
-              <span className="menu-arrow">›</span>
-              {isOpen && (
-                <SubmenuList
-                  nodes={node.children}
-                  state={state}
-                  onClose={onClose}
-                />
-              )}
-            </li>
+            <Fragment key={node.path}>
+              {sep}
+              <li
+                className="menu-item menu-item-submenu"
+                role="menuitem"
+                aria-haspopup="true"
+                aria-expanded={isOpen}
+                onMouseEnter={() => setOpenChild(node.path)}
+                onMouseLeave={() =>
+                  setOpenChild((c) => (c === node.path ? null : c))
+                }
+              >
+                <span className="menu-icon-slot" aria-hidden="true" />
+                <span className="menu-label">{node.label}</span>
+                <span className="menu-arrow">›</span>
+                {isOpen && (
+                  <SubmenuList
+                    nodes={node.children}
+                    state={state}
+                    onClose={onClose}
+                  />
+                )}
+              </li>
+            </Fragment>
           );
         }
         const action = node.action!;
         const enabled = action.enabled(state);
         return (
-          <li
-            key={node.path}
-            className={
-              "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
-            }
-            role="menuitem"
-            aria-disabled={!enabled}
-            onClick={() => {
-              if (!enabled) return;
-              onClose();
-              void action.run();
-            }}
-            title={action.menuPath}
-          >
-            <span className="menu-label">{node.label}</span>
-          </li>
+          <Fragment key={node.path}>
+            {sep}
+            <li
+              className={
+                "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
+              }
+              role="menuitem"
+              aria-disabled={!enabled}
+              onClick={() => {
+                if (!enabled) return;
+                onClose();
+                void action.run();
+              }}
+              title={action.menuPath}
+            >
+              <span className="menu-icon-slot" aria-hidden="true">
+                {action.iconUrl && (
+                  <img
+                    src={action.iconUrl}
+                    alt=""
+                    className="menu-icon-img"
+                  />
+                )}
+              </span>
+              <span className="menu-label">{node.label}</span>
+              {action.shortcut && (
+                <span className="menu-shortcut">{action.shortcut}</span>
+              )}
+            </li>
+          </Fragment>
         );
       })}
     </ul>

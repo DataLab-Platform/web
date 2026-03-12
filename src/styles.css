@@ -159,6 +159,35 @@ input {
   color: var(--text-dim);
   font-size: 11px;
 }
+.menu-icon-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.menu-icon-img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.menu-shortcut {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: auto;
+  padding-left: 16px;
+}
+.menu-separator {
+  list-style: none;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  padding: 0;
+}
+.menu-label {
+  flex: 1;
+}
 
 .workspace {
   display: grid;

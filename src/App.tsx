@@ -410,34 +410,64 @@ export default function App() {
     input.click();
   }, [runtime, refresh]);
 
-  const handleExportCsv = useCallback(async () => {
+  const handleSaveFile = useCallback(async () => {
     if (!runtime || !currentId) return;
-    const text = await runtime.exportSignalCsv(currentId);
-    const blob = new Blob([text], { type: "text/csv" });
+    // Default to CSV for backward-compat with the previous "Export CSV…"
+    // action; users can pick another extension by editing the filename
+    // before the download dialog is committed by the browser.
+    const formats = await runtime.listSignalIoFormats();
+    const writeExts = formats.all_write_extensions;
+    const stem = (data?.title || "signal").replace(/[^\w.-]+/g, "_");
+    // Browsers can't really show an extension picker on a synthetic <a>
+    // download; we offer a one-line prompt with the catalog of supported
+    // extensions for parity with DataLab's "Save signal…" dialog.
+    const ext = window.prompt(
+      `File extension (one of: ${writeExts.join(", ")})`,
+      "csv",
+    );
+    if (!ext) return;
+    const cleanExt = ext.replace(/^\./, "").trim();
+    if (!writeExts.includes(cleanExt)) {
+      window.alert(
+        `Unsupported extension ".${cleanExt}".\nSupported: ${writeExts.join(", ")}`,
+      );
+      return;
+    }
+    const filename = `${stem}.${cleanExt}`;
+    const bytes = await runtime.saveSignalToBytes(currentId, filename);
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(data?.title || "signal").replace(/[^\w.-]+/g, "_")}.csv`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, [runtime, currentId, data]);
 
-  const handleImportCsv = useCallback(async () => {
+  const handleOpenFile = useCallback(async () => {
     if (!runtime) return;
+    const formats = await runtime.listSignalIoFormats();
+    const accept = formats.all_read_extensions
+      .map((e) => `.${e}`)
+      .join(",");
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".csv,.txt,text/csv,text/plain";
+    input.accept = accept;
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
+      const files = input.files;
+      if (!files || files.length === 0) return;
       setBusy(true);
+      let lastId: string | null = null;
       try {
-        const text = await file.text();
-        const stem = file.name.replace(/\.[^.]+$/, "");
-        const id = await runtime.importSignalCsv(text, stem);
-        await refresh(id);
+        for (const file of Array.from(files)) {
+          const buf = new Uint8Array(await file.arrayBuffer());
+          const ids = await runtime.openSignalFromBytes(file.name, buf);
+          if (ids.length > 0) lastId = ids[ids.length - 1];
+        }
+        await refresh(lastId);
       } finally {
         setBusy(false);
       }
@@ -494,8 +524,8 @@ export default function App() {
         onEditRoi: handleEditRoi,
         onSaveProject: handleSaveProject,
         onLoadProject: handleLoadProject,
-        onImportCsv: handleImportCsv,
-        onExportCsv: handleExportCsv,
+        onOpenFile: handleOpenFile,
+        onSaveFile: handleSaveFile,
         onNewImage: handleNewImage,
       }),
       ...buildSignalCreationActions(signalTypes, handleCreateTyped),
@@ -512,8 +542,8 @@ export default function App() {
       handleEditRoi,
       handleSaveProject,
       handleLoadProject,
-      handleImportCsv,
-      handleExportCsv,
+      handleOpenFile,
+      handleSaveFile,
       handleNewImage,
     ],
   );

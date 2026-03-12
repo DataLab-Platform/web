@@ -23,6 +23,8 @@ export interface ActionDescriptor {
   shortcut?: string;
   /** Insert a separator *before* this item when rendered. */
   beginGroup?: boolean;
+  /** Optional URL to an SVG/PNG icon shown next to the label. */
+  iconUrl?: string;
   enabled: (state: ActionState) => boolean;
   run: () => void | Promise<void>;
 }
@@ -35,6 +37,8 @@ export interface MenuNode {
   action?: ActionDescriptor;
   /** Present when the node has child entries (submenu). */
   children?: MenuNode[];
+  /** Optional icon URL shown next to the label. */
+  iconUrl?: string;
 }
 
 /** Top-level menu ordering, matching DataLab desktop conventions. */
