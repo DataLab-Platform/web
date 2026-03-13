@@ -198,6 +198,44 @@ export interface SignalIoFormats {
   all_write_extensions: string[];
 }
 
+/** Menu descriptor for one entry of the "Analysis" menu. */
+export interface SignalAnalysisDescriptor {
+  /** Stable id (e.g. ``"fwhm"``).  Matches the Sigima function name. */
+  id: string;
+  label: string;
+  /** Bare SVG filename or ``""`` for icon-less entries. */
+  icon: string;
+  /** Insert a separator above this entry (mirrors DataLab desktop). */
+  separator_before: boolean;
+  /** ``true`` when the analysis exposes a parameter DataSet. */
+  has_params: boolean;
+}
+
+/** Per-row geometry / table payload (one of two ``category`` values). */
+export interface AnalysisResultBase {
+  metadata_key: string;
+  title: string;
+  func_name: string | null;
+  headers: string[];
+  roi_indices: number[] | null;
+}
+
+export interface GeometryAnalysisResult extends AnalysisResultBase {
+  category: "geometry";
+  /** ``"point" | "marker" | "segment" | "rectangle" | "circle" | "ellipse" | "polygon"``. */
+  kind: string;
+  /** N×K array of physical coordinates (K depends on ``kind``). */
+  coords: number[][];
+}
+
+export interface TableAnalysisResult extends AnalysisResultBase {
+  category: "table";
+  kind: string;
+  data: (number | string | null)[][];
+}
+
+export type AnalysisResult = GeometryAnalysisResult | TableAnalysisResult;
+
 export interface SignalCreationParams {
   kind: "sine" | "cosine" | "gauss" | "noise";
   title: string;
@@ -376,6 +414,60 @@ await micropip.install(["sigima", "guidata"])
     if (result instanceof Uint8Array) return result;
     if (result instanceof ArrayBuffer) return new Uint8Array(result);
     return Uint8Array.from(result as number[]);
+  }
+
+  /** List every entry of the signal "Analysis" menu (DataLab parity). */
+  async listSignalAnalysis(): Promise<SignalAnalysisDescriptor[]> {
+    return (await this.callPy(
+      "list_signal_analysis",
+    )) as SignalAnalysisDescriptor[];
+  }
+
+  /** Return the parameter schema (with cached values pre-filled) for the
+   *  given analysis function, or ``null`` for parameter-less analyses. */
+  async getSignalAnalysisParamSchema(
+    id: string,
+    funcId: string,
+  ): Promise<unknown | null> {
+    const schema = await this.callPy("get_signal_analysis_param_schema", {
+      oid: id,
+      func_id: funcId,
+    });
+    return schema ?? null;
+  }
+
+  /** Run analysis *funcId* on signal *id* and persist the result on the
+   *  signal's metadata.  Returns ``null`` when the function legitimately
+   *  produced no result (e.g. FWHM on a flat curve). */
+  async runSignalAnalysis(
+    id: string,
+    funcId: string,
+    params?: Record<string, unknown> | null,
+  ): Promise<AnalysisResult | null> {
+    const out = await this.callPy("run_signal_analysis", {
+      oid: id,
+      func_id: funcId,
+      params: params ?? null,
+    });
+    return (out ?? null) as AnalysisResult | null;
+  }
+
+  /** Return every analysis result currently attached to signal *id*. */
+  async listSignalResults(id: string): Promise<AnalysisResult[]> {
+    return (await this.callPy("list_signal_results", {
+      oid: id,
+    })) as AnalysisResult[];
+  }
+
+  /** Drop one (or all) analysis result(s) from signal *id*'s metadata. */
+  async clearSignalResults(
+    id: string,
+    metadataKey?: string,
+  ): Promise<number> {
+    return (await this.callPy("clear_signal_results", {
+      oid: id,
+      metadata_key: metadataKey ?? null,
+    })) as number;
   }
 
   async listSignals(): Promise<SignalMeta[]> {

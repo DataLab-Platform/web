@@ -241,6 +241,75 @@ input {
   gap: 6px;
 }
 
+.results-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.results-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.results-clear-all {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.results-clear-all:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.result-card {
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+.result-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.result-card-title {
+  font-weight: 600;
+  font-size: 12px;
+}
+.result-card-remove {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.result-card-remove:hover {
+  color: #d62728;
+}
+.result-card-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.result-card-table th,
+.result-card-table td {
+  border: 1px solid var(--border);
+  padding: 2px 4px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.result-card-table th {
+  background: var(--panel);
+  font-weight: 600;
+}
+
 .panel {
   display: flex;
   flex-direction: column;

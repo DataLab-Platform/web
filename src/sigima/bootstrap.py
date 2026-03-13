@@ -1209,6 +1209,357 @@ def apply_processing(
     return apply_feature(processing_id, [oid], params=params)[0]
 
 
+# ---------------------------------------------------------------------------
+# Signal analysis ("Analysis" menu) — DataLab parity.
+#
+# Each entry maps an analysis function name to the Sigima callable that
+# produces a :class:`TableResult` or :class:`GeometryResult`.  Results are
+# stored in ``obj.metadata`` exactly the way DataLab desktop does it
+# (prefixed key ``"Table_<func>_dict"`` or ``"Geometry_<func>_dict"``) so
+# project files round-trip 1:1 with the desktop application.
+# ---------------------------------------------------------------------------
+
+
+def _build_signal_analysis_catalog() -> "list[dict[str, Any]]":
+    """Return the ordered catalog of signal-analysis features.
+
+    Mirrors :class:`SignalActionHandler` in ``actionhandler.py`` (line 1419):
+    same order, same labels, same icon names, same separator positions.
+    """
+    import sigima.proc.signal as sips
+
+    return [
+        {
+            "id": "fwhm",
+            "label": "Full width at half-maximum",
+            "icon": "fwhm.svg",
+            "func": sips.fwhm,
+            "paramclass": sips.FWHMParam,
+            "separator_before": False,
+        },
+        {
+            "id": "fw1e2",
+            "label": "Full width at 1/e²",
+            "icon": "fw1e2.svg",
+            "func": sips.fw1e2,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "full_width_at_y",
+            "label": "Full width at y=…",
+            "icon": "",
+            "func": sips.full_width_at_y,
+            "paramclass": sips.OrdinateParam,
+            "separator_before": False,
+        },
+        {
+            "id": "x_at_minmax",
+            "label": "Abscissa of the minimum and maximum",
+            "icon": "",
+            "func": sips.x_at_minmax,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "x_at_y",
+            "label": "First abscissa at y=…",
+            "icon": "",
+            "func": sips.x_at_y,
+            "paramclass": sips.OrdinateParam,
+            "separator_before": False,
+        },
+        {
+            "id": "y_at_x",
+            "label": "Ordinate at x=…",
+            "icon": "",
+            "func": sips.y_at_x,
+            "paramclass": sips.AbscissaParam,
+            "separator_before": False,
+        },
+        {
+            "id": "extract_pulse_features",
+            "label": "Extract pulse features",
+            "icon": "",
+            "func": sips.extract_pulse_features,
+            "paramclass": sips.PulseFeaturesParam,
+            "separator_before": False,
+        },
+        {
+            "id": "sampling_rate_period",
+            "label": "Sampling rate and period",
+            "icon": "",
+            "func": sips.sampling_rate_period,
+            "paramclass": None,
+            "separator_before": True,
+        },
+        {
+            "id": "dynamic_parameters",
+            "label": "Dynamic parameters",
+            "icon": "",
+            "func": sips.dynamic_parameters,
+            "paramclass": sips.DynamicParam,
+            "separator_before": False,
+        },
+        {
+            "id": "bandwidth_3db",
+            "label": "Bandwidth at -3dB",
+            "icon": "",
+            "func": sips.bandwidth_3db,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "contrast",
+            "label": "Contrast",
+            "icon": "",
+            "func": sips.contrast,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "stats",
+            "label": "Statistics",
+            "icon": "stats.svg",
+            "func": sips.stats,
+            "paramclass": None,
+            "separator_before": True,
+        },
+    ]
+
+
+_SIGNAL_ANALYSIS: dict[str, dict[str, Any]] = globals().get(
+    "_SIGNAL_ANALYSIS", {}
+)
+if not _SIGNAL_ANALYSIS:
+    for _entry in _build_signal_analysis_catalog():
+        _SIGNAL_ANALYSIS[_entry["id"]] = _entry
+
+
+# Cached parameter instances per (oid, func_id) so a parametric analysis
+# can be re-opened with its previous values pre-filled.
+_ANALYSIS_PARAMS: dict[str, Any] = globals().get("_ANALYSIS_PARAMS", {})
+
+
+def list_signal_analysis() -> list[dict[str, Any]]:
+    """Return the flat list of analysis entries that powers the menu.
+
+    The order matches DataLab desktop's ``Analysis`` menu (separators
+    included).  Each entry is JSON-friendly:
+
+    .. code:: python
+
+        {"id": "fwhm",
+         "label": "Full width at half-maximum",
+         "icon": "fwhm.svg",
+         "separator_before": False,
+         "has_params": True}
+    """
+    return [
+        {
+            "id": e["id"],
+            "label": e["label"],
+            "icon": e["icon"],
+            "separator_before": e["separator_before"],
+            "has_params": e["paramclass"] is not None,
+        }
+        for e in _SIGNAL_ANALYSIS.values()
+    ]
+
+
+def _get_or_create_analysis_param(oid: str, func_id: str) -> Any:
+    entry = _SIGNAL_ANALYSIS[func_id]
+    paramclass = entry["paramclass"]
+    if paramclass is None:
+        return None
+    cache_key = f"{oid}::{func_id}"
+    cached = _ANALYSIS_PARAMS.get(cache_key)
+    if cached is not None and isinstance(cached, paramclass):
+        return cached
+    param = paramclass()
+    _ANALYSIS_PARAMS[cache_key] = param
+    return param
+
+
+def get_signal_analysis_param_schema(
+    oid: str, func_id: str
+) -> dict[str, Any] | None:
+    """Return the JSON schema for *func_id*'s parameter set, with the
+    cached values for *oid* pre-filled.  Returns ``None`` for parameter-
+    less analyses."""
+    from guidata.dataset import dataset_to_schema_with_values
+
+    if func_id not in _SIGNAL_ANALYSIS:
+        raise KeyError(f"Unknown analysis function: {func_id!r}")
+    param = _get_or_create_analysis_param(oid, func_id)
+    if param is None:
+        return None
+    return dataset_to_schema_with_values(param)
+
+
+def _result_metadata_key(result: Any) -> str:
+    """Return the metadata key used to store *result*.  Mirrors DataLab's
+    :class:`BaseResultAdapter.metadata_key`."""
+    from sigima.objects.scalar import GeometryResult, TableResult
+
+    func_name = getattr(result, "func_name", None) or "result"
+    if isinstance(result, GeometryResult):
+        return f"Geometry_{func_name}_dict"
+    if isinstance(result, TableResult):
+        return f"Table_{func_name}_dict"
+    raise TypeError(f"Unsupported analysis result type: {type(result).__name__}")
+
+
+def _serialize_result(result: Any, key: str) -> dict[str, Any]:
+    """Build a JSON-friendly payload describing one analysis result."""
+    from sigima.objects.scalar import GeometryResult, TableResult
+
+    payload: dict[str, Any] = {
+        "metadata_key": key,
+        "title": result.title,
+        "func_name": getattr(result, "func_name", None),
+    }
+    if isinstance(result, GeometryResult):
+        payload["category"] = "geometry"
+        payload["kind"] = result.kind.value
+        payload["coords"] = result.coords.tolist()
+        payload["headers"] = list(result.headers)
+        payload["roi_indices"] = (
+            None if result.roi_indices is None else result.roi_indices.tolist()
+        )
+    elif isinstance(result, TableResult):
+        payload["category"] = "table"
+        payload["kind"] = (
+            result.kind.value if hasattr(result.kind, "value") else result.kind
+        )
+        payload["headers"] = list(result.headers)
+        # Coerce numpy scalars to plain floats / ints for JSON.
+        rows: list[list[Any]] = []
+        for row in result.data:
+            new_row: list[Any] = []
+            for v in row:
+                if isinstance(v, (bytes, bytearray)):
+                    new_row.append(v.decode("utf-8", errors="replace"))
+                elif hasattr(v, "item"):
+                    try:
+                        new_row.append(v.item())
+                    except (TypeError, ValueError):
+                        new_row.append(str(v))
+                else:
+                    new_row.append(v)
+            rows.append(new_row)
+        payload["data"] = rows
+        payload["roi_indices"] = (
+            None if result.roi_indices is None else list(result.roi_indices)
+        )
+    else:  # pragma: no cover — guarded by _result_metadata_key
+        raise TypeError(f"Unsupported analysis result: {type(result).__name__}")
+    return payload
+
+
+def run_signal_analysis(
+    oid: str, func_id: str, params: Any = None
+) -> dict[str, Any] | None:
+    """Run analysis *func_id* on signal *oid* and persist the result.
+
+    Args:
+        oid: Object id of the source signal.
+        func_id: Analysis function id (see :func:`list_signal_analysis`).
+        params: Optional parameter values for parametric analyses.  Either
+         a dict (from JS) or an already-built guidata DataSet instance.
+
+    Returns:
+        A JSON-friendly description of the produced result, or ``None`` if
+        the function returned no result (some analyses return ``None`` —
+        e.g. ``fwhm`` on a flat signal).
+    """
+    if func_id not in _SIGNAL_ANALYSIS:
+        raise KeyError(f"Unknown analysis function: {func_id!r}")
+    entry = _SIGNAL_ANALYSIS[func_id]
+    obj = _MODEL.get(oid)
+
+    if hasattr(params, "to_py"):
+        params = params.to_py()
+
+    param = _get_or_create_analysis_param(oid, func_id)
+    if param is not None and isinstance(params, dict):
+        from guidata.dataset import update_dataset
+
+        update_dataset(param, params)
+
+    if param is None:
+        result = entry["func"](obj)
+    else:
+        result = entry["func"](obj, param)
+
+    if result is None:
+        return None
+    # Make sure func_name is set for metadata-key consistency with DataLab.
+    if not getattr(result, "func_name", None):
+        try:
+            object.__setattr__(result, "func_name", func_id)
+        except Exception:  # pragma: no cover — frozen dataclass safety net
+            pass
+    key = _result_metadata_key(result)
+    obj.metadata[key] = result.to_dict()
+    return _serialize_result(result, key)
+
+
+def list_signal_results(oid: str) -> list[dict[str, Any]]:
+    """Return every analysis result currently stored on signal *oid*.
+
+    Reconstructs each result from the metadata dict, in the same order
+    the keys appear (which matches insertion order in CPython ≥3.7 and
+    Pyodide).  Used by the front-end to redraw overlays after refresh,
+    project load, or HMR reload.
+    """
+    from sigima.objects.scalar import GeometryResult, TableResult
+
+    obj = _MODEL.get(oid)
+    out: list[dict[str, Any]] = []
+    for key, value in obj.metadata.items():
+        if not isinstance(value, dict):
+            continue
+        if key.startswith("Geometry_") and key.endswith("_dict"):
+            try:
+                result = GeometryResult.from_dict(value)
+            except Exception:  # pragma: no cover — malformed metadata
+                continue
+            out.append(_serialize_result(result, key))
+        elif key.startswith("Table_") and key.endswith("_dict"):
+            try:
+                result = TableResult.from_dict(value)
+            except Exception:  # pragma: no cover — malformed metadata
+                continue
+            out.append(_serialize_result(result, key))
+    return out
+
+
+def clear_signal_results(oid: str, metadata_key: str | None = None) -> int:
+    """Drop one or all analysis results from signal *oid*'s metadata.
+
+    Args:
+        oid: Source signal id.
+        metadata_key: If given, drop only that key.  Otherwise drop every
+         ``Table_*_dict`` and ``Geometry_*_dict`` entry.
+
+    Returns:
+        Number of metadata keys removed.
+    """
+    obj = _MODEL.get(oid)
+    if metadata_key is not None:
+        return 1 if obj.metadata.pop(metadata_key, None) is not None else 0
+    to_drop = [
+        k
+        for k in list(obj.metadata.keys())
+        if (k.startswith("Geometry_") or k.startswith("Table_"))
+        and k.endswith("_dict")
+    ]
+    for k in to_drop:
+        obj.metadata.pop(k, None)
+    return len(to_drop)
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -1251,4 +1602,9 @@ __all__ = [
     "get_processing_schema",
     "resolve_processing_choices",
     "apply_processing",
+    "list_signal_analysis",
+    "get_signal_analysis_param_schema",
+    "run_signal_analysis",
+    "list_signal_results",
+    "clear_signal_results",
 ]

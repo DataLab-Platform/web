@@ -9,6 +9,7 @@ import type {
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
+  buildSignalAnalysisActions,
   buildSignalCreationActions,
   buildStaticActions,
 } from "./actions/registry";
@@ -20,8 +21,10 @@ import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { SidePanel } from "./components/SidePanel";
 import type {
+  AnalysisResult,
   ObjectMeta,
   PlotlyAnnotations,
+  SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
 } from "./sigima/runtime";
@@ -31,6 +34,13 @@ interface PendingFeature {
   sourceIds: string[];
   operandId: string | null;
   schema: SchemaWithValues | null;
+}
+
+/** Pending parametric analysis waiting for the user's parameter input. */
+interface PendingAnalysis {
+  funcId: string;
+  label: string;
+  schema: SchemaWithValues;
 }
 
 export default function App() {
@@ -54,9 +64,15 @@ export default function App() {
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
   const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
   const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
+  const [analysisEntries, setAnalysisEntries] = useState<
+    SignalAnalysisDescriptor[]
+  >([]);
+  const [pendingAnalysis, setPendingAnalysis] =
+    useState<PendingAnalysis | null>(null);
+  const [results, setResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   const [preferredSideTab, setPreferredSideTab] = useState<
-    "creation" | "properties"
+    "creation" | "properties" | "results"
   >("properties");
 
   const refresh = useCallback(
@@ -85,6 +101,7 @@ export default function App() {
     if (status !== "ready" || !runtime) return;
     runtime.listFeatures().then(setFeatures);
     runtime.listSignalCreationTypes().then(setSignalTypes);
+    runtime.listSignalAnalysis().then(setAnalysisEntries);
     refresh();
   }, [status, runtime, refresh]);
 
@@ -93,6 +110,7 @@ export default function App() {
       setData(null);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
+      setResults([]);
       return;
     }
     let cancelled = false;
@@ -119,6 +137,14 @@ export default function App() {
       })
       .catch(() => {
         if (!cancelled) setRoi([]);
+      });
+    runtime
+      .listSignalResults(currentId)
+      .then((rs) => {
+        if (!cancelled) setResults(rs);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
       });
     return () => {
       cancelled = true;
@@ -262,6 +288,85 @@ export default function App() {
       await runFeature(feature, sourceIds, operandId, values);
     },
     [pending, runFeature],
+  );
+
+  const refreshResults = useCallback(
+    async (oid: string) => {
+      if (!runtime) return;
+      const rs = await runtime.listSignalResults(oid);
+      setResults(rs);
+    },
+    [runtime],
+  );
+
+  const runAnalysis = useCallback(
+    async (
+      funcId: string,
+      params: Record<string, unknown> | null,
+      oid: string,
+    ) => {
+      if (!runtime) return;
+      setBusy(true);
+      try {
+        const result = await runtime.runSignalAnalysis(oid, funcId, params);
+        if (result === null) {
+          window.alert(
+            "The analysis function returned no result " +
+              "(e.g. FWHM on a flat curve).",
+          );
+        }
+        await refreshResults(oid);
+        setPreferredSideTab("results");
+        setSideRefreshNonce((n) => n + 1);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, refreshResults],
+  );
+
+  const handleAnalysis = useCallback(
+    async (funcId: string, hasParams: boolean) => {
+      if (!runtime || !currentId) return;
+      if (!hasParams) {
+        await runAnalysis(funcId, null, currentId);
+        return;
+      }
+      const schema = await runtime.getSignalAnalysisParamSchema(
+        currentId,
+        funcId,
+      );
+      if (!schema) {
+        await runAnalysis(funcId, null, currentId);
+        return;
+      }
+      const entry = analysisEntries.find((e) => e.id === funcId);
+      setPendingAnalysis({
+        funcId,
+        label: entry?.label ?? funcId,
+        schema: schema as SchemaWithValues,
+      });
+    },
+    [runtime, currentId, analysisEntries, runAnalysis],
+  );
+
+  const handleSubmitAnalysisParams = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!pendingAnalysis || !currentId) return;
+      const { funcId } = pendingAnalysis;
+      setPendingAnalysis(null);
+      await runAnalysis(funcId, values, currentId);
+    },
+    [pendingAnalysis, currentId, runAnalysis],
+  );
+
+  const handleClearResults = useCallback(
+    async (key: string | null) => {
+      if (!runtime || !currentId) return;
+      await runtime.clearSignalResults(currentId, key ?? undefined);
+      await refreshResults(currentId);
+    },
+    [runtime, currentId, refreshResults],
   );
 
   const handleDelete = useCallback(async () => {
@@ -530,11 +635,14 @@ export default function App() {
       }),
       ...buildSignalCreationActions(signalTypes, handleCreateTyped),
       ...buildFeatureActions(features, handleApplyFeature),
+      ...buildSignalAnalysisActions(analysisEntries, handleAnalysis),
     ],
     [
       features,
       signalTypes,
+      analysisEntries,
       handleCreateTyped,
+      handleAnalysis,
       handleNewGroup,
       handleDelete,
       handleApplyFeature,
@@ -608,6 +716,7 @@ export default function App() {
               annotations={annotations}
               onAnnotationsChange={handleAnnotationsChange}
               roi={roi}
+              results={results}
             />
           )}
         </main>
@@ -618,6 +727,8 @@ export default function App() {
             refreshNonce={sideRefreshNonce}
             onObjectChanged={handleSideObjectChanged}
             preferredTab={preferredSideTab}
+            results={results}
+            onClearResults={handleClearResults}
           />
         )}
       </div>
@@ -644,6 +755,14 @@ export default function App() {
           }
           onSubmit={handleSubmitParams}
           onCancel={() => setPending(null)}
+        />
+      )}
+      {pendingAnalysis && (
+        <DataSetDialog
+          title={pendingAnalysis.label}
+          payload={pendingAnalysis.schema}
+          onSubmit={handleSubmitAnalysisParams}
+          onCancel={() => setPendingAnalysis(null)}
         />
       )}
       {editingMeta && (

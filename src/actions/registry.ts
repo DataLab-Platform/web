@@ -1,4 +1,9 @@
-import type { FeatureDescriptor, SignalCreationType } from "../sigima/runtime";
+import type {
+  FeatureDescriptor,
+  SignalAnalysisDescriptor,
+  SignalCreationType,
+} from "../sigima/runtime";
+import { getAnalysisIconUrl } from "../assets/analysisIcons";
 import { getCreateIconUrl } from "../assets/createIcons";
 import type { ActionDescriptor, ActionState } from "./types";
 
@@ -128,4 +133,29 @@ export function buildSignalCreationActions(
     enabled: ready,
     run: () => onCreate(t.value),
   }));
+}
+
+/** Wire one Analysis-menu entry per Sigima signal-analysis function.
+ *  Mirrors the desktop app's flat ``Analysis`` menu — labels, icons and
+ *  separators come straight from the Python catalogue. */
+export function buildSignalAnalysisActions(
+  entries: SignalAnalysisDescriptor[],
+  onRun: (funcId: string, hasParams: boolean) => void,
+): ActionDescriptor[] {
+  return entries.map((e) => {
+    // Substitute U+2215 (DIVISION SLASH) for ASCII "/" in labels containing
+    // a math fraction (e.g. "Full width at 1/e²"); otherwise the menu-path
+    // splitter would treat it as a sub-menu separator.  Visually identical.
+    const safeLabel = e.label.replace(/\//g, "\u2215");
+    return {
+      id: `analysis.signal.${e.id}`,
+      label: e.has_params ? `${safeLabel}…` : safeLabel,
+      menuPath: `Analysis/${safeLabel}`,
+      iconUrl: getAnalysisIconUrl(e.icon),
+      beginGroup: e.separator_before,
+      enabled: (s) =>
+        s.status === "ready" && !s.busy && s.currentId !== null,
+      run: () => onRun(e.id, e.has_params),
+    };
+  });
 }
