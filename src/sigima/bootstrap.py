@@ -898,6 +898,66 @@ def set_signal_roi(oid: str, segments: list[dict[str, Any]] | None) -> None:
     obj.roi = roi
 
 
+def delete_signal_roi_at(oid: str, index: int) -> None:
+    """Remove the ROI segment at *index* from signal *oid* (no-op if oob)."""
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return
+    if 0 <= index < len(roi.single_rois):
+        # SignalROI.single_rois is a plain list — mutate in place.
+        new_singles = list(roi.single_rois)
+        del new_singles[index]
+        if not new_singles:
+            obj.roi = None
+            return
+        new_roi = SignalROI()
+        for single in new_singles:
+            new_roi.add_roi(single)
+        obj.roi = new_roi
+
+
+def extract_signal_rois(oid: str, merged: bool) -> list[str]:
+    """Extract the ROIs of signal *oid* into one or several new signals.
+
+    Args:
+        oid: Source signal id.
+        merged: When ``True`` produce a *single* output signal containing the
+            concatenation of all ROIs (``sips.extract_rois``).
+            When ``False`` produce *one signal per ROI* (``sips.extract_roi``
+            applied to each ``ROI1DParam``).
+
+    Returns:
+        Ids of the newly created signals (in source order).  Empty list if
+        the source has no ROI.
+    """
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return []
+    import sigima.proc.signal as sips
+
+    # Keep the source group so the extracted children land beside their parent.
+    panel = _MODEL._panels["signal"]  # noqa: SLF001
+    src_group_id: str | None = None
+    try:
+        src_group_id = panel.find_group_of(oid).gid
+    except Exception:
+        src_group_id = None
+    params = [single.to_param(obj, i) for i, single in enumerate(roi.single_rois)]
+    out_ids: list[str] = []
+    if merged:
+        result = sips.extract_rois(obj, params)
+        out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
+    else:
+        for p in params:
+            result = sips.extract_roi(obj, p)
+            out_ids.append(
+                _MODEL.add_object("signal", result, group_id=src_group_id)
+            )
+    return out_ids
+
+
 # ---------------------------------------------------------------------------
 # Project save / load + CSV I/O (Phase 6)
 # ---------------------------------------------------------------------------
@@ -1590,6 +1650,8 @@ __all__ = [
     "set_plotly_annotations",
     "get_signal_roi",
     "set_signal_roi",
+    "delete_signal_roi_at",
+    "extract_signal_rois",
     "save_project",
     "load_project",
     "export_signal_csv",

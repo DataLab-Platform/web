@@ -12,8 +12,13 @@ interface Props {
   oid: string | null;
   annotations: PlotlyAnnotations;
   onAnnotationsChange: (payload: PlotlyAnnotations) => void;
-  /** Persistent ROI segments to overlay (read-only here, edited via dialog). */
+  /** Persistent ROI segments to overlay. */
   roi?: SignalRoiSegment[];
+  /** When true, ROI rectangles are draggable/resizable and the drawrect
+   *  modebar tool produces new ROI segments instead of free annotations. */
+  roiEditMode?: boolean;
+  /** Called whenever the ROI list changed via direct plot interaction. */
+  onRoiChange?: (segments: SignalRoiSegment[]) => void;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
 }
@@ -24,6 +29,8 @@ export function SignalPlot({
   annotations,
   onAnnotationsChange,
   roi = [],
+  roiEditMode = false,
+  onRoiChange,
   results = [],
 }: Props) {
   const xAxisTitle = useMemo(
@@ -34,6 +41,27 @@ export function SignalPlot({
     () => formatAxis(data.ylabel || "Y", data.yunit),
     [data.ylabel, data.yunit],
   );
+
+  // Span used as default Y range for editable ROI rectangles (drag bounds).
+  const { yMin, yMax } = useMemo(() => {
+    if (data.y.length === 0) return { yMin: 0, yMax: 1 };
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const v of data.y) {
+      if (Number.isFinite(v)) {
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+      return { yMin: 0, yMax: 1 };
+    }
+    if (lo === hi) {
+      return { yMin: lo - 0.5, yMax: hi + 0.5 };
+    }
+    const pad = (hi - lo) * 0.05;
+    return { yMin: lo - pad, yMax: hi + pad };
+  }, [data.y]);
 
   const [localShapes, setLocalShapes] = useState<unknown[]>(annotations.shapes);
   const [localAnnotations, setLocalAnnotations] = useState<unknown[]>(
@@ -62,14 +90,68 @@ export function SignalPlot({
     let touched = false;
     let nextShapes = localShapes;
     let nextAnns = localAnnotations;
+    let roiChanged: SignalRoiSegment[] | null = null;
+
     if ("shapes" in event && Array.isArray(event.shapes)) {
-      // Plotly returns the full shapes array including the ROI overlays we
-      // injected; drop the leading ROI block so we only persist user-drawn
-      // annotations.
-      nextShapes = (event.shapes as unknown[]).slice(
-        roiShapes.length + resultShapes.length,
-      );
-      touched = true;
+      // Plotly returns the full shapes array, including ROI overlays we
+      // injected at the head and result-geometry shapes right after.
+      const allEv = event.shapes as Array<Record<string, unknown>>;
+      const roiCount = roiShapes.length;
+      const resultCount = resultShapes.length;
+      // First N entries map back to the ROI list.
+      if (roiEditMode && onRoiChange) {
+        const updated: SignalRoiSegment[] = [];
+        for (let i = 0; i < Math.min(roiCount, allEv.length); i++) {
+          const s = allEv[i];
+          const x0 = Number(s.x0);
+          const x1 = Number(s.x1);
+          if (Number.isFinite(x0) && Number.isFinite(x1)) {
+            const xmin = Math.min(x0, x1);
+            const xmax = Math.max(x0, x1);
+            updated.push({ xmin, xmax, title: roi[i]?.title ?? "" });
+          } else {
+            updated.push(roi[i]);
+          }
+        }
+        // Trailing entries beyond ROI+result blocks may be a newly drawn
+        // rectangle: in edit mode we treat any extra "rect" shape with
+        // numeric x bounds as a new ROI and consume it so it doesn't end
+        // up persisted as an annotation.
+        const extras: unknown[] = [];
+        for (let i = roiCount + resultCount; i < allEv.length; i++) {
+          const s = allEv[i];
+          if (
+            s.type === "rect" &&
+            typeof s.x0 === "number" &&
+            typeof s.x1 === "number"
+          ) {
+            const x0 = Number(s.x0);
+            const x1 = Number(s.x1);
+            if (x1 !== x0) {
+              updated.push({
+                xmin: Math.min(x0, x1),
+                xmax: Math.max(x0, x1),
+                title: "",
+              });
+              continue;
+            }
+          }
+          extras.push(s);
+        }
+        // Detect deletion: shape count below initial ROI count means the
+        // user hit "Erase active shape" on a ROI rectangle.  Plotly does
+        // not tell us *which* index was removed; we re-sync to whatever
+        // remained in the first roiCount slots.
+        if (allEv.length < roiCount + resultCount) {
+          // updated already has the surviving rects (less than roiCount).
+        }
+        roiChanged = updated;
+        nextShapes = extras;
+        touched = true;
+      } else {
+        nextShapes = allEv.slice(roiCount + resultCount);
+        touched = true;
+      }
     }
     if ("annotations" in event && Array.isArray(event.annotations)) {
       nextAnns = (event.annotations as unknown[]).slice(
@@ -78,7 +160,33 @@ export function SignalPlot({
       touched = true;
     }
     for (const key of Object.keys(event)) {
-      if (/^shapes\[\d+\]\./.test(key) || /^annotations\[\d+\]\./.test(key)) {
+      if (/^shapes\[\d+\]\./.test(key)) {
+        // Single-shape drag/resize: figure out if it touched a ROI rect.
+        const m = key.match(/^shapes\[(\d+)\]\.(x[01]|y[01])$/);
+        if (m) {
+          const idx = Number(m[1]);
+          if (roiEditMode && idx < roiShapes.length && onRoiChange) {
+            // Pull every "shapes[i].xN" key out of the event for this index
+            // and update the corresponding ROI in place.
+            const next = roi.slice();
+            const x0Key = `shapes[${idx}].x0`;
+            const x1Key = `shapes[${idx}].x1`;
+            const x0 =
+              x0Key in event ? Number(event[x0Key]) : roi[idx].xmin;
+            const x1 =
+              x1Key in event ? Number(event[x1Key]) : roi[idx].xmax;
+            if (Number.isFinite(x0) && Number.isFinite(x1) && x0 !== x1) {
+              next[idx] = {
+                xmin: Math.min(x0, x1),
+                xmax: Math.max(x0, x1),
+                title: roi[idx].title,
+              };
+              roiChanged = next;
+            }
+          }
+        }
+        touched = true;
+      } else if (/^annotations\[\d+\]\./.test(key)) {
         touched = true;
       }
     }
@@ -86,6 +194,9 @@ export function SignalPlot({
     setLocalShapes(nextShapes);
     setLocalAnnotations(nextAnns);
     scheduleWrite(nextShapes, nextAnns);
+    if (roiChanged && onRoiChange) {
+      onRoiChange(roiChanged);
+    }
   };
 
   const roiShapes = useMemo(
@@ -93,17 +204,31 @@ export function SignalPlot({
       roi.map((seg) => ({
         type: "rect" as const,
         xref: "x",
-        yref: "paper",
+        // In edit mode we anchor the rect to the data Y-axis (so Plotly's\n        // editable shapes can be dragged) but we still ignore Y on persist.
+        yref: roiEditMode ? ("y" as const) : ("paper" as const),
         x0: seg.xmin,
         x1: seg.xmax,
-        y0: 0,
-        y1: 1,
-        fillcolor: "rgba(255, 165, 0, 0.18)",
-        line: { color: "rgba(255, 140, 0, 0.7)", width: 1 },
-        layer: "below",
-        editable: false,
+        y0: roiEditMode ? yMin : 0,
+        y1: roiEditMode ? yMax : 1,
+        fillcolor: roiEditMode
+          ? "rgba(255, 165, 0, 0.10)"
+          : "rgba(255, 165, 0, 0.18)",
+        line: {
+          color: roiEditMode ? "#ff8c00" : "rgba(255, 140, 0, 0.7)",
+          width: roiEditMode ? 2 : 1,
+          dash: roiEditMode ? "dot" : "solid",
+        },
+        layer: roiEditMode ? "above" : "below",
+        editable: roiEditMode,
+        label: roiEditMode
+          ? {
+              text: seg.title || "ROI",
+              textposition: "top left",
+              font: { color: "#ff8c00", size: 11 },
+            }
+          : undefined,
       })),
-    [roi],
+    [roi, roiEditMode, yMin, yMax],
   );
 
   // Convert each GeometryResult into Plotly shapes + a marker scatter trace
@@ -148,6 +273,16 @@ export function SignalPlot({
         yaxis: { title: { text: yAxisTitle } },
         showlegend: resultTraces.length > 0,
         legend: { orientation: "h", y: -0.2 },
+        // In ROI edit mode, default newshape style matches the ROI overlay
+        // so freshly drawn rectangles are visually consistent.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        newshape: roiEditMode
+          ? ({
+              line: { color: "#ff8c00", width: 2, dash: "dot" },
+              fillcolor: "rgba(255, 165, 0, 0.10)",
+              opacity: 1,
+            } as any)
+          : undefined,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         shapes: allShapes as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -158,12 +293,9 @@ export function SignalPlot({
       config={{
         responsive: true,
         displaylogo: false,
-        modeBarButtonsToAdd: [
-          "drawline",
-          "drawrect",
-          "drawopenpath",
-          "eraseshape",
-        ],
+        modeBarButtonsToAdd: roiEditMode
+          ? ["drawrect", "eraseshape"]
+          : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
         editable: true,
       }}
       onRelayout={handleRelayout}

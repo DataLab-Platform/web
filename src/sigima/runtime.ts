@@ -557,6 +557,17 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("set_signal_roi", { oid, segments });
   }
 
+  async deleteSignalRoiAt(oid: string, index: number): Promise<void> {
+    await this.callPy("delete_signal_roi_at", { oid, index });
+  }
+
+  async extractSignalRois(oid: string, merged: boolean): Promise<string[]> {
+    return (await this.callPy("extract_signal_rois", {
+      oid,
+      merged,
+    })) as string[];
+  }
+
   // ------------------------------------------------------------------
   // Project save / load + CSV I/O (Phase 6)
   // ------------------------------------------------------------------

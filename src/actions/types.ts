@@ -45,6 +45,7 @@ export interface MenuNode {
 export const TOP_LEVEL_ORDER = [
   "File",
   "Edit",
+  "ROI",
   "Create",
   "Operations",
   "Processing",

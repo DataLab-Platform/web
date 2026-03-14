@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSigima } from "./sigima/SigimaContext";
 import type {
   FeatureDescriptor,
@@ -9,6 +9,7 @@ import type {
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
+  buildRoiActions,
   buildSignalAnalysisActions,
   buildSignalCreationActions,
   buildStaticActions,
@@ -63,6 +64,7 @@ export default function App() {
   });
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
   const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
+  const [roiEditMode, setRoiEditMode] = useState<boolean>(false);
   const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
   const [analysisEntries, setAnalysisEntries] = useState<
     SignalAnalysisDescriptor[]
@@ -479,6 +481,68 @@ export default function App() {
     [runtime, currentId],
   );
 
+  const handleToggleRoiEditMode = useCallback(() => {
+    setRoiEditMode((m) => !m);
+  }, []);
+
+  // Live-edit callback fed by the plot when the user drags a ROI handle or
+  // draws a brand-new rectangle in edit mode.  The backend is updated with
+  // a short debounce to avoid one PyProxy call per pixel.
+  const roiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleRoiChangeFromPlot = useCallback(
+    (segments: SignalRoiSegment[]) => {
+      setRoi(segments);
+      if (!runtime || !currentId) return;
+      if (roiWriteTimer.current) clearTimeout(roiWriteTimer.current);
+      roiWriteTimer.current = setTimeout(() => {
+        runtime.setSignalRoi(currentId, segments).catch((err) => {
+          console.error("ROI persist failed", err);
+        });
+      }, 200);
+    },
+    [runtime, currentId],
+  );
+
+  const handleRoiRemoveAt = useCallback(
+    async (index: number) => {
+      if (!runtime || !currentId) return;
+      await runtime.deleteSignalRoiAt(currentId, index);
+      const segs = await runtime.getSignalRoi(currentId);
+      setRoi(segs);
+    },
+    [runtime, currentId],
+  );
+
+  const handleRoiRemoveAll = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    await runtime.setSignalRoi(currentId, []);
+    setRoi([]);
+  }, [runtime, currentId]);
+
+  const handleRoiExtractEach = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    setBusy(true);
+    try {
+      const ids = await runtime.extractSignalRois(currentId, false);
+      await refresh();
+      if (ids.length > 0) setCurrentId(ids[ids.length - 1]);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, refresh]);
+
+  const handleRoiExtractMerged = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    setBusy(true);
+    try {
+      const ids = await runtime.extractSignalRois(currentId, true);
+      await refresh();
+      if (ids.length > 0) setCurrentId(ids[0]);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, refresh]);
+
   const handleSaveProject = useCallback(async () => {
     if (!runtime) return;
     const text = await runtime.saveProject();
@@ -626,7 +690,6 @@ export default function App() {
         onNewGroup: handleNewGroup,
         onDeleteSelection: handleDelete,
         onEditProperties: handleEditProperties,
-        onEditRoi: handleEditRoi,
         onSaveProject: handleSaveProject,
         onLoadProject: handleLoadProject,
         onOpenFile: handleOpenFile,
@@ -636,11 +699,21 @@ export default function App() {
       ...buildSignalCreationActions(signalTypes, handleCreateTyped),
       ...buildFeatureActions(features, handleApplyFeature),
       ...buildSignalAnalysisActions(analysisEntries, handleAnalysis),
+      ...buildRoiActions(roi, roiEditMode, {
+        onToggleEditMode: handleToggleRoiEditMode,
+        onEditNumerically: handleEditRoi,
+        onExtractEach: handleRoiExtractEach,
+        onExtractMerged: handleRoiExtractMerged,
+        onRemoveAt: handleRoiRemoveAt,
+        onRemoveAll: handleRoiRemoveAll,
+      }),
     ],
     [
       features,
       signalTypes,
       analysisEntries,
+      roi,
+      roiEditMode,
       handleCreateTyped,
       handleAnalysis,
       handleNewGroup,
@@ -648,6 +721,11 @@ export default function App() {
       handleApplyFeature,
       handleEditProperties,
       handleEditRoi,
+      handleToggleRoiEditMode,
+      handleRoiExtractEach,
+      handleRoiExtractMerged,
+      handleRoiRemoveAt,
+      handleRoiRemoveAll,
       handleSaveProject,
       handleLoadProject,
       handleOpenFile,
@@ -716,6 +794,8 @@ export default function App() {
               annotations={annotations}
               onAnnotationsChange={handleAnnotationsChange}
               roi={roi}
+              roiEditMode={roiEditMode}
+              onRoiChange={handleRoiChangeFromPlot}
               results={results}
             />
           )}
