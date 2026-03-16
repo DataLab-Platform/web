@@ -73,7 +73,8 @@ function SubmenuList({
               }
               role="menuitem"
               aria-disabled={!enabled}
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation();
                 if (!enabled) return;
                 onClose();
                 void action.run();
