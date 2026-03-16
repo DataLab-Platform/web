@@ -323,6 +323,40 @@ input {
   border-bottom: 1px solid var(--border);
   background: var(--panel-alt);
 }
+
+.panel-switcher {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+}
+.panel-switcher-tab {
+  flex: 1;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+.panel-switcher-tab:last-child {
+  border-right: none;
+}
+.panel-switcher-tab:hover:not(:disabled) {
+  background: var(--panel);
+  color: var(--text);
+}
+.panel-switcher-tab.active {
+  background: var(--panel);
+  color: var(--text);
+  border-bottom: 2px solid var(--accent, #4a8cff);
+  margin-bottom: -1px;
+}
+.panel-switcher-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .panel-body {
   flex: 1;
   overflow: auto;

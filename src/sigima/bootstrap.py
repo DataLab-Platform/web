@@ -242,10 +242,37 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
     return {"kind": entry.kind, "title": getattr(obj, "title", "")}
 
 
+def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
+    """Merge signal and image curated catalogs into a single dict.
+
+    Image features are namespaced under ``"image:"`` to avoid id
+    collisions with same-named signal features.
+    """
+    catalog: dict[str, _proc.FeatureSpec] = {}
+    for fid, spec in _proc.build_signal_catalog().items():
+        catalog[fid] = spec
+    for fid, spec in _proc.build_image_catalog().items():
+        new_id = f"image:{fid}"
+        # Reflect the prefix so the front-end uses it consistently.
+        catalog[new_id] = _proc.FeatureSpec(
+            feature_id=new_id,
+            label=spec.label,
+            menu_path=spec.menu_path,
+            pattern=spec.pattern,
+            icon=spec.icon,
+            operand_label=spec.operand_label,
+            paramclass=spec.paramclass,
+            func=spec.func,
+            object_kind=spec.object_kind,
+            skip_xarray_compat=spec.skip_xarray_compat,
+        )
+    return catalog
+
+
 # Preserve the live model & catalogue across HMR re-executions of this file.
 _MODEL: ObjectModel = globals().get("_MODEL", ObjectModel())  # type: ignore[assignment]
 _CATALOG: dict[str, _proc.FeatureSpec] = globals().get(
-    "_CATALOG", _proc.build_signal_catalog()
+    "_CATALOG", _build_full_catalog()
 )
 _PROCESSOR: _proc.BaseProcessor = globals().get(
     "_PROCESSOR", _proc.BaseProcessor("signal")
@@ -383,7 +410,7 @@ _SIGNAL_TYPE_ORDER: list[tuple[str, bool]] = [
 # Per-object cached creation parameter instance.  Keyed by oid; populated
 # when a signal is created via :func:`create_signal_typed` and consumed
 # by :func:`get_creation_param_schema` / :func:`update_signal_creation_params`.
-_CREATION_PARAMS: dict[str, NewSignalParam] = globals().get(
+_CREATION_PARAMS: dict[str, Any] = globals().get(
     "_CREATION_PARAMS", {}
 )
 
@@ -714,8 +741,142 @@ def delete_signal(oid: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Image panel (Phase 7 spike — minimal read-only support)
+# Image panel
 # ---------------------------------------------------------------------------
+
+
+from sigima.objects.image.creation import (  # noqa: E402  pylint: disable=wrong-import-position
+    DEFAULT_TITLE as _IMAGE_DEFAULT_TITLE,
+    IMAGE_TYPE_PARAM_CLASSES,
+    ImageTypes,
+    NewImageParam,
+    create_image_from_param,
+    create_image_parameters,
+)
+
+
+# Display order mirrors DataLab desktop's "Create" image menu.
+# ``True`` in the second column means a separator is drawn *before* the entry.
+_IMAGE_TYPE_ORDER: list[tuple[str, bool]] = [
+    ("zero", False),
+    ("normal_distribution", False),
+    ("poisson_distribution", False),
+    ("uniform_distribution", False),
+    ("gauss", True),
+    ("ramp", False),
+    ("checkerboard", True),
+    ("sinusoidal_grating", False),
+    ("ring", False),
+    ("siemens_star", False),
+    ("sinc", False),
+]
+
+
+# Icon names follow the same convention as signals — bare SVG filenames
+# resolved by the React UI through ``import.meta.glob`` over
+# ``src/assets/icons/create``.  Fallback to a generic icon if missing.
+_IMAGE_TYPE_ICONS: dict[str, str] = {
+    "zero": "2d-zero.svg",
+    "normal_distribution": "2d-normal.svg",
+    "poisson_distribution": "2d-poisson.svg",
+    "uniform_distribution": "2d-uniform.svg",
+    "gauss": "2d-gaussian.svg",
+    "ramp": "2d-ramp.svg",
+    "checkerboard": "checkerboard.svg",
+    "sinusoidal_grating": "grating.svg",
+    "ring": "ring.svg",
+    "siemens_star": "siemens.svg",
+    "sinc": "2d-sinc.svg",
+}
+
+
+def list_image_creation_types() -> list[dict[str, Any]]:
+    """Return the flat list of supported image generation types.
+
+    Same payload shape as :func:`list_signal_creation_types`.
+    """
+    by_value = {itype.value: itype for itype in ImageTypes}
+    out: list[dict[str, Any]] = []
+    for value, separator in _IMAGE_TYPE_ORDER:
+        itype = by_value.get(value)
+        if itype is None or itype not in IMAGE_TYPE_PARAM_CLASSES:
+            continue
+        try:
+            label = itype.label  # type: ignore[attr-defined]
+        except AttributeError:
+            label = value
+        out.append(
+            {
+                "value": value,
+                "label": label,
+                "icon": _IMAGE_TYPE_ICONS.get(value, ""),
+                "separator_before": separator,
+            }
+        )
+    return out
+
+
+def _itype_from_value(value: str) -> ImageTypes:
+    for itype in ImageTypes:
+        if itype.value == value:
+            return itype
+    raise ValueError(f"Unknown image type: {value!r}")
+
+
+def create_image_typed(stype: str, group_id: str | None = None) -> str:
+    """Create an image of *stype* with default parameters and store it.
+
+    The originating :class:`NewImageParam` instance is cached in
+    :data:`_CREATION_PARAMS` so the UI can later display & edit those
+    parameters live (mirrors :func:`create_signal_typed`).
+    """
+    typ = _itype_from_value(stype)
+    param = create_image_parameters(typ)
+    obj = create_image_from_param(param)
+    oid = _MODEL.add_object("image", obj, group_id=group_id)
+    _CREATION_PARAMS[oid] = param
+    obj.metadata["_dlw_creation_stype_"] = stype
+    return oid
+
+
+def update_image_creation_params(
+    oid: str, values: dict[str, Any]
+) -> dict[str, Any]:
+    """Apply *values* to the cached creation parameters and rebuild *oid*."""
+    from guidata.dataset import update_dataset
+
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    param = _CREATION_PARAMS.get(oid)
+    if param is None or not isinstance(param, NewImageParam):
+        raise ValueError(
+            f"Object {oid!r} has no cached image creation parameters; "
+            "use create_image_typed first."
+        )
+    update_dataset(param, values)
+    new_obj = create_image_from_param(param)
+    obj = _MODEL.get(oid)
+    obj.data = new_obj.data
+    obj.x0 = new_obj.x0
+    obj.y0 = new_obj.y0
+    obj.dx = new_obj.dx
+    obj.dy = new_obj.dy
+    use_generated = not param.title or param.title == _IMAGE_DEFAULT_TITLE
+    if use_generated:
+        gen = getattr(param, "generate_title", lambda: "")()
+        obj.title = gen or param.title
+    else:
+        obj.title = param.title
+    obj.xlabel = param.xlabel
+    obj.ylabel = param.ylabel
+    obj.zlabel = param.zlabel
+    obj.xunit = param.xunit
+    obj.yunit = param.yunit
+    obj.zunit = param.zunit
+    return {
+        "shape": [int(obj.data.shape[0]), int(obj.data.shape[1])],
+        "title": obj.title,
+    }
 
 
 def create_image(
@@ -727,14 +888,9 @@ def create_image(
     sigma: float = 50.0,
     group_id: str | None = None,
 ) -> str:
-    """Create a synthetic image and store it in the ``"image"`` panel.
+    """Legacy synthetic image helper kept for backwards compatibility.
 
-    Validates that the generic ObjectModel/Panel layer (Phase 1) is
-    type-agnostic.  Supported kinds:
-
-    * ``"gauss"``   — centred 2D Gaussian
-    * ``"ramp"``    — horizontal ramp 0 → *a*
-    * ``"random"``  — uniform random noise scaled by *a*
+    Prefer :func:`create_image_typed` which mirrors DataLab desktop.
     """
     yy, xx = np.mgrid[0:height, 0:width]
     if kind == "gauss":
@@ -754,19 +910,240 @@ def create_image(
 
 
 def get_image_data(oid: str) -> dict[str, Any]:
-    """Return *oid* image data as nested lists (read-only viewer)."""
+    """Return *oid* image data (read-only viewer payload).
+
+    Coordinates honour ``x0``/``y0``/``dx``/``dy`` (image origin and pixel
+    spacing).  ``data`` is exposed as nested lists.  ``data_min``/``max``
+    let the front-end pick a default LUT range without re-iterating.
+    """
     obj = _MODEL.get(oid)
+    data = obj.data
     return {
         "id": oid,
-        "title": obj.title,
-        "width": int(obj.data.shape[1]),
-        "height": int(obj.data.shape[0]),
-        "data": obj.data.tolist(),
+        "title": obj.title or "",
+        "width": int(data.shape[1]),
+        "height": int(data.shape[0]),
+        "data": data.tolist(),
+        "dtype": str(data.dtype),
+        "x0": float(getattr(obj, "x0", 0.0) or 0.0),
+        "y0": float(getattr(obj, "y0", 0.0) or 0.0),
+        "dx": float(getattr(obj, "dx", 1.0) or 1.0),
+        "dy": float(getattr(obj, "dy", 1.0) or 1.0),
+        "data_min": float(np.nanmin(data)),
+        "data_max": float(np.nanmax(data)),
         "xlabel": obj.xlabel or "",
         "ylabel": obj.ylabel or "",
+        "zlabel": getattr(obj, "zlabel", "") or "",
         "xunit": obj.xunit or "",
         "yunit": obj.yunit or "",
+        "zunit": getattr(obj, "zunit", "") or "",
     }
+
+
+# ---------------------------------------------------------------------------
+# Image ROI (Phase 13)
+# ---------------------------------------------------------------------------
+
+
+def get_image_roi(oid: str) -> list[dict[str, Any]]:
+    """Return ROI list attached to image *oid* in physical coordinates.
+
+    Each entry is one of:
+
+    * Rectangle: ``{"geometry": "rectangle", "title": str, "inverse": bool,
+      "x0": float, "y0": float, "dx": float, "dy": float}``
+    * Circle: ``{"geometry": "circle", "title": str, "inverse": bool,
+      "xc": float, "yc": float, "r": float}``
+    * Polygon: ``{"geometry": "polygon", "title": str, "inverse": bool,
+      "points": [[x0,y0],[x1,y1],...]}``
+
+    Returns ``[]`` when no ROI is defined.
+    """
+    from sigima.objects.image.roi import (
+        CircularROI,
+        PolygonalROI,
+        RectangularROI,
+    )
+
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return []
+    out: list[dict[str, Any]] = []
+    for single in roi.single_rois:
+        title = single.title or ""
+        inverse = bool(getattr(single, "inverse", False))
+        if isinstance(single, RectangularROI):
+            x0, y0, dx, dy = single.get_physical_coords(obj)
+            out.append(
+                {
+                    "geometry": "rectangle",
+                    "title": title,
+                    "inverse": inverse,
+                    "x0": float(x0),
+                    "y0": float(y0),
+                    "dx": float(dx),
+                    "dy": float(dy),
+                }
+            )
+        elif isinstance(single, CircularROI):
+            xc, yc, r = single.get_physical_coords(obj)
+            out.append(
+                {
+                    "geometry": "circle",
+                    "title": title,
+                    "inverse": inverse,
+                    "xc": float(xc),
+                    "yc": float(yc),
+                    "r": float(r),
+                }
+            )
+        elif isinstance(single, PolygonalROI):
+            coords = single.get_physical_coords(obj)
+            pts = [
+                [float(coords[2 * i]), float(coords[2 * i + 1])]
+                for i in range(len(coords) // 2)
+            ]
+            out.append(
+                {
+                    "geometry": "polygon",
+                    "title": title,
+                    "inverse": inverse,
+                    "points": pts,
+                }
+            )
+    return out
+
+
+def _build_image_roi(
+    obj: Any, segments: list[dict[str, Any]]
+) -> Any:
+    """Build an :class:`ImageROI` populated with *segments* (physical coords)."""
+    from sigima.objects.image.roi import (
+        CircularROI,
+        ImageROI,
+        PolygonalROI,
+        RectangularROI,
+    )
+
+    roi = ImageROI()
+    for seg in segments:
+        geometry = str(seg.get("geometry", "rectangle"))
+        title = str(seg.get("title", "") or "")
+        inverse = bool(seg.get("inverse", False))
+        if geometry == "rectangle":
+            x0 = float(seg["x0"])
+            y0 = float(seg["y0"])
+            dx = float(seg["dx"])
+            dy = float(seg["dy"])
+            if dx <= 0 or dy <= 0:
+                raise ValueError(
+                    f"Rectangle ROI requires positive dx/dy (got dx={dx}, dy={dy})"
+                )
+            roi.add_roi(
+                RectangularROI(
+                    [x0, y0, dx, dy], indices=False, title=title, inverse=inverse
+                )
+            )
+        elif geometry == "circle":
+            xc = float(seg["xc"])
+            yc = float(seg["yc"])
+            r = float(seg["r"])
+            if r <= 0:
+                raise ValueError(f"Circle ROI requires positive radius (got r={r})")
+            roi.add_roi(
+                CircularROI(
+                    [xc, yc, r],
+                    indices=False,
+                    title=title,
+                    inverse=inverse,
+                )
+            )
+        elif geometry == "polygon":
+            raw_pts = seg.get("points", [])
+            flat: list[float] = []
+            for pt in raw_pts:
+                flat.append(float(pt[0]))
+                flat.append(float(pt[1]))
+            if len(flat) < 6:
+                raise ValueError("Polygon ROI requires at least 3 vertices")
+            roi.add_roi(
+                PolygonalROI(flat, indices=False, title=title, inverse=inverse)
+            )
+        else:
+            raise ValueError(f"Unknown ROI geometry: {geometry!r}")
+    return roi
+
+
+def set_image_roi(oid: str, segments: list[dict[str, Any]] | None) -> None:
+    """Replace the ROI of image *oid* with *segments*.  Empty/None clears it."""
+    if hasattr(segments, "to_py"):
+        segments = segments.to_py()
+    obj = _MODEL.get(oid)
+    if not segments:
+        obj.roi = None
+        return
+    obj.roi = _build_image_roi(obj, segments)
+
+
+def delete_image_roi_at(oid: str, index: int) -> None:
+    """Remove the ROI at *index* from image *oid* (no-op if oob)."""
+    from sigima.objects.image.roi import ImageROI
+
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return
+    if 0 <= index < len(roi.single_rois):
+        new_singles = list(roi.single_rois)
+        del new_singles[index]
+        if not new_singles:
+            obj.roi = None
+            return
+        new_roi = ImageROI()
+        for single in new_singles:
+            new_roi.add_roi(single)
+        obj.roi = new_roi
+
+
+def extract_image_rois(oid: str, merged: bool) -> list[str]:
+    """Extract the ROIs of image *oid* into one or several new images.
+
+    Args:
+        oid: Source image id.
+        merged: When ``True`` produce a single output image containing the
+            union of all ROIs (``sipi.extract_rois``).
+            When ``False`` produce one image per ROI (``sipi.extract_roi``
+            applied to each :class:`ROI2DParam`).
+
+    Returns:
+        Ids of the newly created images (in source order).  Empty when the
+        source has no ROI.
+    """
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return []
+    import sigima.proc.image as sipi
+
+    panel = _MODEL._panels["image"]  # noqa: SLF001
+    src_group_id: str | None = None
+    try:
+        src_group_id = panel.find_group_of(oid).gid
+    except Exception:
+        src_group_id = None
+    params = [single.to_param(obj, i) for i, single in enumerate(roi.single_rois)]
+    out_ids: list[str] = []
+    if merged:
+        result = sipi.extract_rois(obj, params)
+        out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
+    else:
+        for p in params:
+            result = sipi.extract_roi(obj, p)
+            out_ids.append(
+                _MODEL.add_object("image", result, group_id=src_group_id)
+            )
+    return out_ids
 
 
 # ---------------------------------------------------------------------------
@@ -1388,16 +1765,116 @@ def _build_signal_analysis_catalog() -> "list[dict[str, Any]]":
     ]
 
 
-_SIGNAL_ANALYSIS: dict[str, dict[str, Any]] = globals().get(
-    "_SIGNAL_ANALYSIS", {}
+def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
+    """Return the ordered catalog of image-analysis features.
+
+    Mirrors :class:`ImageActionHandler.register_analysis` in
+    ``datalab/gui/processor/image.py``: same order, same labels, same
+    icon names, same separator positions.  Only ``1_to_0`` entries are
+    listed (i.e. analyses producing :class:`TableResult` /
+    :class:`GeometryResult` results).  ``1_to_1`` analyses
+    (horizontal/vertical projection, histogram) are exposed through the
+    regular Operations/Processing menus.
+    """
+    import sigima.proc.image as sipi
+
+    return [
+        {
+            "id": "stats",
+            "label": "Statistics",
+            "icon": "stats.svg",
+            "func": sipi.stats,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "centroid",
+            "label": "Centroid",
+            "icon": "",
+            "func": sipi.centroid,
+            "paramclass": None,
+            "separator_before": True,
+        },
+        {
+            "id": "enclosing_circle",
+            "label": "Minimum enclosing circle center",
+            "icon": "",
+            "func": sipi.enclosing_circle,
+            "paramclass": None,
+            "separator_before": False,
+        },
+        {
+            "id": "contour_shape",
+            "label": "Contour detection",
+            "icon": "",
+            "func": sipi.contour_shape,
+            "paramclass": sipi.ContourShapeParam,
+            "separator_before": True,
+        },
+        {
+            "id": "peak_detection",
+            "label": "Peak detection",
+            "icon": "peak_detect.svg",
+            "func": sipi.peak_detection,
+            "paramclass": sipi.Peak2DDetectionParam,
+            "separator_before": False,
+        },
+        {
+            "id": "hough_circle_peaks",
+            "label": "Circle Hough transform",
+            "icon": "",
+            "func": sipi.hough_circle_peaks,
+            "paramclass": sipi.HoughCircleParam,
+            "separator_before": False,
+        },
+        {
+            "id": "blob_dog",
+            "label": "Blob detection (DOG)",
+            "icon": "",
+            "func": sipi.blob_dog,
+            "paramclass": sipi.BlobDOGParam,
+            "separator_before": True,
+        },
+        {
+            "id": "blob_doh",
+            "label": "Blob detection (DOH)",
+            "icon": "",
+            "func": sipi.blob_doh,
+            "paramclass": sipi.BlobDOHParam,
+            "separator_before": False,
+        },
+        {
+            "id": "blob_log",
+            "label": "Blob detection (LOG)",
+            "icon": "",
+            "func": sipi.blob_log,
+            "paramclass": sipi.BlobLOGParam,
+            "separator_before": False,
+        },
+    ]
+
+
+# Per-kind analysis catalog: {"signal": {func_id: entry}, "image": {...}}.
+# Preserved across HMR so cached parameter values keep pointing at the
+# right entries.
+_ANALYSIS_CATALOG: dict[str, dict[str, dict[str, Any]]] = globals().get(
+    "_ANALYSIS_CATALOG", {}
 )
-if not _SIGNAL_ANALYSIS:
-    for _entry in _build_signal_analysis_catalog():
-        _SIGNAL_ANALYSIS[_entry["id"]] = _entry
+if not _ANALYSIS_CATALOG:
+    _ANALYSIS_CATALOG["signal"] = {
+        e["id"]: e for e in _build_signal_analysis_catalog()
+    }
+    _ANALYSIS_CATALOG["image"] = {
+        e["id"]: e for e in _build_image_analysis_catalog()
+    }
 
 
-# Cached parameter instances per (oid, func_id) so a parametric analysis
-# can be re-opened with its previous values pre-filled.
+# Backwards-compat alias for any external code that still refers to it.
+_SIGNAL_ANALYSIS = _ANALYSIS_CATALOG["signal"]
+
+
+# Cached parameter instances per (kind, oid, func_id) so a parametric
+# analysis can be re-opened with its previous values pre-filled.
 _ANALYSIS_PARAMS: dict[str, Any] = globals().get("_ANALYSIS_PARAMS", {})
 
 
@@ -1415,6 +1892,16 @@ def list_signal_analysis() -> list[dict[str, Any]]:
          "separator_before": False,
          "has_params": True}
     """
+    return _list_analysis_for_kind("signal")
+
+
+def list_image_analysis() -> list[dict[str, Any]]:
+    """Return the flat list of image-analysis entries (DataLab parity)."""
+    return _list_analysis_for_kind("image")
+
+
+def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
+    catalog = _ANALYSIS_CATALOG.get(kind, {})
     return [
         {
             "id": e["id"],
@@ -1423,16 +1910,19 @@ def list_signal_analysis() -> list[dict[str, Any]]:
             "separator_before": e["separator_before"],
             "has_params": e["paramclass"] is not None,
         }
-        for e in _SIGNAL_ANALYSIS.values()
+        for e in catalog.values()
     ]
 
 
-def _get_or_create_analysis_param(oid: str, func_id: str) -> Any:
-    entry = _SIGNAL_ANALYSIS[func_id]
+def _get_or_create_analysis_param(kind: str, oid: str, func_id: str) -> Any:
+    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    if func_id not in catalog:
+        raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
+    entry = catalog[func_id]
     paramclass = entry["paramclass"]
     if paramclass is None:
         return None
-    cache_key = f"{oid}::{func_id}"
+    cache_key = f"{kind}::{oid}::{func_id}"
     cached = _ANALYSIS_PARAMS.get(cache_key)
     if cached is not None and isinstance(cached, paramclass):
         return cached
@@ -1447,11 +1937,22 @@ def get_signal_analysis_param_schema(
     """Return the JSON schema for *func_id*'s parameter set, with the
     cached values for *oid* pre-filled.  Returns ``None`` for parameter-
     less analyses."""
+    return _get_analysis_param_schema("signal", oid, func_id)
+
+
+def get_image_analysis_param_schema(
+    oid: str, func_id: str
+) -> dict[str, Any] | None:
+    """Image-side counterpart of :func:`get_signal_analysis_param_schema`."""
+    return _get_analysis_param_schema("image", oid, func_id)
+
+
+def _get_analysis_param_schema(
+    kind: str, oid: str, func_id: str
+) -> dict[str, Any] | None:
     from guidata.dataset import dataset_to_schema_with_values
 
-    if func_id not in _SIGNAL_ANALYSIS:
-        raise KeyError(f"Unknown analysis function: {func_id!r}")
-    param = _get_or_create_analysis_param(oid, func_id)
+    param = _get_or_create_analysis_param(kind, oid, func_id)
     if param is None:
         return None
     return dataset_to_schema_with_values(param)
@@ -1533,15 +2034,29 @@ def run_signal_analysis(
         the function returned no result (some analyses return ``None`` —
         e.g. ``fwhm`` on a flat signal).
     """
-    if func_id not in _SIGNAL_ANALYSIS:
-        raise KeyError(f"Unknown analysis function: {func_id!r}")
-    entry = _SIGNAL_ANALYSIS[func_id]
+    return _run_analysis("signal", oid, func_id, params)
+
+
+def run_image_analysis(
+    oid: str, func_id: str, params: Any = None
+) -> dict[str, Any] | None:
+    """Image-side counterpart of :func:`run_signal_analysis`."""
+    return _run_analysis("image", oid, func_id, params)
+
+
+def _run_analysis(
+    kind: str, oid: str, func_id: str, params: Any = None
+) -> dict[str, Any] | None:
+    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    if func_id not in catalog:
+        raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
+    entry = catalog[func_id]
     obj = _MODEL.get(oid)
 
     if hasattr(params, "to_py"):
         params = params.to_py()
 
-    param = _get_or_create_analysis_param(oid, func_id)
+    param = _get_or_create_analysis_param(kind, oid, func_id)
     if param is not None and isinstance(params, dict):
         from guidata.dataset import update_dataset
 
@@ -1620,6 +2135,12 @@ def clear_signal_results(oid: str, metadata_key: str | None = None) -> int:
     return len(to_drop)
 
 
+# The result-storage mechanism is metadata-based and therefore identical
+# for signals and images.  Aliases keep the JS bridge symmetric.
+list_image_results = list_signal_results
+clear_image_results = clear_signal_results
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -1636,7 +2157,14 @@ __all__ = [
     "get_signal_xy",
     "delete_signal",
     "create_image",
+    "create_image_typed",
+    "list_image_creation_types",
+    "update_image_creation_params",
     "get_image_data",
+    "get_image_roi",
+    "set_image_roi",
+    "delete_image_roi_at",
+    "extract_image_rois",
     "get_panel_tree",
     "create_group",
     "rename_group",
@@ -1669,4 +2197,9 @@ __all__ = [
     "run_signal_analysis",
     "list_signal_results",
     "clear_signal_results",
+    "list_image_analysis",
+    "get_image_analysis_param_schema",
+    "run_image_analysis",
+    "list_image_results",
+    "clear_image_results",
 ]

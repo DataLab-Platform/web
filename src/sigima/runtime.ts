@@ -119,20 +119,59 @@ export interface SignalRoiSegment {
   title?: string;
 }
 
-/** Image data payload returned by ``get_image_data`` (Phase 7). */
+/** A single ROI on a 2D image — discriminated union by ``geometry``.
+ *  All coordinates are physical (matching the image's ``x0``/``y0``/
+ *  ``dx``/``dy``).  ``inverse`` flips the masking logic (default false). */
+export type ImageRoiSegment =
+  | {
+      geometry: "rectangle";
+      title?: string;
+      inverse?: boolean;
+      x0: number;
+      y0: number;
+      dx: number;
+      dy: number;
+    }
+  | {
+      geometry: "circle";
+      title?: string;
+      inverse?: boolean;
+      xc: number;
+      yc: number;
+      r: number;
+    }
+  | {
+      geometry: "polygon";
+      title?: string;
+      inverse?: boolean;
+      points: [number, number][];
+    };
+
+/** Image data payload returned by ``get_image_data``. */
 export interface ImageData {
   id: string;
   title: string;
   width: number;
   height: number;
   data: number[][];
+  dtype: string;
+  /** Pixel origin (top-left corner) and pixel spacing. */
+  x0: number;
+  y0: number;
+  dx: number;
+  dy: number;
+  /** Pre-computed extrema, used to seed the LUT range. */
+  data_min: number;
+  data_max: number;
   xlabel: string;
   ylabel: string;
+  zlabel: string;
   xunit: string;
   yunit: string;
+  zunit: string;
 }
 
-/** Parameters for the synthetic image creator (Phase 7 spike). */
+/** Legacy synthetic image parameters (kept for backwards compatibility). */
 export interface ImageCreationParams {
   kind: "gauss" | "ramp" | "random";
   title: string;
@@ -140,6 +179,14 @@ export interface ImageCreationParams {
   height: number;
   a?: number;
   sigma?: number;
+}
+
+/** One entry of the image "Create" menu, mirrors :class:`SignalCreationType`. */
+export interface ImageCreationType {
+  value: string;
+  label: string;
+  icon: string;
+  separator_before: boolean;
 }
 
 /** Diagnostic info returned by ``loadProject``. */
@@ -603,7 +650,7 @@ await micropip.install(["sigima", "guidata"])
   }
 
   // ------------------------------------------------------------------
-  // Image panel (Phase 7 spike)
+  // Image panel
   // ------------------------------------------------------------------
 
   async createImage(params: ImageCreationParams): Promise<string> {
@@ -615,6 +662,106 @@ await micropip.install(["sigima", "guidata"])
 
   async getImageData(oid: string): Promise<ImageData> {
     return (await this.callPy("get_image_data", { oid })) as ImageData;
+  }
+
+  /** Return the catalog of image creation types (mirrors signals). */
+  async listImageCreationTypes(): Promise<ImageCreationType[]> {
+    return (await this.callPy("list_image_creation_types")) as ImageCreationType[];
+  }
+
+  /** Create an image of *stype* with default parameters. */
+  async createImageTyped(stype: string, groupId?: string): Promise<string> {
+    return (await this.callPy("create_image_typed", {
+      stype,
+      group_id: groupId ?? null,
+    })) as string;
+  }
+
+  /** Update cached image creation parameters and rebuild the image. */
+  async updateImageCreationParams(
+    oid: string,
+    values: Record<string, unknown>,
+  ): Promise<{ shape: [number, number]; title: string }> {
+    return (await this.callPy("update_image_creation_params", {
+      oid,
+      values,
+    })) as { shape: [number, number]; title: string };
+  }
+
+  // ------------------------------------------------------------------
+  // Image ROI (Phase 13) — physical coordinates
+  // ------------------------------------------------------------------
+
+  async getImageRoi(oid: string): Promise<ImageRoiSegment[]> {
+    return (await this.callPy("get_image_roi", { oid })) as ImageRoiSegment[];
+  }
+
+  async setImageRoi(
+    oid: string,
+    segments: ImageRoiSegment[],
+  ): Promise<void> {
+    await this.callPy("set_image_roi", { oid, segments });
+  }
+
+  async deleteImageRoiAt(oid: string, index: number): Promise<void> {
+    await this.callPy("delete_image_roi_at", { oid, index });
+  }
+
+  async extractImageRois(oid: string, merged: boolean): Promise<string[]> {
+    return (await this.callPy("extract_image_rois", {
+      oid,
+      merged,
+    })) as string[];
+  }
+
+  // ------------------------------------------------------------------
+  // Image analysis (Phase 13) — same payload shape as signal analysis.
+  // ------------------------------------------------------------------
+
+  async listImageAnalysis(): Promise<SignalAnalysisDescriptor[]> {
+    return (await this.callPy(
+      "list_image_analysis",
+    )) as SignalAnalysisDescriptor[];
+  }
+
+  async getImageAnalysisParamSchema(
+    id: string,
+    funcId: string,
+  ): Promise<unknown | null> {
+    const schema = await this.callPy("get_image_analysis_param_schema", {
+      oid: id,
+      func_id: funcId,
+    });
+    return schema ?? null;
+  }
+
+  async runImageAnalysis(
+    id: string,
+    funcId: string,
+    params?: Record<string, unknown> | null,
+  ): Promise<AnalysisResult | null> {
+    const out = await this.callPy("run_image_analysis", {
+      oid: id,
+      func_id: funcId,
+      params: params ?? null,
+    });
+    return (out ?? null) as AnalysisResult | null;
+  }
+
+  async listImageResults(id: string): Promise<AnalysisResult[]> {
+    return (await this.callPy("list_image_results", {
+      oid: id,
+    })) as AnalysisResult[];
+  }
+
+  async clearImageResults(
+    id: string,
+    metadataKey?: string,
+  ): Promise<number> {
+    return (await this.callPy("clear_image_results", {
+      oid: id,
+      metadata_key: metadataKey ?? null,
+    })) as number;
   }
 
   // ------------------------------------------------------------------

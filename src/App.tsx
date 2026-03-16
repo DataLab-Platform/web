@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSigima } from "./sigima/SigimaContext";
 import type {
   FeatureDescriptor,
+  ImageData,
   PanelTree,
   SchemaWithValues,
   SignalData,
@@ -9,20 +10,28 @@ import type {
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
+  buildImageAnalysisActions,
+  buildImageCreationActions,
+  buildImageRoiActions,
   buildRoiActions,
   buildSignalAnalysisActions,
   buildSignalCreationActions,
   buildStaticActions,
 } from "./actions/registry";
 import { ObjectTree } from "./components/ObjectTree";
+import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
+import { ImagePlot } from "./components/ImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
+import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { SidePanel } from "./components/SidePanel";
 import type {
   AnalysisResult,
+  ImageCreationType,
+  ImageRoiSegment,
   ObjectMeta,
   PlotlyAnnotations,
   SignalAnalysisDescriptor,
@@ -46,10 +55,12 @@ interface PendingAnalysis {
 
 export default function App() {
   const { runtime, status, message, error } = useSigima();
+  const [activePanel, setActivePanel] = useState<PanelKind>("signal");
   const [tree, setTree] = useState<PanelTree | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [data, setData] = useState<SignalData | null>(null);
+  const [imageData, setImageData] = useState<ImageData | null>(null);
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingFeature | null>(null);
@@ -65,8 +76,16 @@ export default function App() {
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
   const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
   const [roiEditMode, setRoiEditMode] = useState<boolean>(false);
+  const [imageRoi, setImageRoi] = useState<ImageRoiSegment[]>([]);
+  const [editingImageRoi, setEditingImageRoi] = useState<
+    ImageRoiSegment[] | null
+  >(null);
   const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
+  const [imageTypes, setImageTypes] = useState<ImageCreationType[]>([]);
   const [analysisEntries, setAnalysisEntries] = useState<
+    SignalAnalysisDescriptor[]
+  >([]);
+  const [imageAnalysisEntries, setImageAnalysisEntries] = useState<
     SignalAnalysisDescriptor[]
   >([]);
   const [pendingAnalysis, setPendingAnalysis] =
@@ -80,7 +99,7 @@ export default function App() {
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
-      const newTree = await runtime.getPanelTree("signal");
+      const newTree = await runtime.getPanelTree(activePanel);
       setTree(newTree);
       const allIds: string[] = [];
       for (const g of newTree.groups) for (const o of g.objects) allIds.push(o.id);
@@ -96,26 +115,65 @@ export default function App() {
         setSelectedIds([preferredCurrentId]);
       }
     },
-    [runtime],
+    [runtime, activePanel],
   );
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
     runtime.listFeatures().then(setFeatures);
     runtime.listSignalCreationTypes().then(setSignalTypes);
+    runtime.listImageCreationTypes().then(setImageTypes);
     runtime.listSignalAnalysis().then(setAnalysisEntries);
+    runtime.listImageAnalysis().then(setImageAnalysisEntries);
     refresh();
   }, [status, runtime, refresh]);
 
   useEffect(() => {
     if (!runtime || !currentId) {
       setData(null);
+      setImageData(null);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
+      setImageRoi([]);
       setResults([]);
       return;
     }
     let cancelled = false;
+    if (activePanel === "image") {
+      // Image panel: viewer + ROI + analysis results.
+      setData(null);
+      setAnnotations({ shapes: [], annotations: [] });
+      setRoi([]);
+      runtime
+        .getImageData(currentId)
+        .then((d) => {
+          if (!cancelled) setImageData(d);
+        })
+        .catch(() => {
+          if (!cancelled) setImageData(null);
+        });
+      runtime
+        .getImageRoi(currentId)
+        .then((segs) => {
+          if (!cancelled) setImageRoi(segs);
+        })
+        .catch(() => {
+          if (!cancelled) setImageRoi([]);
+        });
+      runtime
+        .listImageResults(currentId)
+        .then((rs) => {
+          if (!cancelled) setResults(rs);
+        })
+        .catch(() => {
+          if (!cancelled) setResults([]);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setImageData(null);
+    setImageRoi([]);
     runtime
       .getSignalData(currentId)
       .then((d) => {
@@ -151,7 +209,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, currentId]);
+  }, [runtime, currentId, activePanel]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null) => {
@@ -159,6 +217,21 @@ export default function App() {
       setCurrentId(current);
     },
     [],
+  );
+
+  const handleSwitchPanel = useCallback(
+    (kind: PanelKind) => {
+      if (kind === activePanel) return;
+      setActivePanel(kind);
+      setSelectedIds([]);
+      setCurrentId(null);
+      setData(null);
+      setImageData(null);
+      setRoi([]);
+      setImageRoi([]);
+      setResults([]);
+    },
+    [activePanel],
   );
 
   const handleCreateTyped = useCallback(
@@ -177,20 +250,41 @@ export default function App() {
     [runtime, refresh],
   );
 
+  const handleCreateImageTyped = useCallback(
+    async (stype: string) => {
+      if (!runtime) return;
+      setBusy(true);
+      try {
+        const id = await runtime.createImageTyped(stype);
+        setPreferredSideTab("creation");
+        await refresh(id);
+        setSideRefreshNonce((n) => n + 1);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, refresh],
+  );
+
   const handleSideObjectChanged = useCallback(
     async (oid: string) => {
       if (!runtime) return;
       // The Creation/Properties form just mutated the object — refresh
       // the plot data and the tree (title / size may have changed).
       try {
-        const updated = await runtime.getSignalData(oid);
-        setData(updated);
+        if (activePanel === "image") {
+          const updated = await runtime.getImageData(oid);
+          setImageData(updated);
+        } else {
+          const updated = await runtime.getSignalData(oid);
+          setData(updated);
+        }
       } catch {
         /* ignore — object may have been deleted */
       }
       await refresh(oid);
     },
-    [runtime, refresh],
+    [runtime, refresh, activePanel],
   );
 
   /** Effective sources for *feature* given the current selection. */
@@ -295,10 +389,13 @@ export default function App() {
   const refreshResults = useCallback(
     async (oid: string) => {
       if (!runtime) return;
-      const rs = await runtime.listSignalResults(oid);
+      const rs =
+        activePanel === "image"
+          ? await runtime.listImageResults(oid)
+          : await runtime.listSignalResults(oid);
       setResults(rs);
     },
-    [runtime],
+    [runtime, activePanel],
   );
 
   const runAnalysis = useCallback(
@@ -310,11 +407,14 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        const result = await runtime.runSignalAnalysis(oid, funcId, params);
+        const result =
+          activePanel === "image"
+            ? await runtime.runImageAnalysis(oid, funcId, params)
+            : await runtime.runSignalAnalysis(oid, funcId, params);
         if (result === null) {
           window.alert(
             "The analysis function returned no result " +
-              "(e.g. FWHM on a flat curve).",
+              "(e.g. FWHM on a flat curve, or no peak detected).",
           );
         }
         await refreshResults(oid);
@@ -324,7 +424,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refreshResults],
+    [runtime, refreshResults, activePanel],
   );
 
   const handleAnalysis = useCallback(
@@ -334,22 +434,24 @@ export default function App() {
         await runAnalysis(funcId, null, currentId);
         return;
       }
-      const schema = await runtime.getSignalAnalysisParamSchema(
-        currentId,
-        funcId,
-      );
+      const schema =
+        activePanel === "image"
+          ? await runtime.getImageAnalysisParamSchema(currentId, funcId)
+          : await runtime.getSignalAnalysisParamSchema(currentId, funcId);
       if (!schema) {
         await runAnalysis(funcId, null, currentId);
         return;
       }
-      const entry = analysisEntries.find((e) => e.id === funcId);
+      const catalog =
+        activePanel === "image" ? imageAnalysisEntries : analysisEntries;
+      const entry = catalog.find((e) => e.id === funcId);
       setPendingAnalysis({
         funcId,
         label: entry?.label ?? funcId,
         schema: schema as SchemaWithValues,
       });
     },
-    [runtime, currentId, analysisEntries, runAnalysis],
+    [runtime, currentId, analysisEntries, imageAnalysisEntries, activePanel, runAnalysis],
   );
 
   const handleSubmitAnalysisParams = useCallback(
@@ -365,10 +467,14 @@ export default function App() {
   const handleClearResults = useCallback(
     async (key: string | null) => {
       if (!runtime || !currentId) return;
-      await runtime.clearSignalResults(currentId, key ?? undefined);
+      if (activePanel === "image") {
+        await runtime.clearImageResults(currentId, key ?? undefined);
+      } else {
+        await runtime.clearSignalResults(currentId, key ?? undefined);
+      }
       await refreshResults(currentId);
     },
-    [runtime, currentId, refreshResults],
+    [runtime, currentId, refreshResults, activePanel],
   );
 
   const handleDelete = useCallback(async () => {
@@ -390,12 +496,12 @@ export default function App() {
     if (!runtime) return;
     setBusy(true);
     try {
-      await runtime.createGroup("signal");
+      await runtime.createGroup(activePanel);
       await refresh();
     } finally {
       setBusy(false);
     }
-  }, [runtime, refresh]);
+  }, [runtime, refresh, activePanel]);
 
   const handleRenameObject = useCallback(
     async (oid: string, name: string) => {
@@ -543,6 +649,103 @@ export default function App() {
     }
   }, [runtime, currentId, refresh]);
 
+  // ------------------------------------------------------------------
+  // Image ROI handlers (Phase 13)
+  // ------------------------------------------------------------------
+
+  const handleImageEditRoi = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const segs = await runtime.getImageRoi(currentId);
+    setEditingImageRoi(segs);
+  }, [runtime, currentId]);
+
+  const handleImageAddRectangle = useCallback(async () => {
+    if (!runtime || !currentId || !imageData) return;
+    const sx = (imageData.width * imageData.dx) / 4 || 1;
+    const sy = (imageData.height * imageData.dy) / 4 || 1;
+    const x0 =
+      imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
+    const y0 =
+      imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
+    const next: ImageRoiSegment[] = [
+      ...imageRoi,
+      {
+        geometry: "rectangle",
+        title: "",
+        inverse: false,
+        x0,
+        y0,
+        dx: sx,
+        dy: sy,
+      },
+    ];
+    setEditingImageRoi(next);
+  }, [runtime, currentId, imageRoi, imageData]);
+
+  const handleImageAddCircle = useCallback(async () => {
+    if (!runtime || !currentId || !imageData) return;
+    const r =
+      Math.min(imageData.width * imageData.dx, imageData.height * imageData.dy) /
+        4 || 1;
+    const xc = imageData.x0 + (imageData.width * imageData.dx) / 2;
+    const yc = imageData.y0 + (imageData.height * imageData.dy) / 2;
+    const next: ImageRoiSegment[] = [
+      ...imageRoi,
+      { geometry: "circle", title: "", inverse: false, xc, yc, r },
+    ];
+    setEditingImageRoi(next);
+  }, [runtime, currentId, imageRoi, imageData]);
+
+  const handleSubmitImageRoi = useCallback(
+    async (segments: ImageRoiSegment[]) => {
+      if (!runtime || !currentId) return;
+      await runtime.setImageRoi(currentId, segments);
+      setEditingImageRoi(null);
+      setImageRoi(segments);
+    },
+    [runtime, currentId],
+  );
+
+  const handleImageRoiRemoveAt = useCallback(
+    async (index: number) => {
+      if (!runtime || !currentId) return;
+      await runtime.deleteImageRoiAt(currentId, index);
+      const segs = await runtime.getImageRoi(currentId);
+      setImageRoi(segs);
+    },
+    [runtime, currentId],
+  );
+
+  const handleImageRoiRemoveAll = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    await runtime.setImageRoi(currentId, []);
+    setImageRoi([]);
+  }, [runtime, currentId]);
+
+  const handleImageRoiExtractEach = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    setBusy(true);
+    try {
+      const ids = await runtime.extractImageRois(currentId, false);
+      await refresh();
+      if (ids.length > 0) setCurrentId(ids[ids.length - 1]);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, refresh]);
+
+  const handleImageRoiExtractMerged = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    setBusy(true);
+    try {
+      const ids = await runtime.extractImageRois(currentId, true);
+      await refresh();
+      if (ids.length > 0) setCurrentId(ids[0]);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, refresh]);
+
   const handleSaveProject = useCallback(async () => {
     if (!runtime) return;
     const text = await runtime.saveProject();
@@ -644,27 +847,6 @@ export default function App() {
     input.click();
   }, [runtime, refresh]);
 
-  const handleNewImage = useCallback(async () => {
-    if (!runtime) return;
-    setBusy(true);
-    try {
-      // Spike action: skip the dialog and create a default Gaussian image so
-      // the abstraction is exercised end-to-end without dragging in a 2D
-      // viewer in the MVP.
-      const id = await runtime.createImage({
-        kind: "gauss",
-        title: "Image",
-        width: 256,
-        height: 256,
-        a: 1.0,
-        sigma: 50.0,
-      });
-      await refresh(id);
-    } finally {
-      setBusy(false);
-    }
-  }, [runtime, refresh]);
-
   const hasObjects = useMemo(() => {
     if (!tree) return false;
     for (const g of tree.groups) {
@@ -684,6 +866,13 @@ export default function App() {
     [status, busy, selectedIds, currentId, hasObjects],
   );
 
+  // Restrict feature actions, creation menu and signal-only menus
+  // (Analysis / ROI) to the currently active panel.
+  const visibleFeatures = useMemo(
+    () => features.filter((f) => f.object_kind === activePanel),
+    [features, activePanel],
+  );
+
   const actions = useMemo(
     () => [
       ...buildStaticActions({
@@ -694,27 +883,45 @@ export default function App() {
         onLoadProject: handleLoadProject,
         onOpenFile: handleOpenFile,
         onSaveFile: handleSaveFile,
-        onNewImage: handleNewImage,
       }),
-      ...buildSignalCreationActions(signalTypes, handleCreateTyped),
-      ...buildFeatureActions(features, handleApplyFeature),
-      ...buildSignalAnalysisActions(analysisEntries, handleAnalysis),
-      ...buildRoiActions(roi, roiEditMode, {
-        onToggleEditMode: handleToggleRoiEditMode,
-        onEditNumerically: handleEditRoi,
-        onExtractEach: handleRoiExtractEach,
-        onExtractMerged: handleRoiExtractMerged,
-        onRemoveAt: handleRoiRemoveAt,
-        onRemoveAll: handleRoiRemoveAll,
-      }),
+      ...(activePanel === "signal"
+        ? buildSignalCreationActions(signalTypes, handleCreateTyped)
+        : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
+      ...buildFeatureActions(visibleFeatures, handleApplyFeature),
+      ...(activePanel === "signal"
+        ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
+        : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
+      ...(activePanel === "signal"
+        ? buildRoiActions(roi, roiEditMode, {
+            onToggleEditMode: handleToggleRoiEditMode,
+            onEditNumerically: handleEditRoi,
+            onExtractEach: handleRoiExtractEach,
+            onExtractMerged: handleRoiExtractMerged,
+            onRemoveAt: handleRoiRemoveAt,
+            onRemoveAll: handleRoiRemoveAll,
+          })
+        : buildImageRoiActions(imageRoi, {
+            onAddRectangle: handleImageAddRectangle,
+            onAddCircle: handleImageAddCircle,
+            onEditNumerically: handleImageEditRoi,
+            onExtractEach: handleImageRoiExtractEach,
+            onExtractMerged: handleImageRoiExtractMerged,
+            onRemoveAt: handleImageRoiRemoveAt,
+            onRemoveAll: handleImageRoiRemoveAll,
+          })),
     ],
     [
-      features,
+      activePanel,
+      visibleFeatures,
       signalTypes,
+      imageTypes,
       analysisEntries,
+      imageAnalysisEntries,
       roi,
       roiEditMode,
+      imageRoi,
       handleCreateTyped,
+      handleCreateImageTyped,
       handleAnalysis,
       handleNewGroup,
       handleDelete,
@@ -726,11 +933,17 @@ export default function App() {
       handleRoiExtractMerged,
       handleRoiRemoveAt,
       handleRoiRemoveAll,
+      handleImageAddRectangle,
+      handleImageAddCircle,
+      handleImageEditRoi,
+      handleImageRoiExtractEach,
+      handleImageRoiExtractMerged,
+      handleImageRoiRemoveAt,
+      handleImageRoiRemoveAll,
       handleSaveProject,
       handleLoadProject,
       handleOpenFile,
       handleSaveFile,
-      handleNewImage,
     ],
   );
 
@@ -744,7 +957,14 @@ export default function App() {
       />
       <div className="workspace">
         <aside className="panel">
-          <div className="panel-header">Signals</div>
+          <PanelSwitcher
+            active={activePanel}
+            onChange={handleSwitchPanel}
+            disabled={status !== "ready" || busy}
+          />
+          <div className="panel-header">
+            {activePanel === "signal" ? "Signals" : "Images"}
+          </div>
           <div className="panel-body">
             <ObjectTree
               tree={tree}
@@ -781,13 +1001,17 @@ export default function App() {
               </div>
             </div>
           )}
-          {status === "loading" && !data && (
+          {status === "loading" && !data && !imageData && (
             <div className="plot-empty">{message}</div>
           )}
-          {status === "ready" && !data && (
-            <div className="plot-empty">Create a signal to get started.</div>
+          {status === "ready" && !data && !imageData && (
+            <div className="plot-empty">
+              {activePanel === "signal"
+                ? "Create a signal to get started."
+                : "Create an image to get started."}
+            </div>
           )}
-          {data && (
+          {activePanel === "signal" && data && (
             <SignalPlot
               data={data}
               oid={currentId}
@@ -798,6 +1022,9 @@ export default function App() {
               onRoiChange={handleRoiChangeFromPlot}
               results={results}
             />
+          )}
+          {activePanel === "image" && imageData && (
+            <ImagePlot data={imageData} roi={imageRoi} results={results} />
           )}
         </main>
         {runtime && (
@@ -859,6 +1086,17 @@ export default function App() {
           xMax={data.x[data.x.length - 1] ?? 1}
           onSubmit={handleSubmitRoi}
           onCancel={() => setEditingRoi(null)}
+        />
+      )}
+      {editingImageRoi !== null && imageData && (
+        <ImageRoiDialog
+          initial={editingImageRoi}
+          xMin={imageData.x0}
+          xMax={imageData.x0 + imageData.width * imageData.dx}
+          yMin={imageData.y0}
+          yMax={imageData.y0 + imageData.height * imageData.dy}
+          onSubmit={handleSubmitImageRoi}
+          onCancel={() => setEditingImageRoi(null)}
         />
       )}
     </div>

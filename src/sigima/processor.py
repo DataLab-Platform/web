@@ -36,7 +36,7 @@ from guidata.dataset import (
     resolve_dynamic_choices,
     update_dataset,
 )
-from sigima.objects import SignalObj
+from sigima.objects import ImageObj, SignalObj
 from sigima.proc.decorator import (
     is_computation_function,
 )
@@ -146,6 +146,145 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
 }
 
 
+# Curated image catalogue.  Same conventions as ``SIGNAL_OVERRIDES``.
+IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
+    # Operations / arithmetic ------------------------------------------------
+    "addition": FeatureOverride("Sum", "Operations/Sum"),
+    "average": FeatureOverride("Average", "Operations/Average"),
+    "product": FeatureOverride("Product", "Operations/Product"),
+    "difference": FeatureOverride(
+        "Difference", "Operations/Difference", operand_label="Image to subtract"
+    ),
+    "quadratic_difference": FeatureOverride(
+        "Quadratic difference",
+        "Operations/Quadratic difference",
+        operand_label="Image to subtract",
+    ),
+    "division": FeatureOverride(
+        "Division", "Operations/Division", operand_label="Divisor"
+    ),
+    "addition_constant": FeatureOverride(
+        "Add constant\u2026", "Operations/Constant/Add constant"
+    ),
+    "difference_constant": FeatureOverride(
+        "Subtract constant\u2026", "Operations/Constant/Subtract constant"
+    ),
+    "product_constant": FeatureOverride(
+        "Multiply by constant\u2026", "Operations/Constant/Multiply by constant"
+    ),
+    "division_constant": FeatureOverride(
+        "Divide by constant\u2026", "Operations/Constant/Divide by constant"
+    ),
+    "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
+    "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
+    "real": FeatureOverride("Real part", "Operations/Real part"),
+    "imag": FeatureOverride("Imaginary part", "Operations/Imaginary part"),
+    "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
+    "logp1": FeatureOverride("Log10(z+n)\u2026", "Operations/Math/Log10(z+n)"),
+    "exp": FeatureOverride("Exponential", "Operations/Math/Exponential"),
+    "log10": FeatureOverride("Log10", "Operations/Math/Log10"),
+    # Processing -------------------------------------------------------------
+    "normalize": FeatureOverride("Normalize\u2026", "Processing/Normalize"),
+    "calibration": FeatureOverride(
+        "Linear calibration\u2026", "Processing/Linear calibration"
+    ),
+    "clip": FeatureOverride("Clip\u2026", "Processing/Clip"),
+    # Filtering --------------------------------------------------------------
+    "gaussian_filter": FeatureOverride(
+        "Gaussian filter\u2026", "Processing/Filtering/Gaussian filter"
+    ),
+    "moving_average": FeatureOverride(
+        "Moving average\u2026", "Processing/Filtering/Moving average"
+    ),
+    "moving_median": FeatureOverride(
+        "Moving median\u2026", "Processing/Filtering/Moving median"
+    ),
+    "wiener": FeatureOverride("Wiener filter", "Processing/Filtering/Wiener filter"),
+    # Edges ------------------------------------------------------------------
+    "canny": FeatureOverride("Canny\u2026", "Processing/Edges/Canny"),
+    "roberts": FeatureOverride("Roberts", "Processing/Edges/Roberts"),
+    "sobel": FeatureOverride("Sobel", "Processing/Edges/Sobel"),
+    "laplace": FeatureOverride("Laplace", "Processing/Edges/Laplace"),
+    "prewitt": FeatureOverride("Prewitt", "Processing/Edges/Prewitt"),
+    "scharr": FeatureOverride("Scharr", "Processing/Edges/Scharr"),
+    # Threshold --------------------------------------------------------------
+    "threshold": FeatureOverride("Threshold\u2026", "Processing/Threshold/Threshold"),
+    "threshold_isodata": FeatureOverride(
+        "Isodata", "Processing/Threshold/Isodata"
+    ),
+    "threshold_li": FeatureOverride("Li", "Processing/Threshold/Li"),
+    "threshold_mean": FeatureOverride("Mean", "Processing/Threshold/Mean"),
+    "threshold_otsu": FeatureOverride("Otsu", "Processing/Threshold/Otsu"),
+    "threshold_triangle": FeatureOverride(
+        "Triangle", "Processing/Threshold/Triangle"
+    ),
+    "threshold_yen": FeatureOverride("Yen", "Processing/Threshold/Yen"),
+    # Exposure ---------------------------------------------------------------
+    "adjust_gamma": FeatureOverride(
+        "Gamma correction\u2026", "Processing/Exposure/Gamma correction"
+    ),
+    "adjust_log": FeatureOverride(
+        "Log correction\u2026", "Processing/Exposure/Log correction"
+    ),
+    "adjust_sigmoid": FeatureOverride(
+        "Sigmoid correction\u2026", "Processing/Exposure/Sigmoid correction"
+    ),
+    "equalize_hist": FeatureOverride(
+        "Histogram equalization", "Processing/Exposure/Histogram equalization"
+    ),
+    "equalize_adapthist": FeatureOverride(
+        "Adaptive histogram equalization\u2026",
+        "Processing/Exposure/Adaptive histogram equalization",
+    ),
+    "rescale_intensity": FeatureOverride(
+        "Intensity rescaling\u2026",
+        "Processing/Exposure/Intensity rescaling",
+    ),
+    # Geometry ---------------------------------------------------------------
+    "flatfield": FeatureOverride(
+        "Flat-field correction\u2026",
+        "Processing/Flat-field correction",
+        operand_label="Flat-field image",
+    ),
+    "rotate90": FeatureOverride(
+        "Rotate 90\u00b0", "Processing/Geometry/Rotate 90\u00b0"
+    ),
+    "rotate270": FeatureOverride(
+        "Rotate 270\u00b0", "Processing/Geometry/Rotate 270\u00b0"
+    ),
+    "fliph": FeatureOverride(
+        "Horizontal flip", "Processing/Geometry/Horizontal flip"
+    ),
+    "flipv": FeatureOverride("Vertical flip", "Processing/Geometry/Vertical flip"),
+    "rotate": FeatureOverride(
+        "Rotate arbitrarily\u2026", "Processing/Geometry/Rotate"
+    ),
+    "resize": FeatureOverride("Resize\u2026", "Processing/Geometry/Resize"),
+    "binning": FeatureOverride("Pixel binning\u2026", "Processing/Geometry/Binning"),
+    # Morphology -------------------------------------------------------------
+    "white_tophat": FeatureOverride(
+        "White Top-Hat\u2026", "Processing/Morphology/White Top-Hat"
+    ),
+    "black_tophat": FeatureOverride(
+        "Black Top-Hat\u2026", "Processing/Morphology/Black Top-Hat"
+    ),
+    "erosion": FeatureOverride("Erosion\u2026", "Processing/Morphology/Erosion"),
+    "dilation": FeatureOverride("Dilation\u2026", "Processing/Morphology/Dilation"),
+    "opening": FeatureOverride("Opening\u2026", "Processing/Morphology/Opening"),
+    "closing": FeatureOverride("Closing\u2026", "Processing/Morphology/Closing"),
+    # Fourier ----------------------------------------------------------------
+    "fft": FeatureOverride("FFT", "Processing/Fourier analysis/FFT"),
+    "ifft": FeatureOverride("Inverse FFT", "Processing/Fourier analysis/Inverse FFT"),
+    "magnitude_spectrum": FeatureOverride(
+        "Magnitude spectrum", "Processing/Fourier analysis/Magnitude spectrum"
+    ),
+    "phase_spectrum": FeatureOverride(
+        "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
+    ),
+    "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
+}
+
+
 # ---------------------------------------------------------------------------
 # Pattern inference
 # ---------------------------------------------------------------------------
@@ -169,6 +308,34 @@ def _is_signal_list_type(annot: Any) -> bool:
     return False
 
 
+def _is_image_type(annot: Any) -> bool:
+    if isinstance(annot, type) and issubclass(annot, ImageObj):
+        return True
+    if isinstance(annot, str):
+        return annot in {"ImageObj", "sigima.objects.ImageObj"}
+    return False
+
+
+def _is_image_list_type(annot: Any) -> bool:
+    origin = typing.get_origin(annot)
+    if origin in (list, typing.List):  # type: ignore[attr-defined]
+        args = typing.get_args(annot)
+        return bool(args) and _is_image_type(args[0])
+    if isinstance(annot, str):
+        return annot in {"list[ImageObj]", "List[ImageObj]"}
+    return False
+
+
+def _is_obj_type(annot: Any, kind: str) -> bool:
+    return _is_image_type(annot) if kind == "image" else _is_signal_type(annot)
+
+
+def _is_obj_list_type(annot: Any, kind: str) -> bool:
+    return (
+        _is_image_list_type(annot) if kind == "image" else _is_signal_list_type(annot)
+    )
+
+
 def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
     """Return the DataSet parameter class of *func*, if any."""
     try:
@@ -182,7 +349,12 @@ def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
         annot = hints.get(p.name, p.annotation)
         if isinstance(annot, str):
             annot = func_globals.get(annot, annot)
-        if _is_signal_type(annot) or _is_signal_list_type(annot):
+        if (
+            _is_signal_type(annot)
+            or _is_signal_list_type(annot)
+            or _is_image_type(annot)
+            or _is_image_list_type(annot)
+        ):
             continue
         if (
             isinstance(annot, type)
@@ -193,7 +365,7 @@ def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
     return None
 
 
-def _infer_pattern(func: Callable[..., Any]) -> Pattern | None:
+def _infer_pattern(func: Callable[..., Any], kind: str = "signal") -> Pattern | None:
     """Infer the computation pattern from the function's signature.
 
     Returns ``None`` if the signature does not match a supported pattern.
@@ -207,12 +379,12 @@ def _infer_pattern(func: Callable[..., Any]) -> Pattern | None:
     if not params:
         return None
     first_annot = hints.get(params[0].name, params[0].annotation)
-    if _is_signal_list_type(first_annot):
+    if _is_obj_list_type(first_annot, kind):
         return "n_to_1"
-    if _is_signal_type(first_annot):
+    if _is_obj_type(first_annot, kind):
         if len(params) >= 2:
             second_annot = hints.get(params[1].name, params[1].annotation)
-            if _is_signal_type(second_annot):
+            if _is_obj_type(second_annot, kind):
                 return "2_to_1"
         return "1_to_1"
     return None
@@ -223,19 +395,20 @@ def _infer_pattern(func: Callable[..., Any]) -> Pattern | None:
 # ---------------------------------------------------------------------------
 
 
-def _collect_signal_functions() -> dict[str, Callable[..., Any]]:
-    """Return ``{function_name: callable}`` for every Sigima signal computation.
+def _collect_functions_for_kind(kind: str) -> dict[str, Callable[..., Any]]:
+    """Return ``{function_name: callable}`` for every Sigima computation
+    in ``sigima.proc.<kind>``.
 
-    Walks ``sigima.proc.signal`` only — avoids importing
-    ``sigima.proc.validation`` which depends on ``pytest`` (not available
-    in the default Pyodide stack).
+    Walks the package only — avoids importing ``sigima.proc.validation``
+    which depends on ``pytest`` (not available in the default Pyodide
+    stack).
     """
-    import sigima.proc.signal as _signal_pkg
+    pkg = importlib.import_module(f"sigima.proc.{kind}")
 
     result: dict[str, Callable[..., Any]] = {}
     seen: set[int] = set()
     for _finder, modname, _ispkg in pkgutil.walk_packages(
-        path=_signal_pkg.__path__, prefix=_signal_pkg.__name__ + "."
+        path=pkg.__path__, prefix=pkg.__name__ + "."
     ):
         try:
             mod = importlib.import_module(modname)
@@ -252,22 +425,24 @@ def _collect_signal_functions() -> dict[str, Callable[..., Any]]:
     return result
 
 
-def build_signal_catalog() -> dict[str, FeatureSpec]:
-    """Build the curated signal feature catalogue.
+def _collect_signal_functions() -> dict[str, Callable[..., Any]]:
+    """Backwards-compatible alias for :func:`_collect_functions_for_kind`."""
+    return _collect_functions_for_kind("signal")
 
-    Auto-discovers Sigima signal computation functions and merges them
-    with :data:`SIGNAL_OVERRIDES`.  Functions without a matching override
-    are skipped (logged on the Pyodide console for visibility).
-    """
-    discovered = _collect_signal_functions()
+
+def _build_catalog_for_kind(
+    kind: str, overrides: dict[str, FeatureOverride]
+) -> dict[str, FeatureSpec]:
+    """Generic catalog builder shared by signal and image."""
+    discovered = _collect_functions_for_kind(kind)
     catalog: dict[str, FeatureSpec] = {}
     for fname, func in discovered.items():
-        override = SIGNAL_OVERRIDES.get(fname)
+        override = overrides.get(fname)
         if override is None:
             continue
-        pattern = override.pattern or _infer_pattern(func)
+        pattern = override.pattern or _infer_pattern(func, kind=kind)
         if pattern is None:
-            print(f"[processor] skip {fname!r}: cannot infer pattern")
+            print(f"[processor] skip {fname!r} ({kind}): cannot infer pattern")
             continue
         catalog[fname] = FeatureSpec(
             feature_id=fname,
@@ -278,14 +453,23 @@ def build_signal_catalog() -> dict[str, FeatureSpec]:
             operand_label=override.operand_label,
             paramclass=_extract_paramclass(func),
             func=func,
-            object_kind="signal",
+            object_kind=kind,
             skip_xarray_compat=override.skip_xarray_compat,
         )
-    # Diagnostic: list orphan overrides (typo guard).
-    missing = [k for k in SIGNAL_OVERRIDES if k not in catalog]
+    missing = [k for k in overrides if k not in catalog]
     if missing:
-        print(f"[processor] override(s) without matching function: {missing}")
+        print(f"[processor] {kind} override(s) without matching function: {missing}")
     return catalog
+
+
+def build_signal_catalog() -> dict[str, FeatureSpec]:
+    """Build the curated signal feature catalogue."""
+    return _build_catalog_for_kind("signal", SIGNAL_OVERRIDES)
+
+
+def build_image_catalog() -> dict[str, FeatureSpec]:
+    """Build the curated image feature catalogue."""
+    return _build_catalog_for_kind("image", IMAGE_OVERRIDES)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +600,7 @@ class BaseProcessor:
         result = ApplyResult()
         for src, oid in zip(sources, source_ids):
             op = operand
-            if not spec.skip_xarray_compat:
+            if spec.object_kind == "signal" and not spec.skip_xarray_compat:
                 op = _interpolate_to(src, operand)
             args: tuple[Any, ...] = (
                 (src, op) if instance is None else (src, op, instance)
@@ -431,7 +615,11 @@ class BaseProcessor:
         instance: gds.DataSet | None,
     ) -> ApplyResult:
         srcs = sources
-        if not spec.skip_xarray_compat and len(sources) > 1:
+        if (
+            spec.object_kind == "signal"
+            and not spec.skip_xarray_compat
+            and len(sources) > 1
+        ):
             srcs = _align_signals(sources)
         args: tuple[Any, ...] = (srcs,) if instance is None else (srcs, instance)
         return ApplyResult(items=[(None, spec.func(*args))])
@@ -500,8 +688,10 @@ __all__ = [
     "BaseProcessor",
     "FeatureOverride",
     "FeatureSpec",
+    "IMAGE_OVERRIDES",
     "Pattern",
     "SIGNAL_OVERRIDES",
+    "build_image_catalog",
     "build_signal_catalog",
     "get_schema",
     "resolve_choices",

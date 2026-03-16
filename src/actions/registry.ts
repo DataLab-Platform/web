@@ -1,5 +1,7 @@
 import type {
   FeatureDescriptor,
+  ImageCreationType,
+  ImageRoiSegment,
   SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
@@ -18,7 +20,6 @@ export interface StaticActionCallbacks {
   onLoadProject: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
-  onNewImage: () => void;
 }
 
 /** Wire static actions (File / Edit) ----------------------------------- */
@@ -44,17 +45,10 @@ export function buildStaticActions(
       run: cb.onSaveFile,
     },
     {
-      id: "file.new_image",
-      label: "New image…",
-      menuPath: "File/New image…",
-      beginGroup: true,
-      enabled: ready,
-      run: cb.onNewImage,
-    },
-    {
       id: "file.new_group",
       label: "New group",
       menuPath: "File/New group",
+      beginGroup: true,
       enabled: ready,
       run: cb.onNewGroup,
     },
@@ -129,10 +123,43 @@ export function buildSignalCreationActions(
   }));
 }
 
+/** Wire one Create-menu entry per Sigima image generation type. */
+export function buildImageCreationActions(
+  types: ImageCreationType[],
+  onCreate: (stype: string) => void,
+): ActionDescriptor[] {
+  const ready = (s: ActionState) => s.status === "ready" && !s.busy;
+  return types.map((t) => ({
+    id: `create.image.${t.value}`,
+    label: t.label,
+    menuPath: `Create/${t.label}`,
+    iconUrl: getCreateIconUrl(t.icon),
+    beginGroup: t.separator_before,
+    enabled: ready,
+    run: () => onCreate(t.value),
+  }));
+}
+
 /** Wire one Analysis-menu entry per Sigima signal-analysis function.
  *  Mirrors the desktop app's flat ``Analysis`` menu — labels, icons and
  *  separators come straight from the Python catalogue. */
 export function buildSignalAnalysisActions(
+  entries: SignalAnalysisDescriptor[],
+  onRun: (funcId: string, hasParams: boolean) => void,
+): ActionDescriptor[] {
+  return buildAnalysisActions("signal", entries, onRun);
+}
+
+/** Image-side counterpart of :func:`buildSignalAnalysisActions`. */
+export function buildImageAnalysisActions(
+  entries: SignalAnalysisDescriptor[],
+  onRun: (funcId: string, hasParams: boolean) => void,
+): ActionDescriptor[] {
+  return buildAnalysisActions("image", entries, onRun);
+}
+
+function buildAnalysisActions(
+  kind: "signal" | "image",
   entries: SignalAnalysisDescriptor[],
   onRun: (funcId: string, hasParams: boolean) => void,
 ): ActionDescriptor[] {
@@ -142,7 +169,7 @@ export function buildSignalAnalysisActions(
     // splitter would treat it as a sub-menu separator.  Visually identical.
     const safeLabel = e.label.replace(/\//g, "\u2215");
     return {
-      id: `analysis.signal.${e.id}`,
+      id: `analysis.${kind}.${e.id}`,
       label: e.has_params ? `${safeLabel}…` : safeLabel,
       menuPath: `Analysis/${safeLabel}`,
       iconUrl: getAnalysisIconUrl(e.icon),
@@ -234,6 +261,101 @@ export function buildRoiActions(
   });
   out.push({
     id: "roi.remove_all",
+    label: "Remove all",
+    menuPath: "ROI/Remove/Remove all",
+    iconUrl: getRoiIconUrl("roi_delete"),
+    beginGroup: roi.length > 0,
+    enabled: readyWithRoi,
+    run: cb.onRemoveAll,
+  });
+  return out;
+}
+
+/** Callbacks for the image ``ROI`` top-level menu. */
+export interface ImageRoiActionCallbacks {
+  /** Open the numerical ROI dialog (rectangle/circle/polygon editor). */
+  onEditNumerically: () => void;
+  /** Append a new default rectangle ROI then open the numerical dialog. */
+  onAddRectangle: () => void;
+  /** Append a new default circle ROI then open the numerical dialog. */
+  onAddCircle: () => void;
+  /** Extract one new image per ROI (1-to-n). */
+  onExtractEach: () => void;
+  /** Extract a single new image containing the union of all ROIs. */
+  onExtractMerged: () => void;
+  /** Drop a single ROI by index. */
+  onRemoveAt: (index: number) => void;
+  /** Drop every ROI on the current image. */
+  onRemoveAll: () => void;
+}
+
+/** Wire the ``ROI`` menu actions for the currently displayed image. */
+export function buildImageRoiActions(
+  roi: ImageRoiSegment[],
+  cb: ImageRoiActionCallbacks,
+): ActionDescriptor[] {
+  const ready = (s: ActionState) =>
+    s.status === "ready" && !s.busy && s.currentId !== null;
+  const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
+  const out: ActionDescriptor[] = [
+    {
+      id: "image_roi.add_rectangle",
+      label: "Add rectangular ROI…",
+      menuPath: "ROI/Add rectangular ROI…",
+      iconUrl: getRoiIconUrl("roi_new_rectangle"),
+      enabled: ready,
+      run: cb.onAddRectangle,
+    },
+    {
+      id: "image_roi.add_circle",
+      label: "Add circular ROI…",
+      menuPath: "ROI/Add circular ROI…",
+      iconUrl: getRoiIconUrl("roi_new_circle"),
+      enabled: ready,
+      run: cb.onAddCircle,
+    },
+    {
+      id: "image_roi.edit_numerical",
+      label: "Edit numerically…",
+      menuPath: "ROI/Edit numerically…",
+      iconUrl: getRoiIconUrl("roi_coordinate"),
+      beginGroup: true,
+      enabled: ready,
+      run: cb.onEditNumerically,
+    },
+    {
+      id: "image_roi.extract_each",
+      label: "Extract (one image per ROI)",
+      menuPath: "ROI/Extract (one image per ROI)",
+      iconUrl: getRoiIconUrl("roi_ima"),
+      beginGroup: true,
+      enabled: readyWithRoi,
+      run: cb.onExtractEach,
+    },
+    {
+      id: "image_roi.extract_merged",
+      label: "Extract (merged into one image)",
+      menuPath: "ROI/Extract (merged into one image)",
+      iconUrl: getRoiIconUrl("roi_ima"),
+      enabled: readyWithRoi,
+      run: cb.onExtractMerged,
+    },
+  ];
+  roi.forEach((seg, idx) => {
+    const fallback = `${seg.geometry === "rectangle" ? "Rect" : seg.geometry === "circle" ? "Circle" : "Poly"} ${idx + 1}`;
+    const safeTitle = (seg.title || fallback).replace(/\//g, "\u2215");
+    out.push({
+      id: `image_roi.remove.${idx}`,
+      label: safeTitle,
+      menuPath: `ROI/Remove/${safeTitle}`,
+      iconUrl: getRoiIconUrl("roi_delete"),
+      beginGroup: idx === 0,
+      enabled: ready,
+      run: () => cb.onRemoveAt(idx),
+    });
+  });
+  out.push({
+    id: "image_roi.remove_all",
     label: "Remove all",
     menuPath: "ROI/Remove/Remove all",
     iconUrl: getRoiIconUrl("roi_delete"),
