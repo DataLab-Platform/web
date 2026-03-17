@@ -2,7 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { SigimaProvider } from "./sigima/SigimaContext";
+import { installConsoleCapture } from "./utils/consoleLog";
 import "./styles.css";
+
+installConsoleCapture();
 
 const container = document.getElementById("root");
 if (!container) {

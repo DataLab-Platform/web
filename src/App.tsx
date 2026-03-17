@@ -10,6 +10,7 @@ import type {
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
+  buildHelpActions,
   buildImageAnalysisActions,
   buildImageCreationActions,
   buildImageRoiActions,
@@ -24,6 +25,7 @@ import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import { OperandPicker } from "./components/OperandPicker";
+import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
@@ -108,6 +110,7 @@ export default function App() {
     sourceIds: string[];
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
+  const [helpView, setHelpView] = useState<HelpView | null>(null);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -923,6 +926,11 @@ export default function App() {
         onOpenFile: handleOpenFile,
         onSaveFile: handleSaveFile,
       }),
+      ...buildHelpActions({
+        onShowAbout: () => setHelpView("about"),
+        onShowShortcuts: () => setHelpView("shortcuts"),
+        onShowConsole: () => setHelpView("console"),
+      }),
       ...(activePanel === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
@@ -1156,6 +1164,9 @@ export default function App() {
           onSubmit={handleSubmitImageRoi}
           onCancel={() => setEditingImageRoi(null)}
         />
+      )}
+      {helpView && (
+        <HelpDialog view={helpView} onClose={() => setHelpView(null)} />
       )}
     </div>
   );

@@ -84,6 +84,58 @@ export function buildStaticActions(
   ];
 }
 
+/** Callbacks for the Help (?) menu actions. */
+export interface HelpActionCallbacks {
+  onShowAbout: () => void;
+  onShowShortcuts: () => void;
+  onShowConsole: () => void;
+}
+
+/** Wire Help / "?" menu actions. */
+export function buildHelpActions(
+  cb: HelpActionCallbacks,
+): ActionDescriptor[] {
+  // Help entries are always available (no runtime dependency).
+  const always = () => true;
+  return [
+    {
+      id: "help.documentation",
+      label: "Online documentation",
+      menuPath: "Help/Online documentation",
+      enabled: always,
+      run: () =>
+        window.open(
+          "https://datalab-platform.com/",
+          "_blank",
+          "noopener,noreferrer",
+        ),
+    },
+    {
+      id: "help.shortcuts",
+      label: "Keyboard shortcuts",
+      menuPath: "Help/Keyboard shortcuts",
+      enabled: always,
+      run: cb.onShowShortcuts,
+    },
+    {
+      id: "help.console",
+      label: "Browser console log",
+      menuPath: "Help/Browser console log",
+      beginGroup: true,
+      enabled: always,
+      run: cb.onShowConsole,
+    },
+    {
+      id: "help.about",
+      label: "About DataLab Web",
+      menuPath: "Help/About DataLab Web",
+      beginGroup: true,
+      enabled: always,
+      run: cb.onShowAbout,
+    },
+  ];
+}
+
 /** Wire feature-driven actions (Operations / Processing / …) ---------- */
 export function buildFeatureActions(
   features: FeatureDescriptor[],

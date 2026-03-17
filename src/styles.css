@@ -654,6 +654,161 @@ input {
   font-size: 12px;
 }
 
+/* Help / About / Shortcuts / Console dialog */
+.help-dialog {
+  min-width: 520px;
+  max-width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.help-dialog-body {
+  overflow: auto;
+  flex: 1 1 auto;
+  margin: 8px 0;
+}
+.help-about {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.help-about p {
+  margin: 8px 0;
+}
+.help-about-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.help-about-logo {
+  width: 56px;
+  height: 56px;
+}
+.help-about-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+.help-about-version {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.help-about-links {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: grid;
+  gap: 4px;
+}
+.help-about-links a {
+  color: var(--accent, #2d7ff9);
+  text-decoration: none;
+}
+.help-about-links a:hover {
+  text-decoration: underline;
+}
+.help-about-license {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 12px;
+}
+.help-shortcuts section {
+  margin-bottom: 12px;
+}
+.help-shortcuts h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin: 0 0 4px;
+}
+.help-shortcuts table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.help-shortcuts td {
+  padding: 3px 8px;
+  vertical-align: top;
+}
+.help-shortcuts td:first-child {
+  width: 140px;
+  white-space: nowrap;
+}
+.help-shortcuts kbd {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+}
+.help-console {
+  display: flex;
+  flex-direction: column;
+  height: 60vh;
+  min-height: 280px;
+}
+.help-console-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.help-console-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.help-console-count {
+  color: var(--text-dim);
+  margin-right: auto;
+}
+.help-console-buttons {
+  display: flex;
+  gap: 6px;
+}
+.help-console-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.help-console-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.help-console-line {
+  display: grid;
+  grid-template-columns: 80px 50px 1fr;
+  gap: 8px;
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.help-console-time {
+  color: var(--text-dim);
+}
+.help-console-level {
+  font-weight: 700;
+  text-align: right;
+}
+.help-console-log .help-console-level,
+.help-console-info .help-console-level {
+  color: #8aa9ff;
+}
+.help-console-warn {
+  color: #f1c40f;
+}
+.help-console-error {
+  color: #f48771;
+}
+
 /* DataSetForm — generic schema-driven parameter editor */
 .dataset-dialog {
   min-width: 380px;
