@@ -453,6 +453,108 @@ function buildGeometryOverlays(results: AnalysisResult[]): {
       }
     }
   }
+  // Plot overlays attached to non-geometry results (currently only
+  // emitted by pulse-features tables: baselines/plateau as segments,
+  // x₀/x₅₀/x₁₀₀ as vertical markers).  We render them on top of the
+  // signal trace so they read like DataLab desktop's PlotPy items.
+  for (const r of results) {
+    if (!r.overlays || r.overlays.length === 0) continue;
+    const fallbackColor = colorFor(r.func_name, idx++);
+    for (const ov of r.overlays) {
+      const color = ov.color ?? fallbackColor;
+      if (ov.kind === "segment") {
+        shapes.push({
+          type: "line",
+          xref: "x",
+          yref: "y",
+          x0: ov.x0,
+          y0: ov.y0,
+          x1: ov.x1,
+          y1: ov.y1,
+          line: { color, width: 4 },
+          layer: "above",
+          editable: false,
+        });
+        if (ov.label) {
+          annotations.push({
+            x: (ov.x0 + ov.x1) / 2,
+            y: (ov.y0 + ov.y1) / 2,
+            xref: "x",
+            yref: "y",
+            text: ov.label,
+            showarrow: false,
+            font: { color: "#ffffff", size: 11 },
+            bgcolor: "rgba(0,0,0,0.55)",
+            bordercolor: color,
+            borderwidth: 1,
+            borderpad: 2,
+            yshift: -14,
+          });
+        }
+      } else if (ov.kind === "vline") {
+        shapes.push({
+          type: "line",
+          xref: "x",
+          yref: "paper",
+          x0: ov.x,
+          y0: 0,
+          x1: ov.x,
+          y1: 1,
+          line: { color, width: 2, dash: "dot" },
+          layer: "above",
+          editable: false,
+        });
+        if (ov.label) {
+          annotations.push({
+            x: ov.x,
+            y: 1,
+            xref: "x",
+            yref: "paper",
+            text: ov.label,
+            showarrow: false,
+            font: { color: "#ffffff", size: 11, weight: 700 },
+            bgcolor: "rgba(0,0,0,0.65)",
+            bordercolor: color,
+            borderwidth: 1,
+            borderpad: 2,
+            yshift: -2,
+            xanchor: "center",
+            yanchor: "top",
+          });
+        }
+      } else if (ov.kind === "hline") {
+        shapes.push({
+          type: "line",
+          xref: "paper",
+          yref: "y",
+          x0: 0,
+          y0: ov.y,
+          x1: 1,
+          y1: ov.y,
+          line: { color, width: 2, dash: "dot" },
+          layer: "above",
+          editable: false,
+        });
+        if (ov.label) {
+          annotations.push({
+            x: 1,
+            y: ov.y,
+            xref: "paper",
+            yref: "y",
+            text: ov.label,
+            showarrow: false,
+            font: { color: "#ffffff", size: 11 },
+            bgcolor: "rgba(0,0,0,0.55)",
+            bordercolor: color,
+            borderwidth: 1,
+            borderpad: 2,
+            xshift: -4,
+            xanchor: "right",
+          });
+        }
+      }
+    }
+  }
   return {
     resultShapes: shapes,
     resultAnnotations: annotations,

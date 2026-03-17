@@ -1971,7 +1971,107 @@ def _result_metadata_key(result: Any) -> str:
     raise TypeError(f"Unsupported analysis result type: {type(result).__name__}")
 
 
-def _serialize_result(result: Any, key: str) -> dict[str, Any]:
+def _build_pulse_overlays(result: Any, obj: Any) -> list[dict[str, Any]]:
+    """Build segment / vertical-line overlays for a pulse-features
+    :class:`TableResult` so the front-end can render the same
+    measurement geometry as DataLab desktop.
+
+    Mirrors :class:`datalab.adapters_plotpy.objects.scalar.
+    TablePlotPyAdapter.create_pulse_visualization_items`.
+    """
+    from sigima.tools.signal import pulse
+
+    overlays: list[dict[str, Any]] = []
+    headers = list(result.headers)
+    seg_color = "#33ff00"
+    vline_color = "#a7ff33"
+    x_arr = obj.x
+    y_arr = obj.y
+
+    def _idx(name: str) -> int | None:
+        try:
+            return headers.index(name)
+        except ValueError:
+            return None
+
+    def _valid(*vs: Any) -> bool:
+        for v in vs:
+            if v is None:
+                return False
+            try:
+                if isinstance(v, float) and (v != v):  # NaN
+                    return False
+            except Exception:
+                return False
+        return True
+
+    def _push_segment(
+        x0: float, y0: float, x1: float, y1: float, label: str
+    ) -> None:
+        overlays.append(
+            {
+                "kind": "segment",
+                "x0": float(x0),
+                "y0": float(y0),
+                "x1": float(x1),
+                "y1": float(y1),
+                "label": label,
+                "color": seg_color,
+            }
+        )
+
+    def _push_vline(x: float, label: str) -> None:
+        overlays.append(
+            {
+                "kind": "vline",
+                "x": float(x),
+                "label": label,
+                "color": vline_color,
+            }
+        )
+
+    i_xs0, i_xs1 = _idx("xstartmin"), _idx("xstartmax")
+    i_xe0, i_xe1 = _idx("xendmin"), _idx("xendmax")
+    i_xp0, i_xp1 = _idx("xplateaumin"), _idx("xplateaumax")
+    i_x0 = _idx("x0")
+    i_x50 = _idx("x50")
+    i_x100 = _idx("x100")
+
+    for row in result.data:
+        if i_xs0 is not None and i_xs1 is not None:
+            xs0, xs1 = row[i_xs0], row[i_xs1]
+            if _valid(xs0, xs1):
+                ys = pulse.get_range_mean_y(x_arr, y_arr, (xs0, xs1))
+                if _valid(ys):
+                    _push_segment(xs0, ys, xs1, ys, "Start baseline")
+        if i_xe0 is not None and i_xe1 is not None:
+            xe0, xe1 = row[i_xe0], row[i_xe1]
+            if _valid(xe0, xe1):
+                ye = pulse.get_range_mean_y(x_arr, y_arr, (xe0, xe1))
+                if _valid(ye):
+                    _push_segment(xe0, ye, xe1, ye, "End baseline")
+        if i_xp0 is not None and i_xp1 is not None:
+            xp0, xp1 = row[i_xp0], row[i_xp1]
+            if _valid(xp0, xp1):
+                yp = pulse.get_range_mean_y(x_arr, y_arr, (xp0, xp1))
+                if _valid(yp):
+                    _push_segment(xp0, yp, xp1, yp, "Plateau")
+        for i_x, label in (
+            (i_x0, "x₀"),
+            (i_x50, "x₅₀"),
+            (i_x100, "x₁₀₀"),
+        ):
+            if i_x is None:
+                continue
+            xv = row[i_x]
+            if _valid(xv):
+                _push_vline(xv, label)
+    return overlays
+
+
+def _serialize_result(
+    result: Any, key: str, obj: Any | None = None
+) -> dict[str, Any]:
     """Build a JSON-friendly payload describing one analysis result."""
     from sigima.objects.scalar import GeometryResult, TableResult
 
@@ -2013,6 +2113,19 @@ def _serialize_result(result: Any, key: str) -> dict[str, Any]:
         payload["roi_indices"] = (
             None if result.roi_indices is None else list(result.roi_indices)
         )
+        # Pulse-features tables get plot overlays mirroring DataLab Qt
+        # (start/end baseline + plateau segments, x₀/x₅₀/x₁₀₀ vlines).
+        try:
+            is_pulse = result.is_pulse_features()
+        except Exception:
+            is_pulse = False
+        if is_pulse and obj is not None:
+            try:
+                overlays = _build_pulse_overlays(result, obj)
+            except Exception:  # pragma: no cover — defensive
+                overlays = []
+            if overlays:
+                payload["overlays"] = overlays
     else:  # pragma: no cover — guarded by _result_metadata_key
         raise TypeError(f"Unsupported analysis result: {type(result).__name__}")
     return payload
@@ -2077,7 +2190,7 @@ def _run_analysis(
             pass
     key = _result_metadata_key(result)
     obj.metadata[key] = result.to_dict()
-    return _serialize_result(result, key)
+    return _serialize_result(result, key, obj)
 
 
 def list_signal_results(oid: str) -> list[dict[str, Any]]:
@@ -2100,13 +2213,13 @@ def list_signal_results(oid: str) -> list[dict[str, Any]]:
                 result = GeometryResult.from_dict(value)
             except Exception:  # pragma: no cover — malformed metadata
                 continue
-            out.append(_serialize_result(result, key))
+            out.append(_serialize_result(result, key, obj))
         elif key.startswith("Table_") and key.endswith("_dict"):
             try:
                 result = TableResult.from_dict(value)
             except Exception:  # pragma: no cover — malformed metadata
                 continue
-            out.append(_serialize_result(result, key))
+            out.append(_serialize_result(result, key, obj))
     return out
 
 

@@ -258,6 +258,22 @@ export interface SignalAnalysisDescriptor {
   has_params: boolean;
 }
 
+/** Optional plot overlay attached to a result (currently only emitted
+ *  by pulse-features tables — segments for baselines/plateau and
+ *  vertical markers for x₀ / x₅₀ / x₁₀₀). */
+export type AnalysisOverlay =
+  | {
+      kind: "segment";
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      label?: string;
+      color?: string;
+    }
+  | { kind: "vline"; x: number; label?: string; color?: string }
+  | { kind: "hline"; y: number; label?: string; color?: string };
+
 /** Per-row geometry / table payload (one of two ``category`` values). */
 export interface AnalysisResultBase {
   metadata_key: string;
@@ -265,6 +281,9 @@ export interface AnalysisResultBase {
   func_name: string | null;
   headers: string[];
   roi_indices: number[] | null;
+  /** Optional plot overlays (segments, vlines) supplementing the
+   *  numerical result.  Currently emitted for pulse-features tables. */
+  overlays?: AnalysisOverlay[];
 }
 
 export interface GeometryAnalysisResult extends AnalysisResultBase {
