@@ -3,11 +3,12 @@
  *
  * Mirrors the bottom-left tabbed dock from the desktop app: each tab
  * embeds a :class:`DataSetForm` rendering a guidata DataSet sent over
- * by the Python side.  Edits are auto-applied with a short debounce so
- * the user gets the same live-update experience as in the Qt UI.
+ * by the Python side.  Edits are staged locally; an explicit "Apply"
+ * button (or Ctrl+Enter) commits them to Sigima.  An "unsaved
+ * changes" indicator + "Reset" button flag pending edits.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
@@ -40,8 +41,6 @@ interface Props {
   /** Width in pixels assigned by the host (drag-to-resize). */
   width?: number;
 }
-
-const APPLY_DEBOUNCE_MS = 250;
 
 /** Browser detection for the Document Picture-in-Picture API
  *  (Chromium-based browsers, ``window.documentPictureInPicture``). */
@@ -275,7 +274,6 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
   const [available, setAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,36 +300,15 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
       });
     return () => {
       cancelled = true;
-      if (timer.current !== null) {
-        window.clearTimeout(timer.current);
-        timer.current = null;
-      }
     };
   }, [runtime, oid, refreshNonce]);
 
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
-      try {
-        await runtime.updateSignalCreationParams(oid, values);
-        onApplied();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      await runtime.updateSignalCreationParams(oid, values);
+      onApplied();
     },
     [runtime, oid, onApplied],
-  );
-
-  const handleChange = useCallback(
-    (values: Record<string, unknown>) => {
-      if (!payload) return;
-      setPayload({ ...payload, values });
-      if (timer.current !== null) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(
-        () => apply(values),
-        APPLY_DEBOUNCE_MS,
-      );
-    },
-    [payload, apply],
   );
 
   if (loading) return <div className="side-panel-info">Loading…</div>;
@@ -345,14 +322,13 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
   }
   if (!payload) return null;
   return (
-    <div className="side-panel-form">
-      {error && <div className="error">{error}</div>}
-      <DataSetForm
-        schema={payload.schema}
-        values={payload.values}
-        onChange={handleChange}
-      />
-    </div>
+    <EditableForm
+      key={`creation:${oid}:${refreshNonce}`}
+      schema={payload.schema}
+      values={payload.values}
+      onApply={apply}
+      initialError={error}
+    />
   );
 }
 
@@ -364,7 +340,6 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
   const [payload, setPayload] = useState<SchemaWithValues | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -385,50 +360,148 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
       });
     return () => {
       cancelled = true;
-      if (timer.current !== null) {
-        window.clearTimeout(timer.current);
-        timer.current = null;
-      }
     };
   }, [runtime, oid, refreshNonce]);
 
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
-      try {
-        await runtime.setObjectPropertyValues(oid, values);
-        onApplied();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      await runtime.setObjectPropertyValues(oid, values);
+      onApplied();
     },
     [runtime, oid, onApplied],
   );
 
-  const handleChange = useCallback(
-    (values: Record<string, unknown>) => {
-      if (!payload) return;
-      setPayload({ ...payload, values });
-      if (timer.current !== null) window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(
-        () => apply(values),
-        APPLY_DEBOUNCE_MS,
-      );
-    },
-    [payload, apply],
-  );
-
   if (loading) return <div className="side-panel-info">Loading…</div>;
-  if (error) return <div className="error">{error}</div>;
+  if (error && !payload) return <div className="error">{error}</div>;
   if (!payload) return null;
   return (
-    <div className="side-panel-form">
-      <DataSetForm
-        schema={payload.schema}
-        values={payload.values}
-        onChange={handleChange}
-      />
+    <EditableForm
+      key={`properties:${oid}:${refreshNonce}`}
+      schema={payload.schema}
+      values={payload.values}
+      onApply={apply}
+      initialError={error}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditableForm — shared wrapper adding "Apply" / "Reset" + dirty
+// indicator on top of :class:`DataSetForm`.  Mirrors guidata's
+// "DataSetEditDialog" Apply/Reset behaviour without modal blocking.
+// ---------------------------------------------------------------------------
+
+interface EditableFormProps {
+  schema: SchemaWithValues["schema"];
+  values: Record<string, unknown>;
+  onApply: (values: Record<string, unknown>) => Promise<void>;
+  initialError?: string | null;
+}
+
+function EditableForm({
+  schema,
+  values,
+  onApply,
+  initialError = null,
+}: EditableFormProps) {
+  // Snapshot of the values that are currently committed in Python.
+  // Anything different from this counts as "unsaved".
+  const [appliedValues, setAppliedValues] = useState(values);
+  const [draft, setDraft] = useState(values);
+  const [error, setError] = useState<string | null>(initialError);
+  const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLDivElement | null>(null);
+
+  const dirty = useMemo(
+    () => !valuesEqual(draft, appliedValues),
+    [draft, appliedValues],
+  );
+
+  const handleApply = useCallback(async () => {
+    if (!dirty || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onApply(draft);
+      setAppliedValues(draft);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [dirty, busy, draft, onApply]);
+
+  const handleReset = useCallback(() => {
+    setDraft(appliedValues);
+    setError(null);
+  }, [appliedValues]);
+
+  // Ctrl+Enter / Cmd+Enter inside the form triggers Apply.
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        void handleApply();
+      }
+    },
+    [handleApply],
+  );
+
+  return (
+    <div
+      className="side-panel-form"
+      ref={formRef}
+      onKeyDown={handleKeyDown}
+    >
+      {error && <div className="error">{error}</div>}
+      <DataSetForm schema={schema} values={draft} onChange={setDraft} />
+      <div
+        className={
+          "editable-form-footer" + (dirty ? " editable-form-dirty" : "")
+        }
+      >
+        <span className="editable-form-status" aria-live="polite">
+          {busy
+            ? "Applying…"
+            : dirty
+            ? "● Unsaved changes"
+            : "All changes applied"}
+        </span>
+        <div className="editable-form-buttons">
+          <button
+            type="button"
+            className="editable-form-reset"
+            onClick={handleReset}
+            disabled={!dirty || busy}
+            title="Discard unapplied changes"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className="editable-form-apply"
+            onClick={() => void handleApply()}
+            disabled={!dirty || busy}
+            title="Apply changes (Ctrl+Enter)"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
     </div>
   );
+}
+
+/** Cheap deep-equality for plain JSON values — schema values are
+ *  always serialisable so :func:`JSON.stringify` is sufficient and
+ *  avoids pulling a third-party comparator. */
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
