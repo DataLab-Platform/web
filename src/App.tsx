@@ -28,6 +28,7 @@ import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { SidePanel } from "./components/SidePanel";
+import { Splitter } from "./components/Splitter";
 import type {
   AnalysisResult,
   ImageCreationType,
@@ -53,9 +54,47 @@ interface PendingAnalysis {
   schema: SchemaWithValues;
 }
 
+/** Persist a numeric layout dimension to localStorage so it survives a
+ *  page reload. */
+function usePersistedSize(key: string, defaultValue: number): [
+  number,
+  (next: number) => void,
+] {
+  const [value, setValue] = useState<number>(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return defaultValue;
+      const parsed = Number.parseFloat(raw);
+      return Number.isFinite(parsed) ? parsed : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+  const update = useCallback(
+    (next: number) => {
+      setValue(next);
+      try {
+        window.localStorage.setItem(key, String(next));
+      } catch {
+        /* ignore quota / disabled storage */
+      }
+    },
+    [key],
+  );
+  return [value, update];
+}
+
 export default function App() {
   const { runtime, status, message, error } = useSigima();
   const [activePanel, setActivePanel] = useState<PanelKind>("signal");
+  const [leftPanelWidth, setLeftPanelWidth] = usePersistedSize(
+    "datalab-web.leftPanelWidth",
+    280,
+  );
+  const [sidePanelWidth, setSidePanelWidth] = usePersistedSize(
+    "datalab-web.sidePanelWidth",
+    360,
+  );
   const [tree, setTree] = useState<PanelTree | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -956,7 +995,7 @@ export default function App() {
         actions={actions}
       />
       <div className="workspace">
-        <aside className="panel">
+        <aside className="panel" style={{ width: leftPanelWidth }}>
           <PanelSwitcher
             active={activePanel}
             onChange={handleSwitchPanel}
@@ -978,6 +1017,14 @@ export default function App() {
             />
           </div>
         </aside>
+        <Splitter
+          side="left"
+          value={leftPanelWidth}
+          min={180}
+          max={500}
+          onChange={setLeftPanelWidth}
+          ariaLabel="Resize left panel"
+        />
         <main className="plot-area">
           {status === "error" && (
             <div
@@ -1028,15 +1075,26 @@ export default function App() {
           )}
         </main>
         {runtime && (
-          <SidePanel
-            runtime={runtime}
-            currentId={currentId}
-            refreshNonce={sideRefreshNonce}
-            onObjectChanged={handleSideObjectChanged}
-            preferredTab={preferredSideTab}
-            results={results}
-            onClearResults={handleClearResults}
-          />
+          <>
+            <Splitter
+              side="right"
+              value={sidePanelWidth}
+              min={260}
+              max={900}
+              onChange={setSidePanelWidth}
+              ariaLabel="Resize results panel"
+            />
+            <SidePanel
+              runtime={runtime}
+              currentId={currentId}
+              refreshNonce={sideRefreshNonce}
+              onObjectChanged={handleSideObjectChanged}
+              preferredTab={preferredSideTab}
+              results={results}
+              onClearResults={handleClearResults}
+              width={sidePanelWidth}
+            />
+          </>
         )}
       </div>
       {pendingOperand && (

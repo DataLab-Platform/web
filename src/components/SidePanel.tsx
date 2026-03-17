@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
   SchemaWithValues,
@@ -36,9 +37,35 @@ interface Props {
   /** Drop one (or all when ``key`` is null) result(s) from the current
    *  object's metadata. */
   onClearResults: (key: string | null) => void;
+  /** Width in pixels assigned by the host (drag-to-resize). */
+  width?: number;
 }
 
 const APPLY_DEBOUNCE_MS = 250;
+
+/** Browser detection for the Document Picture-in-Picture API
+ *  (Chromium-based browsers, ``window.documentPictureInPicture``). */
+function pipApiSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "documentPictureInPicture" in window &&
+    typeof (window as unknown as { documentPictureInPicture: unknown })
+      .documentPictureInPicture === "object"
+  );
+}
+
+/** Copy the parent document's stylesheets into the PiP window so the
+ *  detached panel keeps the dark DataLab theme.  We clone ``<style>``
+ *  elements directly and re-create ``<link rel="stylesheet">`` ones to
+ *  side-step CORS issues. */
+function copyStylesheets(target: Document): void {
+  for (const node of Array.from(
+    document.querySelectorAll('style, link[rel="stylesheet"]'),
+  )) {
+    const clone = node.cloneNode(true);
+    target.head.appendChild(clone);
+  }
+}
 
 export function SidePanel(props: Props) {
   const {
@@ -49,8 +76,10 @@ export function SidePanel(props: Props) {
     preferredTab,
     results,
     onClearResults,
+    width,
   } = props;
   const [active, setActive] = useState<TabId>(preferredTab);
+  const [pipWindow, setPipWindow] = useState<Window | null>(null);
 
   // Re-honour the parent's preferred tab when it bumps after a Create
   // action (the parent flips ``preferredTab`` to "creation" then).
@@ -58,8 +87,62 @@ export function SidePanel(props: Props) {
     setActive(preferredTab);
   }, [preferredTab, currentId]);
 
-  return (
-    <aside className="side-panel" aria-label="Object panel">
+  // Cleanup the PiP window when the side panel unmounts.
+  useEffect(() => {
+    return () => {
+      if (pipWindow && !pipWindow.closed) {
+        pipWindow.close();
+      }
+    };
+    // ``pipWindow`` capture is intentional — we only want this to fire
+    // on unmount, not whenever the window changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePopOut = useCallback(async () => {
+    if (!pipApiSupported()) {
+      window.alert(
+        "Pop-out requires the Document Picture-in-Picture API " +
+          "(Chrome / Edge 116+).",
+      );
+      return;
+    }
+    try {
+      const win = await (
+        window as unknown as {
+          documentPictureInPicture: {
+            requestWindow: (opts: {
+              width: number;
+              height: number;
+            }) => Promise<Window>;
+          };
+        }
+      ).documentPictureInPicture.requestWindow({
+        width: Math.max(width ?? 360, 480),
+        height: 720,
+      });
+      copyStylesheets(win.document);
+      win.document.title = "DataLab Web — Object panel";
+      win.document.body.style.margin = "0";
+      win.document.body.style.background = "var(--panel)";
+      win.addEventListener("pagehide", () => setPipWindow(null));
+      setPipWindow(win);
+    } catch (err) {
+      // User dismissed the picker, or browser denied — silently ignore.
+      // eslint-disable-next-line no-console
+      console.warn("Pop-out failed:", err);
+    }
+  }, [width]);
+
+  const handleDock = useCallback(() => {
+    if (pipWindow && !pipWindow.closed) pipWindow.close();
+    setPipWindow(null);
+  }, [pipWindow]);
+
+  const popped = pipWindow !== null && !pipWindow.closed;
+
+  const body = (
+    <>
       <div className="side-panel-tabs" role="tablist">
         <button
           role="tab"
@@ -91,6 +174,19 @@ export function SidePanel(props: Props) {
         >
           Results{results.length > 0 ? ` (${results.length})` : ""}
         </button>
+        <button
+          type="button"
+          className="side-panel-popout"
+          title={
+            popped
+              ? "Dock the panel back into the main window"
+              : "Open the panel in a separate floating window"
+          }
+          onClick={popped ? handleDock : handlePopOut}
+          aria-label={popped ? "Dock panel" : "Pop out panel"}
+        >
+          {popped ? "⇲" : "⇱"}
+        </button>
       </div>
       <div className="side-panel-body">
         {!currentId && (
@@ -116,6 +212,47 @@ export function SidePanel(props: Props) {
           <ResultsPanel results={results} onClear={onClearResults} />
         )}
       </div>
+    </>
+  );
+
+  if (popped && pipWindow) {
+    // Render a placeholder in the docked slot so users know where the
+    // panel went, and portal the real content into the PiP window.
+    return (
+      <>
+        <aside
+          className="side-panel side-panel-popped-placeholder"
+          aria-label="Object panel (popped out)"
+          style={width !== undefined ? { width } : undefined}
+        >
+          <div className="side-panel-placeholder">
+            <p>Object panel is in a separate window.</p>
+            <button
+              type="button"
+              className="results-clear-all"
+              onClick={handleDock}
+            >
+              Dock back here
+            </button>
+          </div>
+        </aside>
+        {createPortal(
+          <aside className="side-panel side-panel-popped" aria-label="Object panel">
+            {body}
+          </aside>,
+          pipWindow.document.body,
+        )}
+      </>
+    );
+  }
+
+  return (
+    <aside
+      className="side-panel"
+      aria-label="Object panel"
+      style={width !== undefined ? { width } : undefined}
+    >
+      {body}
     </aside>
   );
 }
