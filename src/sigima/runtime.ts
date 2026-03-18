@@ -216,6 +216,44 @@ export interface DynamicChoice {
   icon?: string;
 }
 
+/** Read-only stats summary returned by
+ *  :meth:`SigimaRuntime.getObjectStats`. */
+export type ObjectStats =
+  | {
+      kind: "signal";
+      n_points: number;
+      x_dtype: string;
+      y_dtype: string;
+      x_min: number | null;
+      x_max: number | null;
+      y_min: number | null;
+      y_max: number | null;
+      y_mean: number | null;
+      y_std: number | null;
+      y_median: number | null;
+    }
+  | {
+      kind: "image";
+      shape: number[];
+      dtype: string;
+      min: number | null;
+      max: number | null;
+      mean: number | null;
+      std: number | null;
+      median: number | null;
+    };
+
+/** Discriminator for the metadata-editor widgets. */
+export type MetadataValueType = "string" | "number" | "bool" | "json";
+
+/** One row of the metadata editor (returned by
+ *  :meth:`SigimaRuntime.listObjectMetadata`). */
+export interface MetadataEntry {
+  key: string;
+  value_type: MetadataValueType;
+  value: string;
+}
+
 /** One entry of the "Create" menu, returned by
  *  :meth:`SigimaRuntime.listSignalCreationTypes`. */
 export interface SignalCreationType {
@@ -448,6 +486,43 @@ await micropip.install(["sigima", "guidata"])
     values: Record<string, unknown>,
   ): Promise<void> {
     await this.callPy("set_object_property_values", { oid: id, values });
+  }
+
+  /** Read-only stats summary (dtype / shape / min / max / mean / std)
+   *  of the underlying object array.  Used by the Properties panel. */
+  async getObjectStats(id: string): Promise<ObjectStats> {
+    return (await this.callPy("get_object_stats", { oid: id })) as ObjectStats;
+  }
+
+  /** Visible metadata entries of *id* (sorted, internal keys filtered out). */
+  async listObjectMetadata(id: string): Promise<MetadataEntry[]> {
+    return (await this.callPy("list_object_metadata", {
+      oid: id,
+    })) as MetadataEntry[];
+  }
+
+  /** Add or update a metadata entry on *id*. */
+  async setObjectMetadataValue(
+    id: string,
+    key: string,
+    valueType: MetadataValueType,
+    value: string,
+  ): Promise<void> {
+    await this.callPy("set_object_metadata_value", {
+      oid: id,
+      key,
+      value_type: valueType,
+      value,
+    });
+  }
+
+  /** Remove *key* from *id*'s metadata.  Returns ``true`` when the key
+   *  was present, ``false`` otherwise. */
+  async deleteObjectMetadataKey(id: string, key: string): Promise<boolean> {
+    return (await this.callPy("delete_object_metadata_key", {
+      oid: id,
+      key,
+    })) as boolean;
   }
 
   /** List every signal I/O format supported by Sigima.  Used to drive

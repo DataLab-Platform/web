@@ -920,3 +920,221 @@ input {
   color: #f48771;
   font-size: 11px;
 }
+
+
+/* ============================================================== */
+/* Properties tab — stats card, array preview, metadata editor    */
+/* ============================================================== */
+
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stats-card,
+.array-preview,
+.metadata-editor {
+  background: var(--panel-alt, #1c1d20);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.stats-card-title,
+.array-preview-title,
+.metadata-editor-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 0 0 6px 0;
+}
+
+.stats-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+.stats-card-row {
+  display: contents;
+}
+.stats-card-row dt {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.stats-card-row dd {
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  margin: 0;
+  text-align: right;
+}
+.stats-card.error {
+  color: #f48771;
+}
+.stats-card.loading {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* --- Array preview ----------------------------------------- */
+
+.array-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.array-preview-actions {
+  display: flex;
+  gap: 4px;
+}
+.array-preview-actions button {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.array-preview-table-wrap {
+  max-height: 220px;
+  overflow: auto;
+}
+.array-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+.array-preview-table th,
+.array-preview-table td {
+  padding: 2px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.array-preview-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-alt, #1c1d20);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.array-preview-idx {
+  color: var(--text-dim);
+  text-align: left;
+}
+.array-preview-ellipsis td {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 4px 0;
+}
+.array-preview-info {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 0;
+}
+.array-preview-error {
+  color: #f48771;
+  font-size: 11px;
+}
+.array-preview-loading {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* --- Metadata editor --------------------------------------- */
+
+.metadata-editor-list {
+  list-style: none;
+  margin: 0 0 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.metadata-editor-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto minmax(100px, 2fr) auto;
+  gap: 4px;
+  align-items: center;
+}
+.metadata-editor-key {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.metadata-editor-type {
+  font-size: 10px;
+  padding: 1px 2px;
+}
+.metadata-editor-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.metadata-editor-bool {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.metadata-editor-delete {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 14px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.metadata-editor-delete:hover {
+  color: #f48771;
+  border-color: #f48771;
+}
+.metadata-editor-add {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto minmax(100px, 2fr) auto;
+  gap: 4px;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.metadata-editor-add input,
+.metadata-editor-add select {
+  font-size: 11px;
+}
+.metadata-editor-add-btn {
+  font-size: 11px;
+  padding: 2px 10px;
+  background: var(--accent, #2d7ff9);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.metadata-editor-add-btn:disabled {
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+.metadata-editor-empty,
+.metadata-editor-loading {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-style: italic;
+  padding: 4px 0;
+}
+.metadata-editor-error {
+  color: #f48771;
+  font-size: 11px;
+  margin-bottom: 6px;
+}

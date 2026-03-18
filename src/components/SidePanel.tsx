@@ -12,10 +12,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
+  ObjectStats,
   SchemaWithValues,
   SigimaRuntime,
 } from "../sigima/runtime";
 import { DataSetForm } from "./DataSetForm";
+import { ObjectStatsCard } from "./ObjectStatsCard";
+import { MetadataEditor } from "./MetadataEditor";
+import { ArrayPreview } from "./ArrayPreview";
 
 type TabId = "creation" | "properties" | "results";
 
@@ -338,6 +342,8 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
 
 function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
   const [payload, setPayload] = useState<SchemaWithValues | null>(null);
+  const [stats, setStats] = useState<ObjectStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -363,6 +369,23 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
     };
   }, [runtime, oid, refreshNonce]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setStatsError(null);
+    runtime
+      .getObjectStats(oid)
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setStatsError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, oid, refreshNonce]);
+
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
       await runtime.setObjectPropertyValues(oid, values);
@@ -371,18 +394,69 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
     [runtime, oid, onApplied],
   );
 
+  // Hide the raw array / dict fields from the generic DataSet form:
+  // dedicated rich widgets (StatsCard, MetadataEditor) cover them
+  // outside the form, and the CSV-string fallback is unusable for
+  // 1000-point arrays.
+  const filteredSchema = useMemo(
+    () => (payload ? hideArrayAndDictFields(payload.schema) : null),
+    [payload],
+  );
+
   if (loading) return <div className="side-panel-info">Loading…</div>;
   if (error && !payload) return <div className="error">{error}</div>;
-  if (!payload) return null;
+  if (!payload || !filteredSchema) return null;
   return (
-    <EditableForm
-      key={`properties:${oid}:${refreshNonce}`}
-      schema={payload.schema}
-      values={payload.values}
-      onApply={apply}
-      initialError={error}
-    />
+    <div className="properties-panel">
+      <ObjectStatsCard stats={stats} error={statsError} />
+      {stats && (
+        <ArrayPreview
+          runtime={runtime}
+          oid={oid}
+          stats={stats}
+          refreshNonce={refreshNonce}
+        />
+      )}
+      <EditableForm
+        key={`properties:${oid}:${refreshNonce}`}
+        schema={filteredSchema}
+        values={payload.values}
+        onApply={apply}
+        initialError={error}
+      />
+      <MetadataEditor
+        runtime={runtime}
+        oid={oid}
+        refreshNonce={refreshNonce}
+        onChanged={() => onApplied()}
+      />
+    </div>
   );
+}
+
+/**
+ * Return a shallow-cloned schema with every ``float_array`` /
+ * ``dict`` property tagged ``x-guidata-hide: true`` so the generic
+ * :class:`DataSetForm` skips them.  The Properties panel renders
+ * dedicated rich widgets for those instead.
+ */
+function hideArrayAndDictFields(
+  schema: SchemaWithValues["schema"],
+): SchemaWithValues["schema"] {
+  const props = schema.properties as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  if (!props) return schema;
+  const newProps: Record<string, Record<string, unknown>> = {};
+  for (const [name, prop] of Object.entries(props)) {
+    const kind = prop["x-guidata-kind"];
+    if (kind === "float_array" || kind === "dict") {
+      newProps[name] = { ...prop, "x-guidata-hide": true };
+    } else {
+      newProps[name] = prop;
+    }
+  }
+  return { ...schema, properties: newProps };
 }
 
 // ---------------------------------------------------------------------------

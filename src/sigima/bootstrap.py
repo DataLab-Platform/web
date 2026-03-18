@@ -563,6 +563,164 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Properties side panel — extended widgets (stats / array / metadata).
+# ---------------------------------------------------------------------------
+
+
+def _safe_stat(fn, arr) -> float | None:
+    """Return ``fn(arr)`` as a float, or ``None`` when the array is
+    empty or the value is non-finite (NaN / Inf)."""
+    import numpy as np
+
+    if arr is None or len(arr) == 0:
+        return None
+    try:
+        v = float(fn(arr))
+    except Exception:
+        return None
+    if not np.isfinite(v):
+        return None
+    return v
+
+
+def get_object_stats(oid: str) -> dict[str, Any]:
+    """Return a JSON-friendly stats summary for *oid*.
+
+    Mirrors the "Statistics" panel of DataLab desktop — a compact
+    read-only dashboard shown above the editable Properties form.
+    """
+    import numpy as np
+
+    obj = _MODEL.get(oid)
+    kind = _MODEL.kind_of(oid)
+    if kind == "signal":
+        x, y = obj.x, obj.y
+        return {
+            "kind": "signal",
+            "n_points": int(x.size),
+            "x_dtype": str(x.dtype),
+            "y_dtype": str(y.dtype),
+            "x_min": _safe_stat(np.min, x),
+            "x_max": _safe_stat(np.max, x),
+            "y_min": _safe_stat(np.min, y),
+            "y_max": _safe_stat(np.max, y),
+            "y_mean": _safe_stat(np.mean, y),
+            "y_std": _safe_stat(np.std, y),
+            "y_median": _safe_stat(np.median, y),
+        }
+    # image
+    data = obj.data
+    return {
+        "kind": "image",
+        "shape": list(data.shape),
+        "dtype": str(data.dtype),
+        "min": _safe_stat(np.min, data),
+        "max": _safe_stat(np.max, data),
+        "mean": _safe_stat(np.mean, data),
+        "std": _safe_stat(np.std, data),
+        "median": _safe_stat(np.median, data),
+    }
+
+
+# Internal metadata keys that should not be shown to the user.
+# Mirrors :data:`_PLOTLY_ANNOTATIONS_KEY` defined later in the module.
+_HIDDEN_METADATA_KEYS = ("_dlw_creation_stype_", "_dlw_plotly_annotations")
+
+
+def _metadata_visible(key: str) -> bool:
+    if key in _HIDDEN_METADATA_KEYS:
+        return False
+    if key.startswith("Geometry_") and key.endswith("_dict"):
+        return False
+    if key.startswith("Table_") and key.endswith("_dict"):
+        return False
+    return True
+
+
+def _metadata_value_repr(v: Any) -> tuple[str, str]:
+    """Categorise a metadata value and return ``(value_type, str_value)``.
+
+    The ``value_type`` is one of ``"string" | "number" | "bool" |
+    "json"`` and tells the front-end which editor widget to use.
+    """
+    import json
+
+    if isinstance(v, bool):
+        return "bool", "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return "number", repr(v)
+    if isinstance(v, str):
+        return "string", v
+    try:
+        return "json", json.dumps(v, default=str)
+    except Exception:
+        return "json", str(v)
+
+
+def list_object_metadata(oid: str) -> list[dict[str, Any]]:
+    """Return the user-visible metadata entries of *oid*.
+
+    Each entry is ``{key, value_type, value}`` where ``value_type``
+    drives the front-end widget choice (string / number / bool / json).
+    Internal bookkeeping keys (Plotly annotations, creation type,
+    geometry/table results) are filtered out.
+    """
+    obj = _MODEL.get(oid)
+    out: list[dict[str, Any]] = []
+    for key in sorted(obj.metadata):
+        if not _metadata_visible(key):
+            continue
+        value_type, str_value = _metadata_value_repr(obj.metadata[key])
+        out.append(
+            {"key": key, "value_type": value_type, "value": str_value}
+        )
+    return out
+
+
+def set_object_metadata_value(
+    oid: str, key: str, value_type: str, value: str
+) -> None:
+    """Add or update a metadata entry on *oid*.
+
+    The string ``value`` is parsed back into a Python object according
+    to ``value_type`` (``"string" | "number" | "bool" | "json"``).
+    """
+    import json
+
+    obj = _MODEL.get(oid)
+    if not _metadata_visible(key):
+        raise ValueError(
+            f"Metadata key {key!r} is reserved for internal use"
+        )
+    parsed: Any
+    if value_type == "string":
+        parsed = value
+    elif value_type == "number":
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = float(value)
+    elif value_type == "bool":
+        s = (value or "").strip().lower()
+        parsed = s in ("1", "true", "yes", "on")
+    elif value_type == "json":
+        parsed = json.loads(value)
+    else:
+        raise ValueError(f"Unknown value_type: {value_type!r}")
+    obj.metadata[key] = parsed
+
+
+def delete_object_metadata_key(oid: str, key: str) -> bool:
+    """Remove *key* from *oid*'s metadata.  Returns ``True`` when the
+    key was present, ``False`` otherwise."""
+    obj = _MODEL.get(oid)
+    if not _metadata_visible(key):
+        # silently ignore reserved keys
+        return False
+    return obj.metadata.pop(key, None) is not None
+
+
+# ---------------------------------------------------------------------------
 # Generic file I/O (mirrors DataLab's "Open"/"Save" actions).
 # ---------------------------------------------------------------------------
 
@@ -2263,6 +2421,10 @@ __all__ = [
     "update_signal_creation_params",
     "get_object_property_schema",
     "set_object_property_values",
+    "get_object_stats",
+    "list_object_metadata",
+    "set_object_metadata_value",
+    "delete_object_metadata_key",
     "list_signal_io_formats",
     "open_signal_from_bytes",
     "save_signal_to_bytes",
