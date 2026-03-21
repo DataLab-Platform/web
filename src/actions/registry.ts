@@ -21,6 +21,8 @@ export interface StaticActionCallbacks {
   onLoadProject: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
+  onOpenWorkspaceHdf5: () => void;
+  onSaveWorkspaceHdf5: () => void;
 }
 
 /** Wire static actions (File / Edit) ----------------------------------- */
@@ -67,6 +69,21 @@ export function buildStaticActions(
       menuPath: "File/Save project…",
       enabled: (s) => ready(s) && s.hasObjects,
       run: cb.onSaveProject,
+    },
+    {
+      id: "file.open_workspace_h5",
+      label: "Open HDF5 workspace…",
+      menuPath: "File/Open HDF5 workspace…",
+      beginGroup: true,
+      enabled: ready,
+      run: cb.onOpenWorkspaceHdf5,
+    },
+    {
+      id: "file.save_workspace_h5",
+      label: "Save HDF5 workspace…",
+      menuPath: "File/Save HDF5 workspace…",
+      enabled: (s) => ready(s) && s.hasObjects,
+      run: cb.onSaveWorkspaceHdf5,
     },
     {
       id: "edit.delete",

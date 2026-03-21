@@ -842,6 +842,56 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, [runtime]);
 
+  const handleSaveWorkspaceHdf5 = useCallback(async () => {
+    if (!runtime) return;
+    setBusy(true);
+    try {
+      const bytes = await runtime.saveWorkspaceHdf5();
+      const blob = new Blob([bytes], { type: "application/x-hdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "workspace.h5";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime]);
+
+  const handleOpenWorkspaceHdf5 = useCallback(async () => {
+    if (!runtime) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".h5,.hdf5,.hdf,.he5";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        try {
+          await runtime.openWorkspaceHdf5(file.name, bytes, true);
+        } catch (err) {
+          window.alert(
+            `Failed to open HDF5 workspace:\n${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          return;
+        }
+        setSelectedIds([]);
+        setCurrentId(null);
+        await refresh(null);
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }, [runtime, refresh]);
+
   const handleLoadProject = useCallback(async () => {
     if (!runtime) return;
     const input = document.createElement("input");
@@ -965,6 +1015,8 @@ export default function App() {
         onLoadProject: handleLoadProject,
         onOpenFile: handleOpenFile,
         onSaveFile: handleSaveFile,
+        onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
+        onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -1036,6 +1088,8 @@ export default function App() {
       handleLoadProject,
       handleOpenFile,
       handleSaveFile,
+      handleOpenWorkspaceHdf5,
+      handleSaveWorkspaceHdf5,
       pluginActions,
       handleTriggerPluginAction,
       handleReloadPlugins,

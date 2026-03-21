@@ -2580,6 +2580,176 @@ def list_plugins() -> list[dict[str, Any]]:
     return _plugins_module().list_plugins()
 
 
+# ---------------------------------------------------------------------------
+# Native HDF5 workspace I/O (DataLab-compatible)
+# ---------------------------------------------------------------------------
+#
+# Mirrors Qt DataLab's "Open/Save HDF5 workspace" feature.  The on-disk
+# layout is bit-compatible with ``datalab/h5/native.py`` +
+# ``datalab/gui/panel/base.py::serialize_to_hdf5`` so files round-trip
+# between desktop and web.  Each panel writes its objects under a fixed
+# prefix (``DataLab_Sig`` for signals, ``DataLab_Ima`` for images); each
+# group is a sub-group with a ``title`` sub-group holding its name; each
+# object is a sub-group named ``"<short_id>: <sanitized_title>"`` whose
+# content is produced by the standard ``SignalObj.serialize`` /
+# ``ImageObj.serialize`` (powered by ``guidata.io.HDF5Writer``).
+
+_H5_DATALAB_VERSION_KEY = "DataLab_Version"
+_H5_PANEL_PREFIXES: dict[str, str] = {
+    "signal": "DataLab_Sig",
+    "image": "DataLab_Ima",
+}
+
+
+def _h5_sanitize_name(short_id: str, title: str) -> str:
+    """Return ``"<short_id>: <safe_title>"`` (mirrors Qt panel naming)."""
+    import re
+
+    safe = re.sub("[^-a-zA-Z0-9_.() ]+", "", (title or "").replace("/", "_"))
+    return f"{short_id}: {safe}".rstrip(": ").rstrip()
+
+
+def save_workspace_to_bytes() -> bytes:
+    """Serialise the full object model to a DataLab-compatible HDF5 file.
+
+    Returns the raw file bytes, ready to hand to a browser ``Blob`` for
+    download.  Layout matches Qt DataLab's "Save HDF5 workspace" so the
+    resulting ``.h5`` file is also openable from the desktop application.
+    """
+    import os
+    import tempfile
+    from guidata.io import HDF5Writer
+
+    tmpdir = tempfile.mkdtemp(prefix="dlw_h5save_")
+    path = os.path.join(tmpdir, "workspace.h5")
+    try:
+        writer = HDF5Writer(path)
+        try:
+            writer.h5[_H5_DATALAB_VERSION_KEY] = sigima.__version__
+            for kind, prefix in _H5_PANEL_PREFIXES.items():
+                if kind not in _MODEL._panels:  # noqa: SLF001 (intentional)
+                    continue
+                panel = _MODEL._panels[kind]  # noqa: SLF001
+                if not panel.groups:
+                    continue
+                with writer.group(prefix):
+                    for group in panel.groups:
+                        group_name = _h5_sanitize_name(group.gid, group.name)
+                        with writer.group(group_name):
+                            with writer.group("title"):
+                                writer.write_str(group.name)
+                            for oid in group.object_ids:
+                                if oid not in _MODEL._objects:  # noqa: SLF001
+                                    continue
+                                entry = _MODEL._objects[oid]  # noqa: SLF001
+                                obj_name = _h5_sanitize_name(
+                                    oid, getattr(entry.obj, "title", "") or ""
+                                )
+                                with writer.group(obj_name):
+                                    entry.obj.serialize(writer)
+        finally:
+            writer.close()
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+def open_workspace_from_bytes(
+    filename: str, data: Any, *, replace: bool = True
+) -> dict[str, int]:
+    """Load *data* (HDF5 bytes) into the model.
+
+    Args:
+        filename: Original file name (used only for the temporary file).
+        data: Raw bytes from the browser ``File`` object.
+        replace: When True (default), wipe the current model first; mirrors
+            Qt DataLab's "Open HDF5 workspace" behaviour.
+
+    Returns:
+        ``{"signals": n, "images": n, "groups": n}`` for diagnostics.
+
+    Raises:
+        ValueError: when *data* is not a DataLab-compatible HDF5 workspace.
+    """
+    import os
+    import tempfile
+    from guidata.io import HDF5Reader
+    from sigima.objects import ImageObj as _ImageObj
+
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        data = bytes(data)
+    base = os.path.basename(filename) or "workspace.h5"
+    tmpdir = tempfile.mkdtemp(prefix="dlw_h5open_")
+    path = os.path.join(tmpdir, base)
+    with open(path, "wb") as fh:
+        fh.write(bytes(data))
+    counts = {"signals": 0, "images": 0, "groups": 0}
+    try:
+        try:
+            reader = HDF5Reader(path)
+        except OSError as exc:
+            raise ValueError(f"Not a valid HDF5 file: {exc}") from exc
+        try:
+            if _H5_DATALAB_VERSION_KEY not in reader.h5:
+                raise ValueError(
+                    "Not a DataLab HDF5 workspace "
+                    f"(missing {_H5_DATALAB_VERSION_KEY!r} root attribute)"
+                )
+            if replace:
+                _MODEL._panels.clear()  # noqa: SLF001
+                _MODEL._objects.clear()  # noqa: SLF001
+            klass_for_kind = {"signal": SignalObj, "image": _ImageObj}
+            for kind, prefix in _H5_PANEL_PREFIXES.items():
+                if prefix not in reader.h5:
+                    continue
+                klass = klass_for_kind[kind]
+                with reader.group(prefix):
+                    for group_name in list(reader.h5[prefix]):
+                        with reader.group(group_name):
+                            try:
+                                with reader.group("title"):
+                                    grp_title = reader.read_str() or group_name
+                            except Exception:  # noqa: BLE001
+                                grp_title = group_name
+                            gid = _MODEL.create_group(kind, name=grp_title)
+                            counts["groups"] += 1
+                            for obj_name in list(
+                                reader.h5[f"{prefix}/{group_name}"]
+                            ):
+                                if obj_name == "title":
+                                    continue
+                                with reader.group(obj_name):
+                                    obj = klass()
+                                    obj.deserialize(reader)
+                                _MODEL.add_object(kind, obj, group_id=gid)
+                                if kind == "signal":
+                                    counts["signals"] += 1
+                                else:
+                                    counts["images"] += 1
+        finally:
+            reader.close()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+    return counts
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -2625,6 +2795,8 @@ __all__ = [
     "extract_signal_rois",
     "save_project",
     "load_project",
+    "save_workspace_to_bytes",
+    "open_workspace_from_bytes",
     "export_signal_csv",
     "import_signal_csv",
     "list_features",

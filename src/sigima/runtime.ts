@@ -254,6 +254,13 @@ export interface ProjectLoadResult {
   groups: number;
 }
 
+/** Diagnostic info returned by ``openWorkspaceHdf5``. */
+export interface WorkspaceLoadResult {
+  signals: number;
+  images: number;
+  groups: number;
+}
+
 /**
  * JSON Schema 2020-12 document augmented with ``x-guidata-*`` extensions,
  * as produced by :func:`guidata.dataset.dataset_to_schema`.
@@ -438,8 +445,8 @@ export class SigimaRuntime {
     onProgress?.("Loading Pyodide runtime…");
     const py = await window.loadPyodide({ indexURL: PYODIDE_INDEX });
 
-    onProgress?.("Loading scientific stack (numpy, scipy)…");
-    await py.loadPackage(["numpy", "scipy", "micropip"]);
+    onProgress?.("Loading scientific stack (numpy, scipy, h5py)…");
+    await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
 
     onProgress?.("Installing Sigima…");
     await py.runPythonAsync(`
@@ -851,6 +858,33 @@ await micropip.install(["sigima", "guidata"])
       content,
       replace,
     })) as ProjectLoadResult;
+  }
+
+  /** Serialise the full object model to a DataLab-compatible HDF5 file.
+   *  The returned bytes are ready to wrap in a ``Blob`` for download and
+   *  round-trip through Qt DataLab's "Open HDF5 workspace" feature. */
+  async saveWorkspaceHdf5(): Promise<Uint8Array> {
+    const result = (await this.callPy("save_workspace_to_bytes")) as
+      | Uint8Array
+      | ArrayBuffer
+      | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
+  }
+
+  /** Load *bytes* (a DataLab-compatible HDF5 workspace) into the model.
+   *  When *replace* is true (default), the current model is wiped first. */
+  async openWorkspaceHdf5(
+    filename: string,
+    bytes: Uint8Array,
+    replace: boolean = true,
+  ): Promise<WorkspaceLoadResult> {
+    return (await this.callPy("open_workspace_from_bytes", {
+      filename,
+      data: bytes,
+      replace,
+    })) as WorkspaceLoadResult;
   }
 
   async exportSignalCsv(oid: string, separator: string = ","): Promise<string> {
