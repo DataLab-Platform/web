@@ -280,6 +280,126 @@ _PROCESSOR: _proc.BaseProcessor = globals().get(
 
 
 # ---------------------------------------------------------------------------
+# Plugin system bootstrap
+# ---------------------------------------------------------------------------
+
+
+def _plugin_features_for_kind(kind: str) -> dict[str, _proc.FeatureSpec]:
+    """Return ``{feature_id: FeatureSpec}`` for plugin contributions."""
+    return _proc.merge_plugin_features({}, kind)
+
+
+def _full_catalog_with_plugins() -> dict[str, _proc.FeatureSpec]:
+    """Return the curated catalogue augmented with plugin features."""
+    cat = dict(_CATALOG)
+    for kind in ("signal", "image"):
+        cat.update(_plugin_features_for_kind(kind))
+    return cat
+
+
+# JavaScript dialog bridge — set by ``runtime.ts`` via ``set_dialog_bridge``.
+# Signature: ``async (kind: str, payload: dict) -> Any``.
+_DIALOG_BRIDGE: Any = globals().get("_DIALOG_BRIDGE", None)
+
+
+def set_dialog_bridge(bridge: Any) -> None:
+    """Install the JS bridge used by async guidata/datalab dialogs."""
+    global _DIALOG_BRIDGE
+    _DIALOG_BRIDGE = bridge
+
+
+def _require_bridge(slot: str) -> Any:
+    if _DIALOG_BRIDGE is None:
+        raise RuntimeError(
+            f"Dialog bridge missing — cannot service {slot!r}. "
+            "Call sigima.setDialogHandler(...) on the JS side first."
+        )
+    return _DIALOG_BRIDGE
+
+
+async def _async_edit_dataset(instance: Any, parent: Any = None, **_kwargs: Any) -> bool:
+    """Async :meth:`DataSet.edit` handler routed through the JS bridge."""
+    from guidata.dataset import dataset_to_schema_with_values, update_dataset
+
+    bridge = _require_bridge("edit_dataset_async")
+    payload = dataset_to_schema_with_values(instance)
+    payload["title"] = (
+        getattr(instance, "_title", None)
+        or type(instance).__name__
+    )
+    result = await bridge("edit_dataset", payload)
+    if hasattr(result, "to_py"):
+        result = result.to_py()
+    if not result:
+        return False
+    update_dataset(instance, result)
+    return True
+
+
+async def _async_show_message(
+    kind: str, message: str, title: str | None = None, **_kwargs: Any
+) -> None:
+    bridge = _require_bridge("show_message_async")
+    await bridge(
+        "message",
+        {"kind": kind, "message": message, "title": title or ""},
+    )
+
+
+async def _async_ask_question(
+    message: str, title: str | None = None, cancelable: bool = False, **_kwargs: Any
+) -> bool | None:
+    bridge = _require_bridge("ask_question_async")
+    result = await bridge(
+        "confirm",
+        {
+            "message": message,
+            "title": title or "",
+            "cancelable": bool(cancelable),
+        },
+    )
+    if hasattr(result, "to_py"):
+        result = result.to_py()
+    return result
+
+
+def _install_datalab_shim() -> None:
+    """Wire the portable ``datalab.*`` shim to the live bootstrap.
+
+    Idempotent — safe to call from HMR re-execution. Installs:
+
+    * the ``WebMainBridge`` into :class:`datalab.gui.main.DLMainWindow`;
+    * the async dialog handlers into the guidata + datalab registries;
+    * the bridge into :mod:`dlw_plugins` so plugin ``register()`` works.
+    """
+    try:
+        from datalab.gui.main import install_main as _install_main
+        from datalab import helpers as _dl_helpers
+        from guidata.dataset import backends as _gds_backends
+        import dlw_main as _dlw_main
+        import dlw_plugins as _dlw_plugins
+    except Exception:  # pragma: no cover - shim missing in standalone tests
+        print("[bootstrap] datalab.* shim unavailable; plugins disabled")
+        return
+
+    bridge_main = _dlw_main.WebMainBridge()
+    main = _install_main(bridge_main)
+    _dlw_plugins.install_main(main)
+
+    # Async guidata backend
+    _gds_backends.set_handler("edit_dataset_async", _async_edit_dataset)
+
+    # Async datalab.helpers backend
+    _dl_helpers.set_handler("show_message_async", _async_show_message)
+    _dl_helpers.set_handler("ask_question_async", _async_ask_question)
+
+
+# Install once per cold-start; re-installation is idempotent (handlers
+# replace the previous ones), so HMR is safe.
+_install_datalab_shim()
+
+
+# ---------------------------------------------------------------------------
 # Signal creation helpers
 # ---------------------------------------------------------------------------
 
@@ -1723,21 +1843,23 @@ def import_signal_csv(
 
 
 def list_features() -> list[dict[str, Any]]:
-    """Return the full feature catalogue (signals only for now)."""
-    return _proc.serialize_catalog(_CATALOG)
+    """Return the full feature catalogue (signals + images + plugins)."""
+    return _proc.serialize_catalog(_full_catalog_with_plugins())
 
 
 def get_feature_schema(feature_id: str) -> dict[str, Any] | None:
     """Return ``{schema, values}`` for *feature_id* or ``None`` if it is
     parameterless."""
-    return _proc.get_schema(_CATALOG, feature_id)
+    return _proc.get_schema(_full_catalog_with_plugins(), feature_id)
 
 
 def resolve_feature_choices(
     feature_id: str, item_name: str, values: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
     """Resolve a dynamic ChoiceItem for *feature_id*."""
-    return _proc.resolve_choices(_CATALOG, feature_id, item_name, values)
+    return _proc.resolve_choices(
+        _full_catalog_with_plugins(), feature_id, item_name, values
+    )
 
 
 def apply_feature(
@@ -1753,7 +1875,8 @@ def apply_feature(
           source object.
         * ``n_to_1``: the single result goes into the group of the first source.
     """
-    spec = _CATALOG.get(feature_id)
+    catalog = _full_catalog_with_plugins()
+    spec = catalog.get(feature_id)
     if spec is None:
         raise ValueError(f"Unknown feature: {feature_id!r}")
     if not source_ids:
@@ -2412,6 +2535,51 @@ list_image_results = list_signal_results
 clear_image_results = clear_signal_results
 
 
+# ---------------------------------------------------------------------------
+# Plugin loader (browser counterpart of ``datalab.plugins`` discovery).
+# ---------------------------------------------------------------------------
+
+
+def _plugins_module() -> Any:
+    """Return the live :mod:`dlw_plugins` module (raises if missing)."""
+    import dlw_plugins  # noqa: WPS433 - intentionally lazy
+
+    return dlw_plugins
+
+
+def load_plugin_source(filename: str, source: str) -> dict[str, Any]:
+    """Persist *source* under :data:`dlw_plugins.PLUGINS_ROOT` and load it.
+
+    Returns a JSON-friendly snapshot for the new plugin record.
+    """
+    return _plugins_module().load_plugin_source(filename, source)
+
+
+def load_plugin_file(path: str) -> dict[str, Any]:
+    """Load (or reload) the plugin at *path*."""
+    return _plugins_module().load_plugin_file(path)
+
+
+def unload_plugin(name: str) -> dict[str, Any]:
+    """Unregister and forget the plugin *name*."""
+    return _plugins_module().unload_plugin(name)
+
+
+def reload_plugins() -> list[dict[str, Any]]:
+    """Hot-reload every currently-loaded plugin (Qt-style sequence)."""
+    return _plugins_module().reload_plugins()
+
+
+def discover_plugins_in_dir(directory: str) -> list[dict[str, Any]]:
+    """Load every ``*.py`` file in *directory* (non-recursive)."""
+    return _plugins_module().discover_plugins_in_dir(directory)
+
+
+def list_plugins() -> list[dict[str, Any]]:
+    """Return a JSON-friendly snapshot of every registered plugin."""
+    return _plugins_module().list_plugins()
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -2477,4 +2645,11 @@ __all__ = [
     "run_image_analysis",
     "list_image_results",
     "clear_image_results",
+    "set_dialog_bridge",
+    "load_plugin_source",
+    "load_plugin_file",
+    "unload_plugin",
+    "reload_plugins",
+    "discover_plugins_in_dir",
+    "list_plugins",
 ]

@@ -4,6 +4,7 @@ import type {
   FeatureDescriptor,
   ImageData,
   PanelTree,
+  PluginMenuAction,
   SchemaWithValues,
   SignalData,
 } from "./sigima/runtime";
@@ -14,6 +15,7 @@ import {
   buildImageAnalysisActions,
   buildImageCreationActions,
   buildImageRoiActions,
+  buildPluginActions,
   buildRoiActions,
   buildSignalAnalysisActions,
   buildSignalCreationActions,
@@ -26,6 +28,8 @@ import { ImagePlot } from "./components/ImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
+import { DialogBridge } from "./components/DialogBridge";
+import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
@@ -111,6 +115,8 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
+  const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -167,6 +173,7 @@ export default function App() {
     runtime.listImageCreationTypes().then(setImageTypes);
     runtime.listSignalAnalysis().then(setAnalysisEntries);
     runtime.listImageAnalysis().then(setImageAnalysisEntries);
+    runtime.listPluginMenuActions().then(setPluginActions);
     refresh();
   }, [status, runtime, refresh]);
 
@@ -372,6 +379,39 @@ export default function App() {
     },
     [runtime, refresh],
   );
+
+  const refreshPluginActions = useCallback(async () => {
+    if (!runtime) return;
+    setPluginActions(await runtime.listPluginMenuActions());
+  }, [runtime]);
+
+  const handleTriggerPluginAction = useCallback(
+    async (actionId: string) => {
+      if (!runtime) return;
+      setBusy(true);
+      try {
+        await runtime.triggerPluginAction(actionId);
+        await refresh();
+      } catch (err) {
+        console.error("[plugins] action failed", err);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, refresh],
+  );
+
+  const handleReloadPlugins = useCallback(async () => {
+    if (!runtime) return;
+    setBusy(true);
+    try {
+      await runtime.reloadPlugins();
+      await refreshPluginActions();
+      await runtime.listFeatures().then(setFeatures);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, refreshPluginActions]);
 
   const handleApplyFeature = useCallback(
     async (featureId: string) => {
@@ -956,6 +996,11 @@ export default function App() {
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
+      ...buildPluginActions(pluginActions, activePanel, {
+        onTrigger: handleTriggerPluginAction,
+        onOpenManager: () => setPluginManagerOpen(true),
+        onReloadAll: handleReloadPlugins,
+      }),
     ],
     [
       activePanel,
@@ -991,6 +1036,9 @@ export default function App() {
       handleLoadProject,
       handleOpenFile,
       handleSaveFile,
+      pluginActions,
+      handleTriggerPluginAction,
+      handleReloadPlugins,
     ],
   );
 
@@ -1168,6 +1216,16 @@ export default function App() {
       {helpView && (
         <HelpDialog view={helpView} onClose={() => setHelpView(null)} />
       )}
+      {pluginManagerOpen && (
+        <PluginManagerDialog
+          onClose={() => {
+            setPluginManagerOpen(false);
+            void refreshPluginActions();
+            if (runtime) void runtime.listFeatures().then(setFeatures);
+          }}
+        />
+      )}
+      <DialogBridge />
     </div>
   );
 }

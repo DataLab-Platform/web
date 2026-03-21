@@ -8,10 +8,40 @@
 
 import bootstrapSource from "./bootstrap.py?raw";
 import processorSource from "./processor.py?raw";
+import dlwMainSource from "./dlw_main.py?raw";
+import dlwPluginsSource from "./dlw_plugins.py?raw";
 // Until the released ``guidata`` ships the new JSON Schema helpers, we
 // pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
 // monkey-patch the ``guidata.dataset`` namespace.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
+
+// Bundle the portable ``datalab.*`` shim package — every .py file under
+// src/sigima/dlplugins/ is mirrored to Pyodide's site-packages at startup
+// so plugins can ``from datalab.plugins import PluginBase`` unmodified.
+const shimSources = import.meta.glob("./dlplugins/**/*.py", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+const builtinPluginSources = import.meta.glob("./builtin_plugins/*.py", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+// Bundle pluggable backend file from local guidata working tree
+// (Phase 0 patches that aren't yet in a released wheel). Loaded after
+// ``micropip install guidata`` and applied as monkey-patch.
+const guidataBackendsSource = (() => {
+  const candidates = import.meta.glob("./_guidata_backends_shim.py", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+  const first = Object.values(candidates)[0];
+  return first ?? null;
+})();
 
 // Pyodide is loaded from a CDN <script> tag in index.html; declare its global.
 declare global {
@@ -78,6 +108,35 @@ export interface FeatureDescriptor {
   has_params: boolean;
   operand_label: string;
   object_kind: string;
+}
+
+export interface PluginInfoMeta {
+  name: string;
+  version: string;
+  description: string;
+  icon: string | null;
+}
+
+export interface PluginRecord {
+  name: string;
+  filename: string;
+  module: string;
+  enabled: boolean;
+  loaded: boolean;
+  error: string | null;
+  info: PluginInfoMeta | null;
+}
+
+export interface PluginMenuAction {
+  action_id: string;
+  title: string;
+  menu_path: string[];
+  select_condition: string;
+  separator_before: boolean;
+  icon: string | null;
+  tip: string | null;
+  origin: string | null;
+  object_kind: PanelKind;
 }
 
 export type PanelKind = "signal" | "image";
@@ -390,12 +449,82 @@ await micropip.install(["sigima", "guidata"])
 
     onProgress?.("Initialising Sigima namespace…");
     await py.runPythonAsync(guidataJsonSchemaShim);
-    // Make ``processor.py`` importable from bootstrap.py via Pyodide's FS.
+    if (guidataBackendsSource) {
+      await py.runPythonAsync(guidataBackendsSource);
+    }
+    // Mirror the portable ``datalab.*`` shim into Pyodide site-packages.
+    SigimaRuntime.installShim(py, shimSources);
+    // Make ``processor.py``/``dlw_main.py``/``dlw_plugins.py`` importable.
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
+    py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
+    py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
-    return new SigimaRuntime(py);
+    const runtime = new SigimaRuntime(py);
+    runtime.installDialogBridge();
+    await runtime.installBuiltinPlugins(builtinPluginSources);
+    return runtime;
+  }
+
+  /**
+   * Mirror the portable ``datalab.*`` shim into Pyodide's site-packages.
+   *
+   * Each entry in *sources* is keyed by the workspace-relative path
+   * (``./dlplugins/datalab/plugins.py``); we strip the leading
+   * ``./dlplugins/`` and write to ``/home/pyodide/<rest>``.
+   */
+  private static installShim(
+    py: PyodideAPI,
+    sources: Record<string, string>,
+  ): void {
+    const seenDirs = new Set<string>();
+    for (const [path, source] of Object.entries(sources)) {
+      const rel = path.replace(/^\.\/dlplugins\//, "");
+      const target = `/home/pyodide/${rel}`;
+      const dir = target.slice(0, target.lastIndexOf("/"));
+      if (!seenDirs.has(dir)) {
+        py.FS.mkdirTree?.(dir);
+        seenDirs.add(dir);
+      }
+      py.FS.writeFile(target, source);
+    }
+  }
+
+  /** Install the JS callback that Python uses for async dialogs. */
+  private installDialogBridge(): void {
+    const handler = async (kind: unknown, payload: unknown) => {
+      const fn = this.dialogHandler;
+      if (fn === null) {
+        throw new Error(
+          `Dialog requested (${String(kind)}) but no handler is registered. ` +
+            "Call sigima.setDialogHandler(...) on the JS side first.",
+        );
+      }
+      const py = (payload as { toJs?: (opts?: unknown) => unknown }).toJs;
+      const data = typeof py === "function"
+        ? py.call(payload, { dict_converter: Object.fromEntries })
+        : payload;
+      return fn(String(kind), data);
+    };
+    const setBridge = this.py.globals.get("set_dialog_bridge");
+    if (setBridge) {
+      try {
+        // Pyodide auto-wraps JS functions into PyProxy callables.
+        (setBridge as unknown as (cb: typeof handler) => void)(handler);
+      } finally {
+        setBridge.destroy?.();
+      }
+    }
+  }
+
+  /** JS-side callback invoked for every async dialog request from Python. */
+  private dialogHandler: ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
+
+  setDialogHandler(
+    handler: ((kind: string, payload: unknown) => Promise<unknown>) | null,
+  ): void {
+    this.dialogHandler = handler;
   }
 
   /** Call a Python function declared in bootstrap.py with keyword args. */
@@ -930,6 +1059,103 @@ await micropip.install(["sigima", "guidata"])
       processing_id: processingId,
       params: params ?? null,
     })) as string;
+  }
+
+  // ---------------------------------------------------------------------
+  // Plugin system
+  // ---------------------------------------------------------------------
+
+  /** Write bundled built-in plugins to a dedicated directory and load them. */
+  async installBuiltinPlugins(
+    sources: Record<string, string>,
+  ): Promise<void> {
+    const dir = "/home/pyodide/builtin_plugins";
+    this.py.FS.mkdirTree?.(dir);
+    for (const [path, source] of Object.entries(sources)) {
+      const name = path.split("/").pop() ?? "plugin.py";
+      this.py.FS.writeFile(`${dir}/${name}`, source);
+    }
+    try {
+      await this.discoverPluginsInDir(dir);
+    } catch (err) {
+      console.error("[plugins] failed to load built-in plugins", err);
+    }
+  }
+
+  async loadPluginSource(
+    filename: string,
+    source: string,
+  ): Promise<PluginRecord> {
+    return (await this.callPy("load_plugin_source", {
+      filename,
+      source,
+    })) as PluginRecord;
+  }
+
+  async loadPluginFile(path: string): Promise<PluginRecord> {
+    return (await this.callPy("load_plugin_file", { path })) as PluginRecord;
+  }
+
+  async unloadPlugin(name: string): Promise<{ name: string; removed: boolean }> {
+    return (await this.callPy("unload_plugin", { name })) as {
+      name: string;
+      removed: boolean;
+    };
+  }
+
+  async reloadPlugins(): Promise<PluginRecord[]> {
+    return (await this.callPy("reload_plugins")) as PluginRecord[];
+  }
+
+  async discoverPluginsInDir(directory: string): Promise<PluginRecord[]> {
+    return (await this.callPy("discover_plugins_in_dir", {
+      directory,
+    })) as PluginRecord[];
+  }
+
+  async listPlugins(): Promise<PluginRecord[]> {
+    return (await this.callPy("list_plugins")) as PluginRecord[];
+  }
+
+  /**
+   * List every menu action recorded by plugin shims (one snapshot per call).
+   */
+  async listPluginMenuActions(): Promise<PluginMenuAction[]> {
+    return (await this.runPython(`
+from datalab.registries import EXTRA_MENU_ACTIONS
+[{
+    "action_id": entry.action_id,
+    "title": entry.title,
+    "menu_path": entry.menu_path,
+    "select_condition": entry.select_condition,
+    "separator_before": entry.separator_before,
+    "icon": entry.icon,
+    "tip": entry.tip,
+    "origin": entry.origin,
+    "object_kind": kind,
+} for kind in ("signal", "image") for entry in EXTRA_MENU_ACTIONS[kind]]
+`)) as PluginMenuAction[];
+  }
+
+  /** Trigger a plugin-supplied menu action by its id. */
+  async triggerPluginAction(actionId: string): Promise<void> {
+    await this.py.runPythonAsync(`
+import inspect
+from datalab.registries import EXTRA_MENU_ACTIONS
+_target = None
+for _kind in ("signal", "image"):
+    for _entry in EXTRA_MENU_ACTIONS[_kind]:
+        if _entry.action_id == ${JSON.stringify(actionId)}:
+            _target = _entry
+            break
+    if _target is not None:
+        break
+if _target is None:
+    raise KeyError("Unknown plugin action: ${actionId}")
+_result = _target.triggered()
+if inspect.isawaitable(_result):
+    await _result
+`);
   }
 
   // ---------------------------------------------------------------------

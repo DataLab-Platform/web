@@ -2,6 +2,7 @@ import type {
   FeatureDescriptor,
   ImageCreationType,
   ImageRoiSegment,
+  PluginMenuAction,
   SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
@@ -417,3 +418,70 @@ export function buildImageRoiActions(
   });
   return out;
 }
+
+
+/** Wire actions contributed by Python plugins. */
+export interface PluginActionCallbacks {
+  onTrigger: (actionId: string) => void;
+  onOpenManager: () => void;
+  onReloadAll: () => void;
+}
+
+export function buildPluginActions(
+  entries: PluginMenuAction[],
+  activePanel: "signal" | "image",
+  cb: PluginActionCallbacks,
+): ActionDescriptor[] {
+  const ready = (s: ActionState) => s.status === "ready" && !s.busy;
+
+  // Always-visible "Plugins" entries (manager + reload).
+  const fixed: ActionDescriptor[] = [
+    {
+      id: "plugins.manager",
+      label: "Manage plugins…",
+      menuPath: "Plugins/Manage plugins…",
+      enabled: ready,
+      run: cb.onOpenManager,
+    },
+    {
+      id: "plugins.reload_all",
+      label: "Reload all plugins",
+      menuPath: "Plugins/Reload all plugins",
+      beginGroup: true,
+      enabled: ready,
+      run: cb.onReloadAll,
+    },
+  ];
+
+  // Filter to entries belonging to the active panel kind.
+  const visible = entries.filter((e) => e.object_kind === activePanel);
+  const dynamic = visible.map<ActionDescriptor>((entry) => {
+    const path = ["Plugins", ...entry.menu_path, entry.title]
+      .filter((s) => s && s.length > 0)
+      .join("/");
+    return {
+      id: `plugin.${entry.action_id}`,
+      label: entry.title,
+      menuPath: path,
+      beginGroup: entry.separator_before,
+      enabled: (s) => {
+        if (!ready(s)) return false;
+        switch (entry.select_condition) {
+          case "exactly_one":
+            return s.selectedIds.length === 1;
+          case "at_least_one":
+            return s.selectedIds.length >= 1 || s.currentId !== null;
+          case "at_least_two":
+            return s.selectedIds.length >= 2;
+          default:
+            return true;
+        }
+      },
+      run: () => cb.onTrigger(entry.action_id),
+    };
+  });
+
+  return [...fixed, ...dynamic];
+}
+
+

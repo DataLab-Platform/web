@@ -472,6 +472,47 @@ def build_image_catalog() -> dict[str, FeatureSpec]:
     return _build_catalog_for_kind("image", IMAGE_OVERRIDES)
 
 
+def merge_plugin_features(
+    catalog: dict[str, FeatureSpec], kind: str
+) -> dict[str, FeatureSpec]:
+    """Return *catalog* augmented with plugin-supplied features for *kind*.
+
+    Reads :data:`datalab.registries.EXTRA_FEATURES` (populated by the
+    portable ``datalab.gui.processor`` shim when plugins call
+    ``register_1_to_1`` etc.) and converts each :class:`ExtraFeature` to
+    a :class:`FeatureSpec`. Existing curated entries take precedence —
+    plugins cannot override built-ins. The returned dict is always a
+    *new* dict to keep the input untouched.
+    """
+    try:
+        from datalab.registries import EXTRA_FEATURES
+    except Exception:  # datalab shim not available
+        return dict(catalog)
+    merged = dict(catalog)
+    for extra in EXTRA_FEATURES.get(kind, ()):
+        # Namespace plugin features under "plugin:<name>" so they never
+        # clash with curated ids — even when plugins re-register the same
+        # function across reloads.
+        fid = extra.feature_id
+        if fid in merged or f"plugin:{fid}" in merged:
+            fid = f"plugin:{extra.origin or 'unknown'}:{extra.feature_id}"
+        else:
+            fid = f"plugin:{extra.feature_id}"
+        merged[fid] = FeatureSpec(
+            feature_id=fid,
+            label=extra.label,
+            menu_path=extra.menu_path,
+            pattern=extra.pattern,
+            icon=extra.icon,
+            operand_label=extra.operand_label,
+            paramclass=extra.paramclass,
+            func=extra.func,
+            object_kind=kind,
+            skip_xarray_compat=extra.skip_xarray_compat,
+        )
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # Generic processor
 # ---------------------------------------------------------------------------
@@ -694,6 +735,7 @@ __all__ = [
     "build_image_catalog",
     "build_signal_catalog",
     "get_schema",
+    "merge_plugin_features",
     "resolve_choices",
     "serialize_catalog",
 ]

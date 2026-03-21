@@ -68,6 +68,14 @@ npm run build
 The `dist/` folder can be served from any static host (GitHub Pages, S3,
 nginx, …). All paths are relative so the app works under sub-paths.
 
+## Plugins
+
+DataLab-Web ships a Qt-compatible plugin system. The same `PluginBase`
+subclass can run unchanged in DataLab desktop and DataLab-Web, provided
+parameter dialogs use `await param.edit_async(self.main)` instead of the
+synchronous `param.edit(self.main)`. See [doc/plugins.md](doc/plugins.md)
+for details, hot-reload behaviour and the bundled vitrine plugin.
+
 ## Roadmap (high-level)
 
 1. **MVP (current):** synthetic signal creation, a handful of 1-to-1
