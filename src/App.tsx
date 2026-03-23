@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSigima } from "./sigima/SigimaContext";
 import type {
   FeatureDescriptor,
+  H5BrowserFile,
   ImageData,
   PanelTree,
   PluginMenuAction,
@@ -33,6 +34,7 @@ import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
+import { H5BrowserDialog } from "./components/H5BrowserDialog";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
 import type {
@@ -115,6 +117,9 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  const [h5BrowserFiles, setH5BrowserFiles] = useState<H5BrowserFile[] | null>(
+    null,
+  );
   const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
   const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
@@ -875,11 +880,23 @@ export default function App() {
         try {
           await runtime.openWorkspaceHdf5(file.name, bytes, true);
         } catch (err) {
-          window.alert(
-            `Failed to open HDF5 workspace:\n${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
+          const msg = err instanceof Error ? err.message : String(err);
+          // Qt parity: when the file is a regular HDF5 file (not a
+          // DataLab workspace), fall through to the H5 browser dialog.
+          if (msg.includes("Not a DataLab HDF5 workspace")) {
+            try {
+              const opened = await runtime.openH5Browser(file.name, bytes);
+              setH5BrowserFiles([opened]);
+            } catch (err2) {
+              window.alert(
+                `Failed to open HDF5 file:\n${
+                  err2 instanceof Error ? err2.message : String(err2)
+                }`,
+              );
+            }
+            return;
+          }
+          window.alert(`Failed to open HDF5 workspace:\n${msg}`);
           return;
         }
         setSelectedIds([]);
@@ -891,6 +908,27 @@ export default function App() {
     };
     input.click();
   }, [runtime, refresh]);
+
+  const handleImportHdf5 = useCallback(() => {
+    // Open the H5 browser dialog with no preloaded file; the user picks
+    // a file from inside the dialog (matches Qt's File > Import HDF5).
+    setH5BrowserFiles([]);
+  }, []);
+
+  const handleH5BrowserImport = useCallback(
+    async (oids: string[], uint32Clipped: boolean) => {
+      setH5BrowserFiles(null);
+      if (uint32Clipped) {
+        window.alert(
+          "Some uint32 image data was clipped to int32 range during import.",
+        );
+      }
+      setSelectedIds([]);
+      setCurrentId(oids[oids.length - 1] ?? null);
+      await refresh(oids[oids.length - 1] ?? null);
+    },
+    [refresh],
+  );
 
   const handleLoadProject = useCallback(async () => {
     if (!runtime) return;
@@ -1017,6 +1055,7 @@ export default function App() {
         onSaveFile: handleSaveFile,
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
+        onImportHdf5: handleImportHdf5,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -1090,6 +1129,7 @@ export default function App() {
       handleSaveFile,
       handleOpenWorkspaceHdf5,
       handleSaveWorkspaceHdf5,
+      handleImportHdf5,
       pluginActions,
       handleTriggerPluginAction,
       handleReloadPlugins,
@@ -1269,6 +1309,13 @@ export default function App() {
       )}
       {helpView && (
         <HelpDialog view={helpView} onClose={() => setHelpView(null)} />
+      )}
+      {h5BrowserFiles !== null && (
+        <H5BrowserDialog
+          initial={h5BrowserFiles}
+          onImport={handleH5BrowserImport}
+          onCancel={() => setH5BrowserFiles(null)}
+        />
       )}
       {pluginManagerOpen && (
         <PluginManagerDialog

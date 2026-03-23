@@ -2750,6 +2750,63 @@ def open_workspace_from_bytes(
     return counts
 
 
+# ---------------------------------------------------------------------------
+# Foreign HDF5 browser (Phase 2 — port of Qt H5BrowserDialog)
+# ---------------------------------------------------------------------------
+#
+# Stateful: each ``h5_browser_open`` call returns a ``file_id`` that maps
+# to an open ``h5py.File`` instance kept alive in
+# :mod:`dlw_h5browser`.  The React UI walks the JSON tree returned here,
+# requests previews on demand, then ``h5_browser_import`` injects the
+# selected nodes into the live :data:`_MODEL`.
+
+import dlw_h5browser as _h5br  # noqa: E402  pylint: disable=wrong-import-position
+
+
+def h5_browser_open(filename: str, data: Any) -> dict[str, Any]:
+    """Open *filename* (raw bytes) and return ``{file_id, root}``."""
+    return _h5br.open_file(filename, data)
+
+
+def h5_browser_close(file_id: str) -> None:
+    """Close the HDF5 browser file *file_id*."""
+    _h5br.close_file(file_id)
+
+
+def h5_browser_close_all() -> None:
+    """Close every open HDF5 browser file."""
+    _h5br.close_all()
+
+
+def h5_browser_node_attrs(file_id: str, node_id: str) -> dict[str, Any]:
+    """Return data for the bottom "Group / Attributes" preview tabs."""
+    return _h5br.node_attrs(file_id, node_id)
+
+
+def h5_browser_preview(file_id: str, node_id: str) -> dict[str, Any]:
+    """Return preview-ready Plotly data for the right-side preview pane."""
+    return _h5br.preview(file_id, node_id)
+
+
+def h5_browser_array(file_id: str, node_id: str) -> dict[str, Any]:
+    """Return raw data for the "Show array" spreadsheet view."""
+    return _h5br.array_data(file_id, node_id)
+
+
+def h5_browser_import(
+    file_id: str, node_ids: Any, group_id: str | None = None
+) -> dict[str, Any]:
+    """Import every node in *node_ids* into the live model.
+
+    Returns ``{"oids": [...], "uint32_clipped": bool}``.
+    """
+    result = _h5br.import_nodes(file_id, node_ids, group_id=group_id)
+    oids: list[str] = []
+    for kind, obj in result["objects"]:
+        oids.append(_MODEL.add_object(kind, obj, group_id=result["group_id"]))
+    return {"oids": oids, "uint32_clipped": bool(result["uint32_clipped"])}
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -2797,6 +2854,13 @@ __all__ = [
     "load_project",
     "save_workspace_to_bytes",
     "open_workspace_from_bytes",
+    "h5_browser_open",
+    "h5_browser_close",
+    "h5_browser_close_all",
+    "h5_browser_node_attrs",
+    "h5_browser_preview",
+    "h5_browser_array",
+    "h5_browser_import",
     "export_signal_csv",
     "import_signal_csv",
     "list_features",

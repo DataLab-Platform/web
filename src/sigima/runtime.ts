@@ -10,6 +10,7 @@ import bootstrapSource from "./bootstrap.py?raw";
 import processorSource from "./processor.py?raw";
 import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
+import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
 // Until the released ``guidata`` ships the new JSON Schema helpers, we
 // pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
 // monkey-patch the ``guidata.dataset`` namespace.
@@ -261,6 +262,64 @@ export interface WorkspaceLoadResult {
   groups: number;
 }
 
+/** One node of the HDF5 browser tree (mirrors Qt H5TreeWidget rows). */
+export interface H5BrowserNode {
+  id: string;
+  name: string;
+  icon_name: string;
+  shape_str: string;
+  dtype_str: string;
+  text: string;
+  description: string;
+  is_supported: boolean;
+  is_array: boolean;
+  is_group: boolean;
+  /** ``"group" | "scalar" | "text" | "array" | "compound" | "signal" | "image"``. */
+  kind: string;
+  children: H5BrowserNode[];
+}
+
+/** Result of opening one HDF5 file in the browser dialog. */
+export interface H5BrowserFile {
+  file_id: string;
+  filename: string;
+  root: H5BrowserNode;
+}
+
+/** Attributes pane payload for one selected node. */
+export interface H5BrowserNodeAttrs {
+  path: string;
+  name: string;
+  description: string;
+  text_preview: string;
+  attributes: Record<string, unknown>;
+}
+
+/** Preview data for the right-side Plotly pane. */
+export type H5BrowserPreview =
+  | { kind: "unsupported"; error?: string }
+  | { kind: "signal"; title: string; x: number[]; y: number[] }
+  | {
+      kind: "image";
+      title: string;
+      width: number;
+      height: number;
+      data: number[][];
+    };
+
+/** Raw array payload for the "Show array" spreadsheet view. */
+export interface H5BrowserArray {
+  shape: number[];
+  dtype: string;
+  data: unknown;
+}
+
+/** Result of importing selected HDF5 nodes into the live model. */
+export interface H5BrowserImportResult {
+  oids: string[];
+  uint32_clipped: boolean;
+}
+
 /**
  * JSON Schema 2020-12 document augmented with ``x-guidata-*`` extensions,
  * as produced by :func:`guidata.dataset.dataset_to_schema`.
@@ -465,6 +524,7 @@ await micropip.install(["sigima", "guidata"])
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
     py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
+    py.FS.writeFile("/home/pyodide/dlw_h5browser.py", dlwH5BrowserSource);
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
@@ -885,6 +945,75 @@ await micropip.install(["sigima", "guidata"])
       data: bytes,
       replace,
     })) as WorkspaceLoadResult;
+  }
+
+  // ------------------------------------------------------------------
+  // Foreign HDF5 browser (Phase 2)
+  // ------------------------------------------------------------------
+
+  /** Open *bytes* as an HDF5 file in the browser dialog.  The returned
+   *  ``file_id`` must later be passed to ``closeH5Browser`` to free the
+   *  underlying ``h5py.File`` handle and temp file. */
+  async openH5Browser(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<H5BrowserFile> {
+    return (await this.callPy("h5_browser_open", {
+      filename,
+      data: bytes,
+    })) as H5BrowserFile;
+  }
+
+  /** Close one open HDF5 browser file. */
+  async closeH5Browser(fileId: string): Promise<void> {
+    await this.callPy("h5_browser_close", { file_id: fileId });
+  }
+
+  /** Close every open HDF5 browser file (use on dialog dismissal). */
+  async closeAllH5Browsers(): Promise<void> {
+    await this.callPy("h5_browser_close_all");
+  }
+
+  async getH5BrowserNodeAttrs(
+    fileId: string,
+    nodeId: string,
+  ): Promise<H5BrowserNodeAttrs> {
+    return (await this.callPy("h5_browser_node_attrs", {
+      file_id: fileId,
+      node_id: nodeId,
+    })) as H5BrowserNodeAttrs;
+  }
+
+  async getH5BrowserPreview(
+    fileId: string,
+    nodeId: string,
+  ): Promise<H5BrowserPreview> {
+    return (await this.callPy("h5_browser_preview", {
+      file_id: fileId,
+      node_id: nodeId,
+    })) as H5BrowserPreview;
+  }
+
+  async getH5BrowserArray(
+    fileId: string,
+    nodeId: string,
+  ): Promise<H5BrowserArray> {
+    return (await this.callPy("h5_browser_array", {
+      file_id: fileId,
+      node_id: nodeId,
+    })) as H5BrowserArray;
+  }
+
+  async importH5BrowserNodes(
+    fileId: string,
+    nodeIds: string[],
+    groupId?: string | null,
+  ): Promise<H5BrowserImportResult> {
+    return (await this.callPy("h5_browser_import", {
+      file_id: fileId,
+      node_ids: nodeIds,
+      group_id: groupId ?? null,
+    })) as H5BrowserImportResult;
   }
 
   async exportSignalCsv(oid: string, separator: string = ","): Promise<string> {

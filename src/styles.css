@@ -1138,3 +1138,224 @@ input {
   font-size: 11px;
   margin-bottom: 6px;
 }
+
+/* ----- HDF5 browser dialog ------------------------------------------- */
+.h5browser-dialog {
+  width: min(1100px, 95vw);
+  height: min(780px, 92vh);
+  display: flex;
+  flex-direction: column;
+}
+.h5browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.h5browser-file-combo {
+  min-width: 200px;
+  flex: 0 1 auto;
+}
+.h5browser-spacer {
+  flex: 1 1 auto;
+}
+.h5browser-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(380px, 1fr) minmax(360px, 1fr);
+  gap: 8px;
+  min-height: 0;
+  margin-top: 8px;
+}
+.h5browser-tree-pane {
+  border: 1px solid var(--border);
+  overflow: auto;
+  min-height: 0;
+}
+.h5browser-tree {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.h5browser-tree thead {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.h5browser-tree th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.h5browser-col-name {
+  width: 45%;
+}
+.h5browser-col-shape {
+  width: 15%;
+}
+.h5browser-col-dtype {
+  width: 15%;
+}
+.h5browser-col-value {
+  width: 25%;
+}
+.h5browser-row td {
+  padding: 2px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.h5browser-row {
+  cursor: pointer;
+}
+.h5browser-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.h5browser-row-selected {
+  background: rgba(70, 130, 200, 0.25) !important;
+}
+.h5browser-cell-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.h5browser-cell-mono,
+.h5browser-cell-value {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.h5browser-expand,
+.h5browser-expand-spacer {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+}
+.h5browser-check-spacer {
+  display: inline-block;
+  width: 13px;
+}
+.h5browser-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}
+.h5browser-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 20px;
+  text-align: center;
+}
+.h5browser-preview-pane {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+.h5browser-preview-plot,
+.h5browser-preview-attrs {
+  border: 1px solid var(--border);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.h5browser-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.h5browser-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.h5browser-tab-active {
+  border-color: var(--border);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.h5browser-tab-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 4px 8px;
+}
+.h5browser-attrs {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.h5browser-attrs th {
+  text-align: left;
+  padding: 2px 8px 2px 0;
+  vertical-align: top;
+  color: var(--text-dim);
+  font-weight: 600;
+  width: 130px;
+}
+.h5browser-attrs td pre {
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.h5browser-error {
+  margin-top: 6px;
+}
+.h5browser-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.h5browser-array-dialog {
+  width: min(800px, 90vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.h5browser-array-grid {
+  flex: 1 1 auto;
+  overflow: auto;
+  border: 1px solid var(--border);
+  margin: 8px 0;
+}
+.h5browser-array-grid table {
+  border-collapse: collapse;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+}
+.h5browser-array-grid td {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+.h5browser-array-truncated {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}

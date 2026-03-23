@@ -23,6 +23,7 @@ export interface StaticActionCallbacks {
   onSaveFile: () => void;
   onOpenWorkspaceHdf5: () => void;
   onSaveWorkspaceHdf5: () => void;
+  onImportHdf5: () => void;
 }
 
 /** Wire static actions (File / Edit) ----------------------------------- */
@@ -84,6 +85,13 @@ export function buildStaticActions(
       menuPath: "File/Save HDF5 workspace…",
       enabled: (s) => ready(s) && s.hasObjects,
       run: cb.onSaveWorkspaceHdf5,
+    },
+    {
+      id: "file.import_hdf5",
+      label: "Import from HDF5…",
+      menuPath: "File/Import from HDF5…",
+      enabled: ready,
+      run: cb.onImportHdf5,
     },
     {
       id: "edit.delete",
