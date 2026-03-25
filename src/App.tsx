@@ -132,6 +132,7 @@ export default function App() {
   const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
   const [roiEditMode, setRoiEditMode] = useState<boolean>(false);
   const [imageRoi, setImageRoi] = useState<ImageRoiSegment[]>([]);
+  const [imageRoiEditMode, setImageRoiEditMode] = useState<boolean>(false);
   const [editingImageRoi, setEditingImageRoi] = useState<
     ImageRoiSegment[] | null
   >(null);
@@ -795,6 +796,30 @@ export default function App() {
     [runtime, currentId],
   );
 
+  const handleToggleImageRoiEditMode = useCallback(() => {
+    setImageRoiEditMode((m) => !m);
+  }, []);
+
+  // Live-edit callback fed by the plot when the user drags a ROI handle
+  // or draws a brand-new shape in edit mode.  The backend is updated with
+  // a short debounce to avoid one PyProxy call per pixel.
+  const imageRoiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const handleImageRoiChangeFromPlot = useCallback(
+    (segments: ImageRoiSegment[]) => {
+      setImageRoi(segments);
+      if (!runtime || !currentId) return;
+      if (imageRoiWriteTimer.current) clearTimeout(imageRoiWriteTimer.current);
+      imageRoiWriteTimer.current = setTimeout(() => {
+        runtime.setImageRoi(currentId, segments).catch((err) => {
+          console.error("Image ROI persist failed", err);
+        });
+      }, 200);
+    },
+    [runtime, currentId],
+  );
+
   const handleImageRoiRemoveAt = useCallback(
     async (index: number) => {
       if (!runtime || !currentId) return;
@@ -1096,7 +1121,8 @@ export default function App() {
             onRemoveAt: handleRoiRemoveAt,
             onRemoveAll: handleRoiRemoveAll,
           })
-        : buildImageRoiActions(imageRoi, {
+        : buildImageRoiActions(imageRoi, imageRoiEditMode, {
+            onToggleEditMode: handleToggleImageRoiEditMode,
             onAddRectangle: handleImageAddRectangle,
             onAddCircle: handleImageAddCircle,
             onEditNumerically: handleImageEditRoi,
@@ -1121,6 +1147,7 @@ export default function App() {
       roi,
       roiEditMode,
       imageRoi,
+      imageRoiEditMode,
       handleCreateTyped,
       handleCreateImageTyped,
       handleAnalysis,
@@ -1138,6 +1165,7 @@ export default function App() {
       handleImageAddCircle,
       handleImageEditRoi,
       handleImageRoiExtractEach,
+      handleToggleImageRoiEditMode,
       handleImageRoiExtractMerged,
       handleImageRoiRemoveAt,
       handleImageRoiRemoveAll,
@@ -1240,7 +1268,13 @@ export default function App() {
             />
           )}
           {activePanel === "image" && imageData && (
-            <ImagePlot data={imageData} roi={imageRoi} results={results} />
+            <ImagePlot
+              data={imageData}
+              roi={imageRoi}
+              roiEditMode={imageRoiEditMode}
+              onRoiChange={handleImageRoiChangeFromPlot}
+              results={results}
+            />
           )}
         </main>
         {runtime && (

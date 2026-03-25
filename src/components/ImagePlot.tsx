@@ -9,8 +9,14 @@ import type {
 
 interface ImagePlotProps {
   data: ImageData;
-  /** ROI overlays drawn on top of the heatmap (read-only). */
+  /** ROI overlays drawn on top of the heatmap. */
   roi?: ImageRoiSegment[];
+  /** When true, ROI shapes become draggable/resizable and the
+   *  drawrect/drawcircle/drawclosedpath modebar tools produce new ROI
+   *  segments instead of free annotations. */
+  roiEditMode?: boolean;
+  /** Called whenever the ROI list changed via direct plot interaction. */
+  onRoiChange?: (segments: ImageRoiSegment[]) => void;
   /** Analysis results (centroid, peaks, blobs, …) drawn as overlays. */
   results?: AnalysisResult[];
 }
@@ -27,7 +33,13 @@ interface ImagePlotProps {
  * * ``results`` — geometry results (peaks, blobs, contours…) coloured per
  *   analysis function.
  */
-export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
+export function ImagePlot({
+  data,
+  roi = [],
+  roiEditMode = false,
+  onRoiChange,
+  results = [],
+}: ImagePlotProps) {
   const traces = useMemo(() => {
     const z = data.data;
     const h = data.height;
@@ -59,8 +71,8 @@ export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
   }, [data]);
 
   const { roiShapes, roiAnnotations } = useMemo(
-    () => buildRoiOverlays(roi),
-    [roi],
+    () => buildRoiOverlays(roi, roiEditMode),
+    [roi, roiEditMode],
   );
 
   const { resultShapes, resultAnnotations, resultTraces } = useMemo(
@@ -91,10 +103,77 @@ export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
       },
       shapes: [...roiShapes, ...resultShapes],
       annotations: [...roiAnnotations, ...resultAnnotations],
+      // Newly drawn shapes inherit the ROI overlay style in edit mode so
+      // the user can immediately see what will become a ROI.
+      newshape: roiEditMode
+        ? {
+            line: { color: ROI_COLOR, width: 2, dash: "dot" },
+            fillcolor: "rgba(255,136,0,0.10)",
+            opacity: 1,
+          }
+        : undefined,
       paper_bgcolor: "var(--surface)",
       plot_bgcolor: "var(--surface)",
     };
-  }, [data, roiShapes, roiAnnotations, resultShapes, resultAnnotations]);
+  }, [
+    data,
+    roiShapes,
+    roiAnnotations,
+    resultShapes,
+    resultAnnotations,
+    roiEditMode,
+  ]);
+
+  const handleRelayout = (event: Record<string, unknown>) => {
+    if (!roiEditMode || !onRoiChange) return;
+    const roiCount = roiShapes.length;
+    const resultCount = resultShapes.length;
+
+    // Case 1 — Plotly returned the full ``shapes`` array (drag end, draw,
+    // or erase).  Reconcile it with the ROI list.
+    if ("shapes" in event && Array.isArray(event.shapes)) {
+      const allEv = event.shapes as Array<Record<string, unknown>>;
+      const updated: ImageRoiSegment[] = [];
+      // Surviving ROI shapes (first roiCount slots — but the user may have
+      // erased some, in which case fewer remain).
+      const headLen = Math.min(roiCount, allEv.length);
+      for (let i = 0; i < headLen; i++) {
+        const seg = shapeToRoi(allEv[i], roi[i]);
+        if (seg) updated.push(seg);
+      }
+      // Trailing extras (after ROI + result blocks) ⇒ newly drawn shapes.
+      for (let i = roiCount + resultCount; i < allEv.length; i++) {
+        const seg = shapeToRoi(allEv[i], null);
+        if (seg) updated.push(seg);
+      }
+      onRoiChange(updated);
+      return;
+    }
+
+    // Case 2 — single-shape live drag/resize: ``shapes[i].x0`` etc.
+    let dirty = false;
+    const next = roi.slice();
+    for (const key of Object.keys(event)) {
+      const m = key.match(/^shapes\[(\d+)\]\.(.+)$/);
+      if (!m) continue;
+      const idx = Number(m[1]);
+      if (idx >= roiCount) continue; // result shape, ignore
+      const seg = next[idx];
+      if (!seg) continue;
+      // Pull every shapes[idx].* key for this index and rebuild the seg.
+      const patch: Record<string, unknown> = {};
+      for (const k2 of Object.keys(event)) {
+        const m2 = k2.match(/^shapes\[(\d+)\]\.(.+)$/);
+        if (m2 && Number(m2[1]) === idx) patch[m2[2]] = event[k2];
+      }
+      const updated = patchRoi(seg, patch);
+      if (updated) {
+        next[idx] = updated;
+        dirty = true;
+      }
+    }
+    if (dirty) onRoiChange(next);
+  };
 
   return (
     <Plot
@@ -102,7 +181,17 @@ export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
       layout={layout as never}
       style={{ width: "100%", height: "100%" }}
       useResizeHandler
-      config={{ responsive: true, displaylogo: false }}
+      config={
+        {
+          responsive: true,
+          displaylogo: false,
+          editable: roiEditMode,
+          modeBarButtonsToAdd: roiEditMode
+            ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
+            : undefined,
+        } as never
+      }
+      onRelayout={handleRelayout}
     />
   );
 }
@@ -113,7 +202,10 @@ export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
 
 const ROI_COLOR = "#ff8800";
 
-function buildRoiOverlays(roi: ImageRoiSegment[]): {
+function buildRoiOverlays(
+  roi: ImageRoiSegment[],
+  editMode = false,
+): {
   roiShapes: unknown[];
   roiAnnotations: unknown[];
 } {
@@ -132,9 +224,10 @@ function buildRoiOverlays(roi: ImageRoiSegment[]): {
         y0: seg.y0,
         x1: seg.x0 + seg.dx,
         y1: seg.y0 + seg.dy,
-        line: { color: ROI_COLOR, width: 1.5, dash: "dot" },
+        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
+        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
         layer: "above",
-        editable: false,
+        editable: editMode,
       });
       annotations.push({
         x: seg.x0,
@@ -159,9 +252,10 @@ function buildRoiOverlays(roi: ImageRoiSegment[]): {
         y0: seg.yc - seg.r,
         x1: seg.xc + seg.r,
         y1: seg.yc + seg.r,
-        line: { color: ROI_COLOR, width: 1.5, dash: "dot" },
+        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
+        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
         layer: "above",
-        editable: false,
+        editable: editMode,
       });
       annotations.push({
         x: seg.xc - seg.r,
@@ -188,9 +282,10 @@ function buildRoiOverlays(roi: ImageRoiSegment[]): {
         path,
         xref: "x",
         yref: "y",
-        line: { color: ROI_COLOR, width: 1.5, dash: "dot" },
+        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
+        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
         layer: "above",
-        editable: false,
+        editable: editMode,
       });
       annotations.push({
         x: seg.points[0][0],
@@ -209,6 +304,107 @@ function buildRoiOverlays(roi: ImageRoiSegment[]): {
     }
   });
   return { roiShapes: shapes, roiAnnotations: annotations };
+}
+
+// Parse a Plotly path string ("M x,y L x,y ... Z") into an array of points.
+function parsePolygonPath(path: string): [number, number][] {
+  const pts: [number, number][] = [];
+  // Tokens separated by whitespace; each one is a command (M/L/Z) optionally
+  // followed by "x,y", or just "x,y".
+  for (const tok of path.split(/\s+/)) {
+    if (!tok) continue;
+    const cleaned = tok.replace(/^[MmLlZz]/, "");
+    if (!cleaned.includes(",")) continue;
+    const [xs, ys] = cleaned.split(",");
+    const x = Number(xs);
+    const y = Number(ys);
+    if (Number.isFinite(x) && Number.isFinite(y)) pts.push([x, y]);
+  }
+  return pts;
+}
+
+/** Convert a Plotly shape (rect/circle/path) to an ImageRoiSegment.
+ *  ``existing`` provides defaults (title, inverse) for in-place updates. */
+function shapeToRoi(
+  shape: Record<string, unknown>,
+  existing: ImageRoiSegment | null,
+): ImageRoiSegment | null {
+  const title = existing?.title ?? "";
+  const inverse = existing?.inverse ?? false;
+  const stype = shape.type;
+  if (stype === "rect") {
+    const x0 = Number(shape.x0);
+    const x1 = Number(shape.x1);
+    const y0 = Number(shape.y0);
+    const y1 = Number(shape.y1);
+    if (![x0, x1, y0, y1].every(Number.isFinite)) return null;
+    const xmin = Math.min(x0, x1);
+    const ymin = Math.min(y0, y1);
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    if (dx <= 0 || dy <= 0) return null;
+    return { geometry: "rectangle", title, inverse, x0: xmin, y0: ymin, dx, dy };
+  }
+  if (stype === "circle") {
+    const x0 = Number(shape.x0);
+    const x1 = Number(shape.x1);
+    const y0 = Number(shape.y0);
+    const y1 = Number(shape.y1);
+    if (![x0, x1, y0, y1].every(Number.isFinite)) return null;
+    const xc = (x0 + x1) / 2;
+    const yc = (y0 + y1) / 2;
+    // The user can deform the circle into an ellipse by dragging — keep it
+    // a circle by averaging the bbox half-extents.
+    const r = (Math.abs(x1 - x0) + Math.abs(y1 - y0)) / 4;
+    if (r <= 0) return null;
+    return { geometry: "circle", title, inverse, xc, yc, r };
+  }
+  if (stype === "path" && typeof shape.path === "string") {
+    const points = parsePolygonPath(shape.path);
+    if (points.length < 3) return null;
+    return { geometry: "polygon", title, inverse, points };
+  }
+  return null;
+}
+
+/** Apply a patch (subset of "x0"/"y0"/"x1"/"y1"/"path") to an existing
+ *  ROI segment, preserving its kind/title/inverse. */
+function patchRoi(
+  seg: ImageRoiSegment,
+  patch: Record<string, unknown>,
+): ImageRoiSegment | null {
+  if (seg.geometry === "rectangle") {
+    const x0a = "x0" in patch ? Number(patch.x0) : seg.x0;
+    const y0a = "y0" in patch ? Number(patch.y0) : seg.y0;
+    const x1a = "x1" in patch ? Number(patch.x1) : seg.x0 + seg.dx;
+    const y1a = "y1" in patch ? Number(patch.y1) : seg.y0 + seg.dy;
+    if (![x0a, x1a, y0a, y1a].every(Number.isFinite)) return null;
+    const xmin = Math.min(x0a, x1a);
+    const ymin = Math.min(y0a, y1a);
+    const dx = Math.abs(x1a - x0a);
+    const dy = Math.abs(y1a - y0a);
+    if (dx <= 0 || dy <= 0) return null;
+    return { ...seg, x0: xmin, y0: ymin, dx, dy };
+  }
+  if (seg.geometry === "circle") {
+    const x0a = "x0" in patch ? Number(patch.x0) : seg.xc - seg.r;
+    const y0a = "y0" in patch ? Number(patch.y0) : seg.yc - seg.r;
+    const x1a = "x1" in patch ? Number(patch.x1) : seg.xc + seg.r;
+    const y1a = "y1" in patch ? Number(patch.y1) : seg.yc + seg.r;
+    if (![x0a, x1a, y0a, y1a].every(Number.isFinite)) return null;
+    const xc = (x0a + x1a) / 2;
+    const yc = (y0a + y1a) / 2;
+    const r = (Math.abs(x1a - x0a) + Math.abs(y1a - y0a)) / 4;
+    if (r <= 0) return null;
+    return { ...seg, xc, yc, r };
+  }
+  if (seg.geometry === "polygon") {
+    if (typeof patch.path !== "string") return null;
+    const points = parsePolygonPath(patch.path);
+    if (points.length < 3) return null;
+    return { ...seg, points };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

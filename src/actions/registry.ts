@@ -359,6 +359,8 @@ export function buildRoiActions(
 
 /** Callbacks for the image ``ROI`` top-level menu. */
 export interface ImageRoiActionCallbacks {
+  /** Toggle the interactive (drag/draw) ROI editor on the plot. */
+  onToggleEditMode: () => void;
   /** Open the numerical ROI dialog (rectangle/circle/polygon editor). */
   onEditNumerically: () => void;
   /** Append a new default rectangle ROI then open the numerical dialog. */
@@ -378,6 +380,7 @@ export interface ImageRoiActionCallbacks {
 /** Wire the ``ROI`` menu actions for the currently displayed image. */
 export function buildImageRoiActions(
   roi: ImageRoiSegment[],
+  roiEditMode: boolean,
   cb: ImageRoiActionCallbacks,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) =>
@@ -385,10 +388,21 @@ export function buildImageRoiActions(
   const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
   const out: ActionDescriptor[] = [
     {
+      id: "image_roi.edit_graphical",
+      label: roiEditMode ? "Stop graphical edit" : "Edit graphically",
+      menuPath: roiEditMode
+        ? "ROI/Stop graphical edit"
+        : "ROI/Edit graphically",
+      iconUrl: getRoiIconUrl("roi_graphical"),
+      enabled: ready,
+      run: cb.onToggleEditMode,
+    },
+    {
       id: "image_roi.add_rectangle",
       label: "Add rectangular ROI…",
       menuPath: "ROI/Add rectangular ROI…",
       iconUrl: getRoiIconUrl("roi_new_rectangle"),
+      beginGroup: true,
       enabled: ready,
       run: cb.onAddRectangle,
     },
