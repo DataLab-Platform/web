@@ -262,6 +262,91 @@ export interface WorkspaceLoadResult {
   groups: number;
 }
 
+/** Parameters of the Text Import Wizard (mirrors
+ *  :class:`datalab.widgets.textimport.SignalImportParam`). */
+export interface TextImportParams {
+  delimiter: string;
+  decimal: string;
+  comment: string;
+  skipRows: number;
+  maxRows: number | null;
+  /** ``"infer"`` (auto), ``"none"`` (no header) or ``"first"`` (first row). */
+  header: "infer" | "none" | "first";
+  transpose: boolean;
+  firstColIsX: boolean;
+  dtypeStr: string;
+}
+
+/** Preview payload returned by :meth:`SigimaRuntime.parseTextImport`. */
+export interface TextImportPreview {
+  headers: string[];
+  /** First N rows of the parsed matrix; NaN cells are encoded as
+   *  ``"NaN"`` strings. */
+  preview_rows: (number | string)[][];
+  nrows: number;
+  ncols: number;
+  /** Candidate signal titles (after applying ``firstColIsX``). */
+  signal_titles: string[];
+  error: string | null;
+}
+
+/** Candidate-signal payload for the wizard's graphical preview page. */
+export interface TextImportSignal {
+  title: string;
+  x: number[];
+  y: number[];
+  xlabel: string;
+  ylabel: string;
+}
+
+export interface TextImportSignals {
+  signals: TextImportSignal[];
+  error: string | null;
+}
+
+/** Final wizard payload (selection + shared labels). */
+export interface TextImportCommitOptions {
+  selectedIndices: number[];
+  title?: string;
+  xlabel?: string;
+  ylabel?: string;
+  xunit?: string;
+  yunit?: string;
+  groupId?: string | null;
+}
+
+/** Default parameters for the Text Import Wizard. */
+export function defaultTextImportParams(): TextImportParams {
+  return {
+    delimiter: ",",
+    decimal: ".",
+    comment: "#",
+    skipRows: 0,
+    maxRows: null,
+    header: "infer",
+    transpose: false,
+    firstColIsX: true,
+    dtypeStr: "float64",
+  };
+}
+
+/** Convert a TextImportParams object to bootstrap.py kwargs. */
+export function textImportToPyKwargs(
+  params: TextImportParams,
+): Record<string, unknown> {
+  return {
+    delimiter: params.delimiter,
+    decimal: params.decimal,
+    comment: params.comment,
+    skip_rows: params.skipRows,
+    max_rows: params.maxRows,
+    header: params.header,
+    transpose: params.transpose,
+    first_col_is_x: params.firstColIsX,
+    dtype_str: params.dtypeStr,
+  };
+}
+
 /** One node of the HDF5 browser tree (mirrors Qt H5TreeWidget rows). */
 export interface H5BrowserNode {
   id: string;
@@ -1033,6 +1118,50 @@ await micropip.install(["sigima", "guidata"])
       title,
       separator,
     })) as string;
+  }
+
+  // ------------------------------------------------------------------
+  // Text Import Wizard (mirrors datalab.widgets.textimport)
+  // ------------------------------------------------------------------
+
+  async parseTextImport(
+    content: string,
+    params: TextImportParams,
+    previewRows: number = 200,
+  ): Promise<TextImportPreview> {
+    return (await this.callPy("parse_text_import", {
+      content,
+      preview_rows: previewRows,
+      ...textImportToPyKwargs(params),
+    })) as TextImportPreview;
+  }
+
+  async buildTextImportSignals(
+    content: string,
+    params: TextImportParams,
+  ): Promise<TextImportSignals> {
+    return (await this.callPy("build_text_import_signals", {
+      content,
+      ...textImportToPyKwargs(params),
+    })) as TextImportSignals;
+  }
+
+  async commitTextImport(
+    content: string,
+    params: TextImportParams,
+    selection: TextImportCommitOptions,
+  ): Promise<string[]> {
+    return (await this.callPy("commit_text_import", {
+      content,
+      ...textImportToPyKwargs(params),
+      selected_indices: selection.selectedIndices,
+      title: selection.title ?? "",
+      xlabel: selection.xlabel ?? "",
+      ylabel: selection.ylabel ?? "",
+      xunit: selection.xunit ?? "",
+      yunit: selection.yunit ?? "",
+      group_id: selection.groupId ?? null,
+    })) as string[];
   }
 
   // ------------------------------------------------------------------

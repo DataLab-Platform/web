@@ -1838,6 +1838,361 @@ def import_signal_csv(
 
 
 # ---------------------------------------------------------------------------
+# Text Import Wizard helpers (mirrors datalab.widgets.textimport)
+# ---------------------------------------------------------------------------
+
+
+def _normalise_text_import_params(
+    delimiter: str = ",",
+    decimal: str = ".",
+    comment: str = "#",
+    skip_rows: int = 0,
+    max_rows: int | None = None,
+    header: str = "infer",
+    transpose: bool = False,
+    first_col_is_x: bool = True,
+    dtype_str: str = "float64",
+) -> dict[str, Any]:
+    """Return a normalised parameter dict for the text-import helpers."""
+    if delimiter == r"\t":
+        delimiter = "\t"
+    if max_rows is not None and max_rows <= 0:
+        max_rows = None
+    return {
+        "delimiter": delimiter or ",",
+        "decimal": decimal or ".",
+        "comment": comment or "",
+        "skip_rows": max(int(skip_rows or 0), 0),
+        "max_rows": max_rows,
+        "header": header if header in ("infer", "none", "first") else "infer",
+        "transpose": bool(transpose),
+        "first_col_is_x": bool(first_col_is_x),
+        "dtype_str": dtype_str or "float64",
+    }
+
+
+def _parse_text_to_matrix(
+    content: str, params: dict[str, Any]
+) -> tuple[list[str], list[list[float]]]:
+    """Parse *content* into ``(headers, rows)``.
+
+    Lines starting with the comment character are dropped before any other
+    processing. ``skip_rows`` is then applied. ``header`` controls whether
+    the first remaining line is treated as a list of column names.
+    """
+    delim = params["delimiter"]
+    decimal = params["decimal"]
+    comment = params["comment"]
+    skip_rows = params["skip_rows"]
+    max_rows = params["max_rows"]
+    header = params["header"]
+
+    raw_lines: list[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if comment and stripped.startswith(comment):
+            continue
+        raw_lines.append(line)
+    raw_lines = raw_lines[skip_rows:]
+    if not raw_lines:
+        return [], []
+
+    def _split(line: str) -> list[str]:
+        if delim == " ":
+            return [c for c in line.split() if c != ""]
+        return [c.strip() for c in line.split(delim)]
+
+    def _to_float(cell: str) -> float:
+        if cell == "" or cell.lower() in ("nan", "na", "n/a"):
+            return float("nan")
+        if decimal != ".":
+            cell = cell.replace(decimal, ".")
+        return float(cell)
+
+    headers: list[str] = []
+    data_lines = raw_lines
+
+    use_header = False
+    if header == "first":
+        use_header = True
+    elif header == "infer":
+        first_fields = _split(raw_lines[0])
+        try:
+            for c in first_fields:
+                _to_float(c)
+        except ValueError:
+            use_header = True
+
+    if use_header:
+        headers = _split(raw_lines[0])
+        data_lines = raw_lines[1:]
+
+    if max_rows is not None:
+        data_lines = data_lines[:max_rows]
+
+    rows: list[list[float]] = []
+    ncols = 0
+    for line in data_lines:
+        cells = _split(line)
+        try:
+            row = [_to_float(c) for c in cells]
+        except ValueError:
+            continue
+        if not row:
+            continue
+        ncols = max(ncols, len(row))
+        rows.append(row)
+
+    # Pad short rows with NaN to keep the matrix rectangular.
+    for row in rows:
+        if len(row) < ncols:
+            row.extend([float("nan")] * (ncols - len(row)))
+
+    if not headers:
+        headers = [f"col{i}" for i in range(ncols)]
+    elif len(headers) < ncols:
+        headers.extend(f"col{i}" for i in range(len(headers), ncols))
+    elif len(headers) > ncols:
+        headers = headers[:ncols]
+
+    if params["transpose"]:
+        if rows:
+            transposed = list(map(list, zip(*rows)))
+            rows = [list(r) for r in transposed]
+            headers = [f"col{i}" for i in range(len(rows[0]) if rows else 0)]
+    return headers, rows
+
+
+def parse_text_import(
+    content: str,
+    *,
+    delimiter: str = ",",
+    decimal: str = ".",
+    comment: str = "#",
+    skip_rows: int = 0,
+    max_rows: int | None = None,
+    header: str = "infer",
+    transpose: bool = False,
+    first_col_is_x: bool = True,
+    dtype_str: str = "float64",
+    preview_rows: int = 200,
+) -> dict[str, Any]:
+    """Return a parsed preview of *content* for the import wizard.
+
+    The result dict contains:
+
+    * ``headers``: list of column names (one per column)
+    * ``preview_rows``: first ``preview_rows`` rows as a list of list of
+      floats (or strings for ``"NaN"``)
+    * ``nrows``: total number of *data* rows parsed
+    * ``ncols``: number of columns
+    * ``signal_titles``: list of candidate signal titles (taking
+      ``first_col_is_x`` into account)
+    * ``error``: ``None`` on success, a human-readable string otherwise
+    """
+    params = _normalise_text_import_params(
+        delimiter=delimiter,
+        decimal=decimal,
+        comment=comment,
+        skip_rows=skip_rows,
+        max_rows=max_rows,
+        header=header,
+        transpose=transpose,
+        first_col_is_x=first_col_is_x,
+        dtype_str=dtype_str,
+    )
+    try:
+        headers, rows = _parse_text_to_matrix(content, params)
+    except Exception as exc:  # pylint: disable=broad-except
+        return {
+            "headers": [],
+            "preview_rows": [],
+            "nrows": 0,
+            "ncols": 0,
+            "signal_titles": [],
+            "error": str(exc),
+        }
+    if not rows:
+        return {
+            "headers": headers,
+            "preview_rows": [],
+            "nrows": 0,
+            "ncols": len(headers),
+            "signal_titles": [],
+            "error": "No numeric data found",
+        }
+    ncols = len(rows[0])
+    nrows = len(rows)
+    if first_col_is_x and ncols >= 2:
+        signal_titles = [headers[i] for i in range(1, ncols)]
+    else:
+        signal_titles = list(headers)
+    preview = []
+    for row in rows[: max(0, int(preview_rows))]:
+        preview.append(
+            [
+                ("NaN" if (isinstance(v, float) and v != v) else v)
+                for v in row
+            ]
+        )
+    return {
+        "headers": headers,
+        "preview_rows": preview,
+        "nrows": nrows,
+        "ncols": ncols,
+        "signal_titles": signal_titles,
+        "error": None,
+    }
+
+
+def build_text_import_signals(
+    content: str,
+    *,
+    delimiter: str = ",",
+    decimal: str = ".",
+    comment: str = "#",
+    skip_rows: int = 0,
+    max_rows: int | None = None,
+    header: str = "infer",
+    transpose: bool = False,
+    first_col_is_x: bool = True,
+    dtype_str: str = "float64",
+) -> dict[str, Any]:
+    """Build candidate signal payloads (no insertion into the model).
+
+    Returns a dict with ``signals`` (list of ``{title, x, y, xlabel,
+    ylabel}``) and ``error``.  The wizard uses this to render the
+    graphical-preview page.
+    """
+    params = _normalise_text_import_params(
+        delimiter=delimiter,
+        decimal=decimal,
+        comment=comment,
+        skip_rows=skip_rows,
+        max_rows=max_rows,
+        header=header,
+        transpose=transpose,
+        first_col_is_x=first_col_is_x,
+        dtype_str=dtype_str,
+    )
+    try:
+        headers, rows = _parse_text_to_matrix(content, params)
+    except Exception as exc:  # pylint: disable=broad-except
+        return {"signals": [], "error": str(exc)}
+    if not rows:
+        return {"signals": [], "error": "No numeric data found"}
+    try:
+        data = np.asarray(rows, dtype=np.dtype(params["dtype_str"]))
+    except (TypeError, ValueError) as exc:
+        return {"signals": [], "error": f"Invalid data type: {exc}"}
+    if data.ndim != 2:
+        return {"signals": [], "error": "Parsed data is not 2D"}
+    columns = data.T  # shape: (ncols, nrows)
+    ncols = columns.shape[0]
+    if params["first_col_is_x"] and ncols >= 2:
+        x = columns[0]
+        xlabel = headers[0] if headers else "x"
+        signals = []
+        for i in range(1, ncols):
+            signals.append(
+                {
+                    "title": headers[i] if i < len(headers) else f"col{i}",
+                    "x": x.tolist(),
+                    "y": columns[i].tolist(),
+                    "xlabel": xlabel,
+                    "ylabel": headers[i] if i < len(headers) else "",
+                }
+            )
+    else:
+        n = columns.shape[1]
+        x_default = np.arange(n, dtype=np.dtype(params["dtype_str"]))
+        signals = []
+        for i in range(ncols):
+            signals.append(
+                {
+                    "title": headers[i] if i < len(headers) else f"col{i}",
+                    "x": x_default.tolist(),
+                    "y": columns[i].tolist(),
+                    "xlabel": "",
+                    "ylabel": headers[i] if i < len(headers) else "",
+                }
+            )
+    return {"signals": signals, "error": None}
+
+
+def commit_text_import(
+    content: str,
+    *,
+    delimiter: str = ",",
+    decimal: str = ".",
+    comment: str = "#",
+    skip_rows: int = 0,
+    max_rows: int | None = None,
+    header: str = "infer",
+    transpose: bool = False,
+    first_col_is_x: bool = True,
+    dtype_str: str = "float64",
+    selected_indices: list[int] | None = None,
+    title: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+    xunit: str = "",
+    yunit: str = "",
+    group_id: str | None = None,
+) -> list[str]:
+    """Create the selected signals in the model and return their oids."""
+    payload = build_text_import_signals(
+        content,
+        delimiter=delimiter,
+        decimal=decimal,
+        comment=comment,
+        skip_rows=skip_rows,
+        max_rows=max_rows,
+        header=header,
+        transpose=transpose,
+        first_col_is_x=first_col_is_x,
+        dtype_str=dtype_str,
+    )
+    if payload["error"]:
+        raise ValueError(payload["error"])
+    candidates = payload["signals"]
+    if not candidates:
+        raise ValueError("No signal could be built from the provided data")
+    if selected_indices is None:
+        indices = list(range(len(candidates)))
+    else:
+        indices = [int(i) for i in selected_indices if 0 <= int(i) < len(candidates)]
+    if not indices:
+        raise ValueError("No signal selected for import")
+    multi = len(indices) > 1
+    oids: list[str] = []
+    for n, idx in enumerate(indices, start=1):
+        spec = candidates[idx]
+        sig_title = spec["title"] or f"col{idx}"
+        if title:
+            sig_title = f"{title} - {sig_title}" if multi else title
+        elif multi:
+            sig_title = f"{sig_title} {n:02d}"
+        obj = sigima.create_signal(
+            title=sig_title,
+            x=np.asarray(spec["x"], dtype=np.dtype(dtype_str)),
+            y=np.asarray(spec["y"], dtype=np.dtype(dtype_str)),
+        )
+        # Default labels/units inferred from the column header; user
+        # overrides take precedence (mirrors datalab.widgets.textimport).
+        obj.xlabel = xlabel or spec["xlabel"] or obj.xlabel
+        obj.ylabel = ylabel or spec["ylabel"] or obj.ylabel
+        if xunit:
+            obj.xunit = xunit
+        if yunit:
+            obj.yunit = yunit
+        oids.append(_MODEL.add_object("signal", obj, group_id=group_id))
+    return oids
+
+
+# ---------------------------------------------------------------------------
 # Feature catalogue & processing
 # ---------------------------------------------------------------------------
 
@@ -2863,6 +3218,9 @@ __all__ = [
     "h5_browser_import",
     "export_signal_csv",
     "import_signal_csv",
+    "parse_text_import",
+    "build_text_import_signals",
+    "commit_text_import",
     "list_features",
     "get_feature_schema",
     "resolve_feature_choices",

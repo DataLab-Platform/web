@@ -35,6 +35,7 @@ import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { H5BrowserDialog } from "./components/H5BrowserDialog";
+import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
 import type {
@@ -120,6 +121,7 @@ export default function App() {
   const [h5BrowserFiles, setH5BrowserFiles] = useState<H5BrowserFile[] | null>(
     null,
   );
+  const [textImportOpen, setTextImportOpen] = useState(false);
   const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
   const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
@@ -915,6 +917,21 @@ export default function App() {
     setH5BrowserFiles([]);
   }, []);
 
+  const handleImportTextWizard = useCallback(() => {
+    setTextImportOpen(true);
+  }, []);
+
+  const handleTextImportFinished = useCallback(
+    async (oids: string[]) => {
+      setTextImportOpen(false);
+      if (oids.length === 0) return;
+      setSelectedIds([]);
+      setCurrentId(oids[oids.length - 1] ?? null);
+      await refresh(oids[oids.length - 1] ?? null);
+    },
+    [refresh],
+  );
+
   const handleH5BrowserImport = useCallback(
     async (oids: string[], uint32Clipped: boolean) => {
       setH5BrowserFiles(null);
@@ -1056,6 +1073,7 @@ export default function App() {
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onImportHdf5: handleImportHdf5,
+        onImportTextWizard: handleImportTextWizard,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -1130,6 +1148,7 @@ export default function App() {
       handleOpenWorkspaceHdf5,
       handleSaveWorkspaceHdf5,
       handleImportHdf5,
+      handleImportTextWizard,
       pluginActions,
       handleTriggerPluginAction,
       handleReloadPlugins,
@@ -1315,6 +1334,12 @@ export default function App() {
           initial={h5BrowserFiles}
           onImport={handleH5BrowserImport}
           onCancel={() => setH5BrowserFiles(null)}
+        />
+      )}
+      {textImportOpen && (
+        <TextImportWizard
+          onImport={handleTextImportFinished}
+          onCancel={() => setTextImportOpen(false)}
         />
       )}
       {pluginManagerOpen && (
