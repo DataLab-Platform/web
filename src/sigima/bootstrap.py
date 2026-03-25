@@ -2487,6 +2487,14 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "paramclass": sipi.BlobLOGParam,
             "separator_before": False,
         },
+        {
+            "id": "blob_opencv",
+            "label": "Blob detection (OpenCV)",
+            "icon": "",
+            "func": sipi.blob_opencv,
+            "paramclass": sipi.BlobOpenCVParam,
+            "separator_before": False,
+        },
     ]
 
 

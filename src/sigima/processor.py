@@ -83,6 +83,11 @@ class FeatureSpec:
 # ``apply_feature`` if their id is known — we don't enforce a guard).
 SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     # Operations / arithmetic ------------------------------------------------
+    "arithmetic": FeatureOverride(
+        "Arithmetic\u2026",
+        "Operations/Arithmetic",
+        operand_label="Second signal",
+    ),
     "addition": FeatureOverride("Sum", "Operations/Sum"),
     "average": FeatureOverride("Average", "Operations/Average"),
     "product": FeatureOverride("Product", "Operations/Product"),
@@ -97,71 +102,8 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "division": FeatureOverride(
         "Division", "Operations/Division", operand_label="Divisor"
     ),
-    "addition_constant": FeatureOverride(
-        "Add constant\u2026", "Operations/Constant/Add constant"
-    ),
-    "difference_constant": FeatureOverride(
-        "Subtract constant\u2026", "Operations/Constant/Subtract constant"
-    ),
-    "product_constant": FeatureOverride(
-        "Multiply by constant\u2026", "Operations/Constant/Multiply by constant"
-    ),
-    "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
-    "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
-    "real": FeatureOverride("Real part", "Operations/Real part"),
-    "imag": FeatureOverride("Imaginary part", "Operations/Imaginary part"),
-    "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
-    # Processing -------------------------------------------------------------
-    "normalize": FeatureOverride("Normalize\u2026", "Processing/Normalize"),
-    "derivative": FeatureOverride("Derivative", "Processing/Derivative"),
-    "integral": FeatureOverride("Integral", "Processing/Integral"),
-    "moving_average": FeatureOverride(
-        "Moving average\u2026", "Processing/Moving average"
-    ),
-    "moving_median": FeatureOverride(
-        "Moving median\u2026", "Processing/Moving median"
-    ),
-    "wiener": FeatureOverride("Wiener filter", "Processing/Wiener filter"),
-    "gaussian_filter": FeatureOverride(
-        "Gaussian filter\u2026", "Processing/Gaussian filter"
-    ),
-    "calibration": FeatureOverride(
-        "Linear calibration\u2026", "Processing/Axis transformation/Linear calibration"
-    ),
-    # Math -------------------------------------------------------------------
-    "exp": FeatureOverride("Exponential", "Operations/Math/Exponential"),
-    "log10": FeatureOverride("Log10", "Operations/Math/Log10"),
-    "sqrt": FeatureOverride("Square root", "Operations/Math/Square root"),
-    "power": FeatureOverride("Power\u2026", "Operations/Math/Power"),
-    # Fourier ----------------------------------------------------------------
-    "fft": FeatureOverride("FFT", "Processing/Fourier analysis/FFT"),
-    "ifft": FeatureOverride("Inverse FFT", "Processing/Fourier analysis/Inverse FFT"),
-    "magnitude_spectrum": FeatureOverride(
-        "Magnitude spectrum", "Processing/Fourier analysis/Magnitude spectrum"
-    ),
-    "phase_spectrum": FeatureOverride(
-        "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
-    ),
-    "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
-}
-
-
-# Curated image catalogue.  Same conventions as ``SIGNAL_OVERRIDES``.
-IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
-    # Operations / arithmetic ------------------------------------------------
-    "addition": FeatureOverride("Sum", "Operations/Sum"),
-    "average": FeatureOverride("Average", "Operations/Average"),
-    "product": FeatureOverride("Product", "Operations/Product"),
-    "difference": FeatureOverride(
-        "Difference", "Operations/Difference", operand_label="Image to subtract"
-    ),
-    "quadratic_difference": FeatureOverride(
-        "Quadratic difference",
-        "Operations/Quadratic difference",
-        operand_label="Image to subtract",
-    ),
-    "division": FeatureOverride(
-        "Division", "Operations/Division", operand_label="Divisor"
+    "standard_deviation": FeatureOverride(
+        "Standard deviation", "Operations/Standard deviation"
     ),
     "addition_constant": FeatureOverride(
         "Add constant\u2026", "Operations/Constant/Add constant"
@@ -179,100 +121,103 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
     "real": FeatureOverride("Real part", "Operations/Real part"),
     "imag": FeatureOverride("Imaginary part", "Operations/Imaginary part"),
+    "phase": FeatureOverride("Phase\u2026", "Operations/Phase"),
+    "complex_from_magnitude_phase": FeatureOverride(
+        "Combine with phase\u2026",
+        "Operations/Combine with phase",
+        operand_label="Phase signal",
+    ),
+    "complex_from_real_imag": FeatureOverride(
+        "Combine with imaginary part",
+        "Operations/Combine with imaginary part",
+        operand_label="Imaginary part signal",
+    ),
     "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
-    "logp1": FeatureOverride("Log10(z+n)\u2026", "Operations/Math/Log10(z+n)"),
+    "astype": FeatureOverride(
+        "Convert data type\u2026", "Operations/Convert data type"
+    ),
+    "convolution": FeatureOverride(
+        "Convolution",
+        "Operations/Convolution",
+        operand_label="Convolution kernel",
+    ),
+    "deconvolution": FeatureOverride(
+        "Deconvolution",
+        "Operations/Deconvolution",
+        operand_label="Deconvolution kernel",
+    ),
+    # Math -------------------------------------------------------------------
     "exp": FeatureOverride("Exponential", "Operations/Math/Exponential"),
     "log10": FeatureOverride("Log10", "Operations/Math/Log10"),
-    # Processing -------------------------------------------------------------
-    "normalize": FeatureOverride("Normalize\u2026", "Processing/Normalize"),
+    "sqrt": FeatureOverride("Square root", "Operations/Math/Square root"),
+    "power": FeatureOverride("Power\u2026", "Operations/Math/Power"),
+    # Processing / Axis transformation ---------------------------------------
     "calibration": FeatureOverride(
-        "Linear calibration\u2026", "Processing/Linear calibration"
+        "Linear calibration\u2026",
+        "Processing/Axis transformation/Linear calibration",
     ),
-    "clip": FeatureOverride("Clip\u2026", "Processing/Clip"),
-    # Filtering --------------------------------------------------------------
+    "xy_mode": FeatureOverride(
+        "X-Y mode",
+        "Processing/Axis transformation/X-Y mode",
+        skip_xarray_compat=True,
+    ),
+    "reverse_x": FeatureOverride(
+        "Reverse X-axis", "Processing/Axis transformation/Reverse X-axis"
+    ),
+    "replace_x_by_other_y": FeatureOverride(
+        "Replace X by other signal's Y",
+        "Processing/Axis transformation/Replace X by other signal's Y",
+        operand_label="Signal whose Y becomes the X axis",
+        skip_xarray_compat=True,
+    ),
+    "to_cartesian": FeatureOverride(
+        "Convert to cartesian coordinates\u2026",
+        "Processing/Axis transformation/Convert to cartesian coordinates",
+    ),
+    "to_polar": FeatureOverride(
+        "Convert to polar coordinates\u2026",
+        "Processing/Axis transformation/Convert to polar coordinates",
+    ),
+    "transpose": FeatureOverride(
+        "Swap X/Y axes", "Processing/Axis transformation/Swap X/Y axes"
+    ),
+    # Processing / Level adjustment ------------------------------------------
+    "normalize": FeatureOverride(
+        "Normalize\u2026", "Processing/Level adjustment/Normalize"
+    ),
+    "clip": FeatureOverride(
+        "Clipping\u2026", "Processing/Level adjustment/Clipping"
+    ),
+    "offset_correction": FeatureOverride(
+        "Offset correction", "Processing/Level adjustment/Offset correction"
+    ),
+    # Processing / Noise addition --------------------------------------------
+    "add_gaussian_noise": FeatureOverride(
+        "Add Gaussian noise\u2026", "Processing/Noise addition/Add Gaussian noise"
+    ),
+    "add_poisson_noise": FeatureOverride(
+        "Add Poisson noise\u2026", "Processing/Noise addition/Add Poisson noise"
+    ),
+    "add_uniform_noise": FeatureOverride(
+        "Add uniform noise\u2026", "Processing/Noise addition/Add uniform noise"
+    ),
+    # Processing / Noise reduction -------------------------------------------
     "gaussian_filter": FeatureOverride(
-        "Gaussian filter\u2026", "Processing/Filtering/Gaussian filter"
+        "Gaussian filter\u2026", "Processing/Noise reduction/Gaussian filter"
     ),
     "moving_average": FeatureOverride(
-        "Moving average\u2026", "Processing/Filtering/Moving average"
+        "Moving average\u2026", "Processing/Noise reduction/Moving average"
     ),
     "moving_median": FeatureOverride(
-        "Moving median\u2026", "Processing/Filtering/Moving median"
+        "Moving median\u2026", "Processing/Noise reduction/Moving median"
     ),
-    "wiener": FeatureOverride("Wiener filter", "Processing/Filtering/Wiener filter"),
-    # Edges ------------------------------------------------------------------
-    "canny": FeatureOverride("Canny\u2026", "Processing/Edges/Canny"),
-    "roberts": FeatureOverride("Roberts", "Processing/Edges/Roberts"),
-    "sobel": FeatureOverride("Sobel", "Processing/Edges/Sobel"),
-    "laplace": FeatureOverride("Laplace", "Processing/Edges/Laplace"),
-    "prewitt": FeatureOverride("Prewitt", "Processing/Edges/Prewitt"),
-    "scharr": FeatureOverride("Scharr", "Processing/Edges/Scharr"),
-    # Threshold --------------------------------------------------------------
-    "threshold": FeatureOverride("Threshold\u2026", "Processing/Threshold/Threshold"),
-    "threshold_isodata": FeatureOverride(
-        "Isodata", "Processing/Threshold/Isodata"
+    "wiener": FeatureOverride(
+        "Wiener filter", "Processing/Noise reduction/Wiener filter"
     ),
-    "threshold_li": FeatureOverride("Li", "Processing/Threshold/Li"),
-    "threshold_mean": FeatureOverride("Mean", "Processing/Threshold/Mean"),
-    "threshold_otsu": FeatureOverride("Otsu", "Processing/Threshold/Otsu"),
-    "threshold_triangle": FeatureOverride(
-        "Triangle", "Processing/Threshold/Triangle"
+    # Processing / Fourier analysis ------------------------------------------
+    "zero_padding": FeatureOverride(
+        "Zero padding\u2026", "Processing/Fourier analysis/Zero padding"
     ),
-    "threshold_yen": FeatureOverride("Yen", "Processing/Threshold/Yen"),
-    # Exposure ---------------------------------------------------------------
-    "adjust_gamma": FeatureOverride(
-        "Gamma correction\u2026", "Processing/Exposure/Gamma correction"
-    ),
-    "adjust_log": FeatureOverride(
-        "Log correction\u2026", "Processing/Exposure/Log correction"
-    ),
-    "adjust_sigmoid": FeatureOverride(
-        "Sigmoid correction\u2026", "Processing/Exposure/Sigmoid correction"
-    ),
-    "equalize_hist": FeatureOverride(
-        "Histogram equalization", "Processing/Exposure/Histogram equalization"
-    ),
-    "equalize_adapthist": FeatureOverride(
-        "Adaptive histogram equalization\u2026",
-        "Processing/Exposure/Adaptive histogram equalization",
-    ),
-    "rescale_intensity": FeatureOverride(
-        "Intensity rescaling\u2026",
-        "Processing/Exposure/Intensity rescaling",
-    ),
-    # Geometry ---------------------------------------------------------------
-    "flatfield": FeatureOverride(
-        "Flat-field correction\u2026",
-        "Processing/Flat-field correction",
-        operand_label="Flat-field image",
-    ),
-    "rotate90": FeatureOverride(
-        "Rotate 90\u00b0", "Processing/Geometry/Rotate 90\u00b0"
-    ),
-    "rotate270": FeatureOverride(
-        "Rotate 270\u00b0", "Processing/Geometry/Rotate 270\u00b0"
-    ),
-    "fliph": FeatureOverride(
-        "Horizontal flip", "Processing/Geometry/Horizontal flip"
-    ),
-    "flipv": FeatureOverride("Vertical flip", "Processing/Geometry/Vertical flip"),
-    "rotate": FeatureOverride(
-        "Rotate arbitrarily\u2026", "Processing/Geometry/Rotate"
-    ),
-    "resize": FeatureOverride("Resize\u2026", "Processing/Geometry/Resize"),
-    "binning": FeatureOverride("Pixel binning\u2026", "Processing/Geometry/Binning"),
-    # Morphology -------------------------------------------------------------
-    "white_tophat": FeatureOverride(
-        "White Top-Hat\u2026", "Processing/Morphology/White Top-Hat"
-    ),
-    "black_tophat": FeatureOverride(
-        "Black Top-Hat\u2026", "Processing/Morphology/Black Top-Hat"
-    ),
-    "erosion": FeatureOverride("Erosion\u2026", "Processing/Morphology/Erosion"),
-    "dilation": FeatureOverride("Dilation\u2026", "Processing/Morphology/Dilation"),
-    "opening": FeatureOverride("Opening\u2026", "Processing/Morphology/Opening"),
-    "closing": FeatureOverride("Closing\u2026", "Processing/Morphology/Closing"),
-    # Fourier ----------------------------------------------------------------
     "fft": FeatureOverride("FFT", "Processing/Fourier analysis/FFT"),
     "ifft": FeatureOverride("Inverse FFT", "Processing/Fourier analysis/Inverse FFT"),
     "magnitude_spectrum": FeatureOverride(
@@ -282,6 +227,400 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
     ),
     "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
+    # Processing / Frequency filters -----------------------------------------
+    "lowpass": FeatureOverride(
+        "Low-pass filter\u2026", "Processing/Frequency filters/Low-pass filter"
+    ),
+    "highpass": FeatureOverride(
+        "High-pass filter\u2026", "Processing/Frequency filters/High-pass filter"
+    ),
+    "bandpass": FeatureOverride(
+        "Band-pass filter\u2026", "Processing/Frequency filters/Band-pass filter"
+    ),
+    "bandstop": FeatureOverride(
+        "Band-stop filter\u2026", "Processing/Frequency filters/Band-stop filter"
+    ),
+    # Processing / Fitting ---------------------------------------------------
+    "linear_fit": FeatureOverride("Linear fit", "Processing/Fitting/Linear fit"),
+    "polynomial_fit": FeatureOverride(
+        "Polynomial fit\u2026", "Processing/Fitting/Polynomial fit"
+    ),
+    "gaussian_fit": FeatureOverride(
+        "Gaussian fit", "Processing/Fitting/Gaussian fit"
+    ),
+    "lorentzian_fit": FeatureOverride(
+        "Lorentzian fit", "Processing/Fitting/Lorentzian fit"
+    ),
+    "voigt_fit": FeatureOverride("Voigt fit", "Processing/Fitting/Voigt fit"),
+    "planckian_fit": FeatureOverride(
+        "Planckian fit", "Processing/Fitting/Planckian fit"
+    ),
+    "twohalfgaussian_fit": FeatureOverride(
+        "Two Half-Gaussians fit", "Processing/Fitting/Two Half-Gaussians fit"
+    ),
+    "piecewiseexponential_fit": FeatureOverride(
+        "Piecewise exponential fit",
+        "Processing/Fitting/Piecewise exponential fit",
+    ),
+    "exponential_fit": FeatureOverride(
+        "Exponential fit", "Processing/Fitting/Exponential fit"
+    ),
+    "sinusoidal_fit": FeatureOverride(
+        "Sinusoidal fit", "Processing/Fitting/Sinusoidal fit"
+    ),
+    "cdf_fit": FeatureOverride("CDF fit", "Processing/Fitting/CDF fit"),
+    "sigmoid_fit": FeatureOverride(
+        "Sigmoid fit", "Processing/Fitting/Sigmoid fit"
+    ),
+    "evaluate_fit": FeatureOverride(
+        "Evaluate fit",
+        "Processing/Fitting/Evaluate fit",
+        operand_label="Fit signal",
+        skip_xarray_compat=True,
+    ),
+    # Processing -------------------------------------------------------------
+    "derivative": FeatureOverride("Derivative", "Processing/Derivative"),
+    "integral": FeatureOverride("Integral", "Processing/Integral"),
+    "apply_window": FeatureOverride("Windowing\u2026", "Processing/Windowing"),
+    "detrending": FeatureOverride("Detrending\u2026", "Processing/Detrending"),
+    "interpolate": FeatureOverride(
+        "Interpolation\u2026", "Processing/Interpolation"
+    ),
+    "resampling": FeatureOverride("Resampling\u2026", "Processing/Resampling"),
+    # Processing / Stability analysis ----------------------------------------
+    "allan_variance": FeatureOverride(
+        "Allan variance\u2026", "Processing/Stability analysis/Allan variance"
+    ),
+    "allan_deviation": FeatureOverride(
+        "Allan deviation\u2026", "Processing/Stability analysis/Allan deviation"
+    ),
+    "modified_allan_variance": FeatureOverride(
+        "Modified Allan variance\u2026",
+        "Processing/Stability analysis/Modified Allan variance",
+    ),
+    "hadamard_variance": FeatureOverride(
+        "Hadamard variance\u2026", "Processing/Stability analysis/Hadamard variance"
+    ),
+    "total_variance": FeatureOverride(
+        "Total variance\u2026", "Processing/Stability analysis/Total variance"
+    ),
+    "time_deviation": FeatureOverride(
+        "Time deviation\u2026", "Processing/Stability analysis/Time deviation"
+    ),
+    # Analysis (1_to_1 entries shown in the Analysis menu) -------------------
+    "histogram": FeatureOverride("Histogram\u2026", "Analysis/Histogram"),
+    "peak_detection": FeatureOverride(
+        "Peak detection\u2026", "Analysis/Peak detection"
+    ),
+}
+
+
+# Curated image catalogue.  Same conventions as ``SIGNAL_OVERRIDES``.
+IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
+    # Operations / arithmetic ------------------------------------------------
+    "arithmetic": FeatureOverride(
+        "Arithmetic\u2026",
+        "Operations/Arithmetic",
+        operand_label="Second image",
+    ),
+    "addition": FeatureOverride("Sum", "Operations/Sum"),
+    "average": FeatureOverride("Average", "Operations/Average"),
+    "product": FeatureOverride("Product", "Operations/Product"),
+    "difference": FeatureOverride(
+        "Difference", "Operations/Difference", operand_label="Image to subtract"
+    ),
+    "quadratic_difference": FeatureOverride(
+        "Quadratic difference",
+        "Operations/Quadratic difference",
+        operand_label="Image to subtract",
+    ),
+    "division": FeatureOverride(
+        "Division", "Operations/Division", operand_label="Divisor"
+    ),
+    "standard_deviation": FeatureOverride(
+        "Standard deviation", "Operations/Standard deviation"
+    ),
+    "addition_constant": FeatureOverride(
+        "Add constant\u2026", "Operations/Constant/Add constant"
+    ),
+    "difference_constant": FeatureOverride(
+        "Subtract constant\u2026", "Operations/Constant/Subtract constant"
+    ),
+    "product_constant": FeatureOverride(
+        "Multiply by constant\u2026", "Operations/Constant/Multiply by constant"
+    ),
+    "division_constant": FeatureOverride(
+        "Divide by constant\u2026", "Operations/Constant/Divide by constant"
+    ),
+    "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
+    "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
+    "real": FeatureOverride("Real part", "Operations/Real part"),
+    "imag": FeatureOverride("Imaginary part", "Operations/Imaginary part"),
+    "phase": FeatureOverride("Phase\u2026", "Operations/Phase"),
+    "complex_from_magnitude_phase": FeatureOverride(
+        "Combine with phase\u2026",
+        "Operations/Combine with phase",
+        operand_label="Phase image",
+    ),
+    "complex_from_real_imag": FeatureOverride(
+        "Combine with imaginary part",
+        "Operations/Combine with imaginary part",
+        operand_label="Imaginary part image",
+    ),
+    "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
+    "logp1": FeatureOverride("Log10(z+n)\u2026", "Operations/Math/Log10(z+n)"),
+    "log10_z_plus_n": FeatureOverride(
+        "Log10(z+n)\u2026", "Operations/Math/Log10(z+n)"
+    ),
+    "exp": FeatureOverride("Exponential", "Operations/Math/Exponential"),
+    "log10": FeatureOverride("Log10", "Operations/Math/Log10"),
+    "astype": FeatureOverride(
+        "Convert data type\u2026", "Operations/Convert data type"
+    ),
+    "convolution": FeatureOverride(
+        "Convolution",
+        "Operations/Convolution",
+        operand_label="Convolution kernel",
+    ),
+    "deconvolution": FeatureOverride(
+        "Deconvolution",
+        "Operations/Deconvolution",
+        operand_label="Deconvolution kernel",
+    ),
+    "flatfield": FeatureOverride(
+        "Flat-field correction\u2026",
+        "Operations/Flat-field correction",
+        operand_label="Flat-field image",
+    ),
+    # Processing / Geometry --------------------------------------------------
+    "fliph": FeatureOverride(
+        "Flip horizontally", "Processing/Geometry/Flip horizontally"
+    ),
+    "flipv": FeatureOverride(
+        "Flip vertically", "Processing/Geometry/Flip vertically"
+    ),
+    "transpose": FeatureOverride(
+        "Flip diagonally", "Processing/Geometry/Flip diagonally"
+    ),
+    "rotate90": FeatureOverride(
+        "Rotate 90\u00b0 right", "Processing/Geometry/Rotate 90\u00b0 right"
+    ),
+    "rotate270": FeatureOverride(
+        "Rotate 90\u00b0 left", "Processing/Geometry/Rotate 90\u00b0 left"
+    ),
+    "rotate": FeatureOverride(
+        "Rotate by\u2026", "Processing/Geometry/Rotate by"
+    ),
+    "translate": FeatureOverride(
+        "Translate\u2026", "Processing/Geometry/Translate"
+    ),
+    "resize": FeatureOverride("Resize\u2026", "Processing/Resize"),
+    "binning": FeatureOverride("Pixel binning\u2026", "Processing/Pixel binning"),
+    "resampling": FeatureOverride("Resampling\u2026", "Processing/Resampling"),
+    # Processing / Axis transformation ---------------------------------------
+    "set_uniform_coords": FeatureOverride(
+        "Set uniform coordinates\u2026",
+        "Processing/Axis transformation/Set uniform coordinates",
+    ),
+    "calibration": FeatureOverride(
+        "Polynomial calibration\u2026",
+        "Processing/Axis transformation/Polynomial calibration",
+    ),
+    # Processing / Level adjustment ------------------------------------------
+    "normalize": FeatureOverride(
+        "Normalize\u2026", "Processing/Level adjustment/Normalize"
+    ),
+    "clip": FeatureOverride(
+        "Clipping\u2026", "Processing/Level adjustment/Clipping"
+    ),
+    "offset_correction": FeatureOverride(
+        "Offset correction", "Processing/Level adjustment/Offset correction"
+    ),
+    # Processing / Noise addition --------------------------------------------
+    "add_gaussian_noise": FeatureOverride(
+        "Add Gaussian noise\u2026", "Processing/Noise addition/Add Gaussian noise"
+    ),
+    "add_poisson_noise": FeatureOverride(
+        "Add Poisson noise\u2026", "Processing/Noise addition/Add Poisson noise"
+    ),
+    "add_uniform_noise": FeatureOverride(
+        "Add uniform noise\u2026", "Processing/Noise addition/Add uniform noise"
+    ),
+    # Processing / Noise reduction -------------------------------------------
+    "gaussian_filter": FeatureOverride(
+        "Gaussian filter\u2026", "Processing/Noise reduction/Gaussian filter"
+    ),
+    "moving_average": FeatureOverride(
+        "Moving average\u2026", "Processing/Noise reduction/Moving average"
+    ),
+    "moving_median": FeatureOverride(
+        "Moving median\u2026", "Processing/Noise reduction/Moving median"
+    ),
+    "wiener": FeatureOverride(
+        "Wiener filter", "Processing/Noise reduction/Wiener filter"
+    ),
+    # Processing / Fourier analysis ------------------------------------------
+    "zero_padding": FeatureOverride(
+        "Zero padding\u2026", "Processing/Fourier analysis/Zero padding"
+    ),
+    "fft": FeatureOverride("FFT", "Processing/Fourier analysis/FFT"),
+    "ifft": FeatureOverride("Inverse FFT", "Processing/Fourier analysis/Inverse FFT"),
+    "magnitude_spectrum": FeatureOverride(
+        "Magnitude spectrum", "Processing/Fourier analysis/Magnitude spectrum"
+    ),
+    "phase_spectrum": FeatureOverride(
+        "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
+    ),
+    "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
+    # Processing / Frequency filters -----------------------------------------
+    "butterworth": FeatureOverride(
+        "Butterworth\u2026", "Processing/Frequency filters/Butterworth"
+    ),
+    "gaussian_freq_filter": FeatureOverride(
+        "Gaussian bandpass\u2026",
+        "Processing/Frequency filters/Gaussian bandpass",
+    ),
+    # Processing / Thresholding ----------------------------------------------
+    "threshold": FeatureOverride(
+        "Parametric thresholding\u2026",
+        "Processing/Thresholding/Parametric thresholding",
+    ),
+    "threshold_isodata": FeatureOverride(
+        "ISODATA thresholding", "Processing/Thresholding/ISODATA thresholding"
+    ),
+    "threshold_li": FeatureOverride(
+        "Li thresholding", "Processing/Thresholding/Li thresholding"
+    ),
+    "threshold_mean": FeatureOverride(
+        "Mean thresholding", "Processing/Thresholding/Mean thresholding"
+    ),
+    "threshold_minimum": FeatureOverride(
+        "Minimum thresholding", "Processing/Thresholding/Minimum thresholding"
+    ),
+    "threshold_otsu": FeatureOverride(
+        "Otsu thresholding", "Processing/Thresholding/Otsu thresholding"
+    ),
+    "threshold_triangle": FeatureOverride(
+        "Triangle thresholding", "Processing/Thresholding/Triangle thresholding"
+    ),
+    "threshold_yen": FeatureOverride(
+        "Yen thresholding", "Processing/Thresholding/Yen thresholding"
+    ),
+    # Processing / Exposure --------------------------------------------------
+    "adjust_gamma": FeatureOverride(
+        "Gamma correction\u2026", "Processing/Exposure/Gamma correction"
+    ),
+    "adjust_log": FeatureOverride(
+        "Logarithmic correction\u2026",
+        "Processing/Exposure/Logarithmic correction",
+    ),
+    "adjust_sigmoid": FeatureOverride(
+        "Sigmoid correction\u2026", "Processing/Exposure/Sigmoid correction"
+    ),
+    "equalize_hist": FeatureOverride(
+        "Histogram equalization\u2026",
+        "Processing/Exposure/Histogram equalization",
+    ),
+    "equalize_adapthist": FeatureOverride(
+        "Adaptive histogram equalization\u2026",
+        "Processing/Exposure/Adaptive histogram equalization",
+    ),
+    "rescale_intensity": FeatureOverride(
+        "Intensity rescaling\u2026",
+        "Processing/Exposure/Intensity rescaling",
+    ),
+    # Processing / Restoration -----------------------------------------------
+    "denoise_tv": FeatureOverride(
+        "Total variation denoising\u2026",
+        "Processing/Restoration/Total variation denoising",
+    ),
+    "denoise_bilateral": FeatureOverride(
+        "Bilateral filter denoising\u2026",
+        "Processing/Restoration/Bilateral filter denoising",
+    ),
+    "denoise_wavelet": FeatureOverride(
+        "Wavelet denoising\u2026",
+        "Processing/Restoration/Wavelet denoising",
+    ),
+    "denoise_tophat": FeatureOverride(
+        "White Top-Hat denoising\u2026",
+        "Processing/Restoration/White Top-Hat denoising",
+    ),
+    # Processing / Morphology ------------------------------------------------
+    "white_tophat": FeatureOverride(
+        "White Top-Hat (disk)\u2026",
+        "Processing/Morphology/White Top-Hat (disk)",
+    ),
+    "black_tophat": FeatureOverride(
+        "Black Top-Hat (disk)\u2026",
+        "Processing/Morphology/Black Top-Hat (disk)",
+    ),
+    "erosion": FeatureOverride(
+        "Erosion (disk)\u2026", "Processing/Morphology/Erosion (disk)"
+    ),
+    "dilation": FeatureOverride(
+        "Dilation (disk)\u2026", "Processing/Morphology/Dilation (disk)"
+    ),
+    "opening": FeatureOverride(
+        "Opening (disk)\u2026", "Processing/Morphology/Opening (disk)"
+    ),
+    "closing": FeatureOverride(
+        "Closing (disk)\u2026", "Processing/Morphology/Closing (disk)"
+    ),
+    # Processing / Edge detection --------------------------------------------
+    "canny": FeatureOverride(
+        "Canny filter\u2026", "Processing/Edge detection/Canny filter"
+    ),
+    "roberts": FeatureOverride(
+        "Roberts filter", "Processing/Edge detection/Roberts filter"
+    ),
+    "sobel": FeatureOverride(
+        "Sobel filter", "Processing/Edge detection/Sobel filter"
+    ),
+    "sobel_h": FeatureOverride(
+        "Sobel filter (horizontal)",
+        "Processing/Edge detection/Sobel filter (horizontal)",
+    ),
+    "sobel_v": FeatureOverride(
+        "Sobel filter (vertical)",
+        "Processing/Edge detection/Sobel filter (vertical)",
+    ),
+    "laplace": FeatureOverride(
+        "Laplace filter", "Processing/Edge detection/Laplace filter"
+    ),
+    "prewitt": FeatureOverride(
+        "Prewitt filter", "Processing/Edge detection/Prewitt filter"
+    ),
+    "prewitt_h": FeatureOverride(
+        "Prewitt filter (horizontal)",
+        "Processing/Edge detection/Prewitt filter (horizontal)",
+    ),
+    "prewitt_v": FeatureOverride(
+        "Prewitt filter (vertical)",
+        "Processing/Edge detection/Prewitt filter (vertical)",
+    ),
+    "scharr": FeatureOverride(
+        "Scharr filter", "Processing/Edge detection/Scharr filter"
+    ),
+    "scharr_h": FeatureOverride(
+        "Scharr filter (horizontal)",
+        "Processing/Edge detection/Scharr filter (horizontal)",
+    ),
+    "scharr_v": FeatureOverride(
+        "Scharr filter (vertical)",
+        "Processing/Edge detection/Scharr filter (vertical)",
+    ),
+    "farid": FeatureOverride(
+        "Farid filter", "Processing/Edge detection/Farid filter"
+    ),
+    "farid_h": FeatureOverride(
+        "Farid filter (horizontal)",
+        "Processing/Edge detection/Farid filter (horizontal)",
+    ),
+    "farid_v": FeatureOverride(
+        "Farid filter (vertical)",
+        "Processing/Edge detection/Farid filter (vertical)",
+    ),
 }
 
 
