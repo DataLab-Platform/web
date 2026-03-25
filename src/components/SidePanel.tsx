@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
+  LastProcessingInfo,
   ObjectStats,
   SchemaWithValues,
   SigimaRuntime,
@@ -21,7 +22,7 @@ import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";
 import { ArrayPreview } from "./ArrayPreview";
 
-type TabId = "creation" | "properties" | "results";
+type TabId = "creation" | "properties" | "processing" | "results";
 
 interface Props {
   runtime: SigimaRuntime;
@@ -83,6 +84,39 @@ export function SidePanel(props: Props) {
   } = props;
   const [active, setActive] = useState<TabId>(preferredTab);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  // Cached "last processing" payload for the current object.  Fetched
+  // here (not just inside the Processing tab) so the tab header can be
+  // shown / hidden without mounting the panel first.
+  const [lastProcessing, setLastProcessing] =
+    useState<LastProcessingInfo | null>(null);
+  const hasProcessing = lastProcessing !== null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentId) {
+      setLastProcessing(null);
+      return;
+    }
+    runtime
+      .getLastProcessing(currentId)
+      .then((p) => {
+        if (!cancelled) setLastProcessing(p);
+      })
+      .catch(() => {
+        if (!cancelled) setLastProcessing(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, currentId, refreshNonce]);
+
+  // If the active tab disappears (e.g. user selected a fresh object
+  // without a processing record), fall back to Properties.
+  useEffect(() => {
+    if (active === "processing" && !hasProcessing) {
+      setActive("properties");
+    }
+  }, [active, hasProcessing]);
 
   // Re-honour the parent's preferred tab when it bumps after a Create
   // action (the parent flips ``preferredTab`` to "creation" then).
@@ -167,6 +201,23 @@ export function SidePanel(props: Props) {
         >
           Properties
         </button>
+        {hasProcessing && (
+          <button
+            role="tab"
+            aria-selected={active === "processing"}
+            className={
+              "side-panel-tab" + (active === "processing" ? " active" : "")
+            }
+            onClick={() => setActive("processing")}
+            title={
+              lastProcessing
+                ? `Edit parameters of: ${lastProcessing.label}`
+                : undefined
+            }
+          >
+            Processing
+          </button>
+        )}
         <button
           role="tab"
           aria-selected={active === "results"}
@@ -208,6 +259,15 @@ export function SidePanel(props: Props) {
             runtime={runtime}
             oid={currentId}
             refreshNonce={refreshNonce}
+            onApplied={() => onObjectChanged(currentId)}
+          />
+        )}
+        {currentId && active === "processing" && lastProcessing && (
+          <ProcessingPanel
+            runtime={runtime}
+            oid={currentId}
+            refreshNonce={refreshNonce}
+            info={lastProcessing}
             onApplied={() => onObjectChanged(currentId)}
           />
         )}
@@ -430,6 +490,80 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
         refreshNonce={refreshNonce}
         onChanged={() => onApplied()}
       />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Processing tab — re-edit the parameters of the last applied feature
+// and re-run it on the same source(s), replacing the current object's
+// data in place.  Mirrors DataLab desktop's "Processing" dock tab.
+// ---------------------------------------------------------------------------
+
+interface ProcessingPanelProps extends SubProps {
+  info: LastProcessingInfo;
+}
+
+function ProcessingPanel({
+  runtime,
+  oid,
+  refreshNonce,
+  info,
+  onApplied,
+}: ProcessingPanelProps) {
+  const apply = useCallback(
+    async (values: Record<string, unknown>) => {
+      await runtime.reapplyLastProcessing(oid, values);
+      onApplied();
+    },
+    [runtime, oid, onApplied],
+  );
+
+  // Parameterless features: nothing to edit, just expose a "Re-apply"
+  // button so the user can still trigger the recomputation.
+  if (!info.has_params || !info.schema) {
+    return (
+      <div className="processing-panel">
+        <ProcessingHeader info={info} />
+        <div className="side-panel-info">
+          This processing has no parameters.
+        </div>
+        <div className="editable-form-footer">
+          <span className="editable-form-status">&nbsp;</span>
+          <div className="editable-form-buttons">
+            <button
+              type="button"
+              className="editable-form-apply"
+              onClick={() => void apply({})}
+              title="Re-apply this processing"
+            >
+              Re-apply
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="processing-panel">
+      <ProcessingHeader info={info} />
+      <EditableForm
+        key={`processing:${oid}:${refreshNonce}`}
+        schema={info.schema}
+        values={info.values ?? {}}
+        onApply={apply}
+      />
+    </div>
+  );
+}
+
+function ProcessingHeader({ info }: { info: LastProcessingInfo }) {
+  return (
+    <div className="processing-panel-header">
+      <div className="processing-panel-title">{info.label}</div>
+      {info.menu_path && (
+        <div className="processing-panel-path">{info.menu_path}</div>
+      )}
     </div>
   );
 }

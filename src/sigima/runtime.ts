@@ -98,6 +98,20 @@ export interface ProcessingDescriptor {
   has_params: boolean;
 }
 
+/** Snapshot returned by ``get_last_processing(oid)``: identifies the
+ *  feature that produced *oid* and exposes its (optional) parameter
+ *  schema with the values used in the latest invocation. */
+export interface LastProcessingInfo {
+  feature_id: string;
+  label: string;
+  menu_path: string;
+  source_ids: string[];
+  operand_id: string | null;
+  has_params: boolean;
+  schema: SchemaWithValues["schema"] | null;
+  values: Record<string, unknown> | null;
+}
+
 export type Pattern = "1_to_1" | "2_to_1" | "n_to_1";
 
 export interface FeatureDescriptor {
@@ -1350,6 +1364,28 @@ await micropip.install(["sigima", "guidata"])
       oid: id,
       processing_id: processingId,
       params: params ?? null,
+    })) as string;
+  }
+
+  /** Return the last processing applied to produce *id*, or ``null``
+   *  when the object was created (not produced by a feature) or the
+   *  feature is no longer registered.  Drives the "Processing" side
+   *  panel tab. */
+  async getLastProcessing(id: string): Promise<LastProcessingInfo | null> {
+    return (await this.callPy("get_last_processing", {
+      oid: id,
+    })) as LastProcessingInfo | null;
+  }
+
+  /** Re-run the last processing applied to *id* with *values* and
+   *  replace its data in place.  Returns the same id. */
+  async reapplyLastProcessing(
+    id: string,
+    values: Record<string, unknown> | null,
+  ): Promise<string> {
+    return (await this.callPy("reapply_last_processing", {
+      oid: id,
+      values,
     })) as string;
   }
 

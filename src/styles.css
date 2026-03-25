@@ -338,6 +338,28 @@ input {
 .editable-form-apply:hover:not(:disabled) {
   filter: brightness(1.1);
 }
+
+.processing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.processing-panel-header {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-alt);
+}
+.processing-panel-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+}
+.processing-panel-path {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
 .editable-form-reset:disabled,
 .editable-form-apply:disabled {
   opacity: 0.45;

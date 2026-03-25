@@ -1000,6 +1000,8 @@ def move_object(oid: str, target_group_id: str) -> None:
 def delete_object(oid: str) -> None:
     """Delete object *oid* from its panel."""
     _MODEL.delete_object(oid)
+    _LAST_PROCESSING.pop(oid, None)
+    _CREATION_PARAMS.pop(oid, None)
 
 
 # Backwards-compatible flat list (used by debug helpers / DevTools console).
@@ -2236,6 +2238,8 @@ def apply_feature(
         raise ValueError(f"Unknown feature: {feature_id!r}")
     if not source_ids:
         raise ValueError("apply_feature requires at least one source")
+    if hasattr(params, "to_py"):
+        params = params.to_py()
     sources = [_MODEL.get(oid) for oid in source_ids]
     operand = _MODEL.get(operand_id) if operand_id else None
     panel = _MODEL.panel(spec.object_kind)
@@ -2247,8 +2251,121 @@ def apply_feature(
     for source_oid, dst in result.items:
         anchor = source_oid or source_ids[0]
         group = panel.find_group_of(anchor)
-        new_ids.append(_MODEL.add_object(spec.object_kind, dst, group_id=group.gid))
+        new_oid = _MODEL.add_object(spec.object_kind, dst, group_id=group.gid)
+        new_ids.append(new_oid)
+        # Record the originating processing so the "Processing" side panel
+        # tab can re-edit its parameters and re-apply it on the same source(s).
+        _LAST_PROCESSING[new_oid] = {
+            "feature_id": feature_id,
+            "source_ids": list(source_ids),
+            "operand_id": operand_id,
+            "params": dict(params) if params else {},
+        }
     return new_ids
+
+
+# Per-object record of the last processing that produced it.  Keyed by the
+# *result* oid; consumed by :func:`get_last_processing` and
+# :func:`reapply_last_processing` to power the "Processing" side panel tab.
+_LAST_PROCESSING: dict[str, dict[str, Any]] = globals().get(
+    "_LAST_PROCESSING", {}
+)
+
+
+def get_last_processing(oid: str) -> dict[str, Any] | None:
+    """Return the last processing applied to produce *oid*, or ``None``.
+
+    Payload: ``{"feature_id", "label", "menu_path", "schema", "values",
+    "source_ids", "operand_id", "has_params"}``.  ``schema`` / ``values``
+    are absent (set to ``None``) when the feature is parameterless.
+    """
+    from guidata.dataset import dataset_to_schema_with_values, update_dataset
+
+    record = _LAST_PROCESSING.get(oid)
+    if record is None:
+        return None
+    catalog = _full_catalog_with_plugins()
+    spec = catalog.get(record["feature_id"])
+    if spec is None:
+        return None
+    payload: dict[str, Any] = {
+        "feature_id": spec.feature_id,
+        "label": spec.label,
+        "menu_path": spec.menu_path,
+        "source_ids": list(record["source_ids"]),
+        "operand_id": record["operand_id"],
+        "has_params": spec.paramclass is not None,
+        "schema": None,
+        "values": None,
+    }
+    if spec.paramclass is not None:
+        instance = spec.paramclass()
+        if record["params"]:
+            try:
+                update_dataset(instance, record["params"])
+            except Exception:  # pylint: disable=broad-except
+                pass
+        sw = dataset_to_schema_with_values(instance)
+        payload["schema"] = sw["schema"]
+        payload["values"] = sw["values"]
+    return payload
+
+
+def reapply_last_processing(
+    oid: str, values: dict[str, Any] | None = None
+) -> str:
+    """Re-run the last processing that produced *oid* with *values*.
+
+    The result replaces *oid* in place: same id, same group position,
+    so plots and tree selection stay anchored.  Source / operand objects
+    are looked up by their original ids; if any of them no longer exists,
+    a :class:`ValueError` is raised.
+    """
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    record = _LAST_PROCESSING.get(oid)
+    if record is None:
+        raise ValueError(f"Object {oid!r} has no recorded processing.")
+    catalog = _full_catalog_with_plugins()
+    spec = catalog.get(record["feature_id"])
+    if spec is None:
+        raise ValueError(
+            f"Processing {record['feature_id']!r} is no longer available."
+        )
+    source_ids = record["source_ids"]
+    missing = [sid for sid in source_ids if not _MODEL.has(sid)]
+    if missing:
+        raise ValueError(
+            "Source object(s) no longer exist: " + ", ".join(missing)
+        )
+    operand_id = record["operand_id"]
+    if operand_id is not None and not _MODEL.has(operand_id):
+        raise ValueError(f"Operand object {operand_id!r} no longer exists.")
+    sources = [_MODEL.get(sid) for sid in source_ids]
+    operand = _MODEL.get(operand_id) if operand_id else None
+    ctx = _proc.ApplyContext(
+        feature=spec,
+        sources=sources,
+        operand=operand,
+        params=dict(values) if values else None,
+    )
+    result = _PROCESSOR.apply(ctx, source_ids)
+    if not result.items:
+        raise ValueError("Processing produced no result.")
+    # Take the first (and for 1_to_1/2_to_1 only) result and swap it into
+    # the existing entry.  This preserves the oid, group position and any
+    # downstream references the UI may hold.
+    _, new_obj = result.items[0]
+    _MODEL._objects[oid].obj = new_obj  # noqa: SLF001
+    # Update the recorded params so subsequent edits start from the new
+    # baseline (mirrors how DataLab desktop persists the edited DataSet).
+    _LAST_PROCESSING[oid] = {
+        "feature_id": spec.feature_id,
+        "source_ids": list(source_ids),
+        "operand_id": operand_id,
+        "params": dict(values) if values else {},
+    }
+    return oid
 
 
 # ---------------------------------------------------------------------------
@@ -3237,6 +3354,8 @@ __all__ = [
     "get_processing_schema",
     "resolve_processing_choices",
     "apply_processing",
+    "get_last_processing",
+    "reapply_last_processing",
     "list_signal_analysis",
     "get_signal_analysis_param_schema",
     "run_signal_analysis",
