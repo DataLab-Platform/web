@@ -30,7 +30,6 @@ export function ArrayPreview({ runtime, oid, stats, refreshNonce }: Props) {
     <SignalArrayPreview
       runtime={runtime}
       oid={oid}
-      n={stats.n_points}
       refreshNonce={refreshNonce}
     />
   );
@@ -39,12 +38,10 @@ export function ArrayPreview({ runtime, oid, stats, refreshNonce }: Props) {
 function SignalArrayPreview({
   runtime,
   oid,
-  n,
   refreshNonce,
 }: {
   runtime: SigimaRuntime;
   oid: string;
-  n: number;
   refreshNonce: number;
 }) {
   const [data, setData] = useState<{ x: number[]; y: number[] } | null>(null);

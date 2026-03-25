@@ -265,39 +265,40 @@ export function SignalPlot({
   return (
     <Plot
       data={allTraces as never}
-      layout={{
-        title: { text: data.title },
-        autosize: true,
-        margin: { l: 60, r: 20, t: 40, b: 50 },
-        xaxis: { title: { text: xAxisTitle } },
-        yaxis: { title: { text: yAxisTitle } },
-        showlegend: resultTraces.length > 0,
-        legend: { orientation: "h", y: -0.2 },
-        // In ROI edit mode, default newshape style matches the ROI overlay
-        // so freshly drawn rectangles are visually consistent.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        newshape: roiEditMode
-          ? ({
-              line: { color: "#ff8c00", width: 2, dash: "dot" },
-              fillcolor: "rgba(255, 165, 0, 0.10)",
-              opacity: 1,
-            } as any)
-          : undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        shapes: allShapes as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        annotations: allAnnotations as any,
-      }}
+      layout={
+        {
+          title: { text: data.title },
+          autosize: true,
+          margin: { l: 60, r: 20, t: 40, b: 50 },
+          xaxis: { title: { text: xAxisTitle } },
+          yaxis: { title: { text: yAxisTitle } },
+          showlegend: resultTraces.length > 0,
+          legend: { orientation: "h", y: -0.2 },
+          // In ROI edit mode, default newshape style matches the ROI overlay
+          // so freshly drawn rectangles are visually consistent.
+          newshape: roiEditMode
+            ? {
+                line: { color: "#ff8c00", width: 2, dash: "dot" },
+                fillcolor: "rgba(255, 165, 0, 0.10)",
+                opacity: 1,
+              }
+            : undefined,
+          shapes: allShapes,
+          annotations: allAnnotations,
+        } as never
+      }
       style={{ width: "100%", height: "100%" }}
       useResizeHandler
-      config={{
-        responsive: true,
-        displaylogo: false,
-        modeBarButtonsToAdd: roiEditMode
-          ? ["drawrect", "eraseshape"]
-          : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
-        editable: true,
-      }}
+      config={
+        {
+          responsive: true,
+          displaylogo: false,
+          modeBarButtonsToAdd: roiEditMode
+            ? ["drawrect", "eraseshape"]
+            : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
+          editable: true,
+        } as never
+      }
       onRelayout={handleRelayout}
     />
   );

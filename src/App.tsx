@@ -854,7 +854,7 @@ export default function App() {
     setBusy(true);
     try {
       const bytes = await runtime.saveWorkspaceHdf5();
-      const blob = new Blob([bytes], { type: "application/x-hdf" });
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/x-hdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -994,7 +994,7 @@ export default function App() {
     }
     const filename = `${stem}.${cleanExt}`;
     const bytes = await runtime.saveSignalToBytes(currentId, filename);
-    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    const blob = new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

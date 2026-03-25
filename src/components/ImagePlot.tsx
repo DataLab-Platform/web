@@ -98,8 +98,8 @@ export function ImagePlot({ data, roi = [], results = [] }: ImagePlotProps) {
 
   return (
     <Plot
-      data={allTraces}
-      layout={layout}
+      data={allTraces as never}
+      layout={layout as never}
       style={{ width: "100%", height: "100%" }}
       useResizeHandler
       config={{ responsive: true, displaylogo: false }}
