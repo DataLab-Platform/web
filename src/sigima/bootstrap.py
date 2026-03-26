@@ -38,6 +38,15 @@ from sigima.objects.signal.creation import (
 from sigima.objects.signal.roi import SignalROI, create_signal_roi
 
 import dlw_processor as _proc
+import dlw_interactive_fit as _ifit
+
+# Re-export interactive-fit helpers as module-level callables so the JS
+# runtime can resolve them via ``py.globals.get(...)``.
+list_interactive_fits = _ifit.list_interactive_fits
+init_interactive_fit = _ifit.init_interactive_fit
+evaluate_interactive_fit = _ifit.evaluate_interactive_fit
+auto_fit_interactive = _ifit.auto_fit_interactive
+commit_interactive_fit = _ifit.commit_interactive_fit
 
 
 # ---------------------------------------------------------------------------
@@ -3356,6 +3365,11 @@ __all__ = [
     "apply_processing",
     "get_last_processing",
     "reapply_last_processing",
+    "list_interactive_fits",
+    "init_interactive_fit",
+    "evaluate_interactive_fit",
+    "auto_fit_interactive",
+    "commit_interactive_fit",
     "list_signal_analysis",
     "get_signal_analysis_param_schema",
     "run_signal_analysis",

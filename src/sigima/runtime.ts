@@ -11,6 +11,7 @@ import processorSource from "./processor.py?raw";
 import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
+import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
 // Until the released ``guidata`` ships the new JSON Schema helpers, we
 // pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
 // monkey-patch the ``guidata.dataset`` namespace.
@@ -123,6 +124,49 @@ export interface FeatureDescriptor {
   has_params: boolean;
   operand_label: string;
   object_kind: string;
+}
+
+/** One entry of the "Processing > Fitting > Interactive fitting" submenu. */
+export interface InteractiveFitInfo {
+  id: string;
+  label: string;
+  /** ``polynomial_fit`` exposes a ``degree`` extra; everything else is
+   *  parameterless. */
+  needs_degree: boolean;
+}
+
+/** One adjustable parameter of an interactive fit (slider row). */
+export interface InteractiveFitParam {
+  name: string;
+  /** Pretty label for display (Greek letters etc.). */
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+}
+
+/** Payload returned by :meth:`SigimaRuntime.initInteractiveFit`. */
+export interface InteractiveFitInit {
+  fit_id: string;
+  label: string;
+  /** Source signal X / Y arrays (full range). */
+  x: number[];
+  y: number[];
+  /** X / Y restricted to the active ROI (== full range when no ROI). */
+  x_roi: number[];
+  y_roi: number[];
+  params: InteractiveFitParam[];
+  /** Fit evaluated on the full X axis with the initial parameters. */
+  y_fit: number[];
+  needs_degree: boolean;
+  extras: Record<string, unknown>;
+}
+
+/** Payload returned by :meth:`SigimaRuntime.autoFitInteractive`. */
+export interface InteractiveFitAuto {
+  values: Record<string, number>;
+  y_fit: number[];
+  residual_rms: number;
 }
 
 export interface PluginInfoMeta {
@@ -624,6 +668,10 @@ await micropip.install(["sigima", "guidata"])
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
     py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
     py.FS.writeFile("/home/pyodide/dlw_h5browser.py", dlwH5BrowserSource);
+    py.FS.writeFile(
+      "/home/pyodide/dlw_interactive_fit.py",
+      dlwInteractiveFitSource,
+    );
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
@@ -1331,6 +1379,77 @@ await micropip.install(["sigima", "guidata"])
       operand_id: operandId,
       params,
     })) as string[];
+  }
+
+  // ------------------------------------------------------------------
+  // Interactive fitting (Processing > Fitting > Interactive fitting)
+  // ------------------------------------------------------------------
+
+  /** List the available interactive fit kinds (linear, gaussian, …). */
+  async listInteractiveFits(): Promise<InteractiveFitInfo[]> {
+    return (await this.callPy(
+      "list_interactive_fits",
+    )) as InteractiveFitInfo[];
+  }
+
+  /** Initialise an interactive fit on signal *oid* and return the
+   *  initial parameter slider values, the bounds, and the fit curve. */
+  async initInteractiveFit(
+    oid: string,
+    fitId: string,
+    extras: Record<string, unknown> | null = null,
+  ): Promise<InteractiveFitInit> {
+    return (await this.callPy("init_interactive_fit", {
+      oid,
+      fit_id: fitId,
+      extras,
+    })) as InteractiveFitInit;
+  }
+
+  /** Re-evaluate the model at *x* with the user-tweaked *values*.
+   *  Called on every slider drag — fast pure-NumPy evaluation. */
+  async evaluateInteractiveFit(
+    fitId: string,
+    x: number[],
+    values: Record<string, number>,
+    extras: Record<string, unknown> | null = null,
+  ): Promise<number[]> {
+    return (await this.callPy("evaluate_interactive_fit", {
+      fit_id: fitId,
+      x,
+      values,
+      extras,
+    })) as number[];
+  }
+
+  /** Run the auto-fitter (scipy.optimize.curve_fit) and return the
+   *  optimised parameters + the new fit curve. */
+  async autoFitInteractive(
+    oid: string,
+    fitId: string,
+    extras: Record<string, unknown> | null = null,
+  ): Promise<InteractiveFitAuto> {
+    return (await this.callPy("auto_fit_interactive", {
+      oid,
+      fit_id: fitId,
+      extras,
+    })) as InteractiveFitAuto;
+  }
+
+  /** Commit the current parameter values: add the fitted curve as a
+   *  new signal in the same group as *oid*; return the new object id. */
+  async commitInteractiveFit(
+    oid: string,
+    fitId: string,
+    values: Record<string, number>,
+    extras: Record<string, unknown> | null = null,
+  ): Promise<string> {
+    return (await this.callPy("commit_interactive_fit", {
+      oid,
+      fit_id: fitId,
+      values,
+      extras,
+    })) as string;
   }
 
   async listProcessings(): Promise<ProcessingDescriptor[]> {

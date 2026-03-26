@@ -1555,3 +1555,70 @@ input {
   gap: 6px;
   font-size: 12px;
 }
+
+/* Interactive fit dialog */
+.ifit-dialog {
+  width: min(90vw, 1080px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.ifit-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 12px;
+  flex: 1;
+  min-height: 360px;
+  overflow: hidden;
+}
+.ifit-plot {
+  border: 1px solid var(--border);
+  min-height: 360px;
+}
+.ifit-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.ifit-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.ifit-param-row {
+  display: grid;
+  grid-template-columns: 36px 60px 1fr 60px 90px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.ifit-param-label {
+  font-weight: 600;
+}
+.ifit-param-min,
+.ifit-param-max {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  text-align: center;
+}
+.ifit-param-slider {
+  width: 100%;
+}
+.ifit-param-input {
+  width: 90px;
+  font-variant-numeric: tabular-nums;
+}
+.ifit-degree-row {
+  grid-template-columns: 60px 90px 1fr;
+  margin-bottom: 6px;
+}
+.ifit-degree-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+}

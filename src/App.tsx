@@ -4,6 +4,7 @@ import type {
   FeatureDescriptor,
   H5BrowserFile,
   ImageData,
+  InteractiveFitInfo,
   PanelTree,
   PluginMenuAction,
   SchemaWithValues,
@@ -16,6 +17,7 @@ import {
   buildImageAnalysisActions,
   buildImageCreationActions,
   buildImageRoiActions,
+  buildInteractiveFitActions,
   buildPluginActions,
   buildRoiActions,
   buildSignalAnalysisActions,
@@ -30,6 +32,7 @@ import { DataSetDialog } from "./components/DataSetDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { DialogBridge } from "./components/DialogBridge";
+import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
@@ -148,6 +151,13 @@ export default function App() {
     useState<PendingAnalysis | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
+  const [interactiveFits, setInteractiveFits] = useState<InteractiveFitInfo[]>(
+    [],
+  );
+  const [pendingFit, setPendingFit] = useState<{
+    fit: InteractiveFitInfo;
+    oid: string;
+  } | null>(null);
   const [preferredSideTab, setPreferredSideTab] = useState<
     "creation" | "properties" | "results"
   >("properties");
@@ -182,6 +192,7 @@ export default function App() {
     runtime.listSignalAnalysis().then(setAnalysisEntries);
     runtime.listImageAnalysis().then(setImageAnalysisEntries);
     runtime.listPluginMenuActions().then(setPluginActions);
+    runtime.listInteractiveFits().then(setInteractiveFits);
     refresh();
   }, [status, runtime, refresh]);
 
@@ -552,6 +563,22 @@ export default function App() {
       await runAnalysis(funcId, values, currentId);
     },
     [pendingAnalysis, currentId, runAnalysis],
+  );
+
+  const handleLaunchInteractiveFit = useCallback(
+    (fit: InteractiveFitInfo) => {
+      if (!currentId) return;
+      setPendingFit({ fit, oid: currentId });
+    },
+    [currentId],
+  );
+
+  const handleInteractiveFitCommit = useCallback(
+    async (newOid: string) => {
+      setPendingFit(null);
+      await refresh(newOid);
+    },
+    [refresh],
   );
 
   const handleClearResults = useCallback(
@@ -1110,6 +1137,12 @@ export default function App() {
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
       ...(activePanel === "signal"
+        ? buildInteractiveFitActions(
+            interactiveFits,
+            handleLaunchInteractiveFit,
+          )
+        : []),
+      ...(activePanel === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       ...(activePanel === "signal"
@@ -1180,6 +1213,8 @@ export default function App() {
       pluginActions,
       handleTriggerPluginAction,
       handleReloadPlugins,
+      interactiveFits,
+      handleLaunchInteractiveFit,
     ],
   );
 
@@ -1331,6 +1366,14 @@ export default function App() {
           payload={pendingAnalysis.schema}
           onSubmit={handleSubmitAnalysisParams}
           onCancel={() => setPendingAnalysis(null)}
+        />
+      )}
+      {pendingFit && (
+        <InteractiveFitDialog
+          oid={pendingFit.oid}
+          fit={pendingFit.fit}
+          onCommit={handleInteractiveFitCommit}
+          onCancel={() => setPendingFit(null)}
         />
       )}
       {editingMeta && (

@@ -2,6 +2,7 @@ import type {
   FeatureDescriptor,
   ImageCreationType,
   ImageRoiSegment,
+  InteractiveFitInfo,
   PluginMenuAction,
   SignalAnalysisDescriptor,
   SignalCreationType,
@@ -187,6 +188,24 @@ export function buildFeatureActions(
       return true;
     },
     run: () => onApply(f.id),
+  }));
+}
+
+/** Wire one entry per interactive fit kind under
+ *  ``Processing/Fitting/Interactive fitting``.  Mirrors the desktop
+ *  app's ``Processing > Fitting > Interactive fitting`` submenu. */
+export function buildInteractiveFitActions(
+  fits: InteractiveFitInfo[],
+  onLaunch: (fit: InteractiveFitInfo) => void,
+): ActionDescriptor[] {
+  return fits.map((f, idx) => ({
+    id: `ifit.${f.id}`,
+    label: `${f.label}\u2026`,
+    menuPath: `Processing/Fitting/Interactive fitting/${f.label}`,
+    beginGroup: idx === 0,
+    enabled: (s) =>
+      s.status === "ready" && !s.busy && s.currentId !== null,
+    run: () => onLaunch(f),
   }));
 }
 
