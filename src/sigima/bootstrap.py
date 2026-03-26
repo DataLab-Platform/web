@@ -2409,6 +2409,131 @@ def apply_processing(
 
 
 # ---------------------------------------------------------------------------
+# Image-only panel operations (modify selected images in place).
+# Mirrors DataLab desktop's "Processing > Geometry > Distribute on a grid"
+# and "Reset image positions" entries.
+# ---------------------------------------------------------------------------
+
+
+def get_image_grid_param_schema() -> dict[str, Any]:
+    """Return the JSON schema + default values for ``GridParam``.
+
+    Mirrors :func:`get_feature_schema` but for the panel-level
+    distribute-on-a-grid operation, which is *not* a Sigima
+    ``@computation_function``.
+    """
+    from guidata.dataset import dataset_to_schema_with_values
+    from sigima.proc.image import GridParam
+
+    return dataset_to_schema_with_values(GridParam())
+
+
+def _image_extent(obj: Any) -> tuple[float, float, float, float]:
+    """Return ``(x_left, y_top, width, height)`` of *obj* in physical units."""
+    if getattr(obj, "is_uniform_coords", True):
+        return float(obj.x0), float(obj.y0), float(obj.width), float(obj.height)
+    xc = obj.xcoords
+    yc = obj.ycoords
+    return (
+        float(xc[0]),
+        float(yc[0]),
+        float(xc[-1] - xc[0]),
+        float(yc[-1] - yc[0]),
+    )
+
+
+def _translate_image(obj: Any, dx: float, dy: float) -> None:
+    """Translate image *obj* by ``(dx, dy)`` in physical units (in place).
+
+    Updates ``x0``/``y0`` (or ``xcoords``/``ycoords`` for non-uniform
+    grids) and shifts attached ROIs accordingly.
+    """
+    if dx == 0.0 and dy == 0.0:
+        return
+    if getattr(obj, "is_uniform_coords", True):
+        obj.x0 = float(obj.x0) + dx
+        obj.y0 = float(obj.y0) + dy
+    else:
+        obj.xcoords = obj.xcoords + dx
+        obj.ycoords = obj.ycoords + dy
+    try:
+        from sigima.proc.image import transformer  # type: ignore
+
+        transformer.transform_roi(obj, "translate", dx=dx, dy=dy)
+    except Exception:  # pylint: disable=broad-except
+        # ROI translation is best-effort; ignore if the helper changed.
+        pass
+
+
+def distribute_images_on_grid(
+    source_ids: list[str], params: dict[str, Any] | None = None
+) -> None:
+    """Lay out every image of *source_ids* on a grid (in place).
+
+    Mirrors DataLab desktop's
+    :meth:`datalab.gui.processor.image.ImageProcessor.distribute_on_grid`.
+    Modifies each image's origin so the images sit side-by-side without
+    creating new objects.
+    """
+    from sigima.proc.image import GridParam
+
+    if hasattr(params, "to_py"):
+        params = params.to_py()
+    grid = GridParam()
+    if params:
+        from guidata.dataset import update_dataset
+
+        update_dataset(grid, params)
+    objs = [_MODEL.get(oid) for oid in source_ids]
+    if not objs:
+        return
+    g_row = g_col = 0
+    x0_anchor, y0_anchor = _image_extent(objs[0])[:2]
+    x_cursor, y_cursor = x0_anchor, y0_anchor
+    for i, obj in enumerate(objs):
+        x_left, y_top, width, height = _image_extent(obj)
+        if i == 0:
+            # First image stays in place; cursor is anchored to its origin.
+            pass
+        else:
+            dx = x_cursor - x_left
+            dy = y_cursor - y_top
+            _translate_image(obj, dx, dy)
+        # Advance the cursor for the *next* image, mirroring DataLab desktop.
+        if grid.direction == "row":
+            sign = int(np.sign(grid.rows) or 1)
+            g_row = (g_row + sign) % max(int(grid.rows or 1), 1)
+            y_cursor += (height + float(grid.rowspac)) * sign
+            if g_row == 0:
+                g_col += 1
+                x_cursor += width + float(grid.colspac)
+                y_cursor = y0_anchor
+        else:
+            sign = int(np.sign(grid.cols) or 1)
+            g_col = (g_col + sign) % max(int(grid.cols or 1), 1)
+            x_cursor += (width + float(grid.colspac)) * sign
+            if g_col == 0:
+                g_row += 1
+                x_cursor = x0_anchor
+                y_cursor += height + float(grid.rowspac)
+
+
+def reset_image_positions(source_ids: list[str]) -> None:
+    """Re-anchor every image of *source_ids* on the first image's origin.
+
+    Mirrors DataLab desktop's
+    :meth:`datalab.gui.processor.image.ImageProcessor.reset_positions`.
+    """
+    objs = [_MODEL.get(oid) for oid in source_ids]
+    if not objs:
+        return
+    x0_anchor, y0_anchor = _image_extent(objs[0])[:2]
+    for obj in objs[1:]:
+        x_left, y_top, _w, _h = _image_extent(obj)
+        _translate_image(obj, x0_anchor - x_left, y0_anchor - y_top)
+
+
+# ---------------------------------------------------------------------------
 # Signal analysis ("Analysis" menu) — DataLab parity.
 #
 # Each entry maps an analysis function name to the Sigima callable that
@@ -3365,6 +3490,9 @@ __all__ = [
     "apply_processing",
     "get_last_processing",
     "reapply_last_processing",
+    "get_image_grid_param_schema",
+    "distribute_images_on_grid",
+    "reset_image_positions",
     "list_interactive_fits",
     "init_interactive_fit",
     "evaluate_interactive_fit",

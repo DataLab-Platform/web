@@ -188,7 +188,7 @@ export function ImagePlot({
           editable: roiEditMode,
           modeBarButtonsToAdd: roiEditMode
             ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
-            : undefined,
+            : [],
         } as never
       }
       onRelayout={handleRelayout}

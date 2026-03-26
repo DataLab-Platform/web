@@ -1382,6 +1382,34 @@ await micropip.install(["sigima", "guidata"])
   }
 
   // ------------------------------------------------------------------
+  // Image-only panel operations (modify selected images in place)
+  // ------------------------------------------------------------------
+
+  /** Return the JSON schema + default values for ``GridParam`` (used by
+   *  the "Distribute on a grid" dialog). */
+  async getImageGridParamSchema(): Promise<SchemaWithValues> {
+    return (await this.callPy(
+      "get_image_grid_param_schema",
+    )) as SchemaWithValues;
+  }
+
+  /** Lay out *sourceIds* images side-by-side on a grid (in place). */
+  async distributeImagesOnGrid(
+    sourceIds: string[],
+    params: Record<string, unknown> | null = null,
+  ): Promise<void> {
+    await this.callPy("distribute_images_on_grid", {
+      source_ids: sourceIds,
+      params,
+    });
+  }
+
+  /** Re-anchor every image of *sourceIds* on the first image's origin. */
+  async resetImagePositions(sourceIds: string[]): Promise<void> {
+    await this.callPy("reset_image_positions", { source_ids: sourceIds });
+  }
+
+  // ------------------------------------------------------------------
   // Interactive fitting (Processing > Fitting > Interactive fitting)
   // ------------------------------------------------------------------
 

@@ -16,6 +16,7 @@ import {
   buildHelpActions,
   buildImageAnalysisActions,
   buildImageCreationActions,
+  buildImageGridActions,
   buildImageRoiActions,
   buildInteractiveFitActions,
   buildPluginActions,
@@ -151,6 +152,10 @@ export default function App() {
     useState<PendingAnalysis | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
+  const [pendingImageGrid, setPendingImageGrid] = useState<{
+    sourceIds: string[];
+    schema: SchemaWithValues;
+  } | null>(null);
   const [interactiveFits, setInteractiveFits] = useState<InteractiveFitInfo[]>(
     [],
   );
@@ -887,6 +892,62 @@ export default function App() {
     }
   }, [runtime, currentId, refresh]);
 
+  /** Refresh the displayed image of *oid* after an in-place layout
+   *  change (distribute on a grid / reset positions). */
+  const reloadCurrentImage = useCallback(async () => {
+    if (!runtime || !currentId || activePanel !== "image") return;
+    try {
+      const updated = await runtime.getImageData(currentId);
+      setImageData(updated);
+    } catch {
+      /* ignore — object may have been deleted */
+    }
+  }, [runtime, currentId, activePanel]);
+
+  const imageLayoutSourceIds = useCallback((): string[] => {
+    if (selectedIds.length > 0) return selectedIds;
+    return currentId ? [currentId] : [];
+  }, [selectedIds, currentId]);
+
+  const handleDistributeOnGrid = useCallback(async () => {
+    if (!runtime) return;
+    const ids = imageLayoutSourceIds();
+    if (ids.length === 0) return;
+    const schema = await runtime.getImageGridParamSchema();
+    setPendingImageGrid({ sourceIds: ids, schema });
+  }, [runtime, imageLayoutSourceIds]);
+
+  const handleSubmitImageGrid = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!runtime || !pendingImageGrid) return;
+      const { sourceIds } = pendingImageGrid;
+      setPendingImageGrid(null);
+      setBusy(true);
+      try {
+        await runtime.distributeImagesOnGrid(sourceIds, values);
+        await reloadCurrentImage();
+        await refresh(currentId);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, pendingImageGrid, reloadCurrentImage, refresh, currentId],
+  );
+
+  const handleResetImagePositions = useCallback(async () => {
+    if (!runtime) return;
+    const ids = imageLayoutSourceIds();
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      await runtime.resetImagePositions(ids);
+      await reloadCurrentImage();
+      await refresh(currentId);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, imageLayoutSourceIds, reloadCurrentImage, refresh, currentId]);
+
   const handleSaveProject = useCallback(async () => {
     if (!runtime) return;
     const text = await runtime.saveProject();
@@ -1136,6 +1197,12 @@ export default function App() {
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
+      ...(activePanel === "image"
+        ? buildImageGridActions({
+            onDistributeOnGrid: handleDistributeOnGrid,
+            onResetPositions: handleResetImagePositions,
+          })
+        : []),
       ...(activePanel === "signal"
         ? buildInteractiveFitActions(
             interactiveFits,
@@ -1202,6 +1269,8 @@ export default function App() {
       handleImageRoiExtractMerged,
       handleImageRoiRemoveAt,
       handleImageRoiRemoveAll,
+      handleDistributeOnGrid,
+      handleResetImagePositions,
       handleSaveProject,
       handleLoadProject,
       handleOpenFile,
@@ -1366,6 +1435,14 @@ export default function App() {
           payload={pendingAnalysis.schema}
           onSubmit={handleSubmitAnalysisParams}
           onCancel={() => setPendingAnalysis(null)}
+        />
+      )}
+      {pendingImageGrid && (
+        <DataSetDialog
+          title="Distribute on a grid"
+          payload={pendingImageGrid.schema}
+          onSubmit={handleSubmitImageGrid}
+          onCancel={() => setPendingImageGrid(null)}
         />
       )}
       {pendingFit && (

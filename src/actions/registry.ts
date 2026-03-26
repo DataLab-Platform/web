@@ -486,6 +486,43 @@ export function buildImageRoiActions(
 }
 
 
+/** Callbacks for the image ``Operations`` panel-level layout actions
+ *  (mirrors DataLab desktop's "Distribute on a grid" / "Reset image
+ *  positions"). Modify selected images' origins in place. */
+export interface ImageGridActionCallbacks {
+  /** Open the GridParam dialog then lay images out side-by-side. */
+  onDistributeOnGrid: () => void;
+  /** Re-anchor every selected image on the first image's origin. */
+  onResetPositions: () => void;
+}
+
+/** Wire the image-only "Distribute on a grid" / "Reset image positions"
+ *  entries under the "Operations" menu. */
+export function buildImageGridActions(
+  cb: ImageGridActionCallbacks,
+): ActionDescriptor[] {
+  const enabled = (s: ActionState) =>
+    s.status === "ready" && !s.busy && (s.selectedIds.length > 0 || s.currentId !== null);
+  return [
+    {
+      id: "image.distribute_on_grid",
+      label: "Distribute on a grid…",
+      menuPath: "Processing/Geometry/Distribute on a grid…",
+      beginGroup: true,
+      enabled,
+      run: cb.onDistributeOnGrid,
+    },
+    {
+      id: "image.reset_positions",
+      label: "Reset image positions",
+      menuPath: "Processing/Geometry/Reset image positions",
+      enabled,
+      run: cb.onResetPositions,
+    },
+  ];
+}
+
+
 /** Wire actions contributed by Python plugins. */
 export interface PluginActionCallbacks {
   onTrigger: (actionId: string) => void;
