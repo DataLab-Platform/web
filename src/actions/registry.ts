@@ -22,6 +22,7 @@ export interface StaticActionCallbacks {
   onLoadProject: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
+  onSaveToDirectory: () => void;
   onOpenWorkspaceHdf5: () => void;
   onSaveWorkspaceHdf5: () => void;
   onImportHdf5: () => void;
@@ -49,6 +50,14 @@ export function buildStaticActions(
       shortcut: "Ctrl+S",
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onSaveFile,
+    },
+    {
+      id: "file.save_to_directory",
+      label: "Save to directory…",
+      menuPath: "File/Save to directory…",
+      enabled: (s) =>
+        ready(s) && (s.selectedIds.length > 0 || s.currentId !== null),
+      run: cb.onSaveToDirectory,
     },
     {
       id: "file.new_group",

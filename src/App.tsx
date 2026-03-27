@@ -39,6 +39,11 @@ import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { H5BrowserDialog } from "./components/H5BrowserDialog";
+import {
+  SaveToDirectoryDialog,
+  type SaveToDirectoryResult,
+  type SaveToDirectorySource,
+} from "./components/SaveToDirectoryDialog";
 import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
@@ -126,6 +131,14 @@ export default function App() {
     null,
   );
   const [textImportOpen, setTextImportOpen] = useState(false);
+  /** Pending "Save to directory…" dialog. ``null`` when the dialog is
+   *  closed; otherwise carries the source signal ids (with their
+   *  human-readable group/title labels) and the writable extensions list
+   *  fetched from Sigima. */
+  const [pendingSaveToDir, setPendingSaveToDir] = useState<{
+    sources: SaveToDirectorySource[];
+    extensions: string[];
+  } | null>(null);
   const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
   const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
@@ -1118,6 +1131,210 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, [runtime, currentId, data]);
 
+  /** Open the "Save to directory…" dialog with the current selection
+   *  (falls back to the whole panel when nothing is explicitly selected,
+   *  matching the desktop ``include_groups=True`` behaviour). */
+  const handleSaveToDirectory = useCallback(async () => {
+    if (!runtime || !tree) return;
+    const ids = selectedIds.length > 0
+      ? selectedIds
+      : currentId
+        ? [currentId]
+        : [];
+    if (ids.length === 0) return;
+    // Build human-readable labels (group / title) for the preview list.
+    const labelById = new Map<string, string>();
+    for (const g of tree.groups) {
+      for (const o of g.objects) {
+        labelById.set(o.id, `[${g.name}] ${o.title}`);
+      }
+    }
+    const sources: SaveToDirectorySource[] = ids
+      .filter((id) => labelById.has(id))
+      .map((id) => ({ id, displayLabel: labelById.get(id)! }));
+    if (sources.length === 0) return;
+    const formats = await runtime.listSignalIoFormats();
+    setPendingSaveToDir({
+      sources,
+      extensions: formats.all_write_extensions,
+    });
+  }, [runtime, tree, selectedIds, currentId]);
+
+  /** Persist the dialog payload, then write every object to disk using
+   *  the File System Access API when available (Chromium-based browsers)
+   *  and falling back to one-by-one downloads otherwise. */
+  const handleSubmitSaveToDir = useCallback(
+    async (result: SaveToDirectoryResult) => {
+      if (!runtime || !pendingSaveToDir) return;
+      const { sources } = pendingSaveToDir;
+      const { basenames, overwrite } = result;
+      setPendingSaveToDir(null);
+      setBusy(true);
+      try {
+        // Pre-compute the bytes for every object so we keep a single
+        // try/catch around the long-running serialisation step.
+        // NOTE: ``saveSignalToBytes`` may hand back a ``Uint8Array``
+        // backed by Pyodide's WASM memory; that buffer can be reclaimed
+        // or overwritten by the next Python call.  We therefore copy
+        // each payload into a fresh ``Uint8Array`` immediately, so the
+        // accumulated ``payloads`` array stays valid across iterations.
+        const payloads: Array<{ name: string; bytes: Uint8Array }> = [];
+        for (let i = 0; i < sources.length; i++) {
+          const name = basenames[i];
+          const raw = await runtime.saveSignalToBytes(sources[i].id, name);
+          // ``slice()`` allocates a fresh, independent ``Uint8Array``
+          // (``new Uint8Array(other)`` would share ``other.buffer``).
+          payloads.push({ name, bytes: raw.slice() });
+        }
+
+        // Prefer the File System Access API: real on-disk write, with
+        // optional overwrite handling.
+        const picker = (window as unknown as {
+          showDirectoryPicker?: (options?: {
+            mode?: "read" | "readwrite";
+          }) => Promise<FileSystemDirectoryHandle>;
+        }).showDirectoryPicker;
+        let usedPicker = false;
+        if (typeof picker === "function") {
+          let dirHandle: FileSystemDirectoryHandle | null = null;
+          try {
+            dirHandle = await picker({ mode: "readwrite" });
+          } catch (err) {
+            // User cancelled the directory picker — silently abort.
+            if (err instanceof DOMException && err.name === "AbortError") {
+              return;
+            }
+            // Other errors (e.g. SecurityError on non-HTTPS) → fall back
+            // to per-file downloads below.
+            console.warn("[save_to_directory] picker failed", err);
+            dirHandle = null;
+          }
+          if (dirHandle) {
+            // Some browsers grant the picker but still require an
+            // explicit ``readwrite`` permission before write operations.
+            // Chromium also denies permission outright for system folders
+            // (Desktop, Documents, Downloads, OneDrive-synced paths…).
+            const handleWithPerm = dirHandle as unknown as {
+              queryPermission?: (opts: {
+                mode: "readwrite";
+              }) => Promise<PermissionState>;
+              requestPermission?: (opts: {
+                mode: "readwrite";
+              }) => Promise<PermissionState>;
+            };
+            let permissionDenied = false;
+            if (typeof handleWithPerm.queryPermission === "function") {
+              let state = await handleWithPerm.queryPermission({
+                mode: "readwrite",
+              });
+              if (
+                state !== "granted" &&
+                typeof handleWithPerm.requestPermission === "function"
+              ) {
+                try {
+                  state = await handleWithPerm.requestPermission({
+                    mode: "readwrite",
+                  });
+                } catch {
+                  state = "denied";
+                }
+              }
+              if (state !== "granted") {
+                permissionDenied = true;
+              }
+            }
+            if (permissionDenied) {
+              const explanation =
+                "The browser refused write access to the selected " +
+                "directory.\n\nThis usually happens with system folders " +
+                "(Desktop, Documents, Downloads or OneDrive-synced " +
+                "paths), which Chromium blocks regardless of their " +
+                "content.\n\nClick OK to download each file individually " +
+                "instead, or Cancel to abort and pick a different " +
+                "folder.";
+              if (!window.confirm(explanation)) return;
+              // Fall through to the download fallback below.
+            } else {
+              try {
+                for (const { name, bytes } of payloads) {
+                  let finalName = name;
+                  if (!overwrite) {
+                    // Probe for an existing file and append `_N` when needed.
+                    let k = 1;
+                    const dot = name.lastIndexOf(".");
+                    const stem = dot > 0 ? name.slice(0, dot) : name;
+                    const ext = dot > 0 ? name.slice(dot) : "";
+                    // eslint-disable-next-line no-await-in-loop
+                    while (
+                      await dirHandle
+                        .getFileHandle(finalName)
+                        .then(() => true)
+                        .catch(() => false)
+                    ) {
+                      finalName = `${stem}_${k}${ext}`;
+                      k += 1;
+                    }
+                  }
+                  const fileHandle = await dirHandle.getFileHandle(
+                    finalName,
+                    { create: true },
+                  );
+                  const writable = await fileHandle.createWritable();
+                  await writable.write(new Blob([new Uint8Array(bytes)]));
+                  await writable.close();
+                }
+                usedPicker = true;
+              } catch (err) {
+                // Late refusal (e.g. ``NotAllowedError`` raised by
+                // ``getFileHandle`` itself when the path turns out to be
+                // protected): offer the download fallback rather than
+                // surfacing a raw browser error.
+                const msg = err instanceof Error ? err.message : String(err);
+                const isBlocked =
+                  err instanceof DOMException &&
+                  (err.name === "NotAllowedError" ||
+                    err.name === "SecurityError");
+                const explanation = isBlocked
+                  ? "The browser refused to write into this directory " +
+                    "(system folders such as Desktop, Documents, " +
+                    "Downloads or OneDrive-synced paths are blocked).\n\n" +
+                    "Click OK to download each file individually instead, " +
+                    "or Cancel to abort."
+                  : `Write failed:\n${msg}\n\nClick OK to download each ` +
+                    `file individually instead.`;
+                if (!window.confirm(explanation)) return;
+                // Fall through to download-fallback below.
+              }
+            }
+          }
+        }
+        if (usedPicker) return;
+
+        // Fallback: trigger one download per file. Browsers may prompt
+        // the user to allow multiple downloads from this site.
+        for (const { name, bytes } of payloads) {
+          const blob = new Blob([new Uint8Array(bytes)], {
+            type: "application/octet-stream",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        window.alert(`Save to directory failed:\n${msg}`);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, pendingSaveToDir],
+  );
+
   const handleOpenFile = useCallback(async () => {
     if (!runtime) return;
     const formats = await runtime.listSignalIoFormats();
@@ -1183,6 +1400,7 @@ export default function App() {
         onLoadProject: handleLoadProject,
         onOpenFile: handleOpenFile,
         onSaveFile: handleSaveFile,
+        onSaveToDirectory: handleSaveToDirectory,
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onImportHdf5: handleImportHdf5,
@@ -1275,6 +1493,7 @@ export default function App() {
       handleLoadProject,
       handleOpenFile,
       handleSaveFile,
+      handleSaveToDirectory,
       handleOpenWorkspaceHdf5,
       handleSaveWorkspaceHdf5,
       handleImportHdf5,
@@ -1494,6 +1713,20 @@ export default function App() {
         <TextImportWizard
           onImport={handleTextImportFinished}
           onCancel={() => setTextImportOpen(false)}
+        />
+      )}
+      {pendingSaveToDir && runtime && (
+        <SaveToDirectoryDialog
+          sources={pendingSaveToDir.sources}
+          extensions={pendingSaveToDir.extensions}
+          formatBasenames={(pattern) =>
+            runtime.formatSignalBasenames(
+              pendingSaveToDir.sources.map((s) => s.id),
+              pattern,
+            )
+          }
+          onSubmit={handleSubmitSaveToDir}
+          onCancel={() => setPendingSaveToDir(null)}
         />
       )}
       {pluginManagerOpen && (

@@ -944,6 +944,28 @@ def open_signal_from_bytes(
     return oids
 
 
+def format_signal_basenames(oids: list[str], fmt: str) -> list[str]:
+    """Build basenames for *oids* using DataLab's filename pattern syntax.
+
+    Delegates to :func:`sigima.io.common.basename.format_basenames`, which
+    supports placeholders such as ``{title}``, ``{index}``, ``{count}``,
+    ``{xlabel}``, ``{xunit}``, ``{ylabel}``, ``{yunit}`` and
+    ``{metadata[key]}`` together with Python format-spec extensions
+    (``upper``/``lower`` modifiers, integer zero-padding, …).
+
+    Args:
+        oids: Object ids of signals (or images) to format.
+        fmt: Filename pattern (without extension).
+
+    Returns:
+        List of basenames in the same order as *oids*.
+    """
+    from sigima.io.common.basename import format_basenames
+
+    objs = [_MODEL.get(oid) for oid in oids]
+    return list(format_basenames(objs, fmt))
+
+
 def save_signal_to_bytes(oid: str, filename: str) -> bytes:
     """Serialise *oid* into a byte string in the format implied by *filename*.
 
@@ -3437,6 +3459,7 @@ __all__ = [
     "list_signal_io_formats",
     "open_signal_from_bytes",
     "save_signal_to_bytes",
+    "format_signal_basenames",
     "list_signals",
     "get_signal_xy",
     "delete_signal",

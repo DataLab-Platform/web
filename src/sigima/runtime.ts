@@ -900,6 +900,19 @@ await micropip.install(["sigima", "guidata"])
     return Uint8Array.from(result as number[]);
   }
 
+  /** Build basenames for *oids* using DataLab's filename pattern syntax
+   *  (``{title}``, ``{index}``, ``{count}``, axis placeholders, …).
+   *  Mirrors the desktop "Save to directory…" preview helper. */
+  async formatSignalBasenames(
+    oids: string[],
+    pattern: string,
+  ): Promise<string[]> {
+    return (await this.callPy("format_signal_basenames", {
+      oids,
+      fmt: pattern,
+    })) as string[];
+  }
+
   /** List every entry of the signal "Analysis" menu (DataLab parity). */
   async listSignalAnalysis(): Promise<SignalAnalysisDescriptor[]> {
     return (await this.callPy(
