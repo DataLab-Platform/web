@@ -128,7 +128,9 @@ function LayoutNodeView({
   // as a labelled fieldset)
   return (
     <fieldset className="dataset-form-group">
-      {node.label && <legend>{node.label}</legend>}
+      {node.label && (
+        <legend dangerouslySetInnerHTML={{ __html: node.label }} />
+      )}
       {(node.items ?? []).map((child, idx) => (
         <LayoutNodeView
           key={idx}
@@ -170,9 +172,10 @@ function TabGroup({
             type="button"
             className={idx === active ? "active" : ""}
             onClick={() => setActive(idx)}
-          >
-            {t.label || `Tab ${idx + 1}`}
-          </button>
+            dangerouslySetInnerHTML={{
+              __html: t.label || `Tab ${idx + 1}`,
+            }}
+          />
         ))}
       </div>
       <div className="dataset-form-tab-body">
@@ -213,9 +216,11 @@ function FieldRow(props: FieldRowProps) {
   const readOnly = prop.readOnly === true;
   return (
     <div className="dataset-form-row">
-      <label className="dataset-form-label" title={help}>
-        {label}
-      </label>
+      <label
+        className="dataset-form-label"
+        title={help}
+        dangerouslySetInnerHTML={{ __html: label }}
+      />
       <div className="dataset-form-control">
         <FieldWidget {...props} disabled={readOnly} />
         {unit && <span className="dataset-form-unit">{unit}</span>}
