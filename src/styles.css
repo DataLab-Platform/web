@@ -843,6 +843,36 @@ input {
   color: var(--text-dim);
   font-size: 12px;
 }
+
+/* RoiGridDialog — form + live preview side-by-side */
+.roi-grid-dialog {
+  width: min(92vw, 1100px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.roi-grid-dialog-body {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) 1fr;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.roi-grid-dialog-form {
+  overflow: auto;
+  padding-right: 6px;
+}
+.roi-grid-dialog-preview {
+  min-height: 360px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+}
+.roi-grid-dialog-preview > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .dataset-form {
   display: flex;
   flex-direction: column;

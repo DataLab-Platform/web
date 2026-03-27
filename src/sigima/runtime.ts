@@ -1422,6 +1422,27 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("reset_image_positions", { source_ids: sourceIds });
   }
 
+  /** Return the JSON schema + default values for ``ROIGridParam`` (used
+   *  by the "Create ROI grid" dialog of the image panel). */
+  async getRoiGridParamSchema(): Promise<SchemaWithValues> {
+    return (await this.callPy(
+      "get_roi_grid_param_schema",
+    )) as SchemaWithValues;
+  }
+
+  /** Replace the ROI of *oid* with a generated grid of rectangular ROIs.
+   *  Returns the refreshed segments so the caller can update its state
+   *  in a single round-trip. */
+  async createImageRoiGrid(
+    oid: string,
+    params: Record<string, unknown> | null = null,
+  ): Promise<ImageRoiSegment[]> {
+    return (await this.callPy("create_image_roi_grid", {
+      oid,
+      params,
+    })) as ImageRoiSegment[];
+  }
+
   // ------------------------------------------------------------------
   // Interactive fitting (Processing > Fitting > Interactive fitting)
   // ------------------------------------------------------------------

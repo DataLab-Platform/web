@@ -395,6 +395,9 @@ export interface ImageRoiActionCallbacks {
   onAddRectangle: () => void;
   /** Append a new default circle ROI then open the numerical dialog. */
   onAddCircle: () => void;
+  /** Open the "Create ROI grid" dialog and replace the current image's ROI
+   *  with a generated grid of rectangles. */
+  onCreateGrid: () => void;
   /** Extract one new image per ROI (1-to-n). */
   onExtractEach: () => void;
   /** Extract a single new image containing the union of all ROIs. */
@@ -442,8 +445,14 @@ export function buildImageRoiActions(
       enabled: ready,
       run: cb.onAddCircle,
     },
-    {
-      id: "image_roi.edit_numerical",
+    {      id: "image_roi.create_grid",
+      label: "Create ROI grid\u2026",
+      menuPath: "ROI/Create ROI grid\u2026",
+      iconUrl: getRoiIconUrl("roi_grid"),
+      enabled: ready,
+      run: cb.onCreateGrid,
+    },
+    {      id: "image_roi.edit_numerical",
       label: "Edit numerically…",
       menuPath: "ROI/Edit numerically…",
       iconUrl: getRoiIconUrl("roi_coordinate"),

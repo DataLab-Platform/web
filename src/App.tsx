@@ -38,6 +38,7 @@ import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
+import { RoiGridDialog } from "./components/RoiGridDialog";
 import { H5BrowserDialog } from "./components/H5BrowserDialog";
 import {
   SaveToDirectoryDialog,
@@ -167,6 +168,10 @@ export default function App() {
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   const [pendingImageGrid, setPendingImageGrid] = useState<{
     sourceIds: string[];
+    schema: SchemaWithValues;
+  } | null>(null);
+  const [pendingRoiGrid, setPendingRoiGrid] = useState<{
+    oid: string;
     schema: SchemaWithValues;
   } | null>(null);
   const [interactiveFits, setInteractiveFits] = useState<InteractiveFitInfo[]>(
@@ -961,6 +966,46 @@ export default function App() {
     }
   }, [runtime, imageLayoutSourceIds, reloadCurrentImage, refresh, currentId]);
 
+  const handleCreateRoiGrid = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    if (
+      imageRoi.length > 0 &&
+      !window.confirm(
+        "Creating a ROI grid will overwrite any existing ROI.\n\nDo you want to continue?",
+      )
+    ) {
+      return;
+    }
+    const schema = await runtime.getRoiGridParamSchema();
+    setPendingRoiGrid({ oid: currentId, schema });
+  }, [runtime, currentId, imageRoi]);
+
+  const handleSubmitRoiGrid = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!runtime || !pendingRoiGrid) return;
+      const { oid } = pendingRoiGrid;
+      setPendingRoiGrid(null);
+      setBusy(true);
+      try {
+        const segments = await runtime.createImageRoiGrid(oid, values);
+        setImageRoi(segments);
+        await refresh(oid);
+        if (
+          window.confirm(
+            "Do you want to extract images from the defined ROI?",
+          )
+        ) {
+          const ids = await runtime.extractImageRois(oid, false);
+          await refresh();
+          if (ids.length > 0) setCurrentId(ids[ids.length - 1]);
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, pendingRoiGrid, refresh],
+  );
+
   const handleSaveProject = useCallback(async () => {
     if (!runtime) return;
     const text = await runtime.saveProject();
@@ -1443,6 +1488,7 @@ export default function App() {
             onToggleEditMode: handleToggleImageRoiEditMode,
             onAddRectangle: handleImageAddRectangle,
             onAddCircle: handleImageAddCircle,
+            onCreateGrid: handleCreateRoiGrid,
             onEditNumerically: handleImageEditRoi,
             onExtractEach: handleImageRoiExtractEach,
             onExtractMerged: handleImageRoiExtractMerged,
@@ -1481,6 +1527,7 @@ export default function App() {
       handleRoiRemoveAll,
       handleImageAddRectangle,
       handleImageAddCircle,
+      handleCreateRoiGrid,
       handleImageEditRoi,
       handleImageRoiExtractEach,
       handleToggleImageRoiEditMode,
@@ -1662,6 +1709,14 @@ export default function App() {
           payload={pendingImageGrid.schema}
           onSubmit={handleSubmitImageGrid}
           onCancel={() => setPendingImageGrid(null)}
+        />
+      )}
+      {pendingRoiGrid && imageData && (
+        <RoiGridDialog
+          imageData={imageData}
+          payload={pendingRoiGrid.schema}
+          onSubmit={handleSubmitRoiGrid}
+          onCancel={() => setPendingRoiGrid(null)}
         />
       )}
       {pendingFit && (

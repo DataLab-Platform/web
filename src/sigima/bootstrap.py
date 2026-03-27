@@ -2556,6 +2556,46 @@ def reset_image_positions(source_ids: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Image ROI grid generation (mirrors DataLab desktop's
+# "ROI > Create ROI grid…" entry).
+# ---------------------------------------------------------------------------
+
+
+def get_roi_grid_param_schema() -> dict[str, Any]:
+    """Return the JSON schema + default values for ``ROIGridParam``."""
+    from guidata.dataset import dataset_to_schema_with_values
+    from sigima.proc.image import ROIGridParam
+
+    return dataset_to_schema_with_values(ROIGridParam())
+
+
+def create_image_roi_grid(
+    oid: str, params: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    """Replace the ROI of image *oid* with a generated grid of rectangles.
+
+    Mirrors DataLab desktop's
+    :meth:`datalab.gui.processor.image.ImageProcessor.create_roi_grid`,
+    delegating the geometry to
+    :func:`sigima.proc.image.generate_image_grid_roi`.
+
+    Returns the refreshed ROI segments so the front-end can update its
+    overlay in a single round-trip.
+    """
+    from guidata.dataset import update_dataset
+    from sigima.proc.image import ROIGridParam, generate_image_grid_roi
+
+    if hasattr(params, "to_py"):
+        params = params.to_py()
+    p = ROIGridParam()
+    if params:
+        update_dataset(p, params)
+    obj = _MODEL.get(oid)
+    obj.roi = generate_image_grid_roi(obj, p)
+    return get_image_roi(oid)
+
+
+# ---------------------------------------------------------------------------
 # Signal analysis ("Analysis" menu) — DataLab parity.
 #
 # Each entry maps an analysis function name to the Sigima callable that
@@ -3516,6 +3556,8 @@ __all__ = [
     "get_image_grid_param_schema",
     "distribute_images_on_grid",
     "reset_image_positions",
+    "get_roi_grid_param_schema",
+    "create_image_roi_grid",
     "list_interactive_fits",
     "init_interactive_fit",
     "evaluate_interactive_fit",
