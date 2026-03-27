@@ -1304,6 +1304,19 @@ await micropip.install(["sigima", "guidata"])
     })) as string[];
   }
 
+  /** Erase one or more areas of image *oid* (defined by *segments*) and
+   *  return the id of the new result image. The source image's own ROI
+   *  list is left untouched. */
+  async eraseImageArea(
+    oid: string,
+    segments: ImageRoiSegment[],
+  ): Promise<string> {
+    return (await this.callPy("erase_image_area", {
+      oid,
+      segments,
+    })) as string;
+  }
+
   // ------------------------------------------------------------------
   // Image analysis (Phase 13) — same payload shape as signal analysis.
   // ------------------------------------------------------------------

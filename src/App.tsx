@@ -18,6 +18,7 @@ import {
   buildImageCreationActions,
   buildImageGridActions,
   buildImageRoiActions,
+  buildImageEraseActions,
   buildInteractiveFitActions,
   buildPluginActions,
   buildRoiActions,
@@ -152,6 +153,12 @@ export default function App() {
   const [imageRoi, setImageRoi] = useState<ImageRoiSegment[]>([]);
   const [imageRoiEditMode, setImageRoiEditMode] = useState<boolean>(false);
   const [editingImageRoi, setEditingImageRoi] = useState<
+    ImageRoiSegment[] | null
+  >(null);
+  /** ROI segments shown by the ad-hoc dialog used by ``Erase area…``.
+   *  Distinct from ``editingImageRoi`` so submission triggers the erase
+   *  computation instead of overwriting the image's own ROI list. */
+  const [erasingImageRoi, setErasingImageRoi] = useState<
     ImageRoiSegment[] | null
   >(null);
   const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
@@ -910,6 +917,47 @@ export default function App() {
     }
   }, [runtime, currentId, refresh]);
 
+  /** Open the ROI dialog pre-filled with a single centered rectangle, to
+   *  let the user define the area to erase. Mirrors DataLab desktop's
+   *  ``compute_erase`` which prompts the user for a ROI. */
+  const handleOpenEraseDialog = useCallback(() => {
+    if (!runtime || !currentId || !imageData) return;
+    const sx = (imageData.width * imageData.dx) / 4 || 1;
+    const sy = (imageData.height * imageData.dy) / 4 || 1;
+    const x0 =
+      imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
+    const y0 =
+      imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
+    setErasingImageRoi([
+      {
+        geometry: "rectangle",
+        title: "",
+        inverse: false,
+        x0,
+        y0,
+        dx: sx,
+        dy: sy,
+      },
+    ]);
+  }, [runtime, currentId, imageData]);
+
+  const handleSubmitErase = useCallback(
+    async (segments: ImageRoiSegment[]) => {
+      if (!runtime || !currentId) return;
+      setErasingImageRoi(null);
+      if (segments.length === 0) return;
+      setBusy(true);
+      try {
+        const newOid = await runtime.eraseImageArea(currentId, segments);
+        await refresh();
+        setCurrentId(newOid);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, currentId, refresh],
+  );
+
   /** Refresh the displayed image of *oid* after an in-place layout
    *  change (distribute on a grid / reset positions). */
   const reloadCurrentImage = useCallback(async () => {
@@ -1466,6 +1514,9 @@ export default function App() {
             onResetPositions: handleResetImagePositions,
           })
         : []),
+      ...(activePanel === "image"
+        ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
+        : []),
       ...(activePanel === "signal"
         ? buildInteractiveFitActions(
             interactiveFits,
@@ -1536,6 +1587,7 @@ export default function App() {
       handleImageRoiRemoveAll,
       handleDistributeOnGrid,
       handleResetImagePositions,
+      handleOpenEraseDialog,
       handleSaveProject,
       handleLoadProject,
       handleOpenFile,
@@ -1752,6 +1804,17 @@ export default function App() {
           yMax={imageData.y0 + imageData.height * imageData.dy}
           onSubmit={handleSubmitImageRoi}
           onCancel={() => setEditingImageRoi(null)}
+        />
+      )}
+      {erasingImageRoi !== null && imageData && (
+        <ImageRoiDialog
+          initial={erasingImageRoi}
+          xMin={imageData.x0}
+          xMax={imageData.x0 + imageData.width * imageData.dx}
+          yMin={imageData.y0}
+          yMax={imageData.y0 + imageData.height * imageData.dy}
+          onSubmit={handleSubmitErase}
+          onCancel={() => setErasingImageRoi(null)}
         />
       )}
       {helpView && (

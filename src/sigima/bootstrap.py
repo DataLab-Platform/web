@@ -1457,6 +1457,43 @@ def extract_image_rois(oid: str, merged: bool) -> list[str]:
     return out_ids
 
 
+def erase_image_area(oid: str, segments: list[dict[str, Any]] | None) -> str:
+    """Erase one or more areas of image *oid* defined by *segments*.
+
+    Mirrors DataLab desktop's ``compute_erase``: builds an ad-hoc
+    :class:`ImageROI` from the user-defined *segments* (which is *not*
+    stored on the source image), converts it to a list of
+    :class:`ROI2DParam`, and runs :func:`sigima.proc.image.erase`. The
+    erased pixels are replaced by the mean of the image (Sigima default).
+
+    Args:
+        oid: Source image id.
+        segments: ROI segments in the same format as :func:`set_image_roi`
+            (rectangle / circle / polygon, physical coordinates).
+
+    Returns:
+        The id of the newly created result image, placed in the same
+        group as the source.
+    """
+    if hasattr(segments, "to_py"):
+        segments = segments.to_py()
+    if not segments:
+        raise ValueError("erase_image_area requires at least one ROI segment")
+    import sigima.proc.image as sipi
+
+    obj = _MODEL.get(oid)
+    roi = _build_image_roi(obj, segments)
+    params = [single.to_param(obj, i) for i, single in enumerate(roi.single_rois)]
+    panel = _MODEL._panels["image"]  # noqa: SLF001
+    src_group_id: str | None = None
+    try:
+        src_group_id = panel.find_group_of(oid).gid
+    except Exception:
+        src_group_id = None
+    result = sipi.erase(obj, params)
+    return _MODEL.add_object("image", result, group_id=src_group_id)
+
+
 # ---------------------------------------------------------------------------
 # Metadata & annotations (Phase 4)
 # ---------------------------------------------------------------------------
@@ -3512,6 +3549,7 @@ __all__ = [
     "set_image_roi",
     "delete_image_roi_at",
     "extract_image_rois",
+    "erase_image_area",
     "get_panel_tree",
     "create_group",
     "rename_group",
