@@ -994,6 +994,106 @@ def save_signal_to_bytes(oid: str, filename: str) -> bytes:
             pass
 
 
+def list_image_io_formats() -> dict[str, Any]:
+    """Return the supported image I/O formats.
+
+    Same shape as :func:`list_signal_io_formats` but driven by Sigima's
+    :class:`ImageIORegistry`.
+    """
+    from sigima.io.image.base import ImageIORegistry
+
+    read: list[dict[str, Any]] = []
+    write: list[dict[str, Any]] = []
+    all_read: list[str] = []
+    all_write: list[str] = []
+    for fmt in ImageIORegistry.get_formats():
+        entry = {
+            "name": fmt.info.name,
+            "extensions": list(fmt.extlist),
+        }
+        if fmt.info.readable:
+            read.append(entry)
+            all_read.extend(fmt.extlist)
+        if fmt.info.writeable:
+            write.append(entry)
+            all_write.extend(fmt.extlist)
+    return {
+        "read": read,
+        "write": write,
+        "all_read_extensions": sorted(set(all_read)),
+        "all_write_extensions": sorted(set(all_write)),
+    }
+
+
+def open_image_from_bytes(
+    filename: str, data: Any, group_id: str | None = None
+) -> list[str]:
+    """Decode *data* as an image file and add every image it contains to the
+    image panel.  Mirrors :func:`open_signal_from_bytes`.
+
+    Args:
+        filename: Original file name; only the basename + extension matter.
+        data: Raw bytes from the browser ``File`` object.
+        group_id: Optional group to put the new images into.
+
+    Returns:
+        List of newly created object ids (one per image in the file).
+    """
+    import os
+    import tempfile
+    from sigima.io import read_images
+
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        data = bytes(data)
+    base = os.path.basename(filename) or "upload.bin"
+    tmpdir = tempfile.mkdtemp(prefix="dlw_open_img_")
+    path = os.path.join(tmpdir, base)
+    with open(path, "wb") as fh:
+        fh.write(bytes(data))
+    try:
+        images = read_images(path)
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+    if not images:
+        raise ValueError(f"No image could be read from {base!r}")
+    oids: list[str] = []
+    for img in images:
+        oids.append(_MODEL.add_object("image", img, group_id=group_id))
+    return oids
+
+
+def save_image_to_bytes(oid: str, filename: str) -> bytes:
+    """Serialise image *oid* into bytes using the format implied by *filename*.
+
+    Mirrors :func:`save_signal_to_bytes` for images, dispatching via Sigima's
+    :class:`ImageIORegistry`.
+    """
+    import os
+    import tempfile
+    from sigima.io import write_image
+
+    obj = _MODEL.get(oid)
+    base = os.path.basename(filename) or "image.tif"
+    tmpdir = tempfile.mkdtemp(prefix="dlw_save_img_")
+    path = os.path.join(tmpdir, base)
+    try:
+        write_image(path, obj)
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Object model helpers (panel-agnostic)
 # ---------------------------------------------------------------------------
@@ -3544,6 +3644,9 @@ __all__ = [
     "list_signal_io_formats",
     "open_signal_from_bytes",
     "save_signal_to_bytes",
+    "list_image_io_formats",
+    "open_image_from_bytes",
+    "save_image_to_bytes",
     "format_signal_basenames",
     "list_signals",
     "get_signal_xy",

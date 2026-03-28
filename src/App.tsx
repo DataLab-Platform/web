@@ -1275,18 +1275,25 @@ export default function App() {
 
   const handleSaveFile = useCallback(async () => {
     if (!runtime || !currentId) return;
-    // Default to CSV for backward-compat with the previous "Export CSV…"
-    // action; users can pick another extension by editing the filename
-    // before the download dialog is committed by the browser.
-    const formats = await runtime.listSignalIoFormats();
+    // Default to CSV (signals) or TIFF (images); users can pick another
+    // extension by editing the filename in the prompt dialog.
+    const isImage = activePanel === "image";
+    const formats = isImage
+      ? await runtime.listImageIoFormats()
+      : await runtime.listSignalIoFormats();
     const writeExts = formats.all_write_extensions;
-    const stem = (data?.title || "signal").replace(/[^\w.-]+/g, "_");
+    const fallbackExt = isImage ? "tif" : "csv";
+    const titleSource = isImage ? imageData?.title : data?.title;
+    const stem = (titleSource || (isImage ? "image" : "signal")).replace(
+      /[^\w.-]+/g,
+      "_",
+    );
     // Browsers can't really show an extension picker on a synthetic <a>
     // download; we offer a one-line prompt with the catalog of supported
     // extensions for parity with DataLab's "Save signal…" dialog.
     const ext = window.prompt(
       `File extension (one of: ${writeExts.join(", ")})`,
-      "csv",
+      fallbackExt,
     );
     if (!ext) return;
     const cleanExt = ext.replace(/^\./, "").trim();
@@ -1297,7 +1304,9 @@ export default function App() {
       return;
     }
     const filename = `${stem}.${cleanExt}`;
-    const bytes = await runtime.saveSignalToBytes(currentId, filename);
+    const bytes = isImage
+      ? await runtime.saveImageToBytes(currentId, filename)
+      : await runtime.saveSignalToBytes(currentId, filename);
     const blob = new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1307,7 +1316,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runtime, currentId, data]);
+  }, [runtime, currentId, data, imageData, activePanel]);
 
   /** Open the "Save to directory…" dialog with the current selection
    *  (falls back to the whole panel when nothing is explicitly selected,
@@ -1331,12 +1340,15 @@ export default function App() {
       .filter((id) => labelById.has(id))
       .map((id) => ({ id, displayLabel: labelById.get(id)! }));
     if (sources.length === 0) return;
-    const formats = await runtime.listSignalIoFormats();
+    const formats =
+      activePanel === "image"
+        ? await runtime.listImageIoFormats()
+        : await runtime.listSignalIoFormats();
     setPendingSaveToDir({
       sources,
       extensions: formats.all_write_extensions,
     });
-  }, [runtime, tree, selectedIds, currentId]);
+  }, [runtime, tree, selectedIds, currentId, activePanel]);
 
   /** Persist the dialog payload, then write every object to disk using
    *  the File System Access API when available (Chromium-based browsers)
@@ -1359,7 +1371,10 @@ export default function App() {
         const payloads: Array<{ name: string; bytes: Uint8Array }> = [];
         for (let i = 0; i < sources.length; i++) {
           const name = basenames[i];
-          const raw = await runtime.saveSignalToBytes(sources[i].id, name);
+          const raw =
+            activePanel === "image"
+              ? await runtime.saveImageToBytes(sources[i].id, name)
+              : await runtime.saveSignalToBytes(sources[i].id, name);
           // ``slice()`` allocates a fresh, independent ``Uint8Array``
           // (``new Uint8Array(other)`` would share ``other.buffer``).
           payloads.push({ name, bytes: raw.slice() });
@@ -1510,12 +1525,15 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, pendingSaveToDir],
+    [runtime, pendingSaveToDir, activePanel],
   );
 
   const handleOpenFile = useCallback(async () => {
     if (!runtime) return;
-    const formats = await runtime.listSignalIoFormats();
+    const isImage = activePanel === "image";
+    const formats = isImage
+      ? await runtime.listImageIoFormats()
+      : await runtime.listSignalIoFormats();
     const accept = formats.all_read_extensions
       .map((e) => `.${e}`)
       .join(",");
@@ -1531,7 +1549,9 @@ export default function App() {
       try {
         for (const file of Array.from(files)) {
           const buf = new Uint8Array(await file.arrayBuffer());
-          const ids = await runtime.openSignalFromBytes(file.name, buf);
+          const ids = isImage
+            ? await runtime.openImageFromBytes(file.name, buf)
+            : await runtime.openSignalFromBytes(file.name, buf);
           if (ids.length > 0) lastId = ids[ids.length - 1];
         }
         await refresh(lastId);
@@ -1540,7 +1560,7 @@ export default function App() {
       }
     };
     input.click();
-  }, [runtime, refresh]);
+  }, [runtime, refresh, activePanel]);
 
   const hasObjects = useMemo(() => {
     if (!tree) return false;
@@ -1583,6 +1603,7 @@ export default function App() {
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onImportHdf5: handleImportHdf5,
         onImportTextWizard: handleImportTextWizard,
+        panel: activePanel,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),

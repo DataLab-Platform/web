@@ -27,6 +27,9 @@ export interface StaticActionCallbacks {
   onSaveWorkspaceHdf5: () => void;
   onImportHdf5: () => void;
   onImportTextWizard: () => void;
+  /** Active object kind — drives the wording of File menu entries
+   *  ("Open signal…" vs "Open image…", etc.). */
+  panel: "signal" | "image";
 }
 
 /** Wire static actions (File / Edit) ----------------------------------- */
@@ -34,19 +37,22 @@ export function buildStaticActions(
   cb: StaticActionCallbacks,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
+  const noun = cb.panel === "image" ? "image" : "signal";
+  const openLabel = `Open ${noun}…`;
+  const saveLabel = `Save ${noun}…`;
   return [
     {
       id: "file.open",
-      label: "Open signal…",
-      menuPath: "File/Open signal…",
+      label: openLabel,
+      menuPath: `File/${openLabel}`,
       shortcut: "Ctrl+O",
       enabled: ready,
       run: cb.onOpenFile,
     },
     {
       id: "file.save",
-      label: "Save signal…",
-      menuPath: "File/Save signal…",
+      label: saveLabel,
+      menuPath: `File/${saveLabel}`,
       shortcut: "Ctrl+S",
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onSaveFile,

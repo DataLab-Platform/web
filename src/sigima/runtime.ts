@@ -556,6 +556,9 @@ export interface SignalIoFormats {
   all_write_extensions: string[];
 }
 
+/** Image I/O catalogue — identical shape to :class:`SignalIoFormats`. */
+export type ImageIoFormats = SignalIoFormats;
+
 /** Menu descriptor for one entry of the "Analysis" menu. */
 export interface SignalAnalysisDescriptor {
   /** Stable id (e.g. ``"fwhm"``).  Matches the Sigima function name. */
@@ -897,6 +900,35 @@ await micropip.install(["sigima", "guidata"])
    *  Returns a ``Uint8Array`` ready to hand to a browser ``Blob``. */
   async saveSignalToBytes(id: string, filename: string): Promise<Uint8Array> {
     const result = (await this.callPy("save_signal_to_bytes", {
+      oid: id,
+      filename,
+    })) as Uint8Array | ArrayBuffer | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
+  }
+
+  /** Image-side counterpart of :meth:`listSignalIoFormats`. */
+  async listImageIoFormats(): Promise<ImageIoFormats> {
+    return (await this.callPy("list_image_io_formats")) as ImageIoFormats;
+  }
+
+  /** Image-side counterpart of :meth:`openSignalFromBytes`. */
+  async openImageFromBytes(
+    filename: string,
+    bytes: Uint8Array,
+    groupId?: string,
+  ): Promise<string[]> {
+    return (await this.callPy("open_image_from_bytes", {
+      filename,
+      data: bytes,
+      group_id: groupId ?? null,
+    })) as string[];
+  }
+
+  /** Image-side counterpart of :meth:`saveSignalToBytes`. */
+  async saveImageToBytes(id: string, filename: string): Promise<Uint8Array> {
+    const result = (await this.callPy("save_image_to_bytes", {
       oid: id,
       filename,
     })) as Uint8Array | ArrayBuffer | number[];
