@@ -177,6 +177,12 @@ export default function App() {
   const [editingImageRoi, setEditingImageRoi] = useState<
     ImageRoiSegment[] | null
   >(null);
+  /** Persisted LUT range override for the current image (``null`` ⇒
+   *  fall back to the image's intrinsic ``data_min``/``data_max``).
+   *  Driven by the contrast tool inside :class:`ImagePlot`. */
+  const [imageLutRange, setImageLutRange] = useState<
+    [number, number] | null
+  >(null);
   /** ROI segments shown by the ad-hoc dialog used by ``Erase area…``.
    *  Distinct from ``editingImageRoi`` so submission triggers the erase
    *  computation instead of overwriting the image's own ROI list. */
@@ -277,6 +283,7 @@ export default function App() {
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
       setImageRoi([]);
+      setImageLutRange(null);
       setResults([]);
       return;
     }
@@ -286,6 +293,7 @@ export default function App() {
       setData(null);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
+      setImageLutRange(null);
       runtime
         .getImageData(currentId)
         .then((d) => {
@@ -301,6 +309,14 @@ export default function App() {
         })
         .catch(() => {
           if (!cancelled) setImageRoi([]);
+        });
+      runtime
+        .getLutRange(currentId)
+        .then((r) => {
+          if (!cancelled) setImageLutRange(r);
+        })
+        .catch(() => {
+          if (!cancelled) setImageLutRange(null);
         });
       runtime
         .listImageResults(currentId)
@@ -1802,6 +1818,17 @@ export default function App() {
               roiEditMode={imageRoiEditMode}
               onRoiChange={handleImageRoiChangeFromPlot}
               results={results}
+              lutRange={imageLutRange}
+              onLutRangeChange={(r) => {
+                setImageLutRange(r);
+                if (runtime && currentId) {
+                  runtime
+                    .setLutRange(currentId, r)
+                    .catch((e) =>
+                      console.error("Failed to persist LUT range:", e),
+                    );
+                }
+              }}
             />
           )}
         </main>

@@ -1682,3 +1682,159 @@ input {
   color: var(--text-dim);
   font-size: 11px;
 }
+
+/* ------------------------------------------------------------------ */
+/* Image visualization tools (toolbar + profiles + contrast + stats)   */
+/* ------------------------------------------------------------------ */
+.image-plot-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  min-height: 0;
+}
+.image-tools-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex: 0 0 auto;
+}
+.image-tools-button {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.image-tools-button:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}
+.image-tools-button.active {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+.image-tools-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.image-plot-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+.image-plot-area > .js-plotly-plot,
+.image-plot-area > .image-plot-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.image-plot-grid {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: 1fr 140px;
+  grid-template-rows: 100px 1fr;
+}
+.image-plot-cell {
+  min-width: 0;
+  min-height: 0;
+}
+.image-plot-cell-corner {
+  background: transparent;
+}
+.image-plot-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim, #888);
+  font-size: 11px;
+  font-style: italic;
+}
+.image-stats-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(20, 20, 20, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  min-width: 160px;
+  z-index: 5;
+}
+.image-stats-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.image-stats-overlay-close {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.image-stats-overlay-close:hover {
+  color: var(--accent-hover);
+}
+.image-stats-overlay-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  padding: 4px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.contrast-panel {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  padding: 4px 6px;
+}
+.contrast-sliders {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.contrast-sliders label {
+  display: grid;
+  grid-template-columns: 28px 1fr 70px;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+}
+.contrast-sliders input[type="range"] {
+  width: 100%;
+}
+.contrast-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim, #aaa);
+}
+.contrast-auto {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.contrast-auto:hover {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+}

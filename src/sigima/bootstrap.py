@@ -1601,6 +1601,7 @@ def erase_image_area(oid: str, segments: list[dict[str, Any]] | None) -> str:
 
 
 _PLOTLY_ANNOTATIONS_KEY = "_dlw_plotly_annotations"
+_LUT_RANGE_KEY = "_dlw_lut_range"
 
 
 def get_object_meta(oid: str) -> dict[str, Any]:
@@ -1664,6 +1665,47 @@ def set_plotly_annotations(oid: str, payload: dict[str, Any]) -> None:
         "shapes": list(payload.get("shapes", [])),
         "annotations": list(payload.get("annotations", [])),
     }
+
+
+def get_lut_range(oid: str) -> list[float] | None:
+    """Return the persisted LUT range ``[zmin, zmax]`` for image *oid*.
+
+    Returns ``None`` when no override has been stored — in which case the
+    UI should fall back to the image's intrinsic ``data_min``/``data_max``.
+    """
+    obj = _MODEL.get(oid)
+    payload = obj.metadata.get(_LUT_RANGE_KEY)
+    if not isinstance(payload, (list, tuple)) or len(payload) != 2:
+        return None
+    try:
+        zmin = float(payload[0])
+        zmax = float(payload[1])
+    except (TypeError, ValueError):
+        return None
+    return [zmin, zmax]
+
+
+def set_lut_range(oid: str, payload: list[float] | None) -> None:
+    """Persist the LUT range ``[zmin, zmax]`` for image *oid*.
+
+    Pass ``None`` (or an empty/invalid value) to clear the override.
+    """
+    if hasattr(payload, "to_py"):
+        payload = payload.to_py()
+    obj = _MODEL.get(oid)
+    if payload is None:
+        obj.metadata.pop(_LUT_RANGE_KEY, None)
+        return
+    if not isinstance(payload, (list, tuple)) or len(payload) != 2:
+        obj.metadata.pop(_LUT_RANGE_KEY, None)
+        return
+    try:
+        zmin = float(payload[0])
+        zmax = float(payload[1])
+    except (TypeError, ValueError):
+        obj.metadata.pop(_LUT_RANGE_KEY, None)
+        return
+    obj.metadata[_LUT_RANGE_KEY] = [zmin, zmax]
 
 
 # ---------------------------------------------------------------------------

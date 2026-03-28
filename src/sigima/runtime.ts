@@ -1076,6 +1076,26 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("set_plotly_annotations", { oid, payload });
   }
 
+  /** Persisted LUT range ``[zmin, zmax]`` for an image, or ``null`` when
+   *  no override has been stored (in which case the UI falls back to the
+   *  image's intrinsic ``data_min``/``data_max``). */
+  async getLutRange(oid: string): Promise<[number, number] | null> {
+    const result = (await this.callPy("get_lut_range", { oid })) as
+      | [number, number]
+      | null;
+    if (!result || result.length !== 2) return null;
+    return [Number(result[0]), Number(result[1])];
+  }
+
+  /** Persist an LUT range ``[zmin, zmax]`` override. Pass ``null`` to
+   *  clear it (returns to the intrinsic data range). */
+  async setLutRange(
+    oid: string,
+    payload: [number, number] | null,
+  ): Promise<void> {
+    await this.callPy("set_lut_range", { oid, payload });
+  }
+
   // ------------------------------------------------------------------
   // Signal ROI (Phase 5)
   // ------------------------------------------------------------------
