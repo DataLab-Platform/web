@@ -60,6 +60,13 @@ class FeatureOverride:
     icon: str | None = None
     operand_label: str = "Operand"
     skip_xarray_compat: bool = False
+    # Destination panel for results.  ``None`` means "same as input panel"
+    # (the default for the vast majority of features).  Set to e.g.
+    # ``"signal"`` on an image feature whose result is a signal
+    # (line/segment/average/radial profile, projections, image histogram)
+    # or to ``"image"`` on a signal feature whose result is an image
+    # (``signals_to_image``).
+    output_kind: str | None = None
 
 
 @dataclass
@@ -76,6 +83,8 @@ class FeatureSpec:
     func: Callable[..., Any]
     object_kind: str = "signal"
     skip_xarray_compat: bool = False
+    # Resolved at catalog-build time (defaults to ``object_kind``).
+    output_kind: str = "signal"
 
 
 # Curated catalogue.  Keys must match the Sigima function name.  Functions
@@ -311,6 +320,14 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "histogram": FeatureOverride("Histogram\u2026", "Analysis/Histogram"),
     "peak_detection": FeatureOverride(
         "Peak detection\u2026", "Analysis/Peak detection"
+    ),
+    # Cross-kind: signals → image (n_to_1).  Mirrors desktop
+    # ``SignalActionHandler.create_last_actions`` (Operations menu).
+    "signals_to_image": FeatureOverride(
+        "Assemble signals into image\u2026",
+        "Operations/Assemble signals into image",
+        pattern="n_to_1",
+        output_kind="image",
     ),
 }
 
@@ -621,6 +638,44 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Farid filter (vertical)",
         "Processing/Edge detection/Farid filter (vertical)",
     ),
+    # Analysis / Intensity profiles (cross-kind: image → signal).
+    # Mirrors desktop ``ImageActionHandler`` (Analysis menu).
+    "line_profile": FeatureOverride(
+        "Line profile\u2026",
+        "Analysis/Intensity profiles/Line profile",
+        output_kind="signal",
+    ),
+    "segment_profile": FeatureOverride(
+        "Segment profile\u2026",
+        "Analysis/Intensity profiles/Segment profile",
+        output_kind="signal",
+    ),
+    "average_profile": FeatureOverride(
+        "Average profile\u2026",
+        "Analysis/Intensity profiles/Average profile",
+        output_kind="signal",
+    ),
+    "radial_profile": FeatureOverride(
+        "Radial profile extraction\u2026",
+        "Analysis/Intensity profiles/Radial profile extraction",
+        output_kind="signal",
+    ),
+    # Analysis / Projections and histogram (cross-kind: image → signal).
+    "horizontal_projection": FeatureOverride(
+        "Horizontal projection",
+        "Analysis/Horizontal projection",
+        output_kind="signal",
+    ),
+    "vertical_projection": FeatureOverride(
+        "Vertical projection",
+        "Analysis/Vertical projection",
+        output_kind="signal",
+    ),
+    "histogram": FeatureOverride(
+        "Histogram\u2026",
+        "Analysis/Histogram",
+        output_kind="signal",
+    ),
 }
 
 
@@ -794,6 +849,7 @@ def _build_catalog_for_kind(
             func=func,
             object_kind=kind,
             skip_xarray_compat=override.skip_xarray_compat,
+            output_kind=override.output_kind or kind,
         )
     missing = [k for k in overrides if k not in catalog]
     if missing:
@@ -848,6 +904,7 @@ def merge_plugin_features(
             func=extra.func,
             object_kind=kind,
             skip_xarray_compat=extra.skip_xarray_compat,
+            output_kind=kind,
         )
     return merged
 
@@ -1035,6 +1092,7 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
             "has_params": spec.paramclass is not None,
             "operand_label": spec.operand_label,
             "object_kind": spec.object_kind,
+            "output_kind": spec.output_kind,
         }
         for spec in catalog.values()
     ]

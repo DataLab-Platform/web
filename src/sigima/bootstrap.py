@@ -274,6 +274,7 @@ def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
             func=spec.func,
             object_kind=spec.object_kind,
             skip_xarray_compat=spec.skip_xarray_compat,
+            output_kind=spec.output_kind,
         )
     return catalog
 
@@ -2310,16 +2311,23 @@ def apply_feature(
         params = params.to_py()
     sources = [_MODEL.get(oid) for oid in source_ids]
     operand = _MODEL.get(operand_id) if operand_id else None
-    panel = _MODEL.panel(spec.object_kind)
+    src_panel = _MODEL.panel(spec.object_kind)
+    cross_kind = spec.output_kind != spec.object_kind
+    dst_panel = _MODEL.panel(spec.output_kind) if cross_kind else src_panel
     ctx = _proc.ApplyContext(
         feature=spec, sources=sources, operand=operand, params=params
     )
     result = _PROCESSOR.apply(ctx, source_ids)
     new_ids: list[str] = []
     for source_oid, dst in result.items:
-        anchor = source_oid or source_ids[0]
-        group = panel.find_group_of(anchor)
-        new_oid = _MODEL.add_object(spec.object_kind, dst, group_id=group.gid)
+        if cross_kind:
+            # No meaningful "source group" mapping across panels — drop
+            # results into the destination panel's default (first) group.
+            group = dst_panel.ensure_default_group()
+        else:
+            anchor = source_oid or source_ids[0]
+            group = src_panel.find_group_of(anchor)
+        new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=group.gid)
         new_ids.append(new_oid)
         # Record the originating processing so the "Processing" side panel
         # tab can re-edit its parameters and re-apply it on the same source(s).

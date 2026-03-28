@@ -873,6 +873,36 @@ input {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* ProfileDefinitionDialog — image preview (left) + form (right) */
+.profile-dialog {
+  width: min(92vw, 1100px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+.profile-dialog-body {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 360px);
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.profile-dialog-plot {
+  min-height: 360px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+}
+.profile-dialog-plot > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.profile-dialog-form {
+  overflow: auto;
+  padding-right: 6px;
+}
 .dataset-form {
   display: flex;
   flex-direction: column;

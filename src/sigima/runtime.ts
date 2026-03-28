@@ -123,7 +123,12 @@ export interface FeatureDescriptor {
   icon: string | null;
   has_params: boolean;
   operand_label: string;
-  object_kind: string;
+  object_kind: PanelKind;
+  /** Destination panel for results.  Equals ``object_kind`` for the vast
+   *  majority of features; differs for cross-kind features such as image
+   *  profiles / projections / histogram (image → signal) and
+   *  ``signals_to_image`` (signal → image). */
+  output_kind: PanelKind;
 }
 
 /** One entry of the "Processing > Fitting > Interactive fitting" submenu. */

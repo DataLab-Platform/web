@@ -31,6 +31,10 @@ import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
+import {
+  ProfileDefinitionDialog,
+  type ProfileFeatureId,
+} from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { DialogBridge } from "./components/DialogBridge";
@@ -66,6 +70,18 @@ interface PendingFeature {
   operandId: string | null;
   schema: SchemaWithValues | null;
 }
+
+/** Image features whose parameters are also editable graphically through
+ *  :class:`ProfileDefinitionDialog` (mirrors DataLab desktop's
+ *  ``ProfileExtractionDialog``).  Ids carry the ``image:`` namespace
+ *  prefix added by ``bootstrap._build_full_catalog`` to avoid colliding
+ *  with same-named signal features. */
+const PROFILE_FEATURE_IDS = new Set<string>([
+  "image:line_profile",
+  "image:segment_profile",
+  "image:average_profile",
+  "image:radial_profile",
+]);
 
 /** Pending parametric analysis waiting for the user's parameter input. */
 interface PendingAnalysis {
@@ -123,6 +139,12 @@ export default function App() {
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingFeature | null>(null);
+  const [pendingProfile, setPendingProfile] = useState<{
+    feature: FeatureDescriptor;
+    sourceIds: string[];
+    schema: SchemaWithValues;
+    imageData: ImageData;
+  } | null>(null);
   const [pendingOperand, setPendingOperand] = useState<{
     feature: FeatureDescriptor;
     sourceIds: string[];
@@ -212,6 +234,28 @@ export default function App() {
       }
     },
     [runtime, activePanel],
+  );
+
+  /** Refresh a panel that may differ from the current ``activePanel``,
+   *  switching panels in the process.  Used by cross-kind processings
+   *  whose result lands in a different panel than the source. */
+  const refreshPanelKind = useCallback(
+    async (kind: PanelKind, preferredCurrentId?: string | null) => {
+      if (!runtime) return;
+      setActivePanel(kind);
+      const newTree = await runtime.getPanelTree(kind);
+      setTree(newTree);
+      const allIds: string[] = [];
+      for (const g of newTree.groups) for (const o of g.objects) allIds.push(o.id);
+      if (preferredCurrentId && allIds.includes(preferredCurrentId)) {
+        setCurrentId(preferredCurrentId);
+        setSelectedIds([preferredCurrentId]);
+      } else {
+        setCurrentId(allIds[0] ?? null);
+        setSelectedIds([]);
+      }
+    },
+    [runtime],
   );
 
   useEffect(() => {
@@ -421,12 +465,20 @@ export default function App() {
           operandId,
           values,
         );
-        await refresh(newIds[newIds.length - 1] ?? null);
+        const lastId = newIds[newIds.length - 1] ?? null;
+        if (feature.output_kind !== feature.object_kind) {
+          // Cross-kind: result lands in a different panel — switch to it
+          // and refresh that panel's tree explicitly (cannot rely on the
+          // ``refresh`` closure that reads the stale ``activePanel``).
+          await refreshPanelKind(feature.output_kind, lastId);
+        } else {
+          await refresh(lastId);
+        }
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, refreshPanelKind],
   );
 
   const refreshPluginActions = useCallback(async () => {
@@ -481,6 +533,29 @@ export default function App() {
       if (feature.has_params) {
         const schema = await runtime.getFeatureSchema(featureId);
         if (schema) {
+          // Image → signal profile features get a richer dialog with an
+          // interactive shape overlay on the source image, mirroring
+          // DataLab desktop's ``ProfileExtractionDialog``.
+          if (
+            PROFILE_FEATURE_IDS.has(feature.id) &&
+            sourceIds.length > 0 &&
+            feature.object_kind === "image"
+          ) {
+            try {
+              const imgData = await runtime.getImageData(sourceIds[0]);
+              setPendingProfile({
+                feature,
+                sourceIds,
+                schema,
+                imageData: imgData,
+              });
+              return;
+            } catch (err) {
+              console.error("[profile] failed to fetch image data", err);
+              // Fall back to the regular dialog so the user can still
+              // type values manually.
+            }
+          }
           setPending({ feature, sourceIds, operandId: null, schema });
           return;
         }
@@ -515,6 +590,16 @@ export default function App() {
       await runFeature(feature, sourceIds, operandId, values);
     },
     [pending, runFeature],
+  );
+
+  const handleSubmitProfile = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!pendingProfile) return;
+      const { feature, sourceIds } = pendingProfile;
+      setPendingProfile(null);
+      await runFeature(feature, sourceIds, null, values);
+    },
+    [pendingProfile, runFeature],
   );
 
   const refreshResults = useCallback(
@@ -1745,6 +1830,28 @@ export default function App() {
           }
           onSubmit={handleSubmitParams}
           onCancel={() => setPending(null)}
+        />
+      )}
+      {pendingProfile && runtime && (
+        <ProfileDefinitionDialog
+          title={pendingProfile.feature.label.replace(/\u2026$/, "")}
+          featureId={
+            pendingProfile.feature.id.replace(
+              /^image:/,
+              "",
+            ) as ProfileFeatureId
+          }
+          payload={pendingProfile.schema}
+          imageData={pendingProfile.imageData}
+          resolveChoices={(itemName, currentValues) =>
+            runtime.resolveFeatureChoices(
+              pendingProfile.feature.id,
+              itemName,
+              currentValues,
+            )
+          }
+          onSubmit={handleSubmitProfile}
+          onCancel={() => setPendingProfile(null)}
         />
       )}
       {pendingAnalysis && (
