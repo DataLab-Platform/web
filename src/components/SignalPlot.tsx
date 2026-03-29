@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
+import { usePlotlyTheme } from "../utils/plotlyTheme";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -33,6 +34,7 @@ export function SignalPlot({
   onRoiChange,
   results = [],
 }: Props) {
+  const plotlyTheme = usePlotlyTheme();
   const xAxisTitle = useMemo(
     () => formatAxis(data.xlabel || "X", data.xunit),
     [data.xlabel, data.xunit],
@@ -267,13 +269,14 @@ export function SignalPlot({
       data={allTraces as never}
       layout={
         {
+          ...plotlyTheme,
           title: { text: data.title },
           autosize: true,
           margin: { l: 60, r: 20, t: 40, b: 50 },
-          xaxis: { title: { text: xAxisTitle } },
-          yaxis: { title: { text: yAxisTitle } },
+          xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
+          yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
           showlegend: resultTraces.length > 0,
-          legend: { orientation: "h", y: -0.2 },
+          legend: { ...plotlyTheme.legend, orientation: "h", y: -0.2 },
           // In ROI edit mode, default newshape style matches the ROI overlay
           // so freshly drawn rectangles are visually consistent.
           newshape: roiEditMode

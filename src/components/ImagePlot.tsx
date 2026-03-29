@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
+import { usePlotlyTheme } from "../utils/plotlyTheme";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -52,6 +53,7 @@ export function ImagePlot({
   lutRange = null,
   onLutRangeChange,
 }: ImagePlotProps) {
+  const plotlyTheme = usePlotlyTheme();
   // ------------------------------------------------------------------
   // Tool state machine — mutually exclusive; ROI edit mode wins.
   // ------------------------------------------------------------------
@@ -181,11 +183,13 @@ export function ImagePlot({
     const xtitle = data.xunit ? `${data.xlabel} (${data.xunit})` : data.xlabel;
     const ytitle = data.yunit ? `${data.ylabel} (${data.yunit})` : data.ylabel;
     return {
+      ...plotlyTheme,
       title: { text: data.title || "" },
       autosize: true,
       margin: { l: 60, r: 30, t: 40, b: 50 },
-      xaxis: { title: { text: xtitle }, constrain: "domain" as const },
+      xaxis: { ...plotlyTheme.xaxis, title: { text: xtitle }, constrain: "domain" as const },
       yaxis: {
+        ...plotlyTheme.yaxis,
         title: { text: ytitle },
         scaleanchor: "x" as const,
         scaleratio: data.dy / data.dx,
@@ -206,10 +210,9 @@ export function ImagePlot({
               opacity: 1,
             }
           : undefined,
-      paper_bgcolor: "rgba(0,0,0,0)",
-      plot_bgcolor: "rgba(0,0,0,0)",
     };
   }, [
+    plotlyTheme,
     data,
     roiShapes,
     roiAnnotations,
@@ -473,15 +476,15 @@ export function ImagePlot({
                   ]}
                   layout={
                     {
+                      ...plotlyTheme,
                       autosize: true,
                       margin: { l: 60, r: 30, t: 5, b: 5 },
                       xaxis: {
+                        ...plotlyTheme.xaxis,
                         range: [data.x0, data.x0 + data.width * data.dx],
                         showticklabels: false,
                       },
-                      yaxis: { showticklabels: true, automargin: true },
-                      paper_bgcolor: "rgba(0,0,0,0)",
-                      plot_bgcolor: "rgba(0,0,0,0)",
+                      yaxis: { ...plotlyTheme.yaxis, showticklabels: true, automargin: true },
                       showlegend: false,
                     } as never
                   }
@@ -514,18 +517,18 @@ export function ImagePlot({
                   ]}
                   layout={
                     {
+                      ...plotlyTheme,
                       autosize: true,
                       margin: { l: 5, r: 5, t: 40, b: 50 },
-                      xaxis: { showticklabels: true, automargin: true },
+                      xaxis: { ...plotlyTheme.xaxis, showticklabels: true, automargin: true },
                       yaxis: {
+                        ...plotlyTheme.yaxis,
                         range: [
                           data.y0 + data.height * data.dy,
                           data.y0,
                         ],
                         showticklabels: false,
                       },
-                      paper_bgcolor: "rgba(0,0,0,0)",
-                      plot_bgcolor: "rgba(0,0,0,0)",
                       showlegend: false,
                     } as never
                   }
@@ -653,6 +656,7 @@ function ContrastPanel({
   onPreview: (r: [number, number]) => void;
   onCommit: (r: [number, number] | null) => void;
 }) {
+  const plotlyTheme = usePlotlyTheme();
   const span = Math.max(dataMax - dataMin, Number.EPSILON);
   // Slider works on a normalised 0..1000 range to allow fine control over
   // arbitrary data extents.
@@ -689,11 +693,12 @@ function ContrastPanel({
           ]}
           layout={
             {
+              ...plotlyTheme,
               autosize: true,
               margin: { l: 40, r: 10, t: 5, b: 25 },
               height: 90,
-              xaxis: { range: [dataMin, dataMax] },
-              yaxis: { showticklabels: false, type: "log" },
+              xaxis: { ...plotlyTheme.xaxis, range: [dataMin, dataMax] },
+              yaxis: { ...plotlyTheme.yaxis, showticklabels: false, type: "log" },
               shapes: [
                 {
                   type: "rect",
@@ -720,9 +725,6 @@ function ContrastPanel({
                   layer: "above",
                 },
               ],
-              paper_bgcolor: "rgba(0,0,0,0)",
-              plot_bgcolor: "rgba(0,0,0,0)",
-              font: { color: PLOT_FG_COLOR },
               showlegend: false,
               bargap: 0,
             } as never
@@ -780,10 +782,8 @@ function ContrastPanel({
 
 const CROSSHAIR_COLOR = "#3da4ff";
 const STATS_COLOR = "#00c8c8";
-/** Foreground color for Plotly text (axes ticks/labels). The wrapper
- *  cells are transparent so the dark surface shows through; tick text
- *  needs an explicit light color to stay readable. */
-const PLOT_FG_COLOR = "#d4d4d4";
+/** Foreground color for Plotly text (axes ticks/labels) — now provided by
+ *  the per-theme helper :func:`getPlotlyThemeLayout`. */
 
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return String(v);

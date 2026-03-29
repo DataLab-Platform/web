@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
 import type { ActionDescriptor, ActionState, MenuNode } from "../actions/types";
 import { buildMenuTree } from "../actions/buildMenu";
+import { useTheme } from "../utils/theme";
 
 interface Props {
   status: string;
@@ -170,6 +171,25 @@ export function MenuBar(props: Props) {
       >
         {status}
       </span>
+      <ThemeToggleButton />
     </div>
+  );
+}
+
+/** Light/dark theme toggle, wired to the persistent ``useTheme`` hook. */
+function ThemeToggleButton() {
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
+  const label = isDark ? "Switch to light theme" : "Switch to dark theme";
+  return (
+    <button
+      type="button"
+      className="menubar-theme-toggle"
+      onClick={toggle}
+      title={label}
+      aria-label={label}
+    >
+      {isDark ? "\u263C" : "\u263E"}
+    </button>
   );
 }

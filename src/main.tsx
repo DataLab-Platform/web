@@ -3,9 +3,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { SigimaProvider } from "./sigima/SigimaContext";
 import { installConsoleCapture } from "./utils/consoleLog";
+import { initThemeEarly } from "./utils/theme";
 import "./styles.css";
 
 installConsoleCapture();
+initThemeEarly();
 
 const container = document.getElementById("root");
 if (!container) {

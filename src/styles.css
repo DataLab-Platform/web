@@ -6,7 +6,8 @@
  *   └──────┴───────────────────────┘
  */
 
-:root {
+:root,
+:root[data-theme="dark"] {
   --bg: #1e1e1e;
   --panel: #252526;
   --panel-alt: #2d2d30;
@@ -15,9 +16,25 @@
   --text-dim: #858585;
   --accent: #0e639c;
   --accent-hover: #1177bb;
+  --hover-bg: #353537;
   --danger: #c4302b;
+  color-scheme: dark;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
+}
+
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --panel: #f3f3f3;
+  --panel-alt: #e7e7ea;
+  --border: #d0d0d0;
+  --text: #1f1f1f;
+  --text-dim: #6a6a6a;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --hover-bg: #d8d8db;
+  --danger: #c4302b;
+  color-scheme: light;
 }
 
 * {
@@ -99,6 +116,24 @@ input {
 .menubar .status {
   font-size: 11px;
   color: var(--text-dim);
+}
+
+/* Theme toggle button in the menubar */
+.menubar-theme-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+}
+.menubar-theme-toggle:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 /* Hierarchical menu bar (Phase 3) */
@@ -269,6 +304,11 @@ input {
   font-weight: 600;
   color: var(--text-dim);
   cursor: pointer;
+}
+.side-panel-tab:hover:not(:disabled):not(.active) {
+  background: var(--hover-bg);
+  border-color: transparent;
+  color: var(--text);
 }
 .side-panel-tab.active {
   color: var(--text);
@@ -541,7 +581,7 @@ input {
   font-weight: 600;
 }
 .object-tree-group-header:hover {
-  background: #353537;
+  background: var(--hover-bg);
 }
 .object-tree-toggle {
   background: transparent;
@@ -626,7 +666,7 @@ input {
 
 .plot-area {
   position: relative;
-  background: #ffffff;
+  background: var(--bg);
   min-height: 0;
   flex: 1 1 auto;
   min-width: 0;
