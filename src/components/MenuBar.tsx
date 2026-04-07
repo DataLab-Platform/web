@@ -49,7 +49,15 @@ function SubmenuList({
                   setOpenChild((c) => (c === node.path ? null : c))
                 }
               >
-                <span className="menu-icon-slot" aria-hidden="true" />
+                <span className="menu-icon-slot" aria-hidden="true">
+                  {node.iconUrl && (
+                    <img
+                      src={node.iconUrl}
+                      alt=""
+                      className="menu-icon-img"
+                    />
+                  )}
+                </span>
                 <span className="menu-label">{node.label}</span>
                 <span className="menu-arrow">›</span>
                 {isOpen && (

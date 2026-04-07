@@ -10,7 +10,12 @@ import type {
 } from "../sigima/runtime";
 import { getAnalysisIconUrl } from "../assets/analysisIcons";
 import { getCreateIconUrl } from "../assets/createIcons";
+import { getEditIconUrl } from "../assets/editIcons";
+import { getFeatureIconUrl } from "../assets/featureIcons";
+import { getHelpIconUrl } from "../assets/helpIcons";
+import { getIoIconUrl } from "../assets/ioIcons";
 import { getRoiIconUrl } from "../assets/roiIcons";
+import { getRootIconUrl } from "../assets/rootIcons";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -38,6 +43,7 @@ export function buildStaticActions(
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
   const noun = cb.panel === "image" ? "image" : "signal";
+  const suffix = cb.panel === "image" ? "ima" : "sig";
   const openLabel = `Open ${noun}…`;
   const saveLabel = `Save ${noun}…`;
   return [
@@ -46,6 +52,7 @@ export function buildStaticActions(
       label: openLabel,
       menuPath: `File/${openLabel}`,
       shortcut: "Ctrl+O",
+      iconUrl: getIoIconUrl(`fileopen_${suffix}.svg`),
       enabled: ready,
       run: cb.onOpenFile,
     },
@@ -54,6 +61,7 @@ export function buildStaticActions(
       label: saveLabel,
       menuPath: `File/${saveLabel}`,
       shortcut: "Ctrl+S",
+      iconUrl: getIoIconUrl(`filesave_${suffix}.svg`),
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onSaveFile,
     },
@@ -61,37 +69,24 @@ export function buildStaticActions(
       id: "file.save_to_directory",
       label: "Save to directory…",
       menuPath: "File/Save to directory…",
+      iconUrl: getIoIconUrl("save_to_directory.svg"),
       enabled: (s) =>
         ready(s) && (s.selectedIds.length > 0 || s.currentId !== null),
       run: cb.onSaveToDirectory,
     },
     {
-      id: "file.new_group",
-      label: "New group",
-      menuPath: "File/New group",
-      beginGroup: true,
+      id: "file.import_text",
+      label: "Import text data…",
+      menuPath: "File/Import text data…",
+      iconUrl: getIoIconUrl("import_text.svg"),
       enabled: ready,
-      run: cb.onNewGroup,
-    },
-    {
-      id: "file.open_project",
-      label: "Open project…",
-      menuPath: "File/Open project…",
-      beginGroup: true,
-      enabled: ready,
-      run: cb.onLoadProject,
-    },
-    {
-      id: "file.save_project",
-      label: "Save project…",
-      menuPath: "File/Save project…",
-      enabled: (s) => ready(s) && s.hasObjects,
-      run: cb.onSaveProject,
+      run: cb.onImportTextWizard,
     },
     {
       id: "file.open_workspace_h5",
       label: "Open HDF5 workspace…",
       menuPath: "File/Open HDF5 workspace…",
+      iconUrl: getIoIconUrl("fileopen_h5.svg"),
       beginGroup: true,
       enabled: ready,
       run: cb.onOpenWorkspaceHdf5,
@@ -100,6 +95,7 @@ export function buildStaticActions(
       id: "file.save_workspace_h5",
       label: "Save HDF5 workspace…",
       menuPath: "File/Save HDF5 workspace…",
+      iconUrl: getIoIconUrl("filesave_h5.svg"),
       enabled: (s) => ready(s) && s.hasObjects,
       run: cb.onSaveWorkspaceHdf5,
     },
@@ -107,20 +103,43 @@ export function buildStaticActions(
       id: "file.import_hdf5",
       label: "Import from HDF5…",
       menuPath: "File/Import from HDF5…",
+      iconUrl: getIoIconUrl("fileopen_h5.svg"),
       enabled: ready,
       run: cb.onImportHdf5,
     },
     {
-      id: "file.import_text",
-      label: "Import text data…",
-      menuPath: "File/Import text data…",
+      id: "file.open_project",
+      label: "Open project…",
+      menuPath: "File/Open project…",
+      iconUrl: getIoIconUrl("fileopen_h5.svg"),
+      beginGroup: true,
       enabled: ready,
-      run: cb.onImportTextWizard,
+      run: cb.onLoadProject,
+    },
+    {
+      id: "file.save_project",
+      label: "Save project…",
+      menuPath: "File/Save project…",
+      iconUrl: getIoIconUrl("filesave_h5.svg"),
+      enabled: (s) => ready(s) && s.hasObjects,
+      run: cb.onSaveProject,
+    },
+    // Edit menu — order mirrors DataLab Qt's Edit menu (New group first,
+    // then per-object actions).
+    {
+      id: "edit.new_group",
+      label: "New group",
+      menuPath: "Edit/New group",
+      iconUrl: getEditIconUrl("new_group.svg"),
+      enabled: ready,
+      run: cb.onNewGroup,
     },
     {
       id: "edit.delete",
       label: "Delete selection",
       menuPath: "Edit/Delete selection",
+      iconUrl: getEditIconUrl("delete.svg"),
+      beginGroup: true,
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
       run: cb.onDeleteSelection,
     },
@@ -128,6 +147,7 @@ export function buildStaticActions(
       id: "edit.properties",
       label: "Properties…",
       menuPath: "Edit/Properties…",
+      iconUrl: getRootIconUrl("properties.svg"),
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onEditProperties,
     },
@@ -152,6 +172,7 @@ export function buildHelpActions(
       id: "help.documentation",
       label: "Online documentation",
       menuPath: "Help/Online documentation",
+      iconUrl: getHelpIconUrl("libre-gui-help.svg"),
       enabled: always,
       run: () =>
         window.open(
@@ -164,6 +185,7 @@ export function buildHelpActions(
       id: "help.shortcuts",
       label: "Keyboard shortcuts",
       menuPath: "Help/Keyboard shortcuts",
+      iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
       enabled: always,
       run: cb.onShowShortcuts,
     },
@@ -171,6 +193,7 @@ export function buildHelpActions(
       id: "help.console",
       label: "Browser console log",
       menuPath: "Help/Browser console log",
+      iconUrl: getHelpIconUrl("console.svg"),
       beginGroup: true,
       enabled: always,
       run: cb.onShowConsole,
@@ -179,6 +202,7 @@ export function buildHelpActions(
       id: "help.about",
       label: "About DataLab Web",
       menuPath: "Help/About DataLab Web",
+      iconUrl: getHelpIconUrl("libre-gui-about.svg"),
       beginGroup: true,
       enabled: always,
       run: cb.onShowAbout,
@@ -195,6 +219,7 @@ export function buildFeatureActions(
     id: `feature.${f.id}`,
     label: f.label,
     menuPath: f.menu_path,
+    iconUrl: getFeatureIconUrl(f.icon),
     enabled: (s) => {
       if (s.status !== "ready" || s.busy) return false;
       if (s.selectedIds.length === 0 && !s.currentId) return false;
@@ -616,6 +641,7 @@ export function buildPluginActions(
       id: `plugin.${entry.action_id}`,
       label: entry.title,
       menuPath: path,
+      iconUrl: getFeatureIconUrl(entry.icon),
       beginGroup: entry.separator_before,
       enabled: (s) => {
         if (!ready(s)) return false;

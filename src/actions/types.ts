@@ -44,9 +44,9 @@ export interface MenuNode {
 /** Top-level menu ordering, matching DataLab desktop conventions. */
 export const TOP_LEVEL_ORDER = [
   "File",
+  "Create",
   "Edit",
   "ROI",
-  "Create",
   "Operations",
   "Processing",
   "Analysis",

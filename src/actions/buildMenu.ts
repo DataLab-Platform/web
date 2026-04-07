@@ -1,3 +1,4 @@
+import { resolveSubmenuIcon } from "./submenuIcons";
 import type { ActionDescriptor, MenuNode } from "./types";
 import { TOP_LEVEL_ORDER } from "./types";
 
@@ -19,7 +20,7 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
     );
     if (!node) {
       const path = parent.path ? `${parent.path}/${label}` : label;
-      node = { label, path, children: [] };
+      node = { label, path, children: [], iconUrl: resolveSubmenuIcon(path) };
       parent.children.push(node);
     }
     return node;
