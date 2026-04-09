@@ -1878,3 +1878,285 @@ input {
   background: var(--accent);
   border-color: var(--accent-hover);
 }
+
+
+/* ===========================================================
+   Macro panel (mirrors DataLab Qt's MacroPanel).
+   =========================================================== */
+.splitter-horizontal {
+  flex: 0 0 5px;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  user-select: none;
+}
+.splitter-horizontal:hover,
+.splitter-horizontal:active {
+  background: var(--accent, #2d7ff9);
+  opacity: 0.5;
+}
+.splitter-horizontal .splitter-grip {
+  position: absolute;
+  inset: 1px 0;
+  background: var(--border);
+}
+
+.macro-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  background: var(--panel);
+  color: var(--text);
+}
+.macro-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+.macro-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
+.macro-btn {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.macro-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+.macro-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.macro-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-hover);
+}
+.macro-btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.macro-new-wrapper {
+  position: relative;
+}
+.macro-new-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  list-style: none;
+  margin: 2px 0 0 0;
+  padding: 4px 0;
+  min-width: 200px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.macro-new-menu li {
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.macro-new-menu li:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.macro-reopen {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.macro-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.macro-editor-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 150px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.macro-console-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+}
+
+/* CodeMirror multi-tab editor */
+.macro-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.macro-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+  overflow-x: auto;
+  flex: 0 0 auto;
+}
+.macro-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.macro-tab.active {
+  background: var(--panel);
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+}
+.macro-tab:hover:not(.active) {
+  background: var(--panel);
+  color: var(--text);
+}
+.macro-tab-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.macro-tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.macro-tabs-empty {
+  padding: 6px 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+}
+.macro-editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.macro-editor-host .cm-editor {
+  height: 100%;
+}
+.macro-editor-host .cm-scroller {
+  font-family: "Consolas", "Menlo", "Courier New", monospace;
+  font-size: 13px;
+}
+
+/* Output console */
+.macro-console {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.macro-console-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.macro-console-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+.macro-console-actions {
+  display: flex;
+  gap: 4px;
+}
+.macro-console-actions button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.macro-console-actions button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.macro-console-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 4px 8px;
+  font-family: "Consolas", "Menlo", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  position: relative;
+}
+.macro-console-empty {
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 8px;
+}
+.macro-console-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.macro-console-line.stdout {
+  color: var(--text);
+}
+.macro-console-line.stderr {
+  color: #f48771;
+}
+.macro-console-line.system {
+  color: var(--text-dim);
+  font-style: italic;
+}
+.macro-console-resume {
+  position: sticky;
+  bottom: 4px;
+  display: block;
+  margin: 4px auto 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.macro-console-resume:hover {
+  background: var(--accent-hover);
+}

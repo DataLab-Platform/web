@@ -629,6 +629,17 @@ export interface SignalCreationParams {
   sigma?: number;
 }
 
+/** Lightweight macro entry returned by ``listMacros`` (no code). */
+export interface MacroMeta {
+  id: string;
+  title: string;
+}
+
+/** Full macro record (with source code). */
+export interface MacroRecord extends MacroMeta {
+  code: string;
+}
+
 /** Convert a PyProxy result into a plain JS value (recursively). */
 function toJs(value: unknown): unknown {
   if (value && typeof value === "object" && "toJs" in value) {
@@ -779,6 +790,43 @@ await micropip.install(["sigima", "guidata"])
   async createSignal(params: SignalCreationParams): Promise<string> {
     const id = (await this.callPy("create_signal", params as unknown as Record<string, unknown>)) as string;
     return id;
+  }
+
+  /** Create a signal from raw X / Y arrays (used by the macro proxy
+   *  bridge — mirrors :func:`bootstrap.add_signal_from_arrays`). */
+  async addSignalFromArrays(params: {
+    title: string;
+    xdata: number[];
+    ydata: number[];
+    xunit?: string;
+    yunit?: string;
+    xlabel?: string;
+    ylabel?: string;
+    group_id?: string | null;
+  }): Promise<string> {
+    return (await this.callPy(
+      "add_signal_from_arrays",
+      params as unknown as Record<string, unknown>,
+    )) as string;
+  }
+
+  /** Create an image from a raw 2D array (mirrors
+   *  :func:`bootstrap.add_image_from_array`). */
+  async addImageFromArray(params: {
+    title: string;
+    data: number[][];
+    xunit?: string;
+    yunit?: string;
+    zunit?: string;
+    xlabel?: string;
+    ylabel?: string;
+    zlabel?: string;
+    group_id?: string | null;
+  }): Promise<string> {
+    return (await this.callPy(
+      "add_image_from_array",
+      params as unknown as Record<string, unknown>,
+    )) as string;
   }
 
   /** List the supported signal-generation types (mirrors DataLab's
@@ -1735,6 +1783,53 @@ _result = _target.triggered()
 if inspect.isawaitable(_result):
     await _result
 `);
+  }
+
+  // ---------------------------------------------------------------------
+  // Macros (mirrors DataLab Qt's MacroPanel state).
+  // ---------------------------------------------------------------------
+
+  async listMacros(): Promise<MacroMeta[]> {
+    return (await this.callPy("list_macros")) as MacroMeta[];
+  }
+
+  async getMacro(macroId: string): Promise<MacroRecord> {
+    return (await this.callPy("get_macro", {
+      macro_id: macroId,
+    })) as MacroRecord;
+  }
+
+  async createMacro(title?: string, code?: string): Promise<MacroRecord> {
+    return (await this.callPy("create_macro", {
+      title: title ?? null,
+      code: code ?? null,
+    })) as MacroRecord;
+  }
+
+  async setMacroCode(macroId: string, code: string): Promise<void> {
+    await this.callPy("set_macro_code", { macro_id: macroId, code });
+  }
+
+  async renameMacro(macroId: string, title: string): Promise<void> {
+    await this.callPy("rename_macro", { macro_id: macroId, title });
+  }
+
+  async deleteMacro(macroId: string): Promise<void> {
+    await this.callPy("delete_macro", { macro_id: macroId });
+  }
+
+  async duplicateMacro(macroId: string): Promise<MacroRecord> {
+    return (await this.callPy("duplicate_macro", {
+      macro_id: macroId,
+    })) as MacroRecord;
+  }
+
+  async reorderMacros(macroIds: string[]): Promise<void> {
+    await this.callPy("reorder_macros", { macro_ids: macroIds });
+  }
+
+  async replaceMacros(records: MacroRecord[]): Promise<void> {
+    await this.callPy("replace_macros", { records });
   }
 
   // ---------------------------------------------------------------------

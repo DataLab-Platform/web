@@ -53,6 +53,8 @@ import {
 import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
+import { MacroPanel } from "./components/MacroPanel";
+import { useTheme } from "./utils/theme";
 import type {
   AnalysisResult,
   ImageCreationType,
@@ -220,9 +222,24 @@ export default function App() {
     "creation" | "properties" | "results"
   >("properties");
 
+  /** ``activePanel`` narrowed to the runtime's PanelKind ("signal" |
+   *  "image").  When the user is on the macro panel we still need a
+   *  "real" panel kind for the proxy bridge, so we fall back to the
+   *  last non-macro panel they used (defaults to "signal"). */
+  const lastObjectPanelRef = useRef<"signal" | "image">("signal");
+  const objectPanel: "signal" | "image" =
+    activePanel === "macro" ? lastObjectPanelRef.current : activePanel;
+  useEffect(() => {
+    if (activePanel !== "macro") {
+      lastObjectPanelRef.current = activePanel;
+    }
+  }, [activePanel]);
+  const theme = useTheme().theme;
+
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
+      if (activePanel === "macro") return;
       const newTree = await runtime.getPanelTree(activePanel);
       setTree(newTree);
       const allIds: string[] = [];
@@ -249,6 +266,7 @@ export default function App() {
     async (kind: PanelKind, preferredCurrentId?: string | null) => {
       if (!runtime) return;
       setActivePanel(kind);
+      if (kind === "macro") return;
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
@@ -744,7 +762,7 @@ export default function App() {
     if (!runtime) return;
     setBusy(true);
     try {
-      await runtime.createGroup(activePanel);
+      await runtime.createGroup(objectPanel);
       await refresh();
     } finally {
       setBusy(false);
@@ -1619,7 +1637,7 @@ export default function App() {
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onImportHdf5: handleImportHdf5,
         onImportTextWizard: handleImportTextWizard,
-        panel: activePanel,
+        panel: objectPanel,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -1668,7 +1686,7 @@ export default function App() {
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
-      ...buildPluginActions(pluginActions, activePanel, {
+      ...buildPluginActions(pluginActions, objectPanel, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),
         onReloadAll: handleReloadPlugins,
@@ -1743,19 +1761,35 @@ export default function App() {
             disabled={status !== "ready" || busy}
           />
           <div className="panel-header">
-            {activePanel === "signal" ? "Signals" : "Images"}
+            {activePanel === "signal"
+              ? "Signals"
+              : activePanel === "image"
+                ? "Images"
+                : "Macros"}
           </div>
           <div className="panel-body">
-            <ObjectTree
-              tree={tree}
-              selectedIds={selectedIds}
-              currentId={currentId}
-              onSelectionChange={handleSelectionChange}
-              onRenameObject={handleRenameObject}
-              onRenameGroup={handleRenameGroup}
-              onDeleteGroup={handleDeleteGroup}
-              onMoveObject={handleMoveObject}
-            />
+            {activePanel === "macro" ? (
+              <div
+                style={{
+                  padding: 12,
+                  fontSize: 12,
+                  color: "var(--text-dim)",
+                }}
+              >
+                Macros are managed in the editor on the right.
+              </div>
+            ) : (
+              <ObjectTree
+                tree={tree}
+                selectedIds={selectedIds}
+                currentId={currentId}
+                onSelectionChange={handleSelectionChange}
+                onRenameObject={handleRenameObject}
+                onRenameGroup={handleRenameGroup}
+                onDeleteGroup={handleDeleteGroup}
+                onMoveObject={handleMoveObject}
+              />
+            )}
           </div>
         </aside>
         <Splitter
@@ -1767,7 +1801,33 @@ export default function App() {
           ariaLabel="Resize left panel"
         />
         <main className="plot-area">
-          {status === "error" && (
+          {activePanel === "macro" && runtime && (
+            <MacroPanel
+              runtime={runtime}
+              onSetCurrentPanel={(panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleSwitchPanel(panel);
+                }
+              }}
+              getSelection={() => selectedIds}
+              getCurrentPanel={() => objectPanel}
+              selectObjects={(ids, panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleSwitchPanel(panel);
+                }
+                setSelectedIds(ids);
+                setCurrentId(ids[0] ?? null);
+              }}
+              onModelChanged={() => {
+                // The user is on the Macros panel; don't yank them away
+                // and don't waste a network round-trip refreshing a tree
+                // they can't see.  When they switch back to Signals /
+                // Images, ``handleSwitchPanel`` will refresh.
+              }}
+              theme={theme}
+            />
+          )}
+          {activePanel !== "macro" && status === "error" && (
             <div
               className="plot-empty"
               style={{ color: "#c4302b", padding: 16, textAlign: "center" }}
@@ -1789,10 +1849,10 @@ export default function App() {
               </div>
             </div>
           )}
-          {status === "loading" && !data && !imageData && (
+          {activePanel !== "macro" && status === "loading" && !data && !imageData && (
             <div className="plot-empty">{message}</div>
           )}
-          {status === "ready" && !data && !imageData && (
+          {activePanel !== "macro" && status === "ready" && !data && !imageData && (
             <div className="plot-empty">
               {activePanel === "signal"
                 ? "Create a signal to get started."
@@ -1832,7 +1892,7 @@ export default function App() {
             />
           )}
         </main>
-        {runtime && (
+        {runtime && activePanel !== "macro" && (
           <>
             <Splitter
               side="right"

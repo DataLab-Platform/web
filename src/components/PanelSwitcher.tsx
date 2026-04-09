@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-export type PanelKind = "signal" | "image";
+export type PanelKind = "signal" | "image" | "macro";
 
 export interface PanelSwitcherProps {
   active: PanelKind;
@@ -9,12 +9,10 @@ export interface PanelSwitcherProps {
 }
 
 /**
- * Two-tab switcher mirroring DataLab desktop's Signals / Images panels.
- *
- * Displayed at the top of the left side panel — the active tab determines
- * the object kind shown by the object tree, the data displayed in the
- * plot area, and the menu actions (Create / Operations / Processing /
- * Analysis / ROI) the user can run.
+ * Three-tab switcher mirroring DataLab desktop's Signals / Images /
+ * Macros panels.  The active tab determines the object kind shown by
+ * the object tree (or the macro editor for ``"macro"``), the data
+ * displayed in the plot area, and the menu actions available.
  */
 export function PanelSwitcher({
   active,
@@ -42,6 +40,16 @@ export function PanelSwitcher({
         onClick={() => onChange("image")}
       >
         Images
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active === "macro"}
+        disabled={disabled}
+        className={`panel-switcher-tab${active === "macro" ? " active" : ""}`}
+        onClick={() => onChange("macro")}
+      >
+        Macros
       </button>
     </div>
   );

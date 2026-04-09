@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useRef } from "react";
 
 interface Props {
-  /** Which neighbour the splitter resizes — "left" widens by dragging
-   *  right, "right" widens by dragging left. */
-  side: "left" | "right";
+  /** Which neighbour the splitter resizes — "left"/"right" for vertical
+   *  splitters (drag horizontally); "top"/"bottom" for horizontal
+   *  splitters (drag vertically).  ``"top"`` widens by dragging down,
+   *  ``"bottom"`` widens by dragging up. */
+  side: "left" | "right" | "top" | "bottom";
   value: number;
   min: number;
   max: number;
@@ -28,29 +30,46 @@ export function Splitter({
   onChange,
   ariaLabel,
 }: Props) {
-  const dragging = useRef<{ startX: number; startValue: number } | null>(null);
+  const dragging = useRef<{
+    startX: number;
+    startY: number;
+    startValue: number;
+  } | null>(null);
+  const horizontal = side === "top" || side === "bottom";
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
-      dragging.current = { startX: event.clientX, startValue: value };
+      dragging.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startValue: value,
+      };
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor = horizontal ? "row-resize" : "col-resize";
       document.body.style.userSelect = "none";
     },
-    [value],
+    [value, horizontal],
   );
 
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const state = dragging.current;
       if (!state) return;
-      const delta = event.clientX - state.startX;
-      const signed = side === "right" ? -delta : delta;
-      const next = Math.min(max, Math.max(min, state.startValue + signed));
-      onChange(next);
+      let delta: number;
+      if (horizontal) {
+        delta = event.clientY - state.startY;
+        const signed = side === "bottom" ? -delta : delta;
+        const next = Math.min(max, Math.max(min, state.startValue + signed));
+        onChange(next);
+      } else {
+        delta = event.clientX - state.startX;
+        const signed = side === "right" ? -delta : delta;
+        const next = Math.min(max, Math.max(min, state.startValue + signed));
+        onChange(next);
+      }
     },
-    [side, min, max, onChange],
+    [side, min, max, onChange, horizontal],
   );
 
   const handlePointerUp = useCallback(
@@ -80,9 +99,9 @@ export function Splitter({
 
   return (
     <div
-      className="splitter splitter-vertical"
+      className={`splitter ${horizontal ? "splitter-horizontal" : "splitter-vertical"}`}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={horizontal ? "horizontal" : "vertical"}
       aria-label={ariaLabel ?? "Resize panel"}
       aria-valuenow={value}
       aria-valuemin={min}

@@ -290,6 +290,124 @@ _PROCESSOR: _proc.BaseProcessor = globals().get(
 
 
 # ---------------------------------------------------------------------------
+# Macro store (mirrors DataLab Qt's MacroPanel state)
+# ---------------------------------------------------------------------------
+
+# In-memory list of macros: ``[{"id": str, "title": str, "code": str}, ...]``.
+# Order matters (mirrors Qt tab order) — preserved across HMR re-executions.
+_MACROS: list[dict[str, str]] = globals().get("_MACROS", [])  # type: ignore[assignment]
+
+
+_MACRO_SAMPLE_TITLE = "Untitled 1"
+_MACRO_SAMPLE_CODE = '''# Macro simple example
+
+import numpy as np
+
+# `proxy` is pre-injected (DataLab-Web equivalent of RemoteProxy).
+# All proxy methods are async — use `await`.
+# Available methods: add_signal, add_image, calc, get_object,
+# list_signals, list_images, set_current_panel, call_method, ...
+
+x = np.linspace(-10, 10, 500)
+y = np.sin(x) / (x + 1e-9)
+oid = await proxy.add_signal("sinc", x, y)
+print(f"Created signal {oid}")
+
+print("All done!")
+'''
+
+
+def _macro_index(macro_id: str) -> int:
+    for idx, m in enumerate(_MACROS):
+        if m["id"] == macro_id:
+            return idx
+    raise KeyError(f"Unknown macro: {macro_id!r}")
+
+
+def _next_untitled_title() -> str:
+    """Return a unique ``"Untitled N"`` title."""
+    used = {m["title"] for m in _MACROS}
+    n = 1
+    while f"Untitled {n}" in used:
+        n += 1
+    return f"Untitled {n}"
+
+
+def list_macros() -> list[dict[str, str]]:
+    """Return a JSON-friendly snapshot of every macro (id + title only)."""
+    return [{"id": m["id"], "title": m["title"]} for m in _MACROS]
+
+
+def get_macro(macro_id: str) -> dict[str, str]:
+    """Return ``{id, title, code}`` for *macro_id*."""
+    return dict(_MACROS[_macro_index(macro_id)])
+
+
+def create_macro(title: str | None = None, code: str | None = None) -> dict[str, str]:
+    """Create a new macro and return its full record."""
+    new_title = title if title else _next_untitled_title()
+    new_code = code if code is not None else _MACRO_SAMPLE_CODE
+    record = {"id": _new_id("m"), "title": new_title, "code": new_code}
+    _MACROS.append(record)
+    return dict(record)
+
+
+def set_macro_code(macro_id: str, code: str) -> None:
+    """Update the code of *macro_id*."""
+    _MACROS[_macro_index(macro_id)]["code"] = code
+
+
+def rename_macro(macro_id: str, title: str) -> None:
+    """Rename macro *macro_id*."""
+    _MACROS[_macro_index(macro_id)]["title"] = title or "Untitled"
+
+
+def delete_macro(macro_id: str) -> None:
+    """Remove macro *macro_id* from the store."""
+    _MACROS.pop(_macro_index(macro_id))
+
+
+def duplicate_macro(macro_id: str) -> dict[str, str]:
+    """Insert a copy of *macro_id* right after it; return the new record."""
+    idx = _macro_index(macro_id)
+    src = _MACROS[idx]
+    record = {
+        "id": _new_id("m"),
+        "title": f"{src['title']} (copy)",
+        "code": src["code"],
+    }
+    _MACROS.insert(idx + 1, record)
+    return dict(record)
+
+
+def reorder_macros(macro_ids: Any) -> None:
+    """Reorder ``_MACROS`` according to *macro_ids* (must contain every id)."""
+    if hasattr(macro_ids, "to_py"):
+        macro_ids = macro_ids.to_py()
+    new_order: list[dict[str, str]] = []
+    by_id = {m["id"]: m for m in _MACROS}
+    for mid in macro_ids:
+        if mid in by_id:
+            new_order.append(by_id.pop(mid))
+    # Append any leftovers (defensive — should not happen).
+    new_order.extend(by_id.values())
+    _MACROS[:] = new_order
+
+
+def replace_macros(records: Any) -> None:
+    """Replace the whole macro store (used for localStorage restore)."""
+    if hasattr(records, "to_py"):
+        records = records.to_py()
+    cleaned: list[dict[str, str]] = []
+    for rec in records or []:
+        rid = str(rec.get("id") or _new_id("m"))
+        title = str(rec.get("title") or "Untitled")
+        code = str(rec.get("code") or "")
+        cleaned.append({"id": rid, "title": title, "code": code})
+    _MACROS[:] = cleaned
+
+
+# ---------------------------------------------------------------------------
 # Plugin system bootstrap
 # ---------------------------------------------------------------------------
 
@@ -459,6 +577,64 @@ def create_signal(
         raise ValueError(f"Unknown signal kind: {kind!r}")
     obj: SignalObj = sigima.create_signal(title=title, x=x, y=y)
     return _MODEL.add_object("signal", obj, group_id=group_id)
+
+
+def add_signal_from_arrays(
+    title: str,
+    xdata,
+    ydata,
+    xunit: str = "",
+    yunit: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+    group_id: str | None = None,
+) -> str:
+    """Create a signal from raw X / Y arrays and store it.
+
+    Used by the macro proxy bridge so the JS side can pass plain
+    nested lists / typed arrays without building Python source code.
+    """
+    x = np.asarray(xdata, dtype=float)
+    y = np.asarray(ydata, dtype=float)
+    obj: SignalObj = sigima.create_signal(title=title, x=x, y=y)
+    if xunit:
+        obj.xunit = xunit
+    if yunit:
+        obj.yunit = yunit
+    if xlabel:
+        obj.xlabel = xlabel
+    if ylabel:
+        obj.ylabel = ylabel
+    return _MODEL.add_object("signal", obj, group_id=group_id)
+
+
+def add_image_from_array(
+    title: str,
+    data,
+    xunit: str = "",
+    yunit: str = "",
+    zunit: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+    zlabel: str = "",
+    group_id: str | None = None,
+) -> str:
+    """Create an image from a raw 2D array and store it."""
+    arr = np.asarray(data, dtype=float)
+    obj = sigima.create_image(title=title, data=arr)
+    if xunit:
+        obj.xunit = xunit
+    if yunit:
+        obj.yunit = yunit
+    if zunit:
+        obj.zunit = zunit
+    if xlabel:
+        obj.xlabel = xlabel
+    if ylabel:
+        obj.ylabel = ylabel
+    if zlabel:
+        obj.zlabel = zlabel
+    return _MODEL.add_object("image", obj, group_id=group_id)
 
 
 def get_signal_xy(oid: str) -> dict[str, Any]:
@@ -3462,6 +3638,7 @@ _H5_PANEL_PREFIXES: dict[str, str] = {
     "signal": "DataLab_Sig",
     "image": "DataLab_Ima",
 }
+_H5_MACRO_PREFIX = "DataLab_Mac"
 
 
 def _h5_sanitize_name(short_id: str, title: str) -> str:
@@ -3510,6 +3687,26 @@ def save_workspace_to_bytes() -> bytes:
                                 )
                                 with writer.group(obj_name):
                                     entry.obj.serialize(writer)
+            # Macros — mirror Qt MacroPanel.serialize_to_hdf5 layout
+            # (group ``DataLab_Mac``; one subgroup per macro named
+            # ``"m<idx:03d>: <safe_title>"`` containing ``title`` &
+            # ``contents`` string sub-groups).
+            if _MACROS:
+                import re as _re
+
+                with writer.group(_H5_MACRO_PREFIX):
+                    for idx, mac in enumerate(_MACROS):
+                        safe = _re.sub(
+                            "[^-a-zA-Z0-9_.() ]+",
+                            "",
+                            (mac["title"] or "").replace("/", "_"),
+                        )
+                        name = f"m{idx + 1:03d}: {safe}".rstrip(": ").rstrip()
+                        with writer.group(name):
+                            with writer.group("title"):
+                                writer.write_str(mac["title"])
+                            with writer.group("contents"):
+                                writer.write_str(mac["code"])
         finally:
             writer.close()
         with open(path, "rb") as fh:
@@ -3599,6 +3796,30 @@ def open_workspace_from_bytes(
                                     counts["signals"] += 1
                                 else:
                                     counts["images"] += 1
+            # Macros (mirror Qt layout — see ``save_workspace_to_bytes``).
+            if _H5_MACRO_PREFIX in reader.h5:
+                if replace:
+                    _MACROS.clear()
+                with reader.group(_H5_MACRO_PREFIX):
+                    for name in list(reader.h5[_H5_MACRO_PREFIX]):
+                        with reader.group(name):
+                            try:
+                                with reader.group("title"):
+                                    title = reader.read_str() or name
+                            except Exception:  # noqa: BLE001
+                                title = name
+                            try:
+                                with reader.group("contents"):
+                                    code = reader.read_str() or ""
+                            except Exception:  # noqa: BLE001
+                                code = ""
+                        _MACROS.append(
+                            {
+                                "id": _new_id("m"),
+                                "title": title,
+                                "code": code,
+                            }
+                        )
         finally:
             reader.close()
     finally:
@@ -3673,6 +3894,8 @@ def h5_browser_import(
 __all__ = [
     "ObjectModel",
     "create_signal",
+    "add_signal_from_arrays",
+    "add_image_from_array",
     "create_signal_typed",
     "list_signal_creation_types",
     "get_creation_param_schema",
@@ -3722,6 +3945,15 @@ __all__ = [
     "load_project",
     "save_workspace_to_bytes",
     "open_workspace_from_bytes",
+    "list_macros",
+    "get_macro",
+    "create_macro",
+    "set_macro_code",
+    "rename_macro",
+    "delete_macro",
+    "duplicate_macro",
+    "reorder_macros",
+    "replace_macros",
     "h5_browser_open",
     "h5_browser_close",
     "h5_browser_close_all",
