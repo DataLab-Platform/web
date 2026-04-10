@@ -1,42 +1,80 @@
 # DataLab Web
 
-Full-Web reimplementation of the [DataLab](https://datalab-platform.com/) scientific
-data-processing platform.
+Full-Web reimplementation of the [DataLab](https://datalab-platform.com/)
+scientific data-processing platform — the entire computation engine and
+processing catalog run **inside the browser**.
 
-DataLab Web runs **entirely in the browser**: the [Sigima](https://github.com/DataLab-Platform/Sigima)
-computation engine is loaded as Python (CPython compiled to WebAssembly via
-[Pyodide](https://pyodide.org/)), exactly like [JupyterLite](https://jupyterlite.readthedocs.io/).
-The user interface is a dedicated React/TypeScript application inspired by the
-desktop Qt DataLab — not a JupyterLab clone — with [Plotly.js](https://plotly.com/javascript/)
-as the plotting backend (Qt-based PlotPy is not available in the browser).
+DataLab Web embeds the [Sigima](https://github.com/DataLab-Platform/Sigima)
+computation engine in [Pyodide](https://pyodide.org/) (CPython compiled to
+WebAssembly, JupyterLite-style) and pairs it with a dedicated React /
+TypeScript user interface modelled on the desktop Qt DataLab application.
+Plotting is delegated to [Plotly.js](https://plotly.com/javascript/) since
+Qt-based PlotPy is not available in the browser.
 
-> **Status: experimental MVP.** Only a small subset of DataLab’s signal features
-> is wired up so far (synthetic-signal creation + a few 1-to-1 processings).
-> The architecture is meant to be extended incrementally toward feature parity.
+![DataLab Web — 2D sinc image with statistics and contrast tools](doc/images/screenshot-image-sinc2d.png)
+
+## Features
+
+DataLab Web mirrors a large portion of the desktop application surface:
+
+- **Signal panel** — 1D curves with synthetic generators (Gaussian,
+  Lorentzian, Voigt, Planck blackbody, sine, sawtooth, triangle, square,
+  sinc, chirp, step, exponential, logistic, pulses, polynomial, custom
+  expressions, noise distributions…) and full Plotly visualisation with
+  cross-hair markers and annotations.
+- **Image panel** — 2D arrays with synthetic generators (2D Gaussian,
+  ramp, checkerboard, sinusoidal grating, ring pattern, Siemens star,
+  2D sinc, uniform / normal / Poisson noise…), zoomable Plotly heatmap,
+  contrast adjustment, cross profiles and stats area tools.
+- **Processing** — operations, transforms, filters, fitting, FFT/PSD,
+  stability analyses and many other Sigima 1-to-1 / 2-to-1 / n-to-1
+  processings, exposed automatically through the menu bar by
+  introspecting Sigima's catalog.
+- **Analysis** — measurements producing scalar results and result tables;
+  interactive fit dialog; profile extraction (line / segment / average /
+  radial) with graphical parameter editing.
+- **ROI management** — segment / rectangular / circular / polygonal
+  regions of interest with a dedicated editor and grid view.
+- **Object tree** — multi-group workspace with drag & drop, properties,
+  metadata editor, statistics card and computation history.
+- **Macros** — embedded Python editor (CodeMirror with autocompletion and
+  search) plus a console, mirroring DataLab's macro system. Macros call
+  the same `proxy` API as the desktop.
+- **Plugins** — Qt-compatible `PluginBase` API. The same plugin source
+  runs in DataLab desktop and DataLab Web provided dialogs use
+  `await param.edit_async(...)`. See [doc/plugins.md](doc/plugins.md).
+- **I/O** — HDF5 browser (via `h5py` running in Pyodide), text import
+  wizard and per-directory save dialog.
+- **UI niceties** — light / dark theme, resizable splitters with
+  persisted layout, pop-out result panel, contextual help dialog.
 
 ## Architecture overview
 
 ```
  ┌─────────────────────────── Browser ───────────────────────────┐
  │  React / TypeScript UI   ──►   Pyodide (CPython + WASM)        │
- │   • Signal panel             • numpy / scipy                   │
- │   • Plotly.js plot           • sigima (computation engine)     │
- │   • Dialogs / menus          • bootstrap.py (object store +    │
- │                                JS-friendly helper functions)   │
+ │   • Signal & image panels    • numpy / scipy / scikit-image    │
+ │   • Plotly.js plots          • h5py                            │
+ │   • Menus / dialogs          • sigima (computation engine)     │
+ │   • Macro editor             • bootstrap.py (object store +    │
+ │   • Plugin manager             JS-friendly helper functions)   │
  └────────────────────────────────────────────────────────────────┘
 ```
 
-* `src/sigima/` — Pyodide loader and Python ↔ JS bridge.
-  * `bootstrap.py` — Python module loaded into Pyodide; owns the in-memory
-    object store and exposes the helper functions the UI calls
-    (`create_signal`, `apply_processing`, …). Plays the role of DataLab’s
-    `objectmodel.py` + processor classes, scaled down to MVP.
-  * `runtime.ts` — typed wrapper around the Pyodide instance.
-  * `SigimaContext.tsx` — React context that loads the runtime once.
-* `src/components/` — UI building blocks (menu bar, signal list, plot,
-  new-signal dialog).
-* `src/App.tsx` — top-level layout (mirrors the desktop layout: menu bar at
-  the top, signal list on the left, central plot area).
+Code organisation:
+
+- `src/sigima/` — Pyodide loader and Python ↔ JS bridge.
+  - `bootstrap.py` — Python module loaded into Pyodide; owns the in-memory
+    object model and exposes the helper functions the UI calls.
+  - `runtime.ts` — typed wrapper around the Pyodide instance.
+  - `SigimaContext.tsx` — React context that loads the runtime once.
+- `src/components/` — UI building blocks (menu bar, object tree, plots,
+  dialogs, macro panel, side panels…).
+- `src/actions/` — action registry that maps Sigima features to menu items.
+- `src/plugins/` — host-side support for the Qt-compatible plugin API.
+- `src/macros/` — macro editor and execution helpers.
+- `src/App.tsx` — top-level layout (menu bar at the top, object tree on
+  the left, central plot area, results panel on the right).
 
 ## Comparison with related projects
 
@@ -56,8 +94,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The first load downloads Pyodide and installs
-Sigima via `micropip`, which can take 30–60 seconds.
+Open http://localhost:5173. The first load downloads Pyodide (~10 MB)
+and installs Sigima via `micropip`, which can take 30–60 seconds.
+Subsequent loads are cached by the browser.
 
 ### Build a static deployment
 
@@ -66,7 +105,16 @@ npm run build
 ```
 
 The `dist/` folder can be served from any static host (GitHub Pages, S3,
-nginx, …). All paths are relative so the app works under sub-paths.
+nginx, …). Vite is configured with `base: "./"` so all paths are relative
+and the app works under sub-paths.
+
+### Useful scripts
+
+```powershell
+npm run lint     # ESLint
+npm run format   # Prettier
+npm run preview  # Serve the production build locally
+```
 
 ## Plugins
 
@@ -76,19 +124,21 @@ parameter dialogs use `await param.edit_async(self.main)` instead of the
 synchronous `param.edit(self.main)`. See [doc/plugins.md](doc/plugins.md)
 for details, hot-reload behaviour and the bundled vitrine plugin.
 
-## Roadmap (high-level)
+## Roadmap
 
-1. **MVP (current):** synthetic signal creation, a handful of 1-to-1
-   processings, Plotly visualisation.
-2. Image panel (2D arrays, Plotly heatmaps, colormaps).
-3. File I/O — load/save signals and images via the browser File API and
-   Sigima’s `sigima.io` module.
-4. ROI editing — overlay shapes on the Plotly plots and feed them back to
-   Sigima objects.
-5. Generic processing dispatcher mirroring DataLab’s `register_1_to_1` /
-   `register_n_to_1` / … pattern, driven by Sigima introspection.
-6. Macros & remote control via a Web Worker running Pyodide off the main
-   thread.
+Short-term:
+
+- Generic results-table view aligned with the desktop *Results* panel.
+- Richer image data preview (numeric grid with virtualised scrolling).
+- Off-main-thread Pyodide via Web Worker to keep the UI responsive on
+  long-running computations.
+- Additional file formats through `sigima.io` (currently focused on text
+  and HDF5).
+
+Longer-term:
+
+- Remote control bridge to a real DataLab desktop instance via the Web API.
+- Collaborative sessions through shared workspace files.
 
 ## License
 
