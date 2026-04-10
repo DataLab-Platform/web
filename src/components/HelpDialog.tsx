@@ -135,9 +135,15 @@ function AboutView({ version }: { version: string }) {
           </a>
         </li>
       </ul>
+      <p className="help-about-credits">
+        Created by Pierre Raybaut
+        <br />
+        Developed and maintained by DataLab Web open-source project team
+        <br />
+        Copyright © 2023 DataLab Platform Developers
+      </p>
       <p className="help-about-license">
-        Released under the BSD 3-Clause License — © DataLab Platform
-        Developers.
+        Released under the BSD 3-Clause License.
       </p>
     </div>
   );

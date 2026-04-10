@@ -678,6 +678,25 @@ input {
   height: 100%;
   color: var(--text-dim);
 }
+.plot-loading {
+  flex-direction: column;
+  gap: 18px;
+}
+.plot-loading-logo {
+  width: 360px;
+  max-width: 60%;
+  height: auto;
+  opacity: 0.95;
+  animation: plot-loading-pulse 2s ease-in-out infinite;
+}
+.plot-loading-message {
+  font-size: 13px;
+  text-align: center;
+}
+@keyframes plot-loading-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
 
 .overlay {
   position: fixed;
@@ -768,10 +787,14 @@ input {
 .help-about-links a:hover {
   text-decoration: underline;
 }
+.help-about-credits {
+  margin-top: 12px;
+  line-height: 1.5;
+}
 .help-about-license {
   font-size: 11px;
   color: var(--text-dim);
-  margin-top: 12px;
+  margin-top: 8px;
 }
 .help-shortcuts section {
   margin-bottom: 12px;

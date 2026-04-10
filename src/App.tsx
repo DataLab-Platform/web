@@ -1850,7 +1850,14 @@ export default function App() {
             </div>
           )}
           {activePanel !== "macro" && status === "loading" && !data && !imageData && (
-            <div className="plot-empty">{message}</div>
+            <div className="plot-empty plot-loading">
+              <img
+                src={new URL("./assets/DataLab-Splash.svg", import.meta.url).href}
+                alt="DataLab"
+                className="plot-loading-logo"
+              />
+              <div className="plot-loading-message">{message}</div>
+            </div>
           )}
           {activePanel !== "macro" && status === "ready" && !data && !imageData && (
             <div className="plot-empty">
