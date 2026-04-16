@@ -15,7 +15,7 @@ contributed it, so :func:`clear_origin` can purge them on hot reload.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
@@ -99,16 +99,12 @@ EXTRA_GENERATORS: dict[str, dict[str, ExtraGenerator]] = {
 def clear_origin(origin: str) -> None:
     """Remove every entry registered by *origin* (used by hot reload)."""
     for kind in ("signal", "image"):
-        EXTRA_FEATURES[kind] = [
-            f for f in EXTRA_FEATURES[kind] if f.origin != origin
-        ]
+        EXTRA_FEATURES[kind] = [f for f in EXTRA_FEATURES[kind] if f.origin != origin]
         EXTRA_MENU_ACTIONS[kind] = [
             a for a in EXTRA_MENU_ACTIONS[kind] if a.origin != origin
         ]
         EXTRA_GENERATORS[kind] = {
-            k: v
-            for k, v in EXTRA_GENERATORS[kind].items()
-            if v.origin != origin
+            k: v for k, v in EXTRA_GENERATORS[kind].items() if v.origin != origin
         }
 
 

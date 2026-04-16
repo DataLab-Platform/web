@@ -107,14 +107,20 @@ def _format_text(data: Any) -> str:
             try:
                 if data.size == 1:
                     item = data.item()
-                    return _safe_decode_bytes(item) if isinstance(item, bytes) else str(item)
+                    return (
+                        _safe_decode_bytes(item)
+                        if isinstance(item, bytes)
+                        else str(item)
+                    )
                 items = []
                 for i, item in enumerate(data.flat):
                     if i >= 5:
                         items.append("...")
                         break
                     items.append(
-                        _safe_decode_bytes(item) if isinstance(item, bytes) else str(item)
+                        _safe_decode_bytes(item)
+                        if isinstance(item, bytes)
+                        else str(item)
                     )
                 return f"[{', '.join(items)}]"
             except Exception:  # noqa: BLE001
@@ -275,9 +281,7 @@ def _dtype_str(dset: Any, kind: str, data: Any) -> str:
         try:
             dtype = dset.dtype
             if dtype.names:
-                fields = ", ".join(
-                    f"{n}: {dtype.fields[n][0]}" for n in dtype.names
-                )
+                fields = ", ".join(f"{n}: {dtype.fields[n][0]}" for n in dtype.names)
                 return f"compound({fields})"
         except Exception:  # noqa: BLE001
             pass
@@ -325,9 +329,7 @@ def _build_node(file_id: str, h5path: str, dset: Any) -> _NodeInfo:
         )
         for child_dset in dset.values():
             try:
-                info.children.append(
-                    _build_node(file_id, child_dset.name, child_dset)
-                )
+                info.children.append(_build_node(file_id, child_dset.name, child_dset))
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
                 print(
                     f"[h5browser] skip {child_dset.name!r}: {type(exc).__name__}: {exc}"

@@ -66,9 +66,7 @@ class PluginTestData(PluginBase):
             hide_height=True, hide_type=True
         )
         if newparam is not None:
-            obj = test_data.create_noisy_gaussian_image(
-                newparam, add_annotations=False
-            )
+            obj = test_data.create_noisy_gaussian_image(newparam, add_annotations=False)
             self.proxy.add_object(obj)
 
     async def create_multigaussian_image(self) -> None:

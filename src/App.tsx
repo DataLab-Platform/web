@@ -1746,7 +1746,7 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className="app" data-sigima-status={status}>
       <MenuBar
         status={status === "ready" ? "Ready" : message}
         statusKind={status}

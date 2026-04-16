@@ -169,9 +169,7 @@ class _Proxy:
         Mirrors :meth:`RemoteProxy.call_method` for parity with desktop
         macros that use ``proxy.call_method("delete_all_objects", ...)``.
         """
-        return await _call(
-            "call_method", name=name, args=list(args), kwargs=kwargs
-        )
+        return await _call("call_method", name=name, args=list(args), kwargs=kwargs)
 
 
 proxy = _Proxy()

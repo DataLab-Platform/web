@@ -53,9 +53,7 @@ class DLMainWindow:
     def get_object_titles(self, panel: str) -> list[str]:
         return self._bridge.get_object_titles(panel)
 
-    def get_object_uuids(
-        self, panel: str, group: int | str | None = None
-    ) -> list[str]:
+    def get_object_uuids(self, panel: str, group: int | str | None = None) -> list[str]:
         return self._bridge.get_object_uuids(panel, group=group)
 
     def get_object(
@@ -63,12 +61,8 @@ class DLMainWindow:
     ) -> SignalObj | ImageObj:
         return self._bridge.get_object(nb_id_title, panel)
 
-    def get_sel_object_uuids(
-        self, include_groups: bool = False
-    ) -> list[str]:
-        return self._bridge.get_sel_object_uuids(
-            include_groups=include_groups
-        )
+    def get_sel_object_uuids(self, include_groups: bool = False) -> list[str]:
+        return self._bridge.get_sel_object_uuids(include_groups=include_groups)
 
     # -- Object mutation ----------------------------------------------
 

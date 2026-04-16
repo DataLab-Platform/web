@@ -28,7 +28,7 @@ import importlib
 import pkgutil
 import typing
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 import guidata.dataset as gds
 from guidata.dataset import (
@@ -126,9 +126,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     ),
     "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
     "exp": FeatureOverride("Exponential", "Operations/Exponential"),
-    "log10": FeatureOverride(
-        "Logarithm (base 10)", "Operations/Logarithm (base 10)"
-    ),
+    "log10": FeatureOverride("Logarithm (base 10)", "Operations/Logarithm (base 10)"),
     "power": FeatureOverride("Power…", "Operations/Power"),
     "sqrt": FeatureOverride("Square root", "Operations/Square root"),
     "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
@@ -146,9 +144,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         operand_label="Imaginary part signal",
     ),
     "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
-    "astype": FeatureOverride(
-        "Convert data type…", "Operations/Convert data type"
-    ),
+    "astype": FeatureOverride("Convert data type…", "Operations/Convert data type"),
     "average": FeatureOverride("Average", "Operations/Average"),
     "standard_deviation": FeatureOverride(
         "Standard deviation", "Operations/Standard deviation"
@@ -207,12 +203,8 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         "Processing/Axis transformation/Convert to polar coordinates",
     ),
     # Processing / Level adjustment --------------------------------------
-    "normalize": FeatureOverride(
-        "Normalize…", "Processing/Level adjustment/Normalize"
-    ),
-    "clip": FeatureOverride(
-        "Clipping…", "Processing/Level adjustment/Clipping"
-    ),
+    "normalize": FeatureOverride("Normalize…", "Processing/Level adjustment/Normalize"),
+    "clip": FeatureOverride("Clipping…", "Processing/Level adjustment/Clipping"),
     "offset_correction": FeatureOverride(
         "Offset correction", "Processing/Level adjustment/Offset correction"
     ),
@@ -251,9 +243,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "phase_spectrum": FeatureOverride(
         "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
     ),
-    "psd": FeatureOverride(
-        "PSD", "Processing/Fourier analysis/Power spectral density"
-    ),
+    "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
     # Processing / Frequency filters -------------------------------------
     "lowpass": FeatureOverride(
         "Low-pass filter…", "Processing/Frequency filters/Low-pass filter"
@@ -272,9 +262,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "polynomial_fit": FeatureOverride(
         "Polynomial fit…", "Processing/Fitting/Polynomial fit"
     ),
-    "gaussian_fit": FeatureOverride(
-        "Gaussian fit", "Processing/Fitting/Gaussian fit"
-    ),
+    "gaussian_fit": FeatureOverride("Gaussian fit", "Processing/Fitting/Gaussian fit"),
     "lorentzian_fit": FeatureOverride(
         "Lorentzian fit", "Processing/Fitting/Lorentzian fit"
     ),
@@ -296,9 +284,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         "Sinusoidal fit", "Processing/Fitting/Sinusoidal fit"
     ),
     "cdf_fit": FeatureOverride("CDF fit", "Processing/Fitting/CDF fit"),
-    "sigmoid_fit": FeatureOverride(
-        "Sigmoid fit", "Processing/Fitting/Sigmoid fit"
-    ),
+    "sigmoid_fit": FeatureOverride("Sigmoid fit", "Processing/Fitting/Sigmoid fit"),
     "evaluate_fit": FeatureOverride(
         "Evaluate fit",
         "Processing/Fitting/Evaluate fit",
@@ -310,9 +296,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "integral": FeatureOverride("Integral", "Processing/Integral"),
     "apply_window": FeatureOverride("Windowing…", "Processing/Windowing"),
     "detrending": FeatureOverride("Detrending…", "Processing/Detrending"),
-    "interpolate": FeatureOverride(
-        "Interpolation…", "Processing/Interpolation"
-    ),
+    "interpolate": FeatureOverride("Interpolation…", "Processing/Interpolation"),
     "resampling": FeatureOverride("Resampling…", "Processing/Resampling"),
     # Processing / Stability analysis ------------------------------------
     "allan_variance": FeatureOverride(
@@ -336,9 +320,7 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     ),
     # ----- Analysis menu (Qt order) -------------------------------------
     "histogram": FeatureOverride("Histogram…", "Analysis/Histogram"),
-    "peak_detection": FeatureOverride(
-        "Peak detection…", "Analysis/Peak detection"
-    ),
+    "peak_detection": FeatureOverride("Peak detection…", "Analysis/Peak detection"),
 }
 
 
@@ -376,13 +358,9 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     ),
     "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
     "exp": FeatureOverride("Exponential", "Operations/Exponential"),
-    "log10": FeatureOverride(
-        "Logarithm (base 10)", "Operations/Logarithm (base 10)"
-    ),
+    "log10": FeatureOverride("Logarithm (base 10)", "Operations/Logarithm (base 10)"),
     "logp1": FeatureOverride("Log10(z+n)…", "Operations/Log10(z+n)"),
-    "log10_z_plus_n": FeatureOverride(
-        "Log10(z+n)…", "Operations/Log10(z+n)"
-    ),
+    "log10_z_plus_n": FeatureOverride("Log10(z+n)…", "Operations/Log10(z+n)"),
     "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
     "phase": FeatureOverride("Phase…", "Operations/Phase"),
     "complex_from_magnitude_phase": FeatureOverride(
@@ -398,9 +376,7 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         operand_label="Imaginary part image",
     ),
     "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
-    "astype": FeatureOverride(
-        "Convert data type…", "Operations/Convert data type"
-    ),
+    "astype": FeatureOverride("Convert data type…", "Operations/Convert data type"),
     "average": FeatureOverride("Average", "Operations/Average"),
     "standard_deviation": FeatureOverride(
         "Standard deviation", "Operations/Standard deviation"
@@ -433,21 +409,15 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     "transpose": FeatureOverride(
         "Flip diagonally", "Processing/Geometry/Flip diagonally"
     ),
-    "flipv": FeatureOverride(
-        "Flip vertically", "Processing/Geometry/Flip vertically"
-    ),
+    "flipv": FeatureOverride("Flip vertically", "Processing/Geometry/Flip vertically"),
     "rotate90": FeatureOverride(
         "Rotate 90° right", "Processing/Geometry/Rotate 90° right"
     ),
     "rotate270": FeatureOverride(
         "Rotate 90° left", "Processing/Geometry/Rotate 90° left"
     ),
-    "rotate": FeatureOverride(
-        "Rotate by…", "Processing/Geometry/Rotate by"
-    ),
-    "translate": FeatureOverride(
-        "Translate…", "Processing/Geometry/Translate"
-    ),
+    "rotate": FeatureOverride("Rotate by…", "Processing/Geometry/Rotate by"),
+    "translate": FeatureOverride("Translate…", "Processing/Geometry/Translate"),
     # Processing / Axis transformation -----------------------------------
     "set_uniform_coords": FeatureOverride(
         "Set uniform coordinates…",
@@ -458,12 +428,8 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Processing/Axis transformation/Polynomial calibration",
     ),
     # Processing / Level adjustment --------------------------------------
-    "normalize": FeatureOverride(
-        "Normalize…", "Processing/Level adjustment/Normalize"
-    ),
-    "clip": FeatureOverride(
-        "Clipping…", "Processing/Level adjustment/Clipping"
-    ),
+    "normalize": FeatureOverride("Normalize…", "Processing/Level adjustment/Normalize"),
+    "clip": FeatureOverride("Clipping…", "Processing/Level adjustment/Clipping"),
     "offset_correction": FeatureOverride(
         "Offset correction", "Processing/Level adjustment/Offset correction"
     ),
@@ -502,9 +468,7 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     "phase_spectrum": FeatureOverride(
         "Phase spectrum", "Processing/Fourier analysis/Phase spectrum"
     ),
-    "psd": FeatureOverride(
-        "PSD", "Processing/Fourier analysis/Power spectral density"
-    ),
+    "psd": FeatureOverride("PSD", "Processing/Fourier analysis/Power spectral density"),
     # Processing / Frequency filters -------------------------------------
     "butterworth": FeatureOverride(
         "Butterworth…", "Processing/Frequency filters/Butterworth"
@@ -601,12 +565,8 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Closing (disk)…", "Processing/Morphology/Closing (disk)"
     ),
     # Processing / Edge detection (Qt order: alphabetical, h/v after main) -
-    "canny": FeatureOverride(
-        "Canny filter…", "Processing/Edge detection/Canny filter"
-    ),
-    "farid": FeatureOverride(
-        "Farid filter", "Processing/Edge detection/Farid filter"
-    ),
+    "canny": FeatureOverride("Canny filter…", "Processing/Edge detection/Canny filter"),
+    "farid": FeatureOverride("Farid filter", "Processing/Edge detection/Farid filter"),
     "farid_h": FeatureOverride(
         "Farid filter (horizontal)",
         "Processing/Edge detection/Farid filter (horizontal)",
@@ -643,9 +603,7 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Scharr filter (vertical)",
         "Processing/Edge detection/Scharr filter (vertical)",
     ),
-    "sobel": FeatureOverride(
-        "Sobel filter", "Processing/Edge detection/Sobel filter"
-    ),
+    "sobel": FeatureOverride("Sobel filter", "Processing/Edge detection/Sobel filter"),
     "sobel_h": FeatureOverride(
         "Sobel filter (horizontal)",
         "Processing/Edge detection/Sobel filter (horizontal)",
@@ -1152,7 +1110,10 @@ def _align_signals(signals: list[SignalObj]) -> list[SignalObj]:
     sizes = [len(s.x) for s in signals]
     target_idx = sizes.index(min(sizes))
     target = signals[target_idx]
-    return [s if i == target_idx else _interpolate_to(target, s) for i, s in enumerate(signals)]
+    return [
+        s if i == target_idx else _interpolate_to(target, s)
+        for i, s in enumerate(signals)
+    ]
 
 
 @dataclass
@@ -1200,9 +1161,7 @@ class BaseProcessor:
             return self._compute_1_to_1(spec, ctx.sources, source_ids, instance)
         if spec.pattern == "2_to_1":
             if ctx.operand is None:
-                raise ValueError(
-                    f"Feature {spec.feature_id!r} requires an operand"
-                )
+                raise ValueError(f"Feature {spec.feature_id!r} requires an operand")
             return self._compute_2_to_1(
                 spec, ctx.sources, source_ids, ctx.operand, instance
             )
@@ -1297,7 +1256,9 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
     ]
 
 
-def get_schema(catalog: dict[str, FeatureSpec], feature_id: str) -> dict[str, Any] | None:
+def get_schema(
+    catalog: dict[str, FeatureSpec], feature_id: str
+) -> dict[str, Any] | None:
     spec = catalog[feature_id]
     if spec.paramclass is None:
         return None

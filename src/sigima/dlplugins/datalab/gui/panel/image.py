@@ -26,9 +26,7 @@ class ImagePanel:
 
     # -- Plugin-facing helpers ----------------------------------------
 
-    def get_newparam_from_current(
-        self, title: str | None = None
-    ) -> gds.DataSet | None:
+    def get_newparam_from_current(self, title: str | None = None) -> gds.DataSet | None:
         """Return a parameter dataset suitable for a *New image* dialog."""
         try:
             from sigima.params import NewImageParam  # type: ignore[attr-defined]
@@ -42,9 +40,7 @@ class ImagePanel:
             return cached
         return NewImageParam(title=title or "")
 
-    def new_object(
-        self, *_args: Any, add_to_panel: bool = True, **_kwargs: Any
-    ) -> Any:
+    def new_object(self, *_args: Any, add_to_panel: bool = True, **_kwargs: Any) -> Any:
         """Stub — Qt ``new_object`` flow is not implemented in v1."""
         raise BrowserNotSupportedError(
             "ImagePanel.new_object() is not yet available in DataLab-Web."

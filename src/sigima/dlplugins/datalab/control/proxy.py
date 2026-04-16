@@ -55,22 +55,16 @@ class LocalProxy(BaseProxy):
         panel: str | None = None,
         group: int | str | None = None,
     ) -> list[str]:
-        return self.main.get_object_uuids(
-            self._resolve_panel(panel), group=group
-        )
+        return self.main.get_object_uuids(self._resolve_panel(panel), group=group)
 
     def get_object(
         self,
         nb_id_title: int | str | None = None,
         panel: str | None = None,
     ) -> SignalObj | ImageObj:
-        return self.main.get_object(
-            nb_id_title, self._resolve_panel(panel)
-        )
+        return self.main.get_object(nb_id_title, self._resolve_panel(panel))
 
-    def get_sel_object_uuids(
-        self, include_groups: bool = False
-    ) -> list[str]:
+    def get_sel_object_uuids(self, include_groups: bool = False) -> list[str]:
         return self.main.get_sel_object_uuids(include_groups=include_groups)
 
     # -- Object mutation ------------------------------------------------
@@ -167,9 +161,7 @@ class LocalProxy(BaseProxy):
     def calc(self, name: str, param: Any | None = None) -> Any:
         return self.main.calc(name, param=param)
 
-    def call_method(
-        self, method_name: str, *args: Any, **kwargs: Any
-    ) -> Any:
+    def call_method(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         target = self.main
         panel = kwargs.pop("panel", None)
         if panel is not None:

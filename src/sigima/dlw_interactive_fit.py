@@ -17,7 +17,7 @@ powers the headless / automatic fits).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -73,24 +73,18 @@ _PRETTY_PARAMS: dict[str, str] = {
 }
 
 _INTERACTIVE_FITS: dict[str, _FitKind] = {
-    "linear_fit": _FitKind(
-        "linear_fit", "Linear fit", _fit.LinearFitComputer
-    ),
+    "linear_fit": _FitKind("linear_fit", "Linear fit", _fit.LinearFitComputer),
     "polynomial_fit": _FitKind(
         "polynomial_fit",
         "Polynomial fit",
         _fit.PolynomialFitComputer,
         needs_degree=True,
     ),
-    "gaussian_fit": _FitKind(
-        "gaussian_fit", "Gaussian fit", _fit.GaussianFitComputer
-    ),
+    "gaussian_fit": _FitKind("gaussian_fit", "Gaussian fit", _fit.GaussianFitComputer),
     "lorentzian_fit": _FitKind(
         "lorentzian_fit", "Lorentzian fit", _fit.LorentzianFitComputer
     ),
-    "voigt_fit": _FitKind(
-        "voigt_fit", "Voigt fit", _fit.VoigtFitComputer
-    ),
+    "voigt_fit": _FitKind("voigt_fit", "Voigt fit", _fit.VoigtFitComputer),
     "exponential_fit": _FitKind(
         "exponential_fit", "Exponential fit", _fit.ExponentialFitComputer
     ),
@@ -106,9 +100,7 @@ _INTERACTIVE_FITS: dict[str, _FitKind] = {
         _fit.TwoHalfGaussianFitComputer,
     ),
     "cdf_fit": _FitKind("cdf_fit", "CDF fit", _fit.CDFFitComputer),
-    "sigmoid_fit": _FitKind(
-        "sigmoid_fit", "Sigmoid fit", _fit.SigmoidFitComputer
-    ),
+    "sigmoid_fit": _FitKind("sigmoid_fit", "Sigmoid fit", _fit.SigmoidFitComputer),
     "piecewiseexponential_fit": _FitKind(
         "piecewiseexponential_fit",
         "Piecewise exponential fit",
@@ -242,9 +234,7 @@ def init_interactive_fit(
     }
 
 
-def _evaluate(
-    kind: _FitKind, x: np.ndarray, values: dict[str, float]
-) -> np.ndarray:
+def _evaluate(kind: _FitKind, x: np.ndarray, values: dict[str, float]) -> np.ndarray:
     """Evaluate the model — works for both classmethod and instance evaluators."""
     try:
         return np.asarray(kind.computer.evaluate(x, **values), dtype=float)
@@ -277,10 +267,7 @@ def evaluate_interactive_fit(
     x_arr = np.asarray(x, dtype=float)
     if kind.needs_degree:
         # Polynomial: evaluate via numpy.polyval on coefficients in name order.
-        ordered = [
-            values[name]
-            for name in sorted(values.keys())
-        ]
+        ordered = [values[name] for name in sorted(values.keys())]
         return np.polyval(ordered, x_arr).astype(float).tolist()
     return _evaluate(kind, x_arr, {k: float(v) for k, v in values.items()}).tolist()
 
@@ -302,9 +289,7 @@ def auto_fit_interactive(
     _y, params = computer.optimize_fit_with_scipy()
     # Strip housekeeping keys added by ``create_params``.
     clean = {
-        k: float(v)
-        for k, v in params.items()
-        if k not in {"fit_type", "residual_rms"}
+        k: float(v) for k, v in params.items() if k not in {"fit_type", "residual_rms"}
     }
     x_full = np.asarray(obj.x, dtype=float)
     y_fit = _evaluate(kind, x_full, clean)
@@ -335,9 +320,7 @@ def commit_interactive_fit(
     dst = src.copy()
     dst.set_xydata(x_full, y_fit)
     # Title carries the fit kind and the parameter values for traceability.
-    pretty = ", ".join(
-        f"{_pretty_label(k)}={v:g}" for k, v in values.items()
-    )
+    pretty = ", ".join(f"{_pretty_label(k)}={v:g}" for k, v in values.items())
     dst.title = f"{kind.label}({pretty})"
     # Store fit metadata so the Properties tab can surface it (matches the
     # auto-fit convention from sigima.proc.signal.fitting).

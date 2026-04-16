@@ -17,7 +17,7 @@ variants (``await DataSet.edit_async(...)``).
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, ContextManager
+from typing import Any, Callable, ContextManager
 
 from datalab.errors import BrowserNotSupportedError
 

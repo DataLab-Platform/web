@@ -116,6 +116,58 @@ npm run format   # Prettier
 npm run preview  # Serve the production build locally
 ```
 
+## Testing
+
+DataLab-Web ships a four-layer test pyramid that mirrors the engineering
+rigour of the DataLab desktop pytest suite:
+
+| Layer        | Tooling                          | Scope                                                   | Speed |
+| ------------ | -------------------------------- | ------------------------------------------------------- | ----- |
+| Python       | pytest + coverage (CPython)      | `src/sigima/bootstrap.py` and `processor.py` headlessly | ⚡⚡⚡  |
+| TypeScript   | Vitest + jsdom                   | Pure-logic TS modules (action registry, theme, …)       | ⚡⚡   |
+| End-to-end   | Playwright (Chromium)            | Real browser boot of Pyodide + UI smoke tests           | ⚡    |
+| Continuous   | GitHub Actions (`tests.yml`)     | All three layers on every push / PR                     | —     |
+
+The Python layer runs `bootstrap.py` directly under CPython through
+fixtures that stub the Pyodide-only modules (`js`, `pyodide.ffi`); this
+gives fast feedback and high coverage without booting WebAssembly.
+
+Run everything locally:
+
+```powershell
+# One-time: copy the environment template and create the project venv
+# (Python 3.11 or 3.12 — earlier versions trip a quirk in
+# ``isinstance(list[T], type)`` that breaks Sigima's processor
+# introspection).
+Copy-Item .env.template .env
+py -3.11 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+
+# Python unit tests + coverage report (htmlcov-python/)
+.\.venv\Scripts\python -m pytest tests/python --cov=src/sigima --cov-report=html:htmlcov-python
+
+# TypeScript unit tests + coverage report (coverage-ts/)
+npm test
+npm run test:cov
+
+# End-to-end browser tests (boots Pyodide in Chromium ~1.5 min)
+npx playwright install chromium   # one-time
+npm run test:e2e
+```
+
+Test layout:
+
+```
+tests/
+├── python/          # pytest suite — exercises bootstrap.py headlessly
+├── ts/              # Vitest suite — pure TypeScript modules
+└── e2e/             # Playwright specs — real browser smoke tests
+```
+
+VS Code tasks are provided under `.vscode/tasks.json`
+(`🚀 Pytest`, `🟢 Vitest`, `🎭 Playwright`, …). The default test task
+(`Ctrl+Shift+P → Run Test Task`) launches the Python suite.
+
 ## Plugins
 
 DataLab-Web ships a Qt-compatible plugin system. The same `PluginBase`

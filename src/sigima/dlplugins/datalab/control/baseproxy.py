@@ -42,9 +42,7 @@ class BaseProxy:
     def __len__(self) -> int:
         return len(self.get_object_uuids())
 
-    def __getitem__(
-        self, nb_id_title: int | str | None = None
-    ) -> SignalObj | ImageObj:
+    def __getitem__(self, nb_id_title: int | str | None = None) -> SignalObj | ImageObj:
         return self.get_object(nb_id_title)
 
     def __iter__(self) -> Iterator[SignalObj | ImageObj]:
@@ -233,9 +231,7 @@ class BaseProxy:
     def calc(self, name: str, param: gds.DataSet | None = None) -> Any:
         _unsupported("calc")
 
-    def call_method(
-        self, method_name: str, *args: Any, **kwargs: Any
-    ) -> Any:
+    def call_method(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         _unsupported("call_method")
 
 

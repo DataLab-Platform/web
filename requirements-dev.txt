@@ -1,0 +1,23 @@
+# Python development dependencies for DataLab-Web's automated test suite.
+#
+# These are *only* used by the headless CPython tests that exercise the
+# Python sources living under ``src/sigima/`` (the same code that runs
+# inside Pyodide in production). The application itself is shipped to
+# users as a static JavaScript bundle and does not require a Python
+# install.
+
+# Core test runner and coverage tooling.
+pytest>=7.4
+pytest-cov>=4.1
+
+# Sigima (= computation engine) and its mandatory dependencies.
+# Pinning floors only — exact versions come from each project's pyproject.
+sigima>=1.1.2
+guidata>=3.13.4
+numpy>=1.22
+scipy>=1.10.1
+scikit-image>=0.19.2
+pandas>=1.4
+
+# Used by the HDF5 browser shim (``dlw_h5browser.py``).
+h5py>=3.6

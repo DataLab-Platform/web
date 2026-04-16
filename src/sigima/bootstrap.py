@@ -32,10 +32,9 @@ from sigima.objects import SignalObj
 from sigima.objects.signal.creation import (
     SIGNAL_TYPE_PARAM_CLASSES,
     SignalTypes,
-    NewSignalParam,
     create_signal_parameters,
 )
-from sigima.objects.signal.roi import SignalROI, create_signal_roi
+from sigima.objects.signal.roi import SignalROI
 
 import dlw_processor as _proc
 import dlw_interactive_fit as _ifit
@@ -136,9 +135,7 @@ class ObjectModel:
 
     # -- Object mutation ----------------------------------------------------
 
-    def add_object(
-        self, kind: str, obj: Any, group_id: str | None = None
-    ) -> str:
+    def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
         panel = self.panel(kind)
         group = panel.find_group(group_id) if group_id else panel.ensure_default_group()
         oid = _new_id()
@@ -299,7 +296,7 @@ _MACROS: list[dict[str, str]] = globals().get("_MACROS", [])  # type: ignore[ass
 
 
 _MACRO_SAMPLE_TITLE = "Untitled 1"
-_MACRO_SAMPLE_CODE = '''# Macro simple example
+_MACRO_SAMPLE_CODE = """# Macro simple example
 
 import numpy as np
 
@@ -314,7 +311,7 @@ oid = await proxy.add_signal("sinc", x, y)
 print(f"Created signal {oid}")
 
 print("All done!")
-'''
+"""
 
 
 def _macro_index(macro_id: str) -> int:
@@ -445,16 +442,15 @@ def _require_bridge(slot: str) -> Any:
     return _DIALOG_BRIDGE
 
 
-async def _async_edit_dataset(instance: Any, parent: Any = None, **_kwargs: Any) -> bool:
+async def _async_edit_dataset(
+    instance: Any, parent: Any = None, **_kwargs: Any
+) -> bool:
     """Async :meth:`DataSet.edit` handler routed through the JS bridge."""
     from guidata.dataset import dataset_to_schema_with_values, update_dataset
 
     bridge = _require_bridge("edit_dataset_async")
     payload = dataset_to_schema_with_values(instance)
-    payload["title"] = (
-        getattr(instance, "_title", None)
-        or type(instance).__name__
-    )
+    payload["title"] = getattr(instance, "_title", None) or type(instance).__name__
     result = await bridge("edit_dataset", payload)
     if hasattr(result, "to_py"):
         result = result.to_py()
@@ -716,9 +712,7 @@ _SIGNAL_TYPE_ORDER: list[tuple[str, bool]] = [
 # Per-object cached creation parameter instance.  Keyed by oid; populated
 # when a signal is created via :func:`create_signal_typed` and consumed
 # by :func:`get_creation_param_schema` / :func:`update_signal_creation_params`.
-_CREATION_PARAMS: dict[str, Any] = globals().get(
-    "_CREATION_PARAMS", {}
-)
+_CREATION_PARAMS: dict[str, Any] = globals().get("_CREATION_PARAMS", {})
 
 
 def _signal_type_label(stype: SignalTypes) -> str:
@@ -801,9 +795,7 @@ def get_creation_param_schema(oid: str) -> dict[str, Any] | None:
     return payload
 
 
-def update_signal_creation_params(
-    oid: str, values: dict[str, Any]
-) -> dict[str, Any]:
+def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str, Any]:
     """Apply *values* to the cached creation parameters and rebuild *oid*.
 
     The signal's ``x`` / ``y`` arrays are regenerated in place.  When the
@@ -977,15 +969,11 @@ def list_object_metadata(oid: str) -> list[dict[str, Any]]:
         if not _metadata_visible(key):
             continue
         value_type, str_value = _metadata_value_repr(obj.metadata[key])
-        out.append(
-            {"key": key, "value_type": value_type, "value": str_value}
-        )
+        out.append({"key": key, "value_type": value_type, "value": str_value})
     return out
 
 
-def set_object_metadata_value(
-    oid: str, key: str, value_type: str, value: str
-) -> None:
+def set_object_metadata_value(oid: str, key: str, value_type: str, value: str) -> None:
     """Add or update a metadata entry on *oid*.
 
     The string ``value`` is parsed back into a Python object according
@@ -995,9 +983,7 @@ def set_object_metadata_value(
 
     obj = _MODEL.get(oid)
     if not _metadata_visible(key):
-        raise ValueError(
-            f"Metadata key {key!r} is reserved for internal use"
-        )
+        raise ValueError(f"Metadata key {key!r} is reserved for internal use")
     parsed: Any
     if value_type == "string":
         parsed = value
@@ -1427,9 +1413,7 @@ def create_image_typed(stype: str, group_id: str | None = None) -> str:
     return oid
 
 
-def update_image_creation_params(
-    oid: str, values: dict[str, Any]
-) -> dict[str, Any]:
+def update_image_creation_params(oid: str, values: dict[str, Any]) -> dict[str, Any]:
     """Apply *values* to the cached creation parameters and rebuild *oid*."""
     from guidata.dataset import update_dataset
 
@@ -1483,9 +1467,7 @@ def create_image(
     yy, xx = np.mgrid[0:height, 0:width]
     if kind == "gauss":
         cx, cy = width / 2.0, height / 2.0
-        data = a * np.exp(
-            -(((xx - cx) ** 2 + (yy - cy) ** 2) / (2.0 * sigma * sigma))
-        )
+        data = a * np.exp(-(((xx - cx) ** 2 + (yy - cy) ** 2) / (2.0 * sigma * sigma)))
     elif kind == "ramp":
         data = a * (xx / max(width - 1, 1))
     elif kind == "random":
@@ -1603,9 +1585,7 @@ def get_image_roi(oid: str) -> list[dict[str, Any]]:
     return out
 
 
-def _build_image_roi(
-    obj: Any, segments: list[dict[str, Any]]
-) -> Any:
+def _build_image_roi(obj: Any, segments: list[dict[str, Any]]) -> Any:
     """Build an :class:`ImageROI` populated with *segments* (physical coords)."""
     from sigima.objects.image.roi import (
         CircularROI,
@@ -1655,9 +1635,7 @@ def _build_image_roi(
                 flat.append(float(pt[1]))
             if len(flat) < 6:
                 raise ValueError("Polygon ROI requires at least 3 vertices")
-            roi.add_roi(
-                PolygonalROI(flat, indices=False, title=title, inverse=inverse)
-            )
+            roi.add_roi(PolygonalROI(flat, indices=False, title=title, inverse=inverse))
         else:
             raise ValueError(f"Unknown ROI geometry: {geometry!r}")
     return roi
@@ -1728,9 +1706,7 @@ def extract_image_rois(oid: str, merged: bool) -> list[str]:
     else:
         for p in params:
             result = sipi.extract_roi(obj, p)
-            out_ids.append(
-                _MODEL.add_object("image", result, group_id=src_group_id)
-            )
+            out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
     return out_ids
 
 
@@ -1927,9 +1903,7 @@ def set_signal_roi(oid: str, segments: list[dict[str, Any]] | None) -> None:
         xmin = float(seg["xmin"])
         xmax = float(seg["xmax"])
         if xmax <= xmin:
-            raise ValueError(
-                f"ROI segment xmin ({xmin}) must be < xmax ({xmax})"
-            )
+            raise ValueError(f"ROI segment xmin ({xmin}) must be < xmax ({xmax})")
         coords.append([xmin, xmax])
         titles.append(str(seg.get("title", "")))
     roi = SignalROI()
@@ -1996,9 +1970,7 @@ def extract_signal_rois(oid: str, merged: bool) -> list[str]:
     else:
         for p in params:
             result = sips.extract_roi(obj, p)
-            out_ids.append(
-                _MODEL.add_object("signal", result, group_id=src_group_id)
-            )
+            out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
     return out_ids
 
 
@@ -2421,10 +2393,7 @@ def parse_text_import(
     preview = []
     for row in rows[: max(0, int(preview_rows))]:
         preview.append(
-            [
-                ("NaN" if (isinstance(v, float) and v != v) else v)
-                for v in row
-            ]
+            [("NaN" if (isinstance(v, float) and v != v) else v) for v in row]
         )
     return {
         "headers": headers,
@@ -2661,9 +2630,7 @@ def apply_feature(
 # Per-object record of the last processing that produced it.  Keyed by the
 # *result* oid; consumed by :func:`get_last_processing` and
 # :func:`reapply_last_processing` to power the "Processing" side panel tab.
-_LAST_PROCESSING: dict[str, dict[str, Any]] = globals().get(
-    "_LAST_PROCESSING", {}
-)
+_LAST_PROCESSING: dict[str, dict[str, Any]] = globals().get("_LAST_PROCESSING", {})
 
 
 def get_last_processing(oid: str) -> dict[str, Any] | None:
@@ -2705,9 +2672,7 @@ def get_last_processing(oid: str) -> dict[str, Any] | None:
     return payload
 
 
-def reapply_last_processing(
-    oid: str, values: dict[str, Any] | None = None
-) -> str:
+def reapply_last_processing(oid: str, values: dict[str, Any] | None = None) -> str:
     """Re-run the last processing that produced *oid* with *values*.
 
     The result replaces *oid* in place: same id, same group position,
@@ -2723,15 +2688,11 @@ def reapply_last_processing(
     catalog = _full_catalog_with_plugins()
     spec = catalog.get(record["feature_id"])
     if spec is None:
-        raise ValueError(
-            f"Processing {record['feature_id']!r} is no longer available."
-        )
+        raise ValueError(f"Processing {record['feature_id']!r} is no longer available.")
     source_ids = record["source_ids"]
     missing = [sid for sid in source_ids if not _MODEL.has(sid)]
     if missing:
-        raise ValueError(
-            "Source object(s) no longer exist: " + ", ".join(missing)
-        )
+        raise ValueError("Source object(s) no longer exist: " + ", ".join(missing))
     operand_id = record["operand_id"]
     if operand_id is not None and not _MODEL.has(operand_id):
         raise ValueError(f"Operand object {operand_id!r} no longer exists.")
@@ -3181,12 +3142,8 @@ _ANALYSIS_CATALOG: dict[str, dict[str, dict[str, Any]]] = globals().get(
     "_ANALYSIS_CATALOG", {}
 )
 if not _ANALYSIS_CATALOG:
-    _ANALYSIS_CATALOG["signal"] = {
-        e["id"]: e for e in _build_signal_analysis_catalog()
-    }
-    _ANALYSIS_CATALOG["image"] = {
-        e["id"]: e for e in _build_image_analysis_catalog()
-    }
+    _ANALYSIS_CATALOG["signal"] = {e["id"]: e for e in _build_signal_analysis_catalog()}
+    _ANALYSIS_CATALOG["image"] = {e["id"]: e for e in _build_image_analysis_catalog()}
 
 
 # Backwards-compat alias for any external code that still refers to it.
@@ -3251,18 +3208,14 @@ def _get_or_create_analysis_param(kind: str, oid: str, func_id: str) -> Any:
     return param
 
 
-def get_signal_analysis_param_schema(
-    oid: str, func_id: str
-) -> dict[str, Any] | None:
+def get_signal_analysis_param_schema(oid: str, func_id: str) -> dict[str, Any] | None:
     """Return the JSON schema for *func_id*'s parameter set, with the
     cached values for *oid* pre-filled.  Returns ``None`` for parameter-
     less analyses."""
     return _get_analysis_param_schema("signal", oid, func_id)
 
 
-def get_image_analysis_param_schema(
-    oid: str, func_id: str
-) -> dict[str, Any] | None:
+def get_image_analysis_param_schema(oid: str, func_id: str) -> dict[str, Any] | None:
     """Image-side counterpart of :func:`get_signal_analysis_param_schema`."""
     return _get_analysis_param_schema("image", oid, func_id)
 
@@ -3325,9 +3278,7 @@ def _build_pulse_overlays(result: Any, obj: Any) -> list[dict[str, Any]]:
                 return False
         return True
 
-    def _push_segment(
-        x0: float, y0: float, x1: float, y1: float, label: str
-    ) -> None:
+    def _push_segment(x0: float, y0: float, x1: float, y1: float, label: str) -> None:
         overlays.append(
             {
                 "kind": "segment",
@@ -3389,9 +3340,7 @@ def _build_pulse_overlays(result: Any, obj: Any) -> list[dict[str, Any]]:
     return overlays
 
 
-def _serialize_result(
-    result: Any, key: str, obj: Any | None = None
-) -> dict[str, Any]:
+def _serialize_result(result: Any, key: str, obj: Any | None = None) -> dict[str, Any]:
     """Build a JSON-friendly payload describing one analysis result."""
     from sigima.objects.scalar import GeometryResult, TableResult
 
@@ -3560,8 +3509,7 @@ def clear_signal_results(oid: str, metadata_key: str | None = None) -> int:
     to_drop = [
         k
         for k in list(obj.metadata.keys())
-        if (k.startswith("Geometry_") or k.startswith("Table_"))
-        and k.endswith("_dict")
+        if (k.startswith("Geometry_") or k.startswith("Table_")) and k.endswith("_dict")
     ]
     for k in to_drop:
         obj.metadata.pop(k, None)
@@ -3783,9 +3731,7 @@ def open_workspace_from_bytes(
                                 grp_title = group_name
                             gid = _MODEL.create_group(kind, name=grp_title)
                             counts["groups"] += 1
-                            for obj_name in list(
-                                reader.h5[f"{prefix}/{group_name}"]
-                            ):
+                            for obj_name in list(reader.h5[f"{prefix}/{group_name}"]):
                                 if obj_name == "title":
                                     continue
                                 with reader.group(obj_name):

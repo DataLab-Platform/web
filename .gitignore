@@ -8,9 +8,26 @@ build/
 .vscode/*.log
 .idea/
 
+# Local environment (copy from .env.template)
+.env
+
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.coverage
+coverage-python.xml
+htmlcov-python/
+.venv/
+venv/
+
+# TypeScript / Vitest
+coverage-ts/
+
+# Playwright
+playwright-report/
+test-results/
+.playwright/
 
 # OS
 .DS_Store

@@ -49,7 +49,6 @@ from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 from datalab.config import Conf, MOD_NAME, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
-from datalab.errors import BrowserNotSupportedError
 
 if TYPE_CHECKING:
     from sigima.objects import NewImageParam, NewSignalParam
@@ -87,9 +86,7 @@ class PluginRegistry(type):
         return cls._plugin_instances
 
     @classmethod
-    def get_plugin(
-        cls, name_or_class: str | type[PluginBase]
-    ) -> PluginBase | None:
+    def get_plugin(cls, name_or_class: str | type[PluginBase]) -> PluginBase | None:
         """Return plugin instance by name or class."""
         for plugin in cls._plugin_instances:
             if name_or_class in (plugin.info.name, plugin.__class__):
@@ -148,9 +145,7 @@ class PluginRegistry(type):
         cls._discovery_errors.clear()
 
     @classmethod
-    def add_failed_plugin(
-        cls, name: str, filepath: str, tb_text: str
-    ) -> None:
+    def add_failed_plugin(cls, name: str, filepath: str, tb_text: str) -> None:
         """Record information about a plugin that failed to load."""
         cls._failed_plugins.append(FailedPluginInfo(name, filepath, tb_text))
 
@@ -178,10 +173,7 @@ class PluginRegistry(type):
             if plugins:
                 text = italic(_("Registered plugins:")) + linesep
                 for plugin in plugins:
-                    text += (
-                        f"{bullet}{plugin.info.name} "
-                        f"({plugin.info.version})"
-                    )
+                    text += f"{bullet}{plugin.info.name} ({plugin.info.version})"
                     if plugin.info.description:
                         text += f": {plugin.info.description}"
                     text += linesep
@@ -226,9 +218,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self._is_registered = False
         self.info = self.PLUGIN_INFO
         if self.info is None:
-            raise ValueError(
-                f"Plugin info not set for {self.__class__.__name__}"
-            )
+            raise ValueError(f"Plugin info not set for {self.__class__.__name__}")
 
     # -- Convenience accessors -----------------------------------------
 
@@ -271,9 +261,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         """Ask a yes/no(/cancel) question."""
         from datalab import helpers
 
-        return helpers.ask_question(
-            message, title=title, cancelable=cancelable
-        )
+        return helpers.ask_question(message, title=title, cancelable=cancelable)
 
     def edit_new_signal_parameters(
         self,
@@ -451,9 +439,7 @@ def discover_plugins() -> list:
 def reload_plugin_modules() -> None:
     """Reload plugin modules (alias kept for Qt parity)."""
     for modname in list(sys.modules):
-        if modname.startswith(f"{MOD_NAME}_") or modname.startswith(
-            "datalab_"
-        ):
+        if modname.startswith(f"{MOD_NAME}_") or modname.startswith("datalab_"):
             try:
                 importlib.reload(sys.modules[modname])
             except Exception:  # pylint: disable=broad-except

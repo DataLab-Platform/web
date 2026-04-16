@@ -1,0 +1,59 @@
+# DataLab-Web is a JavaScript/TypeScript project (see ``package.json``).
+# This ``pyproject.toml`` only carries Python tooling configuration for the
+# automated test suite that exercises the in-browser Python layer
+# (``src/sigima/*.py``) headlessly under CPython.
+#
+# Python 3.11+ is required: ``src/sigima/processor.py`` relies on
+# ``isinstance(list[SignalObj], type)`` returning ``False``, which is broken
+# under CPython 3.9 and 3.10 (both report ``True``) and was fixed in 3.11.
+
+[project]
+name = "datalab-web-tests"
+version = "0.0.0"
+description = "Test-only Python configuration for DataLab-Web"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests/python"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--tb=short",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:sigima.*",
+    "ignore::DeprecationWarning:guidata.*",
+]
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/sigima"]
+omit = [
+    # Pyodide-only glue is not exercised under CPython.
+    "*/macro_proxy.py",
+    "*/_guidata_backends_shim.py",
+    "*/_guidata_jsonschema_shim.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov-python"
+
+[tool.coverage.xml]
+output = "coverage-python.xml"

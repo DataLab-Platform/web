@@ -77,8 +77,7 @@ def _patch_dataset_methods() -> None:
 
     original_edit = DataSet.edit
 
-    def edit(self, parent=None, apply=None, wordwrap=True, size=None,
-             object_name=None):
+    def edit(self, parent=None, apply=None, wordwrap=True, size=None, object_name=None):
         handler = get_handler("edit_dataset")
         if handler is not None:
             return handler(
@@ -98,8 +97,9 @@ def _patch_dataset_methods() -> None:
             object_name=object_name,
         )
 
-    async def edit_async(self, parent=None, apply=None, wordwrap=True,
-                          size=None, object_name=None):
+    async def edit_async(
+        self, parent=None, apply=None, wordwrap=True, size=None, object_name=None
+    ):
         handler = get_handler("edit_dataset_async")
         if handler is not None:
             return await handler(

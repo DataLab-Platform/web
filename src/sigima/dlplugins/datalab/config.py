@@ -51,9 +51,7 @@ class _MainSection:
     plugins_enabled = _ConfigOption("plugins_enabled", True)
     plugins_enabled_list = _ConfigOption("plugins_enabled_list", None)
     plugins_path = _ConfigOption("plugins_path", "/plugins")
-    traceback_log_available = _ConfigOption(
-        "traceback_log_available", False
-    )
+    traceback_log_available = _ConfigOption("traceback_log_available", False)
 
 
 class Conf:

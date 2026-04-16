@@ -132,9 +132,7 @@ def dataset_to_schema(dataset_cls: type[gdt.DataSet]) -> dict[str, Any]:
         1
     """
     if not (inspect.isclass(dataset_cls) and issubclass(dataset_cls, gdt.DataSet)):
-        raise TypeError(
-            f"Expected a DataSet subclass, got {dataset_cls!r}"
-        )
+        raise TypeError(f"Expected a DataSet subclass, got {dataset_cls!r}")
 
     # Use a transient instance to obtain the title/comment computed by
     # ``DataSetMeta`` from the docstring, without paying for it twice.
@@ -145,8 +143,9 @@ def dataset_to_schema(dataset_cls: type[gdt.DataSet]) -> dict[str, Any]:
     properties: dict[str, dict[str, Any]] = {}
     required: list[str] = []
     property_order: list[str] = []
-    layout = _build_layout_tree(dataset_cls._items, properties, required,
-                                property_order)
+    layout = _build_layout_tree(
+        dataset_cls._items, properties, required, property_order
+    )
 
     module = dataset_cls.__module__
     qualname = dataset_cls.__qualname__
@@ -364,9 +363,7 @@ def _item_to_property(item: gdt.DataItem, order: int) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _numeric_to_property(
-    item: gdi.NumericTypeItem, kind: str
-) -> dict[str, Any]:
+def _numeric_to_property(item: gdi.NumericTypeItem, kind: str) -> dict[str, Any]:
     json_type = "integer" if kind == "int" else "number"
     prop: dict[str, Any] = {
         "type": json_type,
@@ -479,8 +476,7 @@ def _choice_to_property(item: gdi.ChoiceItem) -> dict[str, Any]:
     elif all(isinstance(v, int) and not isinstance(v, bool) for v in enum_values):
         prop["type"] = "integer"
     elif all(
-        isinstance(v, (int, float)) and not isinstance(v, bool)
-        for v in enum_values
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in enum_values
     ):
         prop["type"] = "number"
     return prop
@@ -492,8 +488,7 @@ def _multiple_choice_to_property(item: gdi.MultipleChoiceItem) -> dict[str, Any]
     item_type = base.get("type", "string")
     prop: dict[str, Any] = {
         "type": "array",
-        "items": {"type": item_type, "enum": enum_values} if enum_values
-        else {},
+        "items": {"type": item_type, "enum": enum_values} if enum_values else {},
         "uniqueItems": True,
         "x-guidata-kind": "multiple_choice",
         "x-guidata-choices": base.get("x-guidata-choices", []),
@@ -552,9 +547,7 @@ def _dict_to_property(item: gdi.DictItem) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _add_common_keys(
-    item: gdt.DataItem, prop: dict[str, Any], order: int
-) -> None:
+def _add_common_keys(item: gdt.DataItem, prop: dict[str, Any], order: int) -> None:
     """Augment *prop* with keys shared by every item kind."""
     name = item.get_name()
     label = _label(item)

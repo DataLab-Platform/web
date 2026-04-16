@@ -58,9 +58,7 @@ class WebMainBridge:
             for _oid, obj in self._model().iter_all(panel)
         ]
 
-    def get_object_uuids(
-        self, panel: str, group: int | str | None = None
-    ) -> list[str]:
+    def get_object_uuids(self, panel: str, group: int | str | None = None) -> list[str]:
         model = self._model()
         if group is None:
             return [oid for oid, _ in model.iter_all(panel)]
@@ -74,9 +72,7 @@ class WebMainBridge:
             target = p.find_group(str(group))
         return list(target.object_ids)
 
-    def get_object(
-        self, nb_id_title: int | str | None, panel: str
-    ) -> Any:
+    def get_object(self, nb_id_title: int | str | None, panel: str) -> Any:
         model = self._model()
         if nb_id_title is None:
             uids = self.get_object_uuids(panel)
@@ -96,18 +92,14 @@ class WebMainBridge:
                 return obj
         raise KeyError(f"Object not found: {nb_id_title!r}")
 
-    def get_sel_object_uuids(
-        self, include_groups: bool = False
-    ) -> list[str]:
+    def get_sel_object_uuids(self, include_groups: bool = False) -> list[str]:
         # No selection model in the browser bridge — plugins should pass
         # explicit ids. Return everything as a benign default.
         return self.get_object_uuids(self._current_panel)
 
     # -- Object mutation -----------------------------------------------
 
-    def add_object(
-        self, kind: str, obj: Any, group_id: str | None = None
-    ) -> str:
+    def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
         return self._model().add_object(kind, obj, group_id=group_id)
 
     def add_group(self, panel: str, title: str) -> str:
@@ -141,9 +133,7 @@ class WebMainBridge:
             raise KeyError(f"Unknown feature: {name!r}")
         uids = self.get_object_uuids(spec.object_kind)
         if not uids:
-            raise RuntimeError(
-                f"Cannot apply {name!r}: no source object available"
-            )
+            raise RuntimeError(f"Cannot apply {name!r}: no source object available")
         # Convert DataSet param instance to dict for the apply API.
         params: dict[str, Any] | None = None
         if param is not None:
