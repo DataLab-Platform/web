@@ -11,11 +11,11 @@ This module exposes a UI-framework-agnostic representation of guidata
 :class:`~guidata.dataset.DataSet` classes as `JSON Schema 2020-12`_
 documents, augmented with ``x-guidata-*`` extension keywords for the
 guidata-specific concerns that JSON Schema cannot natively express
-(groups, tabs, units, choice labels, dynamic choices, image icons, …).
+(groups, tabs, units, choice labels, dynamic choices, image icons, ...).
 
 It is the non-Qt equivalent of :mod:`guidata.dataset.qtwidgets`: it
 *describes* the form to be rendered, leaving the actual rendering to
-any frontend (web, CLI, notebook, …).
+any frontend (web, CLI, notebook, ...).
 
 .. _JSON Schema 2020-12: https://json-schema.org/draft/2020-12/schema
 
@@ -74,6 +74,16 @@ Items not supported (raise :class:`NotImplementedError`):
 ``ButtonItem`` (callbacks cannot cross JSON), and conditional visibility
 through callable ``active`` props.
 """
+
+# This module replicates an upstream guidata feature (JSON-schema export
+# for DataSet classes). It needs to read documented internals
+# (``DataItem._help``, ``DataSet._items``) to reproduce the same labels
+# and tooltips as the Qt UI. The deferred imports avoid importing the
+# rest of guidata when only the schema converter is needed; the broad
+# ``except`` in the image lookup mirrors the upstream best-effort
+# behaviour.
+# pylint: disable=protected-access,import-outside-toplevel,wrong-import-position
+# pylint: disable=broad-exception-caught,too-many-return-statements
 
 from __future__ import annotations
 
@@ -279,6 +289,7 @@ def _inside_tab_group(stack: list[list[Any]], root: list[Any]) -> bool:
     """Return True if the current open container is a ``tab-group``.
     Walked by inspecting the parent of the current top.
     """
+    del root  # signature keeps ``root`` for symmetry with ``_open_group``
     if len(stack) < 2:
         return False
     parent = stack[-2]
@@ -535,6 +546,8 @@ def _float_array_to_property(item: gdi.FloatArrayItem) -> dict[str, Any]:
 
 
 def _dict_to_property(item: gdi.DictItem) -> dict[str, Any]:
+    """Return the JSON-Schema fragment for a :class:`DictItem`."""
+    del item  # uniform signature with the other ``_*_to_property`` helpers
     return {
         "type": "object",
         "additionalProperties": True,
@@ -585,6 +598,7 @@ def _add_common_keys(item: gdt.DataItem, prop: dict[str, Any], order: int) -> No
 
 def _choice_entry(item: gdi.ChoiceItem, choice: tuple[Any, ...]) -> dict[str, Any]:
     """Normalise a guidata choice tuple ``(key, label, image)``."""
+    del item  # signature kept for parity with the other ``_*_entry`` helpers
     if not isinstance(choice, tuple) or len(choice) < 2:
         return {"value": choice, "label": str(choice)}
     key, label = choice[0], choice[1]
@@ -658,7 +672,7 @@ def _get_item(instance: gdt.DataSet, name: str) -> gdt.DataItem:
 # the helpers defined above on the ``guidata.dataset`` namespace so that
 # ``from guidata.dataset import dataset_to_schema_with_values`` works
 # unchanged inside ``bootstrap.py``.
-import guidata.dataset as _gds_pkg
+import guidata.dataset as _gds_pkg  # noqa: E402  # late import on purpose
 
 for _name in (
     "dataset_to_schema",

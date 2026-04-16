@@ -9,6 +9,14 @@ to the live :class:`bootstrap.ObjectModel` so HMR re-execution of
 load time.
 """
 
+# This module talks to ``bootstrap.py`` through its module-level globals
+# (``_MODEL``, ``_CATALOG``, ``ObjectModel``); these are the documented
+# integration surface for the Pyodide bridge, hence the file-wide opt-out
+# of ``protected-access`` (W0212). The lazy guidata import in ``calc`` is
+# intentional too: ``guidata.dataset.dataset_to_json`` is only needed when
+# a plugin actually invokes ``main.calc(name, param)``.
+# pylint: disable=protected-access,import-outside-toplevel
+
 from __future__ import annotations
 
 import importlib
@@ -43,9 +51,11 @@ class WebMainBridge:
     # -- Panel state ---------------------------------------------------
 
     def get_current_panel(self) -> str:
+        """Return the active panel kind (``"signal"`` or ``"image"``)."""
         return self._current_panel
 
     def set_current_panel(self, panel: str) -> None:
+        """Set the active panel kind. Raises :class:`ValueError` for unknown panels."""
         if panel not in ("signal", "image"):
             raise ValueError(f"Unknown panel: {panel!r}")
         self._current_panel = panel
@@ -53,12 +63,14 @@ class WebMainBridge:
     # -- Object queries ------------------------------------------------
 
     def get_object_titles(self, panel: str) -> list[str]:
+        """Return the titles of every object hosted by *panel*."""
         return [
             getattr(obj, "title", "") or ""
             for _oid, obj in self._model().iter_all(panel)
         ]
 
     def get_object_uuids(self, panel: str, group: int | str | None = None) -> list[str]:
+        """Return UUIDs in *panel*, optionally restricted to *group*."""
         model = self._model()
         if group is None:
             return [oid for oid, _ in model.iter_all(panel)]
@@ -73,6 +85,7 @@ class WebMainBridge:
         return list(target.object_ids)
 
     def get_object(self, nb_id_title: int | str | None, panel: str) -> Any:
+        """Resolve *nb_id_title* (UUID, 1-based index, title, or ``None``) to an object."""
         model = self._model()
         if nb_id_title is None:
             uids = self.get_object_uuids(panel)
@@ -87,30 +100,39 @@ class WebMainBridge:
         if model.has(nb_id_title):
             return model.get(nb_id_title)
         # Fall back to title lookup
-        for oid, obj in model.iter_all(panel):
+        for _oid, obj in model.iter_all(panel):
             if getattr(obj, "title", None) == nb_id_title:
                 return obj
         raise KeyError(f"Object not found: {nb_id_title!r}")
 
     def get_sel_object_uuids(self, include_groups: bool = False) -> list[str]:
-        # No selection model in the browser bridge — plugins should pass
-        # explicit ids. Return everything as a benign default.
+        """Return all UUIDs in the current panel.
+
+        The browser bridge has no live selection model, so *include_groups*
+        is accepted for desktop API compatibility but ignored.
+        """
+        del include_groups  # unused (desktop-API compatibility)
         return self.get_object_uuids(self._current_panel)
 
     # -- Object mutation -----------------------------------------------
 
     def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
+        """Add *obj* of *kind* (``"signal"`` / ``"image"``) to *group_id*."""
         return self._model().add_object(kind, obj, group_id=group_id)
 
     def add_group(self, panel: str, title: str) -> str:
+        """Create a new group titled *title* in *panel* and return its id."""
         return self._model().create_group(panel, title)
 
     def remove_selected_objects(self, force: bool = False) -> None:
-        # Browser has no live selection — plugins should call
-        # ``model.delete_object(oid)`` explicitly instead.
-        return None
+        """No-op on the browser bridge (no live selection model).
+
+        Plugins should call ``model.delete_object(oid)`` explicitly.
+        """
+        del force  # unused (desktop-API compatibility)
 
     def reset_all(self) -> None:
+        """Replace the live object model with a fresh, empty one."""
         bootstrap = self._bootstrap()
         # Replace the live model with a fresh instance; bootstrap.py keeps
         # the binding via globals() so HMR reuses it.

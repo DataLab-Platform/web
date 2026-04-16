@@ -13,7 +13,7 @@ import pytest
 def test_save_load_project_round_trip(fresh_bootstrap):
     bs = fresh_bootstrap
     x = np.linspace(0, 1, 50)
-    a = bs.add_signal_from_arrays("A", x, np.sin(x), xunit="s", yunit="V")
+    bs.add_signal_from_arrays("A", x, np.sin(x), xunit="s", yunit="V")
     gid = bs.create_group("signal", "Group2")
     b = bs.add_signal_from_arrays("B", x, np.cos(x))
     bs.move_object(b, gid)

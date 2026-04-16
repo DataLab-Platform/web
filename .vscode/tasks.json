@@ -17,9 +17,14 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "statusbar": { "hide": true }
+        "statusbar": {
+          "hide": true
+        }
       },
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {
@@ -39,17 +44,28 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "statusbar": { "hide": true }
+        "statusbar": {
+          "hide": true
+        }
       },
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {
       "label": "🧽🔦 Ruff",
       "dependsOrder": "sequence",
-      "dependsOn": ["🧽 Ruff Formatter", "🔦 Ruff Linter"],
+      "dependsOn": [
+        "🧽 Ruff Formatter",
+        "🔦 Ruff Linter"
+      ],
       "group": "build",
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {
@@ -61,41 +77,52 @@
         "${command:python.interpreterPath}",
         "-m",
         "pylint",
-        "src/sigima",
-        "--disable=duplicate-code",
-        "--disable=fixme",
-        "--disable=too-many-arguments",
-        "--disable=too-many-branches",
-        "--disable=too-many-instance-attributes",
-        "--disable=too-many-lines",
-        "--disable=too-many-locals",
-        "--disable=too-many-public-methods",
-        "--disable=too-many-statements",
-        "--disable=too-many-positional-arguments"
+        "src/sigima"
       ],
-      "options": { "cwd": "${workspaceFolder}" },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": "build",
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {
       "label": "🟦 ESLint (TS)",
       "type": "shell",
       "command": "npm",
-      "args": ["run", "lint"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "args": [
+        "run",
+        "lint"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": "build",
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {
       "label": "🧽 Prettier (TS)",
       "type": "shell",
       "command": "npm",
-      "args": ["run", "format"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "args": [
+        "run",
+        "format"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": "build",
-      "presentation": { "panel": "dedicated", "reveal": "always" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
       "problemMatcher": []
     },
     {

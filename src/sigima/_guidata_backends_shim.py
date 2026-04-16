@@ -13,6 +13,12 @@ provides ``guidata.dataset.backends``, this module is a no-op.
 
 from __future__ import annotations
 
+# This module shims a feature that newer ``guidata`` releases will ship
+# natively (the ``guidata.dataset.backends`` registry). All the deferred
+# imports and the ``DataSet._dlw_backend_patched_`` flag exist precisely
+# so the patching is idempotent and reuses the upstream implementation
+# when it becomes available.
+# pylint: disable=import-outside-toplevel,protected-access,import-error
 import sys
 import types
 from typing import Any, Callable

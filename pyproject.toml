@@ -57,3 +57,46 @@ directory = "htmlcov-python"
 
 [tool.coverage.xml]
 output = "coverage-python.xml"
+
+[tool.pylint.MASTER]
+# ``__init__.py`` does not exist (the modules live under ``src/sigima`` and
+# are pushed into Pyodide individually); list the files explicitly so the
+# rare scenarios where users invoke ``pylint src/sigima`` still work.
+ignore-paths = ["src/sigima/dlplugins", "src/sigima/builtin_plugins"]
+
+[tool.pylint."MESSAGES CONTROL"]
+# Project-wide disables — each is justified by a recurring DataLab-Web
+# pattern that is intentional and not actionable on a per-call basis.
+disable = [
+    # Stylistic complexity rules — DataLab desktop disables the same set;
+    # the in-browser bridge inherits the long Sigima-style entry points.
+    "duplicate-code",
+    "fixme",
+    "too-many-arguments",
+    "too-many-branches",
+    "too-many-instance-attributes",
+    "too-many-lines",
+    "too-many-locals",
+    "too-many-public-methods",
+    "too-many-statements",
+    "too-many-positional-arguments",
+]
+
+[tool.pylint.TYPECHECK]
+# ``js`` and ``pyodide.ffi`` only resolve inside Pyodide; ``datalab`` and
+# ``datalab.plugins`` resolve only when the user-shipped ``datalab`` shim
+# package is mounted under ``/home/pyodide``. ``dlw_*`` are sibling
+# modules pushed into Pyodide's filesystem alongside ``bootstrap.py``.
+# Tell pylint they are real.
+ignored-modules = [
+    "js",
+    "pyodide",
+    "pyodide.ffi",
+    "datalab",
+    "datalab.plugins",
+    "datalab.registries",
+    "datalab.errors",
+    "dlw_processor",
+    "dlw_interactive_fit",
+    "dlw_h5browser",
+]

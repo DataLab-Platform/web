@@ -20,14 +20,29 @@ when it changes.  We therefore preserve the live :data:`_MODEL` and
 :data:`_CATALOG` so user data is not wiped when only helpers change.
 """
 
+# bootstrap.py introspects its own ``ObjectModel`` internals (``_panels``,
+# ``_objects``) when serialising/deserialising HDF5 workspaces — the ``noqa:
+# SLF001`` markers already document each access for ruff. The HDF5 helpers
+# also lazily import heavy optional dependencies (``os``, ``tempfile``,
+# ``re``, ``guidata.io``…) inside the function body so the module loads
+# fast in Pyodide. ``except Exception`` is the desktop-DataLab convention
+# for "best-effort H5 read; never abort on a malformed dataset".
+# pylint: disable=protected-access,import-outside-toplevel,broad-exception-caught
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+import dlw_interactive_fit as _ifit
+
+# ``dlw_processor`` / ``dlw_interactive_fit`` / ``dlw_h5browser`` are
+# sibling modules pushed into Pyodide's filesystem alongside this one;
+# pylint sees them as third-party because they live outside any package.
+# pylint: disable=wrong-import-order,ungrouped-imports,import-error
+import dlw_processor as _proc
 import numpy as np
-import sigima
 from sigima.objects import SignalObj
 from sigima.objects.signal.creation import (
     SIGNAL_TYPE_PARAM_CLASSES,
@@ -36,8 +51,7 @@ from sigima.objects.signal.creation import (
 )
 from sigima.objects.signal.roi import SignalROI
 
-import dlw_processor as _proc
-import dlw_interactive_fit as _ifit
+import sigima
 
 # Re-export interactive-fit helpers as module-level callables so the JS
 # runtime can resolve them via ``py.globals.get(...)``.
@@ -85,6 +99,7 @@ class _Panel:
     default_group_name: str = "Group"
 
     def ensure_default_group(self) -> _Group:
+        """Return the first group, creating one when the panel is empty."""
         if not self.groups:
             self.groups.append(
                 _Group(gid=_new_id("g"), name=f"{self.default_group_name} 1")
@@ -92,12 +107,14 @@ class _Panel:
         return self.groups[0]
 
     def find_group(self, gid: str) -> _Group:
+        """Return the group with id *gid* (raises :class:`KeyError`)."""
         for g in self.groups:
             if g.gid == gid:
                 return g
         raise KeyError(f"Unknown group: {gid!r}")
 
     def find_group_of(self, oid: str) -> _Group:
+        """Return the group containing object *oid*."""
         for g in self.groups:
             if oid in g.object_ids:
                 return g
@@ -118,6 +135,7 @@ class ObjectModel:
     # -- Panel access -------------------------------------------------------
 
     def panel(self, kind: str) -> _Panel:
+        """Return (creating on first access) the panel for *kind*."""
         if kind not in self._panels:
             self._panels[kind] = _Panel(kind=kind)
         return self._panels[kind]
@@ -125,17 +143,21 @@ class ObjectModel:
     # -- Object access ------------------------------------------------------
 
     def get(self, oid: str) -> Any:
+        """Return the object identified by *oid*."""
         return self._objects[oid].obj
 
     def kind_of(self, oid: str) -> str:
+        """Return the panel kind hosting object *oid*."""
         return self._objects[oid].kind
 
     def has(self, oid: str) -> bool:
+        """Return True if *oid* is a known object id."""
         return oid in self._objects
 
     # -- Object mutation ----------------------------------------------------
 
     def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
+        """Insert *obj* in *kind*'s panel (in *group_id* or default group)."""
         panel = self.panel(kind)
         group = panel.find_group(group_id) if group_id else panel.ensure_default_group()
         oid = _new_id()
@@ -144,6 +166,7 @@ class ObjectModel:
         return oid
 
     def delete_object(self, oid: str) -> None:
+        """Remove object *oid* from its panel (silent no-op if absent)."""
         if oid not in self._objects:
             return
         kind = self._objects[oid].kind
@@ -155,6 +178,7 @@ class ObjectModel:
                 break
 
     def move_object(self, oid: str, target_group_id: str) -> None:
+        """Move object *oid* to *target_group_id* within its panel."""
         kind = self._objects[oid].kind
         panel = self.panel(kind)
         target = panel.find_group(target_group_id)
@@ -165,12 +189,14 @@ class ObjectModel:
         target.object_ids.append(oid)
 
     def rename_object(self, oid: str, name: str) -> None:
+        """Rename object *oid* in place."""
         obj = self._objects[oid].obj
         obj.title = name
 
     # -- Group mutation -----------------------------------------------------
 
     def create_group(self, kind: str, name: str | None = None) -> str:
+        """Create a new group on *kind* and return its gid."""
         panel = self.panel(kind)
         if name is None:
             name = f"{panel.default_group_name} {len(panel.groups) + 1}"
@@ -179,9 +205,11 @@ class ObjectModel:
         return gid
 
     def rename_group(self, kind: str, gid: str, name: str) -> None:
+        """Rename group *gid* of *kind* in place."""
         self.panel(kind).find_group(gid).name = name
 
     def delete_group(self, kind: str, gid: str) -> None:
+        """Delete group *gid* of *kind* and all its objects."""
         panel = self.panel(kind)
         group = panel.find_group(gid)
         for oid in list(group.object_ids):
@@ -193,6 +221,7 @@ class ObjectModel:
     # -- Serialisation ------------------------------------------------------
 
     def panel_tree(self, kind: str) -> dict[str, Any]:
+        """Return the JSON-friendly tree of groups and objects for *kind*."""
         panel = self.panel(kind)
         panel.ensure_default_group()
         return {
@@ -212,6 +241,7 @@ class ObjectModel:
         }
 
     def iter_all(self, kind: str) -> Iterable[tuple[str, Any]]:
+        """Iterate over ``(oid, obj)`` pairs of *kind*."""
         for entry in self._objects.values():
             if entry.kind == kind:
                 yield entry.oid, entry.obj
@@ -429,7 +459,7 @@ _DIALOG_BRIDGE: Any = globals().get("_DIALOG_BRIDGE", None)
 
 def set_dialog_bridge(bridge: Any) -> None:
     """Install the JS bridge used by async guidata/datalab dialogs."""
-    global _DIALOG_BRIDGE
+    global _DIALOG_BRIDGE  # pylint: disable=global-statement  # singleton bridge
     _DIALOG_BRIDGE = bridge
 
 
@@ -446,6 +476,7 @@ async def _async_edit_dataset(
     instance: Any, parent: Any = None, **_kwargs: Any
 ) -> bool:
     """Async :meth:`DataSet.edit` handler routed through the JS bridge."""
+    del parent  # signature compat with guidata's sync ``edit`` API
     from guidata.dataset import dataset_to_schema_with_values, update_dataset
 
     bridge = _require_bridge("edit_dataset_async")
@@ -497,11 +528,11 @@ def _install_datalab_shim() -> None:
     * the bridge into :mod:`dlw_plugins` so plugin ``register()`` works.
     """
     try:
-        from datalab.gui.main import install_main as _install_main
-        from datalab import helpers as _dl_helpers
-        from guidata.dataset import backends as _gds_backends
         import dlw_main as _dlw_main
         import dlw_plugins as _dlw_plugins
+        from datalab import helpers as _dl_helpers
+        from datalab.gui.main import install_main as _install_main
+        from guidata.dataset import backends as _gds_backends
     except Exception:  # pragma: no cover - shim missing in standalone tests
         print("[bootstrap] datalab.* shim unavailable; plugins disabled")
         return
@@ -868,8 +899,6 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
 def _safe_stat(fn, arr) -> float | None:
     """Return ``fn(arr)`` as a float, or ``None`` when the array is
     empty or the value is non-finite (NaN / Inf)."""
-    import numpy as np
-
     if arr is None or len(arr) == 0:
         return None
     try:
@@ -887,8 +916,6 @@ def get_object_stats(oid: str) -> dict[str, Any]:
     Mirrors the "Statistics" panel of DataLab desktop — a compact
     read-only dashboard shown above the editable Properties form.
     """
-    import numpy as np
-
     obj = _MODEL.get(oid)
     kind = _MODEL.kind_of(oid)
     if kind == "signal":
@@ -1076,6 +1103,7 @@ def open_signal_from_bytes(
     """
     import os
     import tempfile
+
     from sigima.io import read_signals
 
     # Pyodide passes ``Uint8Array`` as a ``memoryview``-like JsProxy: convert
@@ -1138,6 +1166,7 @@ def save_signal_to_bytes(oid: str, filename: str) -> bytes:
     """
     import os
     import tempfile
+
     from sigima.io import write_signal
 
     obj = _MODEL.get(oid)
@@ -1203,6 +1232,7 @@ def open_image_from_bytes(
     """
     import os
     import tempfile
+
     from sigima.io import read_images
 
     if hasattr(data, "to_py"):
@@ -1238,6 +1268,7 @@ def save_image_to_bytes(oid: str, filename: str) -> bytes:
     """
     import os
     import tempfile
+
     from sigima.io import write_image
 
     obj = _MODEL.get(oid)
@@ -1321,13 +1352,14 @@ def delete_signal(oid: str) -> None:
 
 from sigima.objects.image.creation import (  # noqa: E402  pylint: disable=wrong-import-position
     DEFAULT_TITLE as _IMAGE_DEFAULT_TITLE,
+)
+from sigima.objects.image.creation import (
     IMAGE_TYPE_PARAM_CLASSES,
     ImageTypes,
     NewImageParam,
     create_image_from_param,
     create_image_parameters,
 )
-
 
 # Display order mirrors DataLab desktop's "Create" image menu.
 # ``True`` in the second column means a separator is drawn *before* the entry.
@@ -1587,6 +1619,7 @@ def get_image_roi(oid: str) -> list[dict[str, Any]]:
 
 def _build_image_roi(obj: Any, segments: list[dict[str, Any]]) -> Any:
     """Build an :class:`ImageROI` populated with *segments* (physical coords)."""
+    del obj  # API compat with the signal counterpart (``_build_signal_roi``)
     from sigima.objects.image.roi import (
         CircularROI,
         ImageROI,
@@ -2169,7 +2202,9 @@ def import_signal_csv(
     first_fields = raw_lines[0].split(separator)
     header = None
     try:
-        [float(c.strip()) for c in first_fields[:2]]
+        # Probe: are the first two fields parseable as floats?
+        for c in first_fields[:2]:
+            float(c.strip())
         data_start = 0
     except ValueError:
         header = first_fields
@@ -2393,6 +2428,8 @@ def parse_text_import(
     preview = []
     for row in rows[: max(0, int(preview_rows))]:
         preview.append(
+            # ``v != v`` is the canonical NaN check for plain Python floats.
+            # pylint: disable-next=comparison-with-itself
             [("NaN" if (isinstance(v, float) and v != v) else v) for v in row]
         )
     return {
@@ -2738,12 +2775,14 @@ def list_processings() -> list[dict[str, Any]]:
 
 
 def get_processing_schema(processing_id: str) -> dict[str, Any] | None:
+    """Backwards-compatible alias for :func:`get_feature_schema`."""
     return get_feature_schema(processing_id)
 
 
 def resolve_processing_choices(
     processing_id: str, item_name: str, values: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
+    """Backwards-compatible alias for :func:`resolve_feature_choices`."""
     return resolve_feature_choices(processing_id, item_name, values)
 
 
@@ -3272,7 +3311,9 @@ def _build_pulse_overlays(result: Any, obj: Any) -> list[dict[str, Any]]:
             if v is None:
                 return False
             try:
-                if isinstance(v, float) and (v != v):  # NaN
+                # Canonical NaN check for plain Python floats.
+                # pylint: disable-next=comparison-with-itself
+                if isinstance(v, float) and (v != v):
                     return False
             except Exception:
                 return False
@@ -3606,6 +3647,7 @@ def save_workspace_to_bytes() -> bytes:
     """
     import os
     import tempfile
+
     from guidata.io import HDF5Writer
 
     tmpdir = tempfile.mkdtemp(prefix="dlw_h5save_")
@@ -3689,6 +3731,7 @@ def open_workspace_from_bytes(
     """
     import os
     import tempfile
+
     from guidata.io import HDF5Reader
     from sigima.objects import ImageObj as _ImageObj
 

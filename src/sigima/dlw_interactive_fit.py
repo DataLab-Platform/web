@@ -17,12 +17,11 @@ powers the headless / automatic fits).
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import numpy as np
-
 from sigima.tools.signal import fitting as _fit
-
 
 # ---------------------------------------------------------------------------
 # Catalogue of interactive fit kinds
@@ -31,6 +30,9 @@ from sigima.tools.signal import fitting as _fit
 
 class _FitKind:
     """One interactive fit kind: label + computer factory."""
+
+    # Holder dataclass-style — a single ``make_computer`` method is enough.
+    # pylint: disable=too-few-public-methods
 
     def __init__(
         self,
@@ -49,6 +51,7 @@ class _FitKind:
     def make_computer(
         self, x: np.ndarray, y: np.ndarray, extras: dict[str, Any] | None
     ) -> _fit.FitComputer:
+        """Instantiate the wrapped computer with the parameters from *extras*."""
         if self.needs_degree:
             degree = int((extras or {}).get("degree", 3))
             return self.computer(x, y, degree=degree)  # type: ignore[call-arg]
@@ -147,10 +150,8 @@ def _make_param_descriptors(
             span = max(abs(value) * 2.0, 1.0)
             lo, hi = value - span, value + span
         # Always make sure value stays inside [lo, hi].
-        if value < lo:
-            lo = value
-        if value > hi:
-            hi = value
+        lo = min(lo, value)
+        hi = max(hi, value)
         descriptors.append(
             {
                 "name": name,
@@ -176,8 +177,6 @@ def _get_model() -> Any:
     Bootstrap runs as ``__main__`` (not as an importable module), so we
     fish ``_MODEL`` out of its module namespace via :mod:`sys`.
     """
-    import sys
-
     main = sys.modules.get("__main__")
     model = getattr(main, "_MODEL", None)
     if model is None:

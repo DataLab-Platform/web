@@ -26,6 +26,22 @@ Differences with the Qt code:
   ``H5TreeWidget`` population pass).
 """
 
+# pylint: disable=broad-exception-caught
+# Defensive HDF5 traversal: h5py raises a wide variety of exceptions
+# (UnicodeDecodeError, KeyError, OSError, RuntimeError, h5py-internal
+# errors…) when reading malformed datasets. Each ``except Exception``
+# is paired with a JSON-friendly fallback so the browser never crashes
+# on a bad file. The same pattern is used in DataLab desktop.
+#
+# pylint: disable=too-many-return-statements,too-many-nested-blocks
+# Type-dispatch readers naturally branch by dtype/shape/encoding; the
+# alternative would be a polymorphic class hierarchy that adds noise
+# without simplifying the logic.
+#
+# pylint: disable=import-outside-toplevel
+# ``sigima.objects.create_signal`` / ``create_image`` are imported lazily
+# in the bytes-to-object branches to keep module import time low.
+
 from __future__ import annotations
 
 import os
@@ -37,7 +53,6 @@ from typing import Any
 
 import h5py
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # Encoding / read helpers (ported from datalab/h5/generic.py)

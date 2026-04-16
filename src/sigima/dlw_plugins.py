@@ -26,9 +26,13 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from datalab import registries
-from datalab.plugins import PluginBase, PluginRegistry
-
+# ``datalab`` is the user-shipped portable shim package mounted under
+# ``/home/pyodide/datalab`` at runtime; it is intentionally not on the
+# CPython import path. The ``global _MAIN`` statement is the registry
+# pattern that lets ``install_main`` swap the live bridge after HMR.
+# pylint: disable=import-error,global-statement,broad-exception-caught
+from datalab import registries  # noqa: F401  # used elsewhere in module
+from datalab.plugins import PluginBase, PluginRegistry  # noqa: F401
 
 PLUGINS_ROOT = "/home/pyodide/dlw_plugins"
 

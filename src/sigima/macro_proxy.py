@@ -9,6 +9,12 @@ owns the live :data:`bootstrap._MODEL`) and ``await`` s the response.
 Macros must therefore use ``await proxy.add_signal(...)`` etc.
 """
 
+# ``js._dlw_bridge_call`` is the conventional name (with leading
+# underscore) used on the JS side for the worker bridge entry point.
+# It is part of the documented contract between this module and
+# ``runtime.ts`` — not a private member of a Python class.
+# pylint: disable=protected-access
+
 from __future__ import annotations
 
 import js  # type: ignore[import-not-found]
@@ -19,6 +25,7 @@ from pyodide.ffi import to_js  # type: ignore[import-not-found]
 # The JS side installs ``js._dlw_bridge_call(method: str, payload: any)``;
 # it returns a Promise resolving to the deserialised JS reply.
 def _bridge():
+    """Return the JS bridge function installed by ``runtime.ts``."""
     return js._dlw_bridge_call
 
 
@@ -38,6 +45,7 @@ def _to_jsable(value):
 
 
 async def _call(method: str, **kwargs):
+    """Issue one bridge call to the main thread and return the deserialised reply."""
     payload = to_js(_to_jsable(kwargs), dict_converter=js.Object.fromEntries)
     result = await _bridge()(method, payload)
     if hasattr(result, "to_py"):
@@ -65,6 +73,7 @@ class _Proxy:
         ylabel: str = "",
         group_id: str | None = None,
     ) -> str:
+        """Create a 1D signal in the live workspace; return its UUID."""
         return await _call(
             "add_signal",
             title=title,
@@ -89,6 +98,7 @@ class _Proxy:
         zlabel: str = "",
         group_id: str | None = None,
     ) -> str:
+        """Create a 2D image in the live workspace; return its UUID."""
         return await _call(
             "add_image",
             title=title,
@@ -105,21 +115,27 @@ class _Proxy:
     # -- Object access -----------------------------------------------------
 
     async def list_signals(self):
+        """Return metadata for every signal in the workspace."""
         return await _call("list_signals")
 
     async def list_images(self):
+        """Return metadata for every image in the workspace."""
         return await _call("list_images")
 
     async def get_object(self, oid: str):
+        """Return the JSON-friendly representation of object *oid*."""
         return await _call("get_object", oid=oid)
 
     async def get_object_uuids(self, panel: str = "signal"):
+        """Return every object UUID in *panel*."""
         return await _call("get_object_uuids", panel=panel)
 
     async def select_objects(self, oids, panel: str | None = None):
+        """Select *oids* in *panel* (or in the current panel if ``None``)."""
         return await _call("select_objects", oids=list(oids), panel=panel)
 
     async def delete_object(self, oid: str):
+        """Remove object *oid* from the workspace."""
         return await _call("delete_object", oid=oid)
 
     # -- Processing --------------------------------------------------------
@@ -151,14 +167,17 @@ class _Proxy:
         )
 
     async def list_features(self):
+        """Return the JSON-friendly catalogue of registered features."""
         return await _call("list_features")
 
     # -- Panel control -----------------------------------------------------
 
     async def get_current_panel(self) -> str:
+        """Return the currently active panel kind."""
         return await _call("get_current_panel")
 
     async def set_current_panel(self, panel: str) -> None:
+        """Switch the active panel kind."""
         return await _call("set_current_panel", panel=panel)
 
     # -- Generic call (escape hatch) --------------------------------------

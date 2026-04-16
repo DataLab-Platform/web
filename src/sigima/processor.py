@@ -23,8 +23,8 @@ a browser menu.
 
 from __future__ import annotations
 
-import inspect
 import importlib
+import inspect
 import pkgutil
 import typing
 from dataclasses import dataclass, field
@@ -40,7 +40,6 @@ from sigima.objects import ImageObj, SignalObj
 from sigima.proc.decorator import (
     is_computation_function,
 )
-
 
 Pattern = str  # "1_to_1" | "2_to_1" | "n_to_1"
 
@@ -1037,8 +1036,12 @@ def merge_plugin_features(
     *new* dict to keep the input untouched.
     """
     try:
+        # Lazy: ``datalab`` is the in-Pyodide shim, not always present.
+        # pylint: disable-next=import-outside-toplevel
         from datalab.registries import EXTRA_FEATURES
-    except Exception:  # datalab shim not available
+    except Exception:  # pylint: disable=broad-exception-caught
+        # ``datalab`` shim absent (or partially installed) — plugins are
+        # simply unavailable; never let that abort the host application.
         return dict(catalog)
     merged = dict(catalog)
     for extra in EXTRA_FEATURES.get(kind, ()):
@@ -1073,7 +1076,10 @@ def merge_plugin_features(
 
 def _x_arrays_match(a: SignalObj, b: SignalObj) -> bool:
     """Return True iff *a* and *b* have identical X coordinates."""
-    import numpy as np
+    # Local import: numpy is already imported at module top, but the lazy
+    # binding mirrors the desktop processor and keeps this helper usable
+    # if the parent module is ever pruned for a slimmer Pyodide payload.
+    import numpy as np  # pylint: disable=import-outside-toplevel
 
     if len(a.x) != len(b.x):
         return False
@@ -1088,6 +1094,9 @@ def _interpolate_to(target: SignalObj, other: SignalObj) -> SignalObj:
     """
     if _x_arrays_match(target, other):
         return other
+    # Lazy: ``sigima.tools.signal.interpolation`` pulls SciPy, which is
+    # only worth loading when the X grids actually differ.
+    # pylint: disable=import-outside-toplevel
     from sigima.enums import Interpolation1DMethod
     from sigima.tools.signal.interpolation import interpolate
 
@@ -1127,6 +1136,9 @@ class ApplyContext:
         params: Optional dict of user-edited parameter values.
     """
 
+    # Pure data container.
+    # pylint: disable=too-few-public-methods
+
     feature: FeatureSpec
     sources: list[Any]
     operand: Any | None = None
@@ -1143,11 +1155,18 @@ class ApplyResult:
     source's group).
     """
 
+    # Pure data container (a frozen-style dataclass with one field).
+    # pylint: disable=too-few-public-methods
+
     items: list[tuple[str | None, Any]] = field(default_factory=list)
 
 
 class BaseProcessor:
     """Generic dispatcher mirroring ``datalab.gui.processor.base``."""
+
+    # Single-entry-point dispatcher; the rest of the surface is private
+    # by design (each ``_compute_*`` is selected by ``apply``).
+    # pylint: disable=too-few-public-methods
 
     def __init__(self, object_kind: str = "signal") -> None:
         self.object_kind = object_kind
@@ -1155,6 +1174,7 @@ class BaseProcessor:
     # -- Entry point --------------------------------------------------------
 
     def apply(self, ctx: ApplyContext, source_ids: list[str]) -> ApplyResult:
+        """Apply the feature described by *ctx* to *source_ids* and return the result."""
         spec = ctx.feature
         instance = self._build_param_instance(spec, ctx.params)
         if spec.pattern == "1_to_1":
@@ -1259,6 +1279,7 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
 def get_schema(
     catalog: dict[str, FeatureSpec], feature_id: str
 ) -> dict[str, Any] | None:
+    """Return the JSON schema for the parameters of *feature_id* (or ``None``)."""
     spec = catalog[feature_id]
     if spec.paramclass is None:
         return None
@@ -1271,6 +1292,7 @@ def resolve_choices(
     item_name: str,
     values: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """Resolve dynamic choices for *item_name* of *feature_id* given *values*."""
     spec = catalog[feature_id]
     if spec.paramclass is None:
         raise ValueError(f"Feature {feature_id!r} has no parameters.")
