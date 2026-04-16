@@ -50,7 +50,7 @@ DataLab Web mirrors a large portion of the desktop application surface:
 
 ## Architecture overview
 
-```
+```text
  ┌─────────────────────────── Browser ───────────────────────────┐
  │  React / TypeScript UI   ──►   Pyodide (CPython + WASM)        │
  │   • Signal & image panels    • numpy / scipy / scikit-image    │
@@ -94,7 +94,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The first load downloads Pyodide (~10 MB)
+Open <http://localhost:5173>. The first load downloads Pyodide (~10 MB)
 and installs Sigima via `micropip`, which can take 30–60 seconds.
 Subsequent loads are cached by the browser.
 
@@ -121,12 +121,12 @@ npm run preview  # Serve the production build locally
 DataLab-Web ships a four-layer test pyramid that mirrors the engineering
 rigour of the DataLab desktop pytest suite:
 
-| Layer        | Tooling                          | Scope                                                   | Speed |
-| ------------ | -------------------------------- | ------------------------------------------------------- | ----- |
-| Python       | pytest + coverage (CPython)      | `src/sigima/bootstrap.py` and `processor.py` headlessly | ⚡⚡⚡  |
-| TypeScript   | Vitest + jsdom                   | Pure-logic TS modules (action registry, theme, …)       | ⚡⚡   |
-| End-to-end   | Playwright (Chromium)            | Real browser boot of Pyodide + UI smoke tests           | ⚡    |
-| Continuous   | GitHub Actions (`tests.yml`)     | All three layers on every push / PR                     | —     |
+| Layer        | Tooling                          | Scope                                                   | Speed   |
+| ------------ | -------------------------------- | ------------------------------------------------------- | ------- |
+| Python       | pytest + coverage (CPython)      | `src/sigima/bootstrap.py` and `processor.py` headlessly | Fastest |
+| TypeScript   | Vitest + jsdom                   | Pure-logic TS modules (action registry, theme, …)       | Fast    |
+| End-to-end   | Playwright (Chromium)            | Real browser boot of Pyodide + UI smoke tests           | Slow    |
+| Continuous   | GitHub Actions (`tests.yml`)     | All three layers on every push / PR                     | —       |
 
 The Python layer runs `bootstrap.py` directly under CPython through
 fixtures that stub the Pyodide-only modules (`js`, `pyodide.ffi`); this
@@ -157,7 +157,7 @@ npm run test:e2e
 
 Test layout:
 
-```
+```text
 tests/
 ├── python/          # pytest suite — exercises bootstrap.py headlessly
 ├── ts/              # Vitest suite — pure TypeScript modules
