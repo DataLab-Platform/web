@@ -173,27 +173,82 @@
       "problemMatcher": []
     },
     {
+      "label": "📊 Generate Coverage HTML (Python)",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": [
+        "scripts/run_with_env.py",
+        "${command:python.interpreterPath}",
+        "-m",
+        "coverage",
+        "html"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "statusbar": { "hide": true }
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📊 Serve Coverage HTML (Python)",
+      "detail": "Background HTTP server on http://127.0.0.1:8765/ for the coverage report. Idempotent: silently exits if the port is already taken.",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": [
+        "scripts/serve_coverage.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "statusbar": { "hide": true }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent"
+      },
+      "problemMatcher": [
+        {
+          "pattern": [
+            {
+              "regexp": ".",
+              "file": 1,
+              "location": 2,
+              "message": 3
+            }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "READY",
+            "endsPattern": "READY"
+          }
+        }
+      ]
+    },
+    {
       "label": "📊 Coverage full (Python)",
       "type": "shell",
-      "windows": {
-        "command": "${command:python.interpreterPath} scripts/run_with_env.py ${command:python.interpreterPath} -m coverage html; if ($?) { start htmlcov-python\\index.html }"
-      },
-      "linux": {
-        "command": "${command:python.interpreterPath} scripts/run_with_env.py ${command:python.interpreterPath} -m coverage html && xdg-open htmlcov-python/index.html"
-      },
-      "osx": {
-        "command": "${command:python.interpreterPath} scripts/run_with_env.py ${command:python.interpreterPath} -m coverage html && open htmlcov-python/index.html"
-      },
+      "command": "echo",
+      "args": [
+        "Coverage report served at http://127.0.0.1:8765/ — opening in Simple Browser…",
+        "${input:openCoverageInSimpleBrowser}"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "presentation": {
-        "panel": "dedicated"
+        "panel": "dedicated",
+        "reveal": "silent"
       },
       "problemMatcher": [],
       "dependsOrder": "sequence",
       "dependsOn": [
-        "🧪 Coverage tests (Python)"
+        "🧪 Coverage tests (Python)",
+        "📊 Generate Coverage HTML (Python)",
+        "📊 Serve Coverage HTML (Python)"
       ]
     },
     {
@@ -263,6 +318,14 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openCoverageInSimpleBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": "http://127.0.0.1:8765/"
     }
   ]
 }
