@@ -4,6 +4,12 @@ dist/
 build/
 *.tsbuildinfo
 
+# Compiled Vite config — the source of truth is vite.config.ts; a stale
+# compiled vite.config.js takes precedence over the .ts file and silently
+# masks any change to the real config.
+vite.config.js
+vite.config.d.ts
+
 # Editor
 .vscode/*.log
 .idea/
