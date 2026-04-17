@@ -89,8 +89,14 @@ export function ImagePlot({
     const z = data.data;
     const h = data.height;
     const w = data.width;
-    const x = Array.from({ length: w }, (_, i) => data.x0 + (i + 0.5) * data.dx);
-    const y = Array.from({ length: h }, (_, j) => data.y0 + (j + 0.5) * data.dy);
+    const x = Array.from(
+      { length: w },
+      (_, i) => data.x0 + (i + 0.5) * data.dx,
+    );
+    const y = Array.from(
+      { length: h },
+      (_, j) => data.y0 + (j + 0.5) * data.dy,
+    );
     return [
       {
         type: "heatmap" as const,
@@ -102,7 +108,9 @@ export function ImagePlot({
         colorscale: "Jet" as const,
         showscale: true,
         colorbar: {
-          title: { text: data.zunit ? `${data.zlabel} (${data.zunit})` : data.zlabel },
+          title: {
+            text: data.zunit ? `${data.zlabel} (${data.zunit})` : data.zlabel,
+          },
           thickness: 12,
         },
         hovertemplate:
@@ -187,7 +195,11 @@ export function ImagePlot({
       title: { text: data.title || "" },
       autosize: true,
       margin: { l: 60, r: 30, t: 40, b: 50 },
-      xaxis: { ...plotlyTheme.xaxis, title: { text: xtitle }, constrain: "domain" as const },
+      xaxis: {
+        ...plotlyTheme.xaxis,
+        title: { text: xtitle },
+        constrain: "domain" as const,
+      },
       yaxis: {
         ...plotlyTheme.yaxis,
         title: { text: ytitle },
@@ -351,7 +363,8 @@ export function ImagePlot({
     if (tool !== "profiles" || !cursor) return null;
     const col = Math.round((cursor.x - data.x0) / data.dx - 0.5);
     const row = Math.round((cursor.y - data.y0) / data.dy - 0.5);
-    if (col < 0 || col >= data.width || row < 0 || row >= data.height) return null;
+    if (col < 0 || col >= data.width || row < 0 || row >= data.height)
+      return null;
     const xs = Array.from(
       { length: data.width },
       (_, i) => data.x0 + (i + 0.5) * data.dx,
@@ -484,7 +497,11 @@ export function ImagePlot({
                         range: [data.x0, data.x0 + data.width * data.dx],
                         showticklabels: false,
                       },
-                      yaxis: { ...plotlyTheme.yaxis, showticklabels: true, automargin: true },
+                      yaxis: {
+                        ...plotlyTheme.yaxis,
+                        showticklabels: true,
+                        automargin: true,
+                      },
                       showlegend: false,
                     } as never
                   }
@@ -520,13 +537,14 @@ export function ImagePlot({
                       ...plotlyTheme,
                       autosize: true,
                       margin: { l: 5, r: 5, t: 40, b: 50 },
-                      xaxis: { ...plotlyTheme.xaxis, showticklabels: true, automargin: true },
+                      xaxis: {
+                        ...plotlyTheme.xaxis,
+                        showticklabels: true,
+                        automargin: true,
+                      },
                       yaxis: {
                         ...plotlyTheme.yaxis,
-                        range: [
-                          data.y0 + data.height * data.dy,
-                          data.y0,
-                        ],
+                        range: [data.y0 + data.height * data.dy, data.y0],
                         showticklabels: false,
                       },
                       showlegend: false,
@@ -597,7 +615,11 @@ function ImageToolbar({
   setTool: (t: ImageTool) => void;
   disabled: boolean;
 }) {
-  const buttons: Array<{ id: Exclude<ImageTool, null>; label: string; title: string }> = [
+  const buttons: Array<{
+    id: Exclude<ImageTool, null>;
+    label: string;
+    title: string;
+  }> = [
     {
       id: "profiles",
       label: "Cross profiles",
@@ -615,18 +637,18 @@ function ImageToolbar({
     },
   ];
   return (
-    <div className="image-tools-toolbar" role="toolbar" aria-label="Image visualization tools">
+    <div
+      className="image-tools-toolbar"
+      role="toolbar"
+      aria-label="Image visualization tools"
+    >
       {buttons.map((b) => (
         <button
           key={b.id}
           type="button"
           className={`image-tools-button${tool === b.id ? " active" : ""}`}
           onClick={() => setTool(tool === b.id ? null : b.id)}
-          title={
-            disabled
-              ? "Disabled while ROI edit mode is active"
-              : b.title
-          }
+          title={disabled ? "Disabled while ROI edit mode is active" : b.title}
           disabled={disabled}
           aria-pressed={tool === b.id}
         >
@@ -661,8 +683,7 @@ function ContrastPanel({
   // Slider works on a normalised 0..1000 range to allow fine control over
   // arbitrary data extents.
   const STEPS = 1000;
-  const toStep = (v: number) =>
-    Math.round(((v - dataMin) / span) * STEPS);
+  const toStep = (v: number) => Math.round(((v - dataMin) / span) * STEPS);
   const fromStep = (s: number) => dataMin + (s / STEPS) * span;
   const lowStep = Math.max(0, Math.min(STEPS, toStep(range[0])));
   const highStep = Math.max(0, Math.min(STEPS, toStep(range[1])));
@@ -698,7 +719,11 @@ function ContrastPanel({
               margin: { l: 40, r: 10, t: 5, b: 25 },
               height: 90,
               xaxis: { ...plotlyTheme.xaxis, range: [dataMin, dataMax] },
-              yaxis: { ...plotlyTheme.yaxis, showticklabels: false, type: "log" },
+              yaxis: {
+                ...plotlyTheme.yaxis,
+                showticklabels: false,
+                type: "log",
+              },
               shapes: [
                 {
                   type: "rect",
@@ -894,9 +919,7 @@ function buildRoiOverlays(
     } else if (seg.geometry === "polygon" && seg.points.length >= 3) {
       // Plotly path syntax: M x,y L x,y L x,y Z
       const path =
-        "M " +
-        seg.points.map(([x, y]) => `${x},${y}`).join(" L ") +
-        " Z";
+        "M " + seg.points.map(([x, y]) => `${x},${y}`).join(" L ") + " Z";
       shapes.push({
         type: "path",
         path,
@@ -963,7 +986,15 @@ function shapeToRoi(
     const dx = Math.abs(x1 - x0);
     const dy = Math.abs(y1 - y0);
     if (dx <= 0 || dy <= 0) return null;
-    return { geometry: "rectangle", title, inverse, x0: xmin, y0: ymin, dx, dy };
+    return {
+      geometry: "rectangle",
+      title,
+      inverse,
+      x0: xmin,
+      y0: ymin,
+      dx,
+      dy,
+    };
   }
   if (stype === "circle") {
     const x0 = Number(shape.x0);
@@ -1209,4 +1240,3 @@ function buildImageGeometryOverlays(results: AnalysisResult[]): {
     resultTraces: traces,
   };
 }
-

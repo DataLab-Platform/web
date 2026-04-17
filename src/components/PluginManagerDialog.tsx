@@ -11,7 +11,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSigima } from "../sigima/SigimaContext";
 import type { PluginRecord } from "../sigima/runtime";
 import { PluginConsentDialog } from "./PluginConsentDialog";
-import { hashSource, isPluginTrusted, trustPlugin } from "../plugins/trustStore";
+import {
+  hashSource,
+  isPluginTrusted,
+  trustPlugin,
+} from "../plugins/trustStore";
 
 interface Props {
   onClose: () => void;
@@ -107,11 +111,17 @@ export function PluginManagerDialog({ onClose }: Props) {
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card" style={{ minWidth: 600, maxWidth: 900 }}>
         <h2>Plugins</h2>
-        <div className="actions" style={{ justifyContent: "flex-start", marginBottom: 8 }}>
+        <div
+          className="actions"
+          style={{ justifyContent: "flex-start", marginBottom: 8 }}
+        >
           <button onClick={() => fileRef.current?.click()} disabled={busy}>
             Load from file…
           </button>
-          <button onClick={handleReloadAll} disabled={busy || records.length === 0}>
+          <button
+            onClick={handleReloadAll}
+            disabled={busy || records.length === 0}
+          >
             Reload all
           </button>
           <input

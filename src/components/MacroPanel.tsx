@@ -12,19 +12,10 @@
  *   └──────────────────────────────────────┘
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MacroMeta, MacroRecord, SigimaRuntime } from "../sigima/runtime";
 import { MacroRuntime } from "../sigima/MacroRuntime";
-import {
-  MacroEditorTabs,
-  type MacroTab,
-} from "./MacroEditorTabs";
+import { MacroEditorTabs, type MacroTab } from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
@@ -190,9 +181,7 @@ export function MacroPanel({
       }
       if (cancelled) return;
       // Hydrate code lazily — fetch all up front so dirty/save logic works.
-      const full = await Promise.all(
-        metas.map((m) => runtime.getMacro(m.id)),
-      );
+      const full = await Promise.all(metas.map((m) => runtime.getMacro(m.id)));
       if (cancelled) return;
       setMacros(
         full.map((m) => ({
@@ -218,7 +207,9 @@ export function MacroPanel({
       if (open.length === 0 && ids.length > 0) open = [ids[0]];
       setOpenIds(open);
       const active =
-        savedActive && open.includes(savedActive) ? savedActive : open[0] ?? null;
+        savedActive && open.includes(savedActive)
+          ? savedActive
+          : (open[0] ?? null);
       setActiveId(active);
       setLoaded(true);
     })();
@@ -246,8 +237,7 @@ export function MacroPanel({
 
   useEffect(() => {
     if (!loaded) return;
-    if (activeId)
-      window.localStorage.setItem(LS_LAST_ACTIVE, activeId);
+    if (activeId) window.localStorage.setItem(LS_LAST_ACTIVE, activeId);
   }, [activeId, loaded]);
   useEffect(() => {
     if (!loaded) return;
@@ -281,9 +271,7 @@ export function MacroPanel({
           console.error("Failed to save macro:", err);
         });
         setMacros((prev) =>
-          prev.map((m) =>
-            m.id === id ? { ...m, saved: code } : m,
-          ),
+          prev.map((m) => (m.id === id ? { ...m, saved: code } : m)),
         );
         saveTimers.current.delete(id);
       }, 500);
@@ -322,7 +310,10 @@ export function MacroPanel({
 
   const handleNew = useCallback(
     async (templateCode?: string) => {
-      const rec = await runtime.createMacro(undefined, templateCode ?? undefined);
+      const rec = await runtime.createMacro(
+        undefined,
+        templateCode ?? undefined,
+      );
       const code = rec.code ?? "";
       setMacros((prev) => {
         const next = [
@@ -530,10 +521,7 @@ export function MacroPanel({
           </button>
           {newMenuOpen && (
             <ul className="macro-new-menu" role="menu">
-              <li
-                role="menuitem"
-                onClick={() => handleNew()}
-              >
+              <li role="menuitem" onClick={() => handleNew()}>
                 Blank macro
               </li>
               {TEMPLATES.map((t) => (
@@ -612,10 +600,7 @@ export function MacroPanel({
         )}
       </div>
       <div className="macro-body">
-        <div
-          className="macro-editor-wrap"
-          style={{ height: editorHeight }}
-        >
+        <div className="macro-editor-wrap" style={{ height: editorHeight }}>
           <MacroEditorTabs
             tabs={tabs}
             activeId={activeId}

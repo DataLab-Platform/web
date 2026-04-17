@@ -14,7 +14,9 @@ for (const [path, url] of Object.entries(icons)) {
   if (m) byName[m[1]] = url;
 }
 
-export function getRoiIconUrl(name: string | undefined | null): string | undefined {
+export function getRoiIconUrl(
+  name: string | undefined | null,
+): string | undefined {
   if (!name) return undefined;
   return byName[name.replace(/\.svg$/i, "")];
 }

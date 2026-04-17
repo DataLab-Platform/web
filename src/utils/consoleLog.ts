@@ -68,9 +68,9 @@ export function installConsoleCapture(): void {
   installed = true;
   const levels: ConsoleLevel[] = ["log", "info", "warn", "error", "debug"];
   for (const level of levels) {
-    const original = (console as unknown as Record<string, (...a: unknown[]) => void>)[
-      level
-    ];
+    const original = (
+      console as unknown as Record<string, (...a: unknown[]) => void>
+    )[level];
     if (typeof original !== "function") continue;
     (console as unknown as Record<string, (...a: unknown[]) => void>)[level] = (
       ...args: unknown[]

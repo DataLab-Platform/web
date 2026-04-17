@@ -28,7 +28,12 @@ interface Props {
 
 const VALUE_TYPES: MetadataValueType[] = ["string", "number", "bool", "json"];
 
-export function MetadataEditor({ runtime, oid, refreshNonce, onChanged }: Props) {
+export function MetadataEditor({
+  runtime,
+  oid,
+  refreshNonce,
+  onChanged,
+}: Props) {
   const [entries, setEntries] = useState<MetadataEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +187,9 @@ function MetadataRow({ entry, onUpdate, onDelete }: MetadataRowProps) {
   // Local draft state — the row stays "dirty" until the user blurs
   // the input or presses Enter, at which point we push to the parent.
   const [draft, setDraft] = useState(entry.value);
-  const [draftType, setDraftType] = useState<MetadataValueType>(entry.value_type);
+  const [draftType, setDraftType] = useState<MetadataValueType>(
+    entry.value_type,
+  );
 
   // Resync with prop when the parent reloads.
   useEffect(() => {

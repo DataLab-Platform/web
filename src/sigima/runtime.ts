@@ -70,7 +70,9 @@ export interface PyProxy {
   (...args: any[]): unknown;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   callKwargs?: (...args: any[]) => unknown;
-  toJs?: (opts?: { dict_converter?: (entries: Iterable<[unknown, unknown]>) => unknown }) => unknown;
+  toJs?: (opts?: {
+    dict_converter?: (entries: Iterable<[unknown, unknown]>) => unknown;
+  }) => unknown;
   destroy?: () => void;
 }
 
@@ -645,7 +647,8 @@ function toJs(value: unknown): unknown {
   if (value && typeof value === "object" && "toJs" in value) {
     const proxy = value as PyProxy;
     const result = proxy.toJs?.({
-      dict_converter: (entries) => Object.fromEntries(entries as Iterable<[string, unknown]>),
+      dict_converter: (entries) =>
+        Object.fromEntries(entries as Iterable<[string, unknown]>),
     });
     proxy.destroy?.();
     return result;
@@ -656,7 +659,9 @@ function toJs(value: unknown): unknown {
 export class SigimaRuntime {
   private constructor(private readonly py: PyodideAPI) {}
 
-  static async load(onProgress?: (msg: string) => void): Promise<SigimaRuntime> {
+  static async load(
+    onProgress?: (msg: string) => void,
+  ): Promise<SigimaRuntime> {
     if (typeof window.loadPyodide !== "function") {
       throw new Error(
         "Pyodide failed to load from the CDN. Check the browser console " +
@@ -735,9 +740,10 @@ await micropip.install(["sigima", "guidata"])
         );
       }
       const py = (payload as { toJs?: (opts?: unknown) => unknown }).toJs;
-      const data = typeof py === "function"
-        ? py.call(payload, { dict_converter: Object.fromEntries })
-        : payload;
+      const data =
+        typeof py === "function"
+          ? py.call(payload, { dict_converter: Object.fromEntries })
+          : payload;
       return fn(String(kind), data);
     };
     const setBridge = this.py.globals.get("set_dialog_bridge");
@@ -752,7 +758,9 @@ await micropip.install(["sigima", "guidata"])
   }
 
   /** JS-side callback invoked for every async dialog request from Python. */
-  private dialogHandler: ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
+  private dialogHandler:
+    | ((kind: string, payload: unknown) => Promise<unknown>)
+    | null = null;
 
   setDialogHandler(
     handler: ((kind: string, payload: unknown) => Promise<unknown>) | null,
@@ -761,7 +769,10 @@ await micropip.install(["sigima", "guidata"])
   }
 
   /** Call a Python function declared in bootstrap.py with keyword args. */
-  private async callPy(name: string, kwargs: Record<string, unknown> = {}): Promise<unknown> {
+  private async callPy(
+    name: string,
+    kwargs: Record<string, unknown> = {},
+  ): Promise<unknown> {
     const fn = this.py.globals.get(name);
     if (!fn) {
       throw new Error(`Python function not found: ${name}`);
@@ -788,7 +799,10 @@ await micropip.install(["sigima", "guidata"])
   }
 
   async createSignal(params: SignalCreationParams): Promise<string> {
-    const id = (await this.callPy("create_signal", params as unknown as Record<string, unknown>)) as string;
+    const id = (await this.callPy(
+      "create_signal",
+      params as unknown as Record<string, unknown>,
+    )) as string;
     return id;
   }
 
@@ -1042,10 +1056,7 @@ await micropip.install(["sigima", "guidata"])
   }
 
   /** Drop one (or all) analysis result(s) from signal *id*'s metadata. */
-  async clearSignalResults(
-    id: string,
-    metadataKey?: string,
-  ): Promise<number> {
+  async clearSignalResults(id: string, metadataKey?: string): Promise<number> {
     return (await this.callPy("clear_signal_results", {
       oid: id,
       metadata_key: metadataKey ?? null,
@@ -1072,14 +1083,21 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_panel_tree", { kind })) as PanelTree;
   }
 
-  async createGroup(kind: PanelKind = "signal", name?: string): Promise<string> {
+  async createGroup(
+    kind: PanelKind = "signal",
+    name?: string,
+  ): Promise<string> {
     return (await this.callPy("create_group", {
       kind,
       name: name ?? null,
     })) as string;
   }
 
-  async renameGroup(gid: string, name: string, kind: PanelKind = "signal"): Promise<void> {
+  async renameGroup(
+    gid: string,
+    name: string,
+    kind: PanelKind = "signal",
+  ): Promise<void> {
     await this.callPy("rename_group", { gid, name, kind });
   }
 
@@ -1152,10 +1170,7 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_signal_roi", { oid })) as SignalRoiSegment[];
   }
 
-  async setSignalRoi(
-    oid: string,
-    segments: SignalRoiSegment[],
-  ): Promise<void> {
+  async setSignalRoi(oid: string, segments: SignalRoiSegment[]): Promise<void> {
     await this.callPy("set_signal_roi", { oid, segments });
   }
 
@@ -1178,7 +1193,10 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("save_project")) as string;
   }
 
-  async loadProject(content: string, replace: boolean = true): Promise<ProjectLoadResult> {
+  async loadProject(
+    content: string,
+    replace: boolean = true,
+  ): Promise<ProjectLoadResult> {
     return (await this.callPy("load_project", {
       content,
       replace,
@@ -1361,7 +1379,9 @@ await micropip.install(["sigima", "guidata"])
 
   /** Return the catalog of image creation types (mirrors signals). */
   async listImageCreationTypes(): Promise<ImageCreationType[]> {
-    return (await this.callPy("list_image_creation_types")) as ImageCreationType[];
+    return (await this.callPy(
+      "list_image_creation_types",
+    )) as ImageCreationType[];
   }
 
   /** Create an image of *stype* with default parameters. */
@@ -1391,10 +1411,7 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_image_roi", { oid })) as ImageRoiSegment[];
   }
 
-  async setImageRoi(
-    oid: string,
-    segments: ImageRoiSegment[],
-  ): Promise<void> {
+  async setImageRoi(oid: string, segments: ImageRoiSegment[]): Promise<void> {
     await this.callPy("set_image_roi", { oid, segments });
   }
 
@@ -1462,10 +1479,7 @@ await micropip.install(["sigima", "guidata"])
     })) as AnalysisResult[];
   }
 
-  async clearImageResults(
-    id: string,
-    metadataKey?: string,
-  ): Promise<number> {
+  async clearImageResults(id: string, metadataKey?: string): Promise<number> {
     return (await this.callPy("clear_image_results", {
       oid: id,
       metadata_key: metadataKey ?? null,
@@ -1543,9 +1557,7 @@ await micropip.install(["sigima", "guidata"])
   /** Return the JSON schema + default values for ``ROIGridParam`` (used
    *  by the "Create ROI grid" dialog of the image panel). */
   async getRoiGridParamSchema(): Promise<SchemaWithValues> {
-    return (await this.callPy(
-      "get_roi_grid_param_schema",
-    )) as SchemaWithValues;
+    return (await this.callPy("get_roi_grid_param_schema")) as SchemaWithValues;
   }
 
   /** Replace the ROI of *oid* with a generated grid of rectangular ROIs.
@@ -1567,9 +1579,7 @@ await micropip.install(["sigima", "guidata"])
 
   /** List the available interactive fit kinds (linear, gaussian, …). */
   async listInteractiveFits(): Promise<InteractiveFitInfo[]> {
-    return (await this.callPy(
-      "list_interactive_fits",
-    )) as InteractiveFitInfo[];
+    return (await this.callPy("list_interactive_fits")) as InteractiveFitInfo[];
   }
 
   /** Initialise an interactive fit on signal *oid* and return the
@@ -1636,7 +1646,9 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("list_processings")) as ProcessingDescriptor[];
   }
 
-  async getProcessingSchema(processingId: string): Promise<SchemaWithValues | null> {
+  async getProcessingSchema(
+    processingId: string,
+  ): Promise<SchemaWithValues | null> {
     return (await this.callPy("get_processing_schema", {
       processing_id: processingId,
     })) as SchemaWithValues | null;
@@ -1693,9 +1705,7 @@ await micropip.install(["sigima", "guidata"])
   // ---------------------------------------------------------------------
 
   /** Write bundled built-in plugins to a dedicated directory and load them. */
-  async installBuiltinPlugins(
-    sources: Record<string, string>,
-  ): Promise<void> {
+  async installBuiltinPlugins(sources: Record<string, string>): Promise<void> {
     const dir = "/home/pyodide/builtin_plugins";
     this.py.FS.mkdirTree?.(dir);
     for (const [path, source] of Object.entries(sources)) {
@@ -1723,7 +1733,9 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("load_plugin_file", { path })) as PluginRecord;
   }
 
-  async unloadPlugin(name: string): Promise<{ name: string; removed: boolean }> {
+  async unloadPlugin(
+    name: string,
+  ): Promise<{ name: string; removed: boolean }> {
     return (await this.callPy("unload_plugin", { name })) as {
       name: string;
       removed: boolean;

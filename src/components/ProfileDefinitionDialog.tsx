@@ -61,7 +61,10 @@ const pixToY = (img: ImageData, row: number) => img.y0 + (row + 0.5) * img.dy;
 const xToPix = (img: ImageData, x: number) =>
   Math.max(0, Math.min(img.width - 1, Math.round((x - img.x0) / img.dx - 0.5)));
 const yToPix = (img: ImageData, y: number) =>
-  Math.max(0, Math.min(img.height - 1, Math.round((y - img.y0) / img.dy - 0.5)));
+  Math.max(
+    0,
+    Math.min(img.height - 1, Math.round((y - img.y0) / img.dy - 0.5)),
+  );
 
 // ---------------------------------------------------------------------------
 // Profile shape derivation

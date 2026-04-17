@@ -33,7 +33,9 @@ for (const modules of [operations, processing, fit]) {
   }
 }
 
-export function getFeatureIconUrl(name: string | undefined | null): string | undefined {
+export function getFeatureIconUrl(
+  name: string | undefined | null,
+): string | undefined {
   if (!name) return undefined;
   return byName[name];
 }

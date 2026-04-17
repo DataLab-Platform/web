@@ -15,7 +15,9 @@ for (const [path, url] of Object.entries(modules)) {
   byName[name] = url;
 }
 
-export function getAnalysisIconUrl(name: string | undefined): string | undefined {
+export function getAnalysisIconUrl(
+  name: string | undefined,
+): string | undefined {
   if (!name) return undefined;
   return byName[name];
 }

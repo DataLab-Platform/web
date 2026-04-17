@@ -74,7 +74,9 @@ export function SigimaProvider({ children }: { children: ReactNode }) {
     [runtime, status, message, error],
   );
 
-  return <SigimaContext.Provider value={value}>{children}</SigimaContext.Provider>;
+  return (
+    <SigimaContext.Provider value={value}>{children}</SigimaContext.Provider>
+  );
 }
 
 export function useSigima(): SigimaContextValue {

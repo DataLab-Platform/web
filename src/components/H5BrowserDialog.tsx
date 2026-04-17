@@ -16,13 +16,7 @@
  *     ``Check all`` / ``Uncheck all`` buttons, OK / Cancel buttons.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { getH5IconUrl } from "../assets/h5Icons";
 import type {
@@ -193,8 +187,9 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     }
     const ids = Array.from(ownedFileIds.current);
     ownedFileIds.current.clear();
-    Promise.all(ids.map((fid) => runtime.closeH5Browser(fid).catch(() => {})))
-      .finally(() => onCancel());
+    Promise.all(
+      ids.map((fid) => runtime.closeH5Browser(fid).catch(() => {})),
+    ).finally(() => onCancel());
   }, [runtime, onCancel]);
 
   // ------------------------------------------------------------------
@@ -204,9 +199,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
   const updateCurrent = useCallback(
     (mutate: (state: OpenFileState) => OpenFileState) => {
       setFiles((prev) =>
-        prev.map((f) =>
-          f.file.file_id === currentFileId ? mutate(f) : f,
-        ),
+        prev.map((f) => (f.file.file_id === currentFileId ? mutate(f) : f)),
       );
     },
     [currentFileId],
@@ -299,7 +292,10 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
   const handleShowArray = useCallback(async () => {
     if (!runtime || !currentFileId || !selectedNodeId) return;
     try {
-      const arr = await runtime.getH5BrowserArray(currentFileId, selectedNodeId);
+      const arr = await runtime.getH5BrowserArray(
+        currentFileId,
+        selectedNodeId,
+      );
       setArrayDialog(arr);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -403,7 +399,9 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
                     <th className="h5browser-col-name">Name</th>
                     <th className="h5browser-col-shape">Size</th>
                     <th className="h5browser-col-dtype">Type</th>
-                    {showValues && <th className="h5browser-col-value">Value</th>}
+                    {showValues && (
+                      <th className="h5browser-col-value">Value</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -520,7 +518,10 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
         </div>
 
         {arrayDialog && (
-          <ArrayDialog data={arrayDialog} onClose={() => setArrayDialog(null)} />
+          <ArrayDialog
+            data={arrayDialog}
+            onClose={() => setArrayDialog(null)}
+          />
         )}
       </div>
     </div>
@@ -559,7 +560,10 @@ interface TreeRowsProps {
   onSelect: (id: string) => void;
 }
 
-function shouldRender(node: H5BrowserNode, showOnlySupported: boolean): boolean {
+function shouldRender(
+  node: H5BrowserNode,
+  showOnlySupported: boolean,
+): boolean {
   if (!showOnlySupported) return true;
   if (node.is_supported) return true;
   // Render groups whose subtree contains a supported descendant.
@@ -628,9 +632,7 @@ function TreeRows(props: TreeRowsProps): JSX.Element | null {
           ) : (
             <span className="h5browser-check-spacer" />
           )}
-          {iconUrl && (
-            <img src={iconUrl} alt="" className="h5browser-icon" />
-          )}
+          {iconUrl && <img src={iconUrl} alt="" className="h5browser-icon" />}
           <span title={node.id}>{node.name}</span>
         </td>
         <td className="h5browser-cell-mono">{node.shape_str}</td>

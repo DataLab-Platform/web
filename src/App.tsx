@@ -94,10 +94,10 @@ interface PendingAnalysis {
 
 /** Persist a numeric layout dimension to localStorage so it survives a
  *  page reload. */
-function usePersistedSize(key: string, defaultValue: number): [
-  number,
-  (next: number) => void,
-] {
+function usePersistedSize(
+  key: string,
+  defaultValue: number,
+): [number, (next: number) => void] {
   const [value, setValue] = useState<number>(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -182,9 +182,9 @@ export default function App() {
   /** Persisted LUT range override for the current image (``null`` ⇒
    *  fall back to the image's intrinsic ``data_min``/``data_max``).
    *  Driven by the contrast tool inside :class:`ImagePlot`. */
-  const [imageLutRange, setImageLutRange] = useState<
-    [number, number] | null
-  >(null);
+  const [imageLutRange, setImageLutRange] = useState<[number, number] | null>(
+    null,
+  );
   /** ROI segments shown by the ad-hoc dialog used by ``Erase area…``.
    *  Distinct from ``editingImageRoi`` so submission triggers the erase
    *  computation instead of overwriting the image's own ROI list. */
@@ -243,7 +243,8 @@ export default function App() {
       const newTree = await runtime.getPanelTree(activePanel);
       setTree(newTree);
       const allIds: string[] = [];
-      for (const g of newTree.groups) for (const o of g.objects) allIds.push(o.id);
+      for (const g of newTree.groups)
+        for (const o of g.objects) allIds.push(o.id);
       setSelectedIds((prev) => prev.filter((id) => allIds.includes(id)));
       setCurrentId((prev) => {
         if (preferredCurrentId && allIds.includes(preferredCurrentId)) {
@@ -270,7 +271,8 @@ export default function App() {
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
-      for (const g of newTree.groups) for (const o of g.objects) allIds.push(o.id);
+      for (const g of newTree.groups)
+        for (const o of g.objects) allIds.push(o.id);
       if (preferredCurrentId && allIds.includes(preferredCurrentId)) {
         setCurrentId(preferredCurrentId);
         setSelectedIds([preferredCurrentId]);
@@ -701,7 +703,14 @@ export default function App() {
         schema: schema as SchemaWithValues,
       });
     },
-    [runtime, currentId, analysisEntries, imageAnalysisEntries, activePanel, runAnalysis],
+    [
+      runtime,
+      currentId,
+      analysisEntries,
+      imageAnalysisEntries,
+      activePanel,
+      runAnalysis,
+    ],
   );
 
   const handleSubmitAnalysisParams = useCallback(
@@ -929,10 +938,8 @@ export default function App() {
     if (!runtime || !currentId || !imageData) return;
     const sx = (imageData.width * imageData.dx) / 4 || 1;
     const sy = (imageData.height * imageData.dy) / 4 || 1;
-    const x0 =
-      imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
-    const y0 =
-      imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
+    const x0 = imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
+    const y0 = imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
     const next: ImageRoiSegment[] = [
       ...imageRoi,
       {
@@ -951,8 +958,10 @@ export default function App() {
   const handleImageAddCircle = useCallback(async () => {
     if (!runtime || !currentId || !imageData) return;
     const r =
-      Math.min(imageData.width * imageData.dx, imageData.height * imageData.dy) /
-        4 || 1;
+      Math.min(
+        imageData.width * imageData.dx,
+        imageData.height * imageData.dy,
+      ) / 4 || 1;
     const xc = imageData.x0 + (imageData.width * imageData.dx) / 2;
     const yc = imageData.y0 + (imageData.height * imageData.dy) / 2;
     const next: ImageRoiSegment[] = [
@@ -979,9 +988,7 @@ export default function App() {
   // Live-edit callback fed by the plot when the user drags a ROI handle
   // or draws a brand-new shape in edit mode.  The backend is updated with
   // a short debounce to avoid one PyProxy call per pixel.
-  const imageRoiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const imageRoiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleImageRoiChangeFromPlot = useCallback(
     (segments: ImageRoiSegment[]) => {
       setImageRoi(segments);
@@ -1043,10 +1050,8 @@ export default function App() {
     if (!runtime || !currentId || !imageData) return;
     const sx = (imageData.width * imageData.dx) / 4 || 1;
     const sy = (imageData.height * imageData.dy) / 4 || 1;
-    const x0 =
-      imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
-    const y0 =
-      imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
+    const x0 = imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
+    const y0 = imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
     setErasingImageRoi([
       {
         geometry: "rectangle",
@@ -1158,9 +1163,7 @@ export default function App() {
         setImageRoi(segments);
         await refresh(oid);
         if (
-          window.confirm(
-            "Do you want to extract images from the defined ROI?",
-          )
+          window.confirm("Do you want to extract images from the defined ROI?")
         ) {
           const ids = await runtime.extractImageRois(oid, false);
           await refresh();
@@ -1192,7 +1195,9 @@ export default function App() {
     setBusy(true);
     try {
       const bytes = await runtime.saveWorkspaceHdf5();
-      const blob = new Blob([new Uint8Array(bytes)], { type: "application/x-hdf" });
+      const blob = new Blob([new Uint8Array(bytes)], {
+        type: "application/x-hdf",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1341,7 +1346,9 @@ export default function App() {
     const bytes = isImage
       ? await runtime.saveImageToBytes(currentId, filename)
       : await runtime.saveSignalToBytes(currentId, filename);
-    const blob = new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" });
+    const blob = new Blob([new Uint8Array(bytes)], {
+      type: "application/octet-stream",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1357,11 +1364,8 @@ export default function App() {
    *  matching the desktop ``include_groups=True`` behaviour). */
   const handleSaveToDirectory = useCallback(async () => {
     if (!runtime || !tree) return;
-    const ids = selectedIds.length > 0
-      ? selectedIds
-      : currentId
-        ? [currentId]
-        : [];
+    const ids =
+      selectedIds.length > 0 ? selectedIds : currentId ? [currentId] : [];
     if (ids.length === 0) return;
     // Build human-readable labels (group / title) for the preview list.
     const labelById = new Map<string, string>();
@@ -1416,11 +1420,13 @@ export default function App() {
 
         // Prefer the File System Access API: real on-disk write, with
         // optional overwrite handling.
-        const picker = (window as unknown as {
-          showDirectoryPicker?: (options?: {
-            mode?: "read" | "readwrite";
-          }) => Promise<FileSystemDirectoryHandle>;
-        }).showDirectoryPicker;
+        const picker = (
+          window as unknown as {
+            showDirectoryPicker?: (options?: {
+              mode?: "read" | "readwrite";
+            }) => Promise<FileSystemDirectoryHandle>;
+          }
+        ).showDirectoryPicker;
         let usedPicker = false;
         if (typeof picker === "function") {
           let dirHandle: FileSystemDirectoryHandle | null = null;
@@ -1502,10 +1508,9 @@ export default function App() {
                       k += 1;
                     }
                   }
-                  const fileHandle = await dirHandle.getFileHandle(
-                    finalName,
-                    { create: true },
-                  );
+                  const fileHandle = await dirHandle.getFileHandle(finalName, {
+                    create: true,
+                  });
                   const writable = await fileHandle.createWritable();
                   await writable.write(new Blob([new Uint8Array(bytes)]));
                   await writable.close();
@@ -1568,9 +1573,7 @@ export default function App() {
     const formats = isImage
       ? await runtime.listImageIoFormats()
       : await runtime.listSignalIoFormats();
-    const accept = formats.all_read_extensions
-      .map((e) => `.${e}`)
-      .join(",");
+    const accept = formats.all_read_extensions.map((e) => `.${e}`).join(",");
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
@@ -1849,23 +1852,31 @@ export default function App() {
               </div>
             </div>
           )}
-          {activePanel !== "macro" && status === "loading" && !data && !imageData && (
-            <div className="plot-empty plot-loading">
-              <img
-                src={new URL("./assets/DataLab-Splash.svg", import.meta.url).href}
-                alt="DataLab"
-                className="plot-loading-logo"
-              />
-              <div className="plot-loading-message">{message}</div>
-            </div>
-          )}
-          {activePanel !== "macro" && status === "ready" && !data && !imageData && (
-            <div className="plot-empty">
-              {activePanel === "signal"
-                ? "Create a signal to get started."
-                : "Create an image to get started."}
-            </div>
-          )}
+          {activePanel !== "macro" &&
+            status === "loading" &&
+            !data &&
+            !imageData && (
+              <div className="plot-empty plot-loading">
+                <img
+                  src={
+                    new URL("./assets/DataLab-Splash.svg", import.meta.url).href
+                  }
+                  alt="DataLab"
+                  className="plot-loading-logo"
+                />
+                <div className="plot-loading-message">{message}</div>
+              </div>
+            )}
+          {activePanel !== "macro" &&
+            status === "ready" &&
+            !data &&
+            !imageData && (
+              <div className="plot-empty">
+                {activePanel === "signal"
+                  ? "Create a signal to get started."
+                  : "Create an image to get started."}
+              </div>
+            )}
           {activePanel === "signal" && data && (
             <SignalPlot
               data={data}
@@ -1951,10 +1962,7 @@ export default function App() {
         <ProfileDefinitionDialog
           title={pendingProfile.feature.label.replace(/\u2026$/, "")}
           featureId={
-            pendingProfile.feature.id.replace(
-              /^image:/,
-              "",
-            ) as ProfileFeatureId
+            pendingProfile.feature.id.replace(/^image:/, "") as ProfileFeatureId
           }
           payload={pendingProfile.schema}
           imageData={pendingProfile.imageData}

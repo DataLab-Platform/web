@@ -103,7 +103,9 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
                       <input
                         value={r.title}
                         placeholder={`ROI ${idx + 1}`}
-                        onChange={(e) => updateRow(idx, "title", e.target.value)}
+                        onChange={(e) =>
+                          updateRow(idx, "title", e.target.value)
+                        }
                       />
                     </td>
                     <td>
@@ -135,7 +137,10 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
           {error && (
             <div style={{ color: "#c4302b", marginBottom: 8 }}>{error}</div>
           )}
-          <div className="dialog-actions" style={{ justifyContent: "space-between" }}>
+          <div
+            className="dialog-actions"
+            style={{ justifyContent: "space-between" }}
+          >
             <button type="button" onClick={addRow}>
               + Add
             </button>

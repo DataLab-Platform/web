@@ -108,7 +108,12 @@ function MessageDialog(props: {
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
   const heading =
-    title || (kind === "error" ? "Error" : kind === "warning" ? "Warning" : "Information");
+    title ||
+    (kind === "error"
+      ? "Error"
+      : kind === "warning"
+        ? "Warning"
+        : "Information");
   return (
     <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="card" onClick={(e) => e.stopPropagation()}>
@@ -142,9 +147,7 @@ function ConfirmDialog(props: {
         <h2>{title || "Confirm"}</h2>
         <p style={{ whiteSpace: "pre-wrap" }}>{message}</p>
         <div className="actions">
-          {cancelable && (
-            <button onClick={() => onAnswer(null)}>Cancel</button>
-          )}
+          {cancelable && <button onClick={() => onAnswer(null)}>Cancel</button>}
           <button onClick={() => onAnswer(false)}>No</button>
           <button onClick={() => onAnswer(true)}>Yes</button>
         </div>

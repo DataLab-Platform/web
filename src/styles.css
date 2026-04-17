@@ -19,7 +19,11 @@
   --hover-bg: #353537;
   --danger: #c4302b;
   color-scheme: dark;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 13px;
 }
 
@@ -694,8 +698,13 @@ input {
   text-align: center;
 }
 @keyframes plot-loading-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .overlay {
@@ -1065,7 +1074,6 @@ input {
   color: #f48771;
   font-size: 11px;
 }
-
 
 /* ============================================================== */
 /* Properties tab — stats card, array preview, metadata editor    */
@@ -1901,7 +1909,6 @@ input {
   background: var(--accent);
   border-color: var(--accent-hover);
 }
-
 
 /* ===========================================================
    Macro panel (mirrors DataLab Qt's MacroPanel).

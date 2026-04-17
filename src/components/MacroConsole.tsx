@@ -71,9 +71,7 @@ export const MacroConsole = forwardRef<MacroConsoleHandle, {}>(
       () =>
         lines
           .map((l) => l.text)
-          .concat(
-            Object.values(pendingRef.current).filter((s) => s.length > 0),
-          )
+          .concat(Object.values(pendingRef.current).filter((s) => s.length > 0))
           .join("\n"),
       [lines],
     );

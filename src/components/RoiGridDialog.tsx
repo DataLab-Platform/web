@@ -47,10 +47,8 @@ export function computeRoiGridPreview(
   const dy = (dyCell * (Number(values.ysize) || 0)) / 100;
   const dxStep = (dxCell * (Number(values.xstep) || 100)) / 100;
   const dyStep = (dyCell * (Number(values.ystep) || 100)) / 100;
-  const xtrans =
-    (physW * ((Number(values.xtranslation) ?? 50) - 50)) / 100;
-  const ytrans =
-    (physH * ((Number(values.ytranslation) ?? 50) - 50)) / 100;
+  const xtrans = (physW * ((Number(values.xtranslation) ?? 50) - 50)) / 100;
+  const ytrans = (physH * ((Number(values.ytranslation) ?? 50) - 50)) / 100;
   const xdir = String(values.xdirection || "increasing");
   const ydir = String(values.ydirection || "increasing");
   const baseName = String(values.base_name ?? "ROI");

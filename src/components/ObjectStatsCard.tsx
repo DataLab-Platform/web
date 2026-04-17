@@ -36,7 +36,9 @@ export function ObjectStatsCard({ stats, error }: Props) {
   );
 }
 
-function signalRows(s: Extract<ObjectStats, { kind: "signal" }>): [string, string][] {
+function signalRows(
+  s: Extract<ObjectStats, { kind: "signal" }>,
+): [string, string][] {
   return [
     ["Points", String(s.n_points)],
     ["X dtype", s.x_dtype],
@@ -51,7 +53,9 @@ function signalRows(s: Extract<ObjectStats, { kind: "signal" }>): [string, strin
   ];
 }
 
-function imageRows(s: Extract<ObjectStats, { kind: "image" }>): [string, string][] {
+function imageRows(
+  s: Extract<ObjectStats, { kind: "image" }>,
+): [string, string][] {
   return [
     ["Shape", `${s.shape.join(" × ")}`],
     ["dtype", s.dtype],

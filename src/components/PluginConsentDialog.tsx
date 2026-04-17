@@ -36,9 +36,9 @@ export function PluginConsentDialog(props: Props) {
       <div className="card" style={{ minWidth: 500, maxWidth: 720 }}>
         <h2>Load plugin?</h2>
         <p>
-          DataLab-Web is about to execute the following Python plugin.
-          Plugins run with full access to the in-browser Python runtime
-          (Pyodide). Only proceed if you trust the source.
+          DataLab-Web is about to execute the following Python plugin. Plugins
+          run with full access to the in-browser Python runtime (Pyodide). Only
+          proceed if you trust the source.
         </p>
         <table style={{ width: "100%", marginBottom: 8 }}>
           <tbody>

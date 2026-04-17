@@ -58,9 +58,7 @@ function toRow(seg: ImageRoiSegment): RowState {
     base.yc = String(seg.yc);
     base.r = String(seg.r);
   } else {
-    base.points = seg.points
-      .map(([x, y]) => `${x},${y}`)
-      .join(" ");
+    base.points = seg.points.map(([x, y]) => `${x},${y}`).join(" ");
   }
   return base;
 }
@@ -367,9 +365,7 @@ export function ImageRoiDialog({
                       value={r.points}
                       rows={3}
                       style={{ width: "100%", fontFamily: "monospace" }}
-                      onChange={(e) =>
-                        updateRow(idx, "points", e.target.value)
-                      }
+                      onChange={(e) => updateRow(idx, "points", e.target.value)}
                     />
                   </div>
                 )}

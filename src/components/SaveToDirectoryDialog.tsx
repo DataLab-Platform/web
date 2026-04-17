@@ -91,7 +91,7 @@ export function SaveToDirectoryDialog(props: Props) {
   const [extension, setExtension] = useState(
     initialExtension && extensions.includes(initialExtension)
       ? initialExtension
-      : extensions[0] ?? "",
+      : (extensions[0] ?? ""),
   );
   const [overwrite, setOverwrite] = useState(initialOverwrite ?? false);
   const [basenames, setBasenames] = useState<string[]>([]);
@@ -152,8 +152,8 @@ export function SaveToDirectoryDialog(props: Props) {
             margin: "0 0 10px",
           }}
         >
-          {sources.length} object{sources.length > 1 ? "s" : ""} will be
-          written to the selected directory.
+          {sources.length} object{sources.length > 1 ? "s" : ""} will be written
+          to the selected directory.
         </p>
         <div className="row">
           <label htmlFor="stdir-pattern">Basename pattern</label>

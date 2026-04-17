@@ -113,9 +113,7 @@ export function ObjectTree(props: Props) {
   };
 
   if (!tree || tree.groups.length === 0) {
-    return (
-      <div className="object-tree-empty">No signals yet.</div>
-    );
+    return <div className="object-tree-empty">No signals yet.</div>;
   }
 
   return (
@@ -158,9 +156,7 @@ export function ObjectTree(props: Props) {
               ) : (
                 <span className="object-tree-group-name">{group.name}</span>
               )}
-              <span className="object-tree-count">
-                {group.objects.length}
-              </span>
+              <span className="object-tree-count">{group.objects.length}</span>
               <button
                 type="button"
                 className="object-tree-group-delete"

@@ -221,9 +221,7 @@ export function SidePanel(props: Props) {
         <button
           role="tab"
           aria-selected={active === "results"}
-          className={
-            "side-panel-tab" + (active === "results" ? " active" : "")
-          }
+          className={"side-panel-tab" + (active === "results" ? " active" : "")}
           onClick={() => setActive("results")}
         >
           Results{results.length > 0 ? ` (${results.length})` : ""}
@@ -300,7 +298,10 @@ export function SidePanel(props: Props) {
           </div>
         </aside>
         {createPortal(
-          <aside className="side-panel side-panel-popped" aria-label="Object panel">
+          <aside
+            className="side-panel side-panel-popped"
+            aria-label="Object panel"
+          >
             {body}
           </aside>,
           pipWindow.document.body,
@@ -656,11 +657,7 @@ function EditableForm({
   );
 
   return (
-    <div
-      className="side-panel-form"
-      ref={formRef}
-      onKeyDown={handleKeyDown}
-    >
+    <div className="side-panel-form" ref={formRef} onKeyDown={handleKeyDown}>
       {error && <div className="error">{error}</div>}
       <DataSetForm schema={schema} values={draft} onChange={setDraft} />
       <div
@@ -672,8 +669,8 @@ function EditableForm({
           {busy
             ? "Applying…"
             : dirty
-            ? "● Unsaved changes"
-            : "All changes applied"}
+              ? "● Unsaved changes"
+              : "All changes applied"}
         </span>
         <div className="editable-form-buttons">
           <button
@@ -776,9 +773,7 @@ function ResultCard({
       <table className="result-card-table">
         <thead>
           <tr>
-            {result.category === "table" && result.roi_indices && (
-              <th>ROI</th>
-            )}
+            {result.category === "table" && result.roi_indices && <th>ROI</th>}
             {result.headers.map((h, i) => (
               <th key={i}>{h}</th>
             ))}

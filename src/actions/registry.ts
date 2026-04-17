@@ -162,9 +162,7 @@ export interface HelpActionCallbacks {
 }
 
 /** Wire Help / "?" menu actions. */
-export function buildHelpActions(
-  cb: HelpActionCallbacks,
-): ActionDescriptor[] {
+export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
   // Help entries are always available (no runtime dependency).
   const always = () => true;
   return [
@@ -243,8 +241,7 @@ export function buildInteractiveFitActions(
     label: `${f.label}\u2026`,
     menuPath: `Processing/Fitting/Interactive fitting/${f.label}`,
     beginGroup: idx === 0,
-    enabled: (s) =>
-      s.status === "ready" && !s.busy && s.currentId !== null,
+    enabled: (s) => s.status === "ready" && !s.busy && s.currentId !== null,
     run: () => onLaunch(f),
   }));
 }
@@ -319,8 +316,7 @@ function buildAnalysisActions(
       menuPath: `Analysis/${safeLabel}`,
       iconUrl: getAnalysisIconUrl(e.icon),
       beginGroup: e.separator_before,
-      enabled: (s) =>
-        s.status === "ready" && !s.busy && s.currentId !== null,
+      enabled: (s) => s.status === "ready" && !s.busy && s.currentId !== null,
       run: () => onRun(e.id, e.has_params),
     };
   });
@@ -354,9 +350,7 @@ export function buildRoiActions(
   const out: ActionDescriptor[] = [
     {
       id: "roi.edit_graphical",
-      label: roiEditMode
-        ? "Stop graphical edit"
-        : "Edit graphically",
+      label: roiEditMode ? "Stop graphical edit" : "Edit graphically",
       menuPath: roiEditMode
         ? "ROI/Stop graphical edit"
         : "ROI/Edit graphically",
@@ -476,14 +470,16 @@ export function buildImageRoiActions(
       enabled: ready,
       run: cb.onAddCircle,
     },
-    {      id: "image_roi.create_grid",
+    {
+      id: "image_roi.create_grid",
       label: "Create ROI grid\u2026",
       menuPath: "ROI/Create ROI grid\u2026",
       iconUrl: getRoiIconUrl("roi_grid"),
       enabled: ready,
       run: cb.onCreateGrid,
     },
-    {      id: "image_roi.edit_numerical",
+    {
+      id: "image_roi.edit_numerical",
       label: "Edit numerically…",
       menuPath: "ROI/Edit numerically…",
       iconUrl: getRoiIconUrl("roi_coordinate"),
@@ -534,7 +530,6 @@ export function buildImageRoiActions(
   return out;
 }
 
-
 /** Callbacks for the image ``Erase area`` action (mirrors DataLab desktop's
  *  ``Processing > Restoration > Erase area…``). The user-defined ROI is
  *  ad-hoc and does not modify the source image's own ROI list. */
@@ -560,7 +555,6 @@ export function buildImageEraseActions(
   ];
 }
 
-
 /** Callbacks for the image ``Operations`` panel-level layout actions
  *  (mirrors DataLab desktop's "Distribute on a grid" / "Reset image
  *  positions"). Modify selected images' origins in place. */
@@ -577,7 +571,9 @@ export function buildImageGridActions(
   cb: ImageGridActionCallbacks,
 ): ActionDescriptor[] {
   const enabled = (s: ActionState) =>
-    s.status === "ready" && !s.busy && (s.selectedIds.length > 0 || s.currentId !== null);
+    s.status === "ready" &&
+    !s.busy &&
+    (s.selectedIds.length > 0 || s.currentId !== null);
   return [
     {
       id: "image.distribute_on_grid",
@@ -596,7 +592,6 @@ export function buildImageGridActions(
     },
   ];
 }
-
 
 /** Wire actions contributed by Python plugins. */
 export interface PluginActionCallbacks {
@@ -662,5 +657,3 @@ export function buildPluginActions(
 
   return [...fixed, ...dynamic];
 }
-
-

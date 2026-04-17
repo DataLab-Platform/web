@@ -52,7 +52,9 @@ export function useTheme(): {
   toggle: () => void;
 } {
   const [mode, setModeState] = useState<ThemeMode>(() => readStoredMode());
-  const [theme, setTheme] = useState<ResolvedTheme>(() => resolve(readStoredMode()));
+  const [theme, setTheme] = useState<ResolvedTheme>(() =>
+    resolve(readStoredMode()),
+  );
 
   // Apply theme to <html> whenever it changes.
   useEffect(() => {

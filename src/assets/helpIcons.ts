@@ -12,7 +12,9 @@ for (const [path, url] of Object.entries(modules)) {
   byName[name] = url;
 }
 
-export function getHelpIconUrl(name: string | undefined | null): string | undefined {
+export function getHelpIconUrl(
+  name: string | undefined | null,
+): string | undefined {
   if (!name) return undefined;
   return byName[name];
 }

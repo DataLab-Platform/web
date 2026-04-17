@@ -14,8 +14,18 @@ export interface PlotlyThemeLayout {
   paper_bgcolor: string;
   plot_bgcolor: string;
   font: { color: string };
-  xaxis: { gridcolor: string; zerolinecolor: string; linecolor: string; tickcolor: string };
-  yaxis: { gridcolor: string; zerolinecolor: string; linecolor: string; tickcolor: string };
+  xaxis: {
+    gridcolor: string;
+    zerolinecolor: string;
+    linecolor: string;
+    tickcolor: string;
+  };
+  yaxis: {
+    gridcolor: string;
+    zerolinecolor: string;
+    linecolor: string;
+    tickcolor: string;
+  };
   legend: { font: { color: string } };
 }
 

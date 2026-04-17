@@ -168,8 +168,8 @@ function ImageArrayPreview({
         </h3>
       </header>
       <p className="array-preview-info">
-        Image data preview is not yet available — see the main canvas
-        and the statistics card above.
+        Image data preview is not yet available — see the main canvas and the
+        statistics card above.
       </p>
     </section>
   );

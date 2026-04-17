@@ -51,11 +51,7 @@ function SubmenuList({
               >
                 <span className="menu-icon-slot" aria-hidden="true">
                   {node.iconUrl && (
-                    <img
-                      src={node.iconUrl}
-                      alt=""
-                      className="menu-icon-img"
-                    />
+                    <img src={node.iconUrl} alt="" className="menu-icon-img" />
                   )}
                 </span>
                 <span className="menu-label">{node.label}</span>
@@ -92,11 +88,7 @@ function SubmenuList({
             >
               <span className="menu-icon-slot" aria-hidden="true">
                 {action.iconUrl && (
-                  <img
-                    src={action.iconUrl}
-                    alt=""
-                    className="menu-icon-img"
-                  />
+                  <img src={action.iconUrl} alt="" className="menu-icon-img" />
                 )}
               </span>
               <span className="menu-label">{node.label}</span>

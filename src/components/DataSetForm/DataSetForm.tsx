@@ -209,8 +209,7 @@ interface FieldRowProps {
 
 function FieldRow(props: FieldRowProps) {
   const { name, prop } = props;
-  const label =
-    (prop["x-guidata-label"] as string | undefined) ?? name;
+  const label = (prop["x-guidata-label"] as string | undefined) ?? name;
   const help = prop.description as string | undefined;
   const unit = prop["x-guidata-unit"] as string | undefined;
   const readOnly = prop.readOnly === true;
@@ -282,7 +281,7 @@ function NumericField({
   const max = prop.maximum as number | undefined;
   const step = integer
     ? 1
-    : (prop["x-guidata-step"] as number | undefined) ?? "any";
+    : ((prop["x-guidata-step"] as number | undefined) ?? "any");
   const slider = prop["x-guidata-slider"] === true;
   const handle = (raw: string) => {
     if (raw === "") {
@@ -370,7 +369,10 @@ function useChoices(
   const [dynamic, setDynamic] = useState<ChoiceEntry[]>([]);
   // Re-resolve on dependencies changing values (cheap: front-end serialises
   // by JSON of the visible state).
-  const valuesKey = useMemo(() => JSON.stringify(currentValues), [currentValues]);
+  const valuesKey = useMemo(
+    () => JSON.stringify(currentValues),
+    [currentValues],
+  );
   useMemo(() => {
     if (!isDynamic || !resolveChoices) return;
     let cancelled = false;
@@ -386,8 +388,15 @@ function useChoices(
 }
 
 function ChoiceField(props: LeafProps) {
-  const { prop, value, onChange, disabled, currentValues, name, resolveChoices } =
-    props;
+  const {
+    prop,
+    value,
+    onChange,
+    disabled,
+    currentValues,
+    name,
+    resolveChoices,
+  } = props;
   const choices = useChoices(prop, name, currentValues, resolveChoices);
   return (
     <select
@@ -408,8 +417,15 @@ function ChoiceField(props: LeafProps) {
 }
 
 function MultipleChoiceField(props: LeafProps) {
-  const { prop, value, onChange, disabled, currentValues, name, resolveChoices } =
-    props;
+  const {
+    prop,
+    value,
+    onChange,
+    disabled,
+    currentValues,
+    name,
+    resolveChoices,
+  } = props;
   const choices = useChoices(prop, name, currentValues, resolveChoices);
   const selected = new Set(Array.isArray(value) ? value : []);
   return (
@@ -435,8 +451,15 @@ function MultipleChoiceField(props: LeafProps) {
 }
 
 function ImageChoiceField(props: LeafProps) {
-  const { prop, value, onChange, disabled, currentValues, name, resolveChoices } =
-    props;
+  const {
+    prop,
+    value,
+    onChange,
+    disabled,
+    currentValues,
+    name,
+    resolveChoices,
+  } = props;
   const choices = useChoices(prop, name, currentValues, resolveChoices);
   return (
     <div className="dataset-form-imagechoice">
@@ -551,7 +574,9 @@ function FloatArrayField({ value, onChange, disabled }: LeafProps) {
 }
 
 function JsonField({ value, onChange, disabled }: LeafProps) {
-  const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
+  const [text, setText] = useState(() =>
+    JSON.stringify(value ?? null, null, 2),
+  );
   const [error, setError] = useState<string | null>(null);
   return (
     <div className="dataset-form-json">

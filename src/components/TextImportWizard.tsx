@@ -291,13 +291,7 @@ export function TextImportWizard({ onImport, onCancel }: Props) {
           {STEP_TITLES.map((t, idx) => (
             <li
               key={t}
-              className={
-                idx === step
-                  ? "active"
-                  : idx < step
-                    ? "done"
-                    : ""
-              }
+              className={idx === step ? "active" : idx < step ? "done" : ""}
             >
               <span className="import-wizard-step-num">{idx + 1}</span>
               <span className="import-wizard-step-label">{t}</span>
@@ -334,9 +328,7 @@ export function TextImportWizard({ onImport, onCancel }: Props) {
               error={commitError}
             />
           )}
-          {step === 3 && (
-            <LabelsPage labels={labels} onChange={setLabels} />
-          )}
+          {step === 3 && <LabelsPage labels={labels} onChange={setLabels} />}
         </div>
 
         {commitError && step === 3 && (
@@ -348,10 +340,7 @@ export function TextImportWizard({ onImport, onCancel }: Props) {
             Cancel
           </button>
           <span style={{ flex: 1 }} />
-          <button
-            onClick={goPrev}
-            disabled={step === 0 || committing}
-          >
+          <button onClick={goPrev} disabled={step === 0 || committing}>
             ← Back
           </button>
           {step < 3 ? (
@@ -388,9 +377,7 @@ interface SourcePageProps {
 function SourcePage(p: SourcePageProps) {
   return (
     <div className="import-wizard-page">
-      <p className="import-wizard-subtitle">
-        Select the source of the data:
-      </p>
+      <p className="import-wizard-subtitle">Select the source of the data:</p>
       <div className="import-wizard-source-choice">
         <label>
           <input
@@ -415,9 +402,7 @@ function SourcePage(p: SourcePageProps) {
         {p.kind === "file" ? (
           <button onClick={p.onPickFile}>Choose file…</button>
         ) : (
-          <button onClick={p.onReadClipboard}>
-            Read clipboard
-          </button>
+          <button onClick={p.onReadClipboard}>Read clipboard</button>
         )}
         {p.sourceName && (
           <span className="import-wizard-source-name">
@@ -493,10 +478,7 @@ function ParametersPage(p: ParametersPageProps) {
           <select
             value={p.params.header}
             onChange={(e) =>
-              update(
-                "header",
-                e.target.value as TextImportParams["header"],
-              )
+              update("header", e.target.value as TextImportParams["header"])
             }
           >
             <option value="infer">Infer</option>
@@ -567,8 +549,7 @@ function ParametersPage(p: ParametersPageProps) {
         {!p.busy && p.preview && !p.preview.error && (
           <>
             <p className="import-wizard-hint">
-              {p.preview.nrows} row(s) × {p.preview.ncols} column(s)
-              parsed.
+              {p.preview.nrows} row(s) × {p.preview.ncols} column(s) parsed.
             </p>
             <div className="import-wizard-table-wrap">
               <table className="import-wizard-table">
@@ -584,9 +565,7 @@ function ParametersPage(p: ParametersPageProps) {
                     <tr key={ri}>
                       {row.map((cell, ci) => (
                         <td key={ci}>
-                          {typeof cell === "number"
-                            ? formatCell(cell)
-                            : cell}
+                          {typeof cell === "number" ? formatCell(cell) : cell}
                         </td>
                       ))}
                     </tr>
@@ -710,19 +689,15 @@ interface LabelsPageProps {
 }
 
 function LabelsPage(p: LabelsPageProps) {
-  const update = <K extends keyof LabelState>(
-    key: K,
-    value: LabelState[K],
-  ) => p.onChange({ ...p.labels, [key]: value });
+  const update = <K extends keyof LabelState>(key: K, value: LabelState[K]) =>
+    p.onChange({ ...p.labels, [key]: value });
 
   return (
     <div className="import-wizard-page">
       <p className="import-wizard-subtitle">
         Set the labels and units for the imported data.
         <br />
-        <em>
-          Leave a field empty to keep the value inferred from the source.
-        </em>
+        <em>Leave a field empty to keep the value inferred from the source.</em>
       </p>
       <div className="import-wizard-labels">
         <label>

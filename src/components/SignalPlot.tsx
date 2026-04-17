@@ -173,10 +173,8 @@ export function SignalPlot({
             const next = roi.slice();
             const x0Key = `shapes[${idx}].x0`;
             const x1Key = `shapes[${idx}].x1`;
-            const x0 =
-              x0Key in event ? Number(event[x0Key]) : roi[idx].xmin;
-            const x1 =
-              x1Key in event ? Number(event[x1Key]) : roi[idx].xmax;
+            const x0 = x0Key in event ? Number(event[x0Key]) : roi[idx].xmin;
+            const x1 = x1Key in event ? Number(event[x1Key]) : roi[idx].xmax;
             if (Number.isFinite(x0) && Number.isFinite(x1) && x0 !== x1) {
               next[idx] = {
                 xmin: Math.min(x0, x1),

@@ -47,13 +47,12 @@ export function HelpDialog({ view, onClose, appVersion }: Props) {
       aria-labelledby="help-dialog-title"
       onClick={onClose}
     >
-      <div
-        className="card help-dialog"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="card help-dialog" onClick={(e) => e.stopPropagation()}>
         <h2 id="help-dialog-title">{titleFor(view)}</h2>
         <div className="help-dialog-body">
-          {view === "about" && <AboutView version={appVersion ?? DEFAULT_VERSION} />}
+          {view === "about" && (
+            <AboutView version={appVersion ?? DEFAULT_VERSION} />
+          )}
           {view === "shortcuts" && <ShortcutsView />}
           {view === "console" && <ConsoleView />}
         </div>
@@ -93,9 +92,9 @@ function AboutView({ version }: { version: string }) {
         </div>
       </div>
       <p>
-        Browser-native sibling of the DataLab desktop application. The
-        Sigima computation engine runs entirely client-side via Pyodide
-        (CPython compiled to WebAssembly); no data leaves your browser.
+        Browser-native sibling of the DataLab desktop application. The Sigima
+        computation engine runs entirely client-side via Pyodide (CPython
+        compiled to WebAssembly); no data leaves your browser.
       </p>
       <ul className="help-about-links">
         <li>
@@ -233,9 +232,8 @@ const LEVEL_FILTERS: { id: "all" | ConsoleEntry["level"]; label: string }[] = [
 
 function ConsoleView() {
   const [, setTick] = useState(0);
-  const [filter, setFilter] = useState<(typeof LEVEL_FILTERS)[number]["id"]>(
-    "all",
-  );
+  const [filter, setFilter] =
+    useState<(typeof LEVEL_FILTERS)[number]["id"]>("all");
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // Subscribe to live updates from the buffer.
@@ -247,7 +245,7 @@ function ConsoleView() {
     const all = getConsoleEntries();
     if (filter === "all") return all;
     return all.filter((e) => e.level === filter);
-  }, [filter, /* recompute when buffer changes via tick */]);
+  }, [filter /* recompute when buffer changes via tick */]);
 
   // Auto-scroll to bottom on new entry.
   useEffect(() => {
@@ -276,9 +274,7 @@ function ConsoleView() {
           Level:
           <select
             value={filter}
-            onChange={(e) =>
-              setFilter(e.target.value as typeof filter)
-            }
+            onChange={(e) => setFilter(e.target.value as typeof filter)}
           >
             {LEVEL_FILTERS.map((f) => (
               <option key={f.id} value={f.id}>

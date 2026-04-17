@@ -165,8 +165,8 @@ export class MacroRuntime {
     const w = this.warmWorker!;
     this.warmWorker = null;
     this.worker = w;
-    this.workerReady = (w as unknown as { __ready?: () => boolean }).__ready?.()
-      ?? false;
+    this.workerReady =
+      (w as unknown as { __ready?: () => boolean }).__ready?.() ?? false;
     w.onmessage = (ev) => this.handleWorkerMessage(ev.data);
     w.onerror = (ev) => {
       const msg = ev.message || "worker error";
@@ -282,7 +282,8 @@ export class MacroRuntime {
   private get bridgeMethods(): Record<string, BridgeMethod> {
     const s = this.sigima;
     const ext = this.externalCallbacks;
-    const arr = (v: unknown): number[] | number[][] => v as number[] | number[][];
+    const arr = (v: unknown): number[] | number[][] =>
+      v as number[] | number[][];
     return {
       add_signal: async (p: unknown) => {
         const a = p as {
