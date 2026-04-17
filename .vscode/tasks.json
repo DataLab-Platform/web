@@ -318,6 +318,57 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "🚀 Dev Server",
+      "detail": "Background Vite dev server on http://localhost:5173/.",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "statusbar": { "hide": true }
+      },
+      "isBackground": true,
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent"
+      },
+      "problemMatcher": [
+        {
+          "pattern": [
+            {
+              "regexp": ".",
+              "file": 1,
+              "location": 2,
+              "message": 3
+            }
+          ],
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "VITE v",
+            "endsPattern": "ready in"
+          }
+        }
+      ]
+    },
+    {
+      "label": "🌐 Run DataLab-Web in VS Code",
+      "detail": "Start the Vite dev server (if not running) and open the app in VS Code's Simple Browser.",
+      "type": "shell",
+      "command": "echo",
+      "args": [
+        "DataLab-Web running on http://localhost:5173/ — opening in Simple Browser…",
+        "${input:openAppInSimpleBrowser}"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "silent"
+      },
+      "problemMatcher": [],
+      "dependsOrder": "sequence",
+      "dependsOn": ["🚀 Dev Server"]
     }
   ],
   "inputs": [
@@ -326,6 +377,12 @@
       "type": "command",
       "command": "simpleBrowser.show",
       "args": "http://127.0.0.1:8765/"
+    },
+    {
+      "id": "openAppInSimpleBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": "http://localhost:5173/"
     }
   ]
 }
