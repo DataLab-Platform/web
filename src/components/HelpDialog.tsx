@@ -139,7 +139,7 @@ function AboutView({ version }: { version: string }) {
         <br />
         Developed and maintained by DataLab Web open-source project team
         <br />
-        Copyright © 2023 DataLab Platform Developers
+        Copyright © 2026 DataLab Platform Developers
       </p>
       <p className="help-about-license">
         Released under the BSD 3-Clause License.
