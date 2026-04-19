@@ -16,7 +16,7 @@ DataLab Web mirrors a large portion of the desktop application surface:
 - **Analysis** — measurements producing scalar results and result tables; interactive fit dialog; profile extraction (line / segment / average / radial) with graphical parameter editing.
 - **ROI management** — segment / rectangular / circular / polygonal regions of interest with a dedicated editor and grid view.
 - **Object tree** — multi-group workspace with drag & drop, properties, metadata editor, statistics card and computation history.
-- **Macros** — embedded Python editor (CodeMirror with autocompletion and search) plus a console, mirroring DataLab's macro system. Macros call the same `proxy` API as the desktop.
+- **Macros** — embedded Python editor (CodeMirror with autocompletion and search) plus a console, mirroring DataLab's macro system. Macros run in a dedicated Web Worker (their own Pyodide instance) and call an async `proxy` API that mirrors DataLab's `RemoteProxy`.
 - **Plugins** — Qt-compatible `PluginBase` API. The same plugin source runs in DataLab desktop and DataLab Web provided dialogs use `await param.edit_async(...)`. See [doc/plugins.md](doc/plugins.md).
 - **I/O** — HDF5 browser (via `h5py` running in Pyodide), text import wizard and per-directory save dialog.
 - **UI niceties** — light / dark theme, resizable splitters with persisted layout, pop-out result panel, contextual help dialog.
@@ -37,14 +37,18 @@ DataLab Web mirrors a large portion of the desktop application surface:
 Code organisation:
 
 - `src/sigima/` — Pyodide loader and Python ↔ JS bridge.
-  - `bootstrap.py` — Python module loaded into Pyodide; owns the in-memory object model and exposes the helper functions the UI calls.
+  - `bootstrap.py` — Python module loaded into Pyodide; owns the hierarchical in-memory object model (panels, groups, objects) and exposes the helper functions the UI calls.
+  - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI.
   - `runtime.ts` — typed wrapper around the Pyodide instance.
   - `SigimaContext.tsx` — React context that loads the runtime once.
-- `src/components/` — UI building blocks (menu bar, object tree, plots, dialogs, macro panel, side panels…).
+  - `macroWorker.ts` — dedicated Web Worker hosting a second Pyodide instance for macro execution, isolated from the main UI thread.
+  - `dlplugins/datalab/` — portable plugin shim providing the `PluginBase` API so DataLab desktop plugins run unchanged.
+  - `dlw_h5browser.py`, `dlw_interactive_fit.py`, … — Python helpers backing specific dialogs.
+- `src/components/` — UI building blocks (menu bar, object tree, plots, dialogs, macro panel, side panels…), including `DialogBridge.tsx` which routes Python dialog requests to React components.
 - `src/actions/` — action registry that maps Sigima features to menu items.
 - `src/plugins/` — host-side support for the Qt-compatible plugin API.
-- `src/macros/` — macro editor and execution helpers.
-- `src/App.tsx` — top-level layout (menu bar at the top, object tree on the left, central plot area, results panel on the right).
+- `src/macros/` — macro editor and execution helpers (templates, autocompletion bindings).
+- `src/App.tsx` — top-level layout (menu bar at the top, object tree on the left, central plot area, results panel on the right) with persisted splitter sizes.
 
 ## Comparison with related projects
 
@@ -153,7 +157,7 @@ Short-term:
 
 - Generic results-table view aligned with the desktop *Results* panel.
 - Richer image data preview (numeric grid with virtualised scrolling).
-- Off-main-thread Pyodide via Web Worker to keep the UI responsive on long-running computations.
+- Move the main `SigimaRuntime` off the UI thread (macros already run in a dedicated Web Worker; the main computation Pyodide instance still lives on the main thread).
 - Additional file formats through `sigima.io` (currently focused on text and HDF5).
 
 Longer-term:
