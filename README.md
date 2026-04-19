@@ -116,6 +116,25 @@ npm run format   # Prettier
 npm run preview  # Serve the production build locally
 ```
 
+### Releasing a new version
+
+The application version is declared **once**, in `package.json`, and is
+injected into the bundle at build time via Vite's `define` option (see
+`vite.config.ts`). The *Help → About* dialog reads it from
+`import.meta.env.VITE_APP_VERSION`.
+
+To bump the version, use the standard npm command (it edits
+`package.json`, creates a commit, and tags it `vX.Y.Z`):
+
+```powershell
+npm version patch   # bug fix:  0.1.0 → 0.1.1
+npm version minor   # feature:  0.1.0 → 0.2.0
+npm version major   # breaking: 0.1.0 → 1.0.0
+```
+
+The next `npm run dev` or `npm run build` automatically picks up the new
+value — no other file needs to be edited.
+
 ## Testing
 
 DataLab-Web ships a four-layer test pyramid that mirrors the engineering

@@ -2065,7 +2065,11 @@ export default function App() {
         />
       )}
       {helpView && (
-        <HelpDialog view={helpView} onClose={() => setHelpView(null)} />
+        <HelpDialog
+          view={helpView}
+          onClose={() => setHelpView(null)}
+          appVersion={import.meta.env.VITE_APP_VERSION}
+        />
       )}
       {h5BrowserFiles !== null && (
         <H5BrowserDialog

@@ -1,10 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { pythonHmr } from "./plugins/vite-plugin-python-hmr";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Single source of truth for the application version: ``package.json``.
+// Injected at compile time so ``import.meta.env.VITE_APP_VERSION`` is
+// always defined (no runtime ``.env`` file to maintain). Bump with
+// ``npm version <patch|minor|major>``.
+const pkg = createRequire(import.meta.url)("./package.json") as {
+  version: string;
+};
 
 // Absolute path to the slim Plotly dist file. ``react-plotly.js``
 // hardcodes ``require("plotly.js/dist/plotly")`` (the *full* package),
@@ -23,6 +32,12 @@ export default defineConfig({
   // Static deployment friendly: relative paths so it works from any sub-path
   // (e.g. GitHub Pages project sites).
   base: "./",
+  define: {
+    // Replace ``import.meta.env.VITE_APP_VERSION`` literally at build time
+    // with the version declared in ``package.json``. Used by the About
+    // dialog (see ``src/components/HelpDialog.tsx``).
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version),
+  },
   resolve: {
     alias: {
       // See ``PLOTLY_DIST_MIN`` above.
