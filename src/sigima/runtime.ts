@@ -249,28 +249,28 @@ export interface SignalRoiSegment {
  *  ``dx``/``dy``).  ``inverse`` flips the masking logic (default false). */
 export type ImageRoiSegment =
   | {
-      geometry: "rectangle";
-      title?: string;
-      inverse?: boolean;
-      x0: number;
-      y0: number;
-      dx: number;
-      dy: number;
-    }
+    geometry: "rectangle";
+    title?: string;
+    inverse?: boolean;
+    x0: number;
+    y0: number;
+    dx: number;
+    dy: number;
+  }
   | {
-      geometry: "circle";
-      title?: string;
-      inverse?: boolean;
-      xc: number;
-      yc: number;
-      r: number;
-    }
+    geometry: "circle";
+    title?: string;
+    inverse?: boolean;
+    xc: number;
+    yc: number;
+    r: number;
+  }
   | {
-      geometry: "polygon";
-      title?: string;
-      inverse?: boolean;
-      points: [number, number][];
-    };
+    geometry: "polygon";
+    title?: string;
+    inverse?: boolean;
+    points: [number, number][];
+  };
 
 /** Image data payload returned by ``get_image_data``. */
 export interface ImageData {
@@ -450,12 +450,12 @@ export type H5BrowserPreview =
   | { kind: "unsupported"; error?: string }
   | { kind: "signal"; title: string; x: number[]; y: number[] }
   | {
-      kind: "image";
-      title: string;
-      width: number;
-      height: number;
-      data: number[][];
-    };
+    kind: "image";
+    title: string;
+    width: number;
+    height: number;
+    data: number[][];
+  };
 
 /** Raw array payload for the "Show array" spreadsheet view. */
 export interface H5BrowserArray {
@@ -495,28 +495,28 @@ export interface DynamicChoice {
  *  :meth:`SigimaRuntime.getObjectStats`. */
 export type ObjectStats =
   | {
-      kind: "signal";
-      n_points: number;
-      x_dtype: string;
-      y_dtype: string;
-      x_min: number | null;
-      x_max: number | null;
-      y_min: number | null;
-      y_max: number | null;
-      y_mean: number | null;
-      y_std: number | null;
-      y_median: number | null;
-    }
+    kind: "signal";
+    n_points: number;
+    x_dtype: string;
+    y_dtype: string;
+    x_min: number | null;
+    x_max: number | null;
+    y_min: number | null;
+    y_max: number | null;
+    y_mean: number | null;
+    y_std: number | null;
+    y_median: number | null;
+  }
   | {
-      kind: "image";
-      shape: number[];
-      dtype: string;
-      min: number | null;
-      max: number | null;
-      mean: number | null;
-      std: number | null;
-      median: number | null;
-    };
+    kind: "image";
+    shape: number[];
+    dtype: string;
+    min: number | null;
+    max: number | null;
+    mean: number | null;
+    std: number | null;
+    median: number | null;
+  };
 
 /** Discriminator for the metadata-editor widgets. */
 export type MetadataValueType = "string" | "number" | "bool" | "json";
@@ -579,14 +579,14 @@ export interface SignalAnalysisDescriptor {
  *  vertical markers for x₀ / x₅₀ / x₁₀₀). */
 export type AnalysisOverlay =
   | {
-      kind: "segment";
-      x0: number;
-      y0: number;
-      x1: number;
-      y1: number;
-      label?: string;
-      color?: string;
-    }
+    kind: "segment";
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+    label?: string;
+    color?: string;
+  }
   | { kind: "vline"; x: number; label?: string; color?: string }
   | { kind: "hline"; y: number; label?: string; color?: string };
 
@@ -657,7 +657,7 @@ function toJs(value: unknown): unknown {
 }
 
 export class SigimaRuntime {
-  private constructor(private readonly py: PyodideAPI) {}
+  private constructor(private readonly py: PyodideAPI) { }
 
   static async load(
     onProgress?: (msg: string) => void,
@@ -665,7 +665,7 @@ export class SigimaRuntime {
     if (typeof window.loadPyodide !== "function") {
       throw new Error(
         "Pyodide failed to load from the CDN. Check the browser console " +
-          "and your network / Content-Security-Policy settings.",
+        "and your network / Content-Security-Policy settings.",
       );
     }
     onProgress?.("Loading Pyodide runtime…");
@@ -736,14 +736,26 @@ await micropip.install(["sigima", "guidata"])
       if (fn === null) {
         throw new Error(
           `Dialog requested (${String(kind)}) but no handler is registered. ` +
-            "Call sigima.setDialogHandler(...) on the JS side first.",
+          "Call sigima.setDialogHandler(...) on the JS side first.",
         );
       }
-      const py = (payload as { toJs?: (opts?: unknown) => unknown }).toJs;
-      const data =
-        typeof py === "function"
-          ? py.call(payload, { dict_converter: Object.fromEntries })
-          : payload;
+      // ``payload`` may be a Python proxy: convert to plain JS *and* destroy
+      // the proxy to avoid leaking PyProxy instances on every dialog call.
+      const proxy = payload as PyProxy | null | undefined;
+      const hasToJs = typeof proxy?.toJs === "function";
+      let data: unknown = payload;
+      try {
+        if (hasToJs) {
+          data = proxy!.toJs!({
+            dict_converter: (entries) =>
+              Object.fromEntries(entries as Iterable<[string, unknown]>),
+          });
+        }
+      } finally {
+        if (hasToJs) {
+          proxy!.destroy?.();
+        }
+      }
       return fn(String(kind), data);
     };
     const setBridge = this.py.globals.get("set_dialog_bridge");
@@ -768,34 +780,52 @@ await micropip.install(["sigima", "guidata"])
     this.dialogHandler = handler;
   }
 
+  /**
+   * Serialisation queue for all Pyodide calls.
+   *
+   * Pyodide is single-threaded: two concurrent ``callPy`` invocations would
+   * interleave reads/writes of the bootstrap globals (``_STORE``, etc.) and
+   * corrupt the Python state.  Every ``callPy`` chains on this promise so
+   * the Python side observes a strictly serial sequence of requests.  A
+   * failure in one call must not poison subsequent ones, so the chain is
+   * rebuilt with ``.catch(() => undefined)``.
+   */
+  private _queue: Promise<unknown> = Promise.resolve();
+
   /** Call a Python function declared in bootstrap.py with keyword args. */
-  private async callPy(
+  private async callPy<T = unknown>(
     name: string,
     kwargs: Record<string, unknown> = {},
-  ): Promise<unknown> {
-    const fn = this.py.globals.get(name);
-    if (!fn) {
-      throw new Error(`Python function not found: ${name}`);
-    }
-    if (typeof fn.callKwargs !== "function") {
-      fn.destroy?.();
-      throw new Error(
-        `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
-      );
-    }
-    try {
-      // In Pyodide, callKwargs must receive the kwargs dict as its LAST
-      // argument.  All our helpers in bootstrap.py are called with kwargs
-      // only, so the kwargs dict is also the only argument.
-      const result = fn.callKwargs(kwargs);
-      const awaited = result instanceof Promise ? await result : result;
-      return toJs(awaited);
-    } catch (err) {
-      console.error(`[sigima] ${name} failed`, err);
-      throw err;
-    } finally {
-      fn.destroy?.();
-    }
+  ): Promise<T> {
+    const doCall = async (): Promise<T> => {
+      const fn = this.py.globals.get(name);
+      if (!fn) {
+        throw new Error(`Python function not found: ${name}`);
+      }
+      if (typeof fn.callKwargs !== "function") {
+        fn.destroy?.();
+        throw new Error(
+          `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
+        );
+      }
+      try {
+        // In Pyodide, callKwargs must receive the kwargs dict as its LAST
+        // argument.  All our helpers in bootstrap.py are called with kwargs
+        // only, so the kwargs dict is also the only argument.
+        const result = fn.callKwargs(kwargs);
+        const awaited = result instanceof Promise ? await result : result;
+        return toJs(awaited) as T;
+      } catch (err) {
+        console.error(`[sigima] ${name} failed`, err);
+        throw err;
+      } finally {
+        fn.destroy?.();
+      }
+    };
+    const next = this._queue.then(doCall, doCall);
+    // Keep the chain alive even if this call rejects.
+    this._queue = next.catch(() => undefined);
+    return next;
   }
 
   async createSignal(params: SignalCreationParams): Promise<string> {
