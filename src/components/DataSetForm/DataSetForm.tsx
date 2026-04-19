@@ -14,7 +14,7 @@
  * Falls back to a flat property order when that key is missing.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DynamicChoice, JsonSchema } from "../../sigima/runtime";
 
 // ---------------------------------------------------------------------------
@@ -373,7 +373,11 @@ function useChoices(
     () => JSON.stringify(currentValues),
     [currentValues],
   );
-  useMemo(() => {
+  // NOTE: this MUST be ``useEffect`` (not ``useMemo``).  ``useMemo`` does
+  // not run cleanup callbacks, so the ``cancelled`` flag would never flip
+  // and the *last-resolving* request would win — a real race condition
+  // when ``currentValues`` change faster than the Python round-trip.
+  useEffect(() => {
     if (!isDynamic || !resolveChoices) return;
     let cancelled = false;
     resolveChoices(name, currentValues).then((entries) => {

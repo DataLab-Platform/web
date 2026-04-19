@@ -286,14 +286,32 @@ export default function App() {
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
-    runtime.listFeatures().then(setFeatures);
-    runtime.listSignalCreationTypes().then(setSignalTypes);
-    runtime.listImageCreationTypes().then(setImageTypes);
-    runtime.listSignalAnalysis().then(setAnalysisEntries);
-    runtime.listImageAnalysis().then(setImageAnalysisEntries);
-    runtime.listPluginMenuActions().then(setPluginActions);
-    runtime.listInteractiveFits().then(setInteractiveFits);
+    let cancelled = false;
+    runtime.listFeatures().then((v) => {
+      if (!cancelled) setFeatures(v);
+    });
+    runtime.listSignalCreationTypes().then((v) => {
+      if (!cancelled) setSignalTypes(v);
+    });
+    runtime.listImageCreationTypes().then((v) => {
+      if (!cancelled) setImageTypes(v);
+    });
+    runtime.listSignalAnalysis().then((v) => {
+      if (!cancelled) setAnalysisEntries(v);
+    });
+    runtime.listImageAnalysis().then((v) => {
+      if (!cancelled) setImageAnalysisEntries(v);
+    });
+    runtime.listPluginMenuActions().then((v) => {
+      if (!cancelled) setPluginActions(v);
+    });
+    runtime.listInteractiveFits().then((v) => {
+      if (!cancelled) setInteractiveFits(v);
+    });
     refresh();
+    return () => {
+      cancelled = true;
+    };
   }, [status, runtime, refresh]);
 
   useEffect(() => {
@@ -666,7 +684,7 @@ export default function App() {
         if (result === null) {
           window.alert(
             "The analysis function returned no result " +
-              "(e.g. FWHM on a flat curve, or no peak detected).",
+            "(e.g. FWHM on a flat curve, or no peak detected).",
           );
         }
         await refreshResults(oid);
@@ -1234,8 +1252,7 @@ export default function App() {
               setH5BrowserFiles([opened]);
             } catch (err2) {
               window.alert(
-                `Failed to open HDF5 file:\n${
-                  err2 instanceof Error ? err2.message : String(err2)
+                `Failed to open HDF5 file:\n${err2 instanceof Error ? err2.message : String(err2)
                 }`,
               );
             }
@@ -1528,12 +1545,12 @@ export default function App() {
                     err.name === "SecurityError");
                 const explanation = isBlocked
                   ? "The browser refused to write into this directory " +
-                    "(system folders such as Desktop, Documents, " +
-                    "Downloads or OneDrive-synced paths are blocked).\n\n" +
-                    "Click OK to download each file individually instead, " +
-                    "or Cancel to abort."
+                  "(system folders such as Desktop, Documents, " +
+                  "Downloads or OneDrive-synced paths are blocked).\n\n" +
+                  "Click OK to download each file individually instead, " +
+                  "or Cancel to abort."
                   : `Write failed:\n${msg}\n\nClick OK to download each ` +
-                    `file individually instead.`;
+                  `file individually instead.`;
                 if (!window.confirm(explanation)) return;
                 // Fall through to download-fallback below.
               }
@@ -1653,42 +1670,42 @@ export default function App() {
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
       ...(activePanel === "image"
         ? buildImageGridActions({
-            onDistributeOnGrid: handleDistributeOnGrid,
-            onResetPositions: handleResetImagePositions,
-          })
+          onDistributeOnGrid: handleDistributeOnGrid,
+          onResetPositions: handleResetImagePositions,
+        })
         : []),
       ...(activePanel === "image"
         ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
         : []),
       ...(activePanel === "signal"
         ? buildInteractiveFitActions(
-            interactiveFits,
-            handleLaunchInteractiveFit,
-          )
+          interactiveFits,
+          handleLaunchInteractiveFit,
+        )
         : []),
       ...(activePanel === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       ...(activePanel === "signal"
         ? buildRoiActions(roi, roiEditMode, {
-            onToggleEditMode: handleToggleRoiEditMode,
-            onEditNumerically: handleEditRoi,
-            onExtractEach: handleRoiExtractEach,
-            onExtractMerged: handleRoiExtractMerged,
-            onRemoveAt: handleRoiRemoveAt,
-            onRemoveAll: handleRoiRemoveAll,
-          })
+          onToggleEditMode: handleToggleRoiEditMode,
+          onEditNumerically: handleEditRoi,
+          onExtractEach: handleRoiExtractEach,
+          onExtractMerged: handleRoiExtractMerged,
+          onRemoveAt: handleRoiRemoveAt,
+          onRemoveAll: handleRoiRemoveAll,
+        })
         : buildImageRoiActions(imageRoi, imageRoiEditMode, {
-            onToggleEditMode: handleToggleImageRoiEditMode,
-            onAddRectangle: handleImageAddRectangle,
-            onAddCircle: handleImageAddCircle,
-            onCreateGrid: handleCreateRoiGrid,
-            onEditNumerically: handleImageEditRoi,
-            onExtractEach: handleImageRoiExtractEach,
-            onExtractMerged: handleImageRoiExtractMerged,
-            onRemoveAt: handleImageRoiRemoveAt,
-            onRemoveAll: handleImageRoiRemoveAll,
-          })),
+          onToggleEditMode: handleToggleImageRoiEditMode,
+          onAddRectangle: handleImageAddRectangle,
+          onAddCircle: handleImageAddCircle,
+          onCreateGrid: handleCreateRoiGrid,
+          onEditNumerically: handleImageEditRoi,
+          onExtractEach: handleImageRoiExtractEach,
+          onExtractMerged: handleImageRoiExtractMerged,
+          onRemoveAt: handleImageRoiRemoveAt,
+          onRemoveAll: handleImageRoiRemoveAll,
+        })),
       ...buildPluginActions(pluginActions, objectPanel, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),

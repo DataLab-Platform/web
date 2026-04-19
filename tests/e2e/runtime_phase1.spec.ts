@@ -22,7 +22,6 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // added.  Without it, concurrent ``_STORE[id] = obj`` writes could
         // interleave and lose entries.
         const titles = await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sigima = (window as any).sigima;
             const x = Array.from({ length: 16 }, (_, i) => i);
             const tasks = Array.from({ length: 10 }, (_, i) =>
@@ -51,7 +50,6 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // 2) Fire a healthy call right after.  It must resolve normally,
         //    proving the queue's ``.catch`` keeps the chain alive.
         const result = await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sigima = (window as any).sigima;
             let badRejected = false;
             try {
@@ -73,7 +71,6 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // them so good ones still succeed and bad ones still reject — no race
         // conditions, no swallowed errors.
         const summary = await page.evaluate(async () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const sigima = (window as any).sigima;
             const x = [0, 1, 2, 3];
             const tasks: Promise<unknown>[] = [];

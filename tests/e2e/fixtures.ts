@@ -7,9 +7,12 @@ import { expect, Page } from "@playwright/test";
  * from ``loading`` → ``ready`` once bootstrap.py has been executed.
  */
 export async function waitForSigimaReady(page: Page): Promise<void> {
+  // First load installs Sigima/guidata via micropip (network) and runs the
+  // ~MB-sized bootstrap.py.  On CI or slow PyPI this can exceed 90 s, so we
+  // give it 3 minutes with a safety margin.
   await expect(page.locator(".app")).toHaveAttribute(
     "data-sigima-status",
     "ready",
-    { timeout: 90_000 },
+    { timeout: 180_000 },
   );
 }
