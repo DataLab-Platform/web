@@ -1101,10 +1101,6 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
   }
 
-  async deleteSignal(id: string): Promise<void> {
-    await this.callPy("delete_signal", { oid: id });
-  }
-
   // ------------------------------------------------------------------
   // Object model (groups + objects per panel kind)
   // ------------------------------------------------------------------
