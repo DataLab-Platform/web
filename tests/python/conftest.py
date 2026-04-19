@@ -65,6 +65,11 @@ if "pyodide" not in sys.modules:
 # Alias ``processor`` -> ``dlw_processor`` (mirrors the FS write in runtime.ts).
 # ---------------------------------------------------------------------------
 
+# Importing the JSON-schema shim installs ``dataset_to_schema_with_values``
+# and ``resolve_dynamic_choices`` on ``guidata.dataset`` as a side effect.
+# This MUST run before ``processor`` is imported (which pulls those names).
+importlib.import_module("_guidata_jsonschema_shim")
+
 if "dlw_processor" not in sys.modules:
     sys.modules["dlw_processor"] = importlib.import_module("processor")
 
