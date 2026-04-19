@@ -143,6 +143,35 @@ sys.stderr = _DLWStream(_dlw_post_stderr)
   return pyPromise;
 }
 
+// Surface async errors that escape the ``onmessage`` try/catch (e.g. a
+// timer scheduled by Pyodide that throws, or a detached Promise that
+// rejects).  Without these handlers the worker would die silently — the
+// main thread relies on ``stderr`` / ``finished`` messages to update the
+// macro console and Stop button state.
+self.onerror = (event: Event | string): boolean => {
+  const text =
+    typeof event === "string"
+      ? event
+      : (event as ErrorEvent).message || "macro worker error";
+  self.postMessage({ type: "stderr", text: text + "\n" });
+  self.postMessage({ type: "finished", ok: false, error: text });
+  // Returning ``true`` would prevent default logging in the host page;
+  // we want the error to also appear in DevTools, so let it propagate.
+  return false;
+};
+
+self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
+  const reason = event.reason;
+  const text =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === "string"
+        ? reason
+        : "unhandled promise rejection in macro worker";
+  self.postMessage({ type: "stderr", text: text + "\n" });
+  self.postMessage({ type: "finished", ok: false, error: text });
+};
+
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data as
     | { type: "init" }
