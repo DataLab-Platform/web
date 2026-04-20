@@ -67,6 +67,18 @@ async function getPyodide(): Promise<PyodideAPI> {
       /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
     )) as { loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI> };
     const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
+
+    // Pin ``LANG=C`` before any guidata/sigima import so gettext-wrapped
+    // labels (e.g. signal/image creation types, processing labels) come
+    // back in English and stay consistent with the React UI. See the
+    // long-form comment in ``runtime.ts`` and the "Internationalisation"
+    // section of ``README.md`` for the rationale and the path forward.
+    await py.runPythonAsync(`
+import os
+os.environ["LANG"] = "C"
+os.environ["LANGUAGE"] = "C"
+`);
+
     await py.loadPackage(["numpy"]);
 
     // Stream stdout/stderr to the main thread, line by line.

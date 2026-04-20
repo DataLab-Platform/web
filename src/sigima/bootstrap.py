@@ -41,6 +41,18 @@ import dlw_interactive_fit as _ifit
 # sibling modules pushed into Pyodide's filesystem alongside this one;
 # pylint sees them as third-party because they live outside any package.
 # pylint: disable=wrong-import-order,ungrouped-imports,import-error
+# NOTE on locale / translations:
+# ``runtime.ts`` (and ``macroWorker.ts`` for the macro Pyodide instance)
+# pin ``os.environ["LANG"] = "C"`` *before* this module — and before any
+# ``guidata`` import — so that all ``gettext _()``-wrapped labels coming
+# from ``sigima`` / ``guidata`` (e.g. ``SignalTypes.label``,
+# ``ImageTypes.label``, processing names, parameter labels…) are
+# returned in English and stay consistent with the English-only React
+# UI. Do NOT set ``LANG`` here: ``guidata.configtools.get_translation``
+# caches the translation object at first import, so any change made
+# from this module would already be too late. See the
+# "Internationalisation" section of ``README.md`` for the long-term
+# multi-language perspective.
 import dlw_processor as _proc
 import numpy as np
 from sigima.objects import SignalObj

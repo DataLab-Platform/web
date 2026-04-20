@@ -151,6 +151,40 @@ VS Code tasks are provided under `.vscode/tasks.json` (`🚀 Pytest`, `🟢 Vite
 
 DataLab-Web ships a Qt-compatible plugin system. The same `PluginBase` subclass can run unchanged in DataLab desktop and DataLab-Web, provided parameter dialogs use `await param.edit_async(self.main)` instead of the synchronous `param.edit(self.main)`. See [doc/plugins.md](doc/plugins.md) for details, hot-reload behaviour and the bundled vitrine plugin.
 
+## Internationalisation
+
+### Current state
+
+The DataLab-Web UI is **English-only**. There is no React-side i18n layer yet (no `react-i18next`, no `useTranslation` hook): all menu labels, dialog titles, button captions and tooltips that originate in the TypeScript/React code are hard-coded English strings.
+
+However, a non-trivial fraction of what the user sees comes from **Python**, not from React: the `Create > Signal` and `Create > Image` submenus, the *Processing* / *Operations* / *Analysis* menu entries, parameter labels in computation dialogs, etc. Those labels are produced by Sigima and guidata through `gettext _()` wrappers (e.g. `SignalTypes` and `ImageTypes` in [`sigima.objects.signal.creation`](https://github.com/DataLab-Platform/Sigima) / `sigima.objects.image.creation`).
+
+When `LANG` is unset, [`guidata.configtools.get_translation`](https://github.com/PlotPyStack/guidata) falls back to the browser's preferred language via `get_system_lang()`. On a French-locale browser, this used to surface translated entries (e.g. *Gaussienne*, *Sinusoïde*, *Sinus cardinal*) inside the otherwise-English UI — an inconsistency reported by users.
+
+To keep the UI consistent today, both Pyodide instances pin the locale to the POSIX `C` locale **before** importing guidata or sigima:
+
+- [`src/sigima/runtime.ts`](src/sigima/runtime.ts) — main Pyodide instance, immediately after `loadPyodide(...)` and before `loadPackage` / `micropip.install` / the guidata shims.
+- [`src/sigima/macroWorker.ts`](src/sigima/macroWorker.ts) — secondary Pyodide instance for macros.
+- [`src/sigima/bootstrap.py`](src/sigima/bootstrap.py) carries a defensive comment reminding maintainers that `LANG` is already pinned by `runtime.ts` by the time the module runs, and that setting it from Python would be too late (guidata caches its translation object at import time).
+
+`LANG=C` (rather than `LANG=en` or `LANG=en_US`) is chosen because `C` is the canonical "no translation" POSIX locale: gettext returns the original English `msgid` strings without searching for an `en.mo` catalog that may not be packaged in the Sigima/guidata wheels.
+
+### Perspective: full multi-language support (option 2)
+
+A proper internationalisation story would require coordinated work on both sides of the Pyodide bridge. A possible roadmap:
+
+1. **Add a React i18n layer.** Either adopt `react-i18next` (mature, route-aware, lazy-loadable namespaces) or implement a lightweight `useTranslation()` hook backed by JSON catalogs. All hard-coded English strings in `src/components/`, `src/actions/`, dialog titles, menu separators, status-bar messages and error toasts must be migrated to keys looked up through that layer.
+2. **Extract translatable strings.** Run an extraction pass (e.g. `i18next-parser`) to seed `src/locales/<lang>.json` catalogs. Mirror the guidata/Sigima `.po` workflow conceptually so contributors only have to learn one mental model.
+3. **Expose a language selector.** Add an entry in a *Preferences* dialog (or accept a `?lang=fr` URL parameter) and persist the choice in `localStorage`. Default to the browser's preferred language when nothing is stored.
+4. **Propagate the locale to Pyodide.** Before the *first* guidata import, set `os.environ["LANG"]` (and `LANGUAGE`) to the chosen value. Because `SignalTypes` and `ImageTypes` cache their `.label` attributes at class-definition time (`LabeledEnum` evaluates `_()` once, eagerly), changing the language **after** start-up cannot be done in place — it would require either:
+   - rebuilding the enum labels by re-evaluating each `_()` call (intrusive, brittle, would require Sigima cooperation), **or**
+   - simpler and recommended: trigger a full page reload when the user picks a new language, so a fresh Pyodide instance boots with the new `LANG`.
+5. **Ship additional `.mo` catalogs.** Today Sigima/guidata `.mo` files travel inside the wheels installed by `micropip`. To support languages not bundled there, a small loader could prefetch `.mo` files (or wheels with extra catalogs) and place them on Pyodide's virtual filesystem before the first import.
+6. **Localise the documentation.** Reuse the Sphinx + sphinx-intl workflow already established for the desktop DataLab to translate the contents of `doc/` (signal/image processing references, plugin guide, etc.).
+7. **Coordinate catalogs with the desktop app.** Open question: should DataLab-Web share translation catalogs with the desktop DataLab (single source of truth, but UI surfaces differ — many strings would not apply on either side), or maintain separate catalogs (more duplication, but each project can iterate independently)? A shared **glossary** of recurring terms (Signal, Image, ROI, FFT, Gaussian…) is probably the right middle ground.
+
+Until that work happens, please keep all new UI strings in English and treat the `LANG=C` pin as a load-bearing piece of infrastructure.
+
 ## Roadmap
 
 Short-term:

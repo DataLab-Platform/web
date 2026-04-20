@@ -665,6 +665,35 @@ export class SigimaRuntime {
     onProgress?.("Loading Pyodide runtime…");
     const py = await window.loadPyodide({ indexURL: PYODIDE_INDEX });
 
+    // ---------------------------------------------------------------
+    // Pin the Pyodide locale to ``C`` *before* any ``guidata`` /
+    // ``sigima`` import.
+    //
+    // Why: Sigima exposes user-facing labels (e.g. ``SignalTypes`` /
+    // ``ImageTypes`` enum entries shown in the ``Create`` menu, plus
+    // processing labels and parameter labels) wrapped in ``gettext
+    // _()``. ``guidata.configtools.get_translation`` falls back to the
+    // browser's locale via ``get_system_lang()`` when ``LANG`` is
+    // unset, so a French-locale browser would surface translated
+    // labels while the rest of the React UI is English-only — see the
+    // "Internationalisation" section of ``README.md``.
+    //
+    // Setting ``LANG=C`` (POSIX "no translation" locale) forces
+    // gettext to return the original ``msgid`` strings (English), which
+    // matches the rest of the UI. ``LANGUAGE`` is also unset to defeat
+    // GNU gettext's higher-priority override.
+    //
+    // This MUST run before ``loadPackage``/``micropip.install`` of
+    // ``guidata`` and before any ``runPythonAsync`` that touches the
+    // guidata shims, otherwise the translation object is cached at
+    // import time and the language change comes too late.
+    // ---------------------------------------------------------------
+    await py.runPythonAsync(`
+import os
+os.environ["LANG"] = "C"
+os.environ["LANGUAGE"] = "C"
+`);
+
     onProgress?.("Loading scientific stack (numpy, scipy, h5py)…");
     await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
 
