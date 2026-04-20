@@ -1194,20 +1194,6 @@ export default function App() {
     [runtime, pendingRoiGrid, refresh],
   );
 
-  const handleSaveProject = useCallback(async () => {
-    if (!runtime) return;
-    const text = await runtime.saveProject();
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "project.dlw";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [runtime]);
-
   const handleSaveWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;
     setBusy(true);
@@ -1306,28 +1292,6 @@ export default function App() {
     },
     [refresh],
   );
-
-  const handleLoadProject = useCallback(async () => {
-    if (!runtime) return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".dlw,application/json,.json,.txt";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      setBusy(true);
-      try {
-        const text = await file.text();
-        await runtime.loadProject(text);
-        setSelectedIds([]);
-        setCurrentId(null);
-        await refresh(null);
-      } finally {
-        setBusy(false);
-      }
-    };
-    input.click();
-  }, [runtime, refresh]);
 
   const handleSaveFile = useCallback(async () => {
     if (!runtime || !currentId) return;
@@ -1648,8 +1612,6 @@ export default function App() {
         onNewGroup: handleNewGroup,
         onDeleteSelection: handleDelete,
         onEditProperties: handleEditProperties,
-        onSaveProject: handleSaveProject,
-        onLoadProject: handleLoadProject,
         onOpenFile: handleOpenFile,
         onSaveFile: handleSaveFile,
         onSaveToDirectory: handleSaveToDirectory,
@@ -1748,8 +1710,6 @@ export default function App() {
       handleDistributeOnGrid,
       handleResetImagePositions,
       handleOpenEraseDialog,
-      handleSaveProject,
-      handleLoadProject,
       handleOpenFile,
       handleSaveFile,
       handleSaveToDirectory,

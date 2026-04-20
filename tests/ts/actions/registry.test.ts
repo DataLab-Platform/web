@@ -25,8 +25,6 @@ function makeStaticCallbacks() {
     onNewGroup: vi.fn(),
     onDeleteSelection: vi.fn(),
     onEditProperties: vi.fn(),
-    onSaveProject: vi.fn(),
-    onLoadProject: vi.fn(),
     onOpenFile: vi.fn(),
     onSaveFile: vi.fn(),
     onSaveToDirectory: vi.fn(),

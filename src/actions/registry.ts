@@ -23,8 +23,6 @@ export interface StaticActionCallbacks {
   onNewGroup: () => void;
   onDeleteSelection: () => void;
   onEditProperties: () => void;
-  onSaveProject: () => void;
-  onLoadProject: () => void;
   onOpenFile: () => void;
   onSaveFile: () => void;
   onSaveToDirectory: () => void;
@@ -106,23 +104,6 @@ export function buildStaticActions(
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       enabled: ready,
       run: cb.onImportHdf5,
-    },
-    {
-      id: "file.open_project",
-      label: "Open project…",
-      menuPath: "File/Open project…",
-      iconUrl: getIoIconUrl("fileopen_h5.svg"),
-      beginGroup: true,
-      enabled: ready,
-      run: cb.onLoadProject,
-    },
-    {
-      id: "file.save_project",
-      label: "Save project…",
-      menuPath: "File/Save project…",
-      iconUrl: getIoIconUrl("filesave_h5.svg"),
-      enabled: (s) => ready(s) && s.hasObjects,
-      run: cb.onSaveProject,
     },
     // Edit menu — order mirrors DataLab Qt's Edit menu (New group first,
     // then per-object actions).

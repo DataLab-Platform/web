@@ -314,12 +314,6 @@ export interface ImageCreationType {
   separator_before: boolean;
 }
 
-/** Diagnostic info returned by ``loadProject``. */
-export interface ProjectLoadResult {
-  signals: number;
-  groups: number;
-}
-
 /** Diagnostic info returned by ``openWorkspaceHdf5``. */
 export interface WorkspaceLoadResult {
   signals: number;
@@ -1212,22 +1206,8 @@ await micropip.install(["sigima", "guidata"])
   }
 
   // ------------------------------------------------------------------
-  // Project save / load + CSV I/O (Phase 6)
+  // Workspace HDF5 + CSV I/O
   // ------------------------------------------------------------------
-
-  async saveProject(): Promise<string> {
-    return (await this.callPy("save_project")) as string;
-  }
-
-  async loadProject(
-    content: string,
-    replace: boolean = true,
-  ): Promise<ProjectLoadResult> {
-    return (await this.callPy("load_project", {
-      content,
-      replace,
-    })) as ProjectLoadResult;
-  }
 
   /** Serialise the full object model to a DataLab-compatible HDF5 file.
    *  The returned bytes are ready to wrap in a ``Blob`` for download and
