@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { DynamicChoice, JsonSchema } from "../../sigima/runtime";
+import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ObjectNode, PanelTree } from "../sigima/runtime";
+import type { ObjectNode, PanelTree } from "../runtime/runtime";
 
 interface Props {
   title: string;

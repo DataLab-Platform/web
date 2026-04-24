@@ -8,8 +8,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSigima } from "../sigima/SigimaContext";
-import type { PluginRecord } from "../sigima/runtime";
+import { useSigima } from "../runtime/SigimaContext";
+import type { PluginRecord } from "../runtime/runtime";
 import { PluginConsentDialog } from "./PluginConsentDialog";
 import {
   hashSource,

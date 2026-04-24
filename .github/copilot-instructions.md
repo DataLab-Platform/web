@@ -9,10 +9,10 @@ desktop Qt application.
 ## Architecture in one picture
 
 ```
-React/TS UI  ──►  src/sigima/runtime.ts  ──►  Pyodide  ──►  bootstrap.py  ──►  Sigima
+React/TS UI  ──►  src/runtime/runtime.ts  ──►  Pyodide  ──►  bootstrap.py  ──►  Sigima
 ```
 
-* **`src/sigima/bootstrap.py`** is the only Python file. It is loaded once into
+* **`src/runtime/bootstrap.py`** is the only Python file. It is loaded once into
   Pyodide and owns:
   * an in-memory object store (`_STORE: dict[str, SignalObj]`) — the MVP’s
     equivalent of DataLab’s `ObjectModel`;
@@ -21,10 +21,10 @@ React/TS UI  ──►  src/sigima/runtime.ts  ──►  Pyodide  ──►  bo
   * thin helpers (`create_signal`, `list_signals`, `get_signal_xy`,
     `apply_processing`, `delete_signal`, `list_processings`) that the JS layer
     calls. Every helper returns JSON-serialisable values.
-* **`src/sigima/runtime.ts`** is the only place that touches the Pyodide API.
+* **`src/runtime/runtime.ts`** is the only place that touches the Pyodide API.
   All Python calls go through `SigimaRuntime`; the rest of the UI consumes a
   typed interface (`SignalMeta`, `SignalData`, `ProcessingDescriptor`, …).
-* **`src/sigima/SigimaContext.tsx`** loads the runtime exactly once via React
+* **`src/runtime/SigimaContext.tsx`** loads the runtime exactly once via React
   context.
 * **`src/components/`** holds presentational components (no Pyodide imports).
 
@@ -71,6 +71,18 @@ when extending plot features (curve styles, ROI overlays, geometry results).
 * **Pyodide version is pinned** (`PYODIDE_VERSION` in `runtime.ts` and the
   `<script>` tag in `index.html`). Bump both together; Pyodide’s wheel index
   is version-specific.
+
+## Git workflow
+
+* **Never commit without explicit approval.** Before running `git commit`,
+  always submit the proposed commit message to the user (subject + body) and
+  wait for confirmation. The user may edit the message or reject the commit
+  outright.
+* Prefer Conventional-Commits-style subjects (`feat:`, `fix:`, `refactor:`,
+  `docs:`, `chore:`, …) but defer to the user's preference.
+* Group related changes in a single commit; split unrelated changes.
+* Never use `git push --force`, `git reset --hard`, or `--no-verify` without
+  explicit user instruction.
 
 ## Related projects (siblings in the multi-root workspace)
 

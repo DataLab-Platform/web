@@ -21,8 +21,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MacroMeta, MacroRecord, SigimaRuntime } from "../sigima/runtime";
-import { MacroRuntime } from "../sigima/MacroRuntime";
+import type { MacroMeta, MacroRecord, SigimaRuntime } from "../runtime/runtime";
+import { MacroRuntime } from "../runtime/MacroRuntime";
 import { MacroEditorTabs, type MacroTab } from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";

@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
-import type { SigimaRuntime } from "../../sigima/runtime";
+import type { SigimaRuntime } from "../../runtime/runtime";
 import { NotebookRuntime } from "../../notebook/NotebookRuntime";
 import {
   emptyCodeCell,

@@ -7,7 +7,7 @@ import type {
   PlotlyAnnotations,
   SignalData,
   SignalRoiSegment,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 interface Props {
   data: SignalData;
   oid: string | null;

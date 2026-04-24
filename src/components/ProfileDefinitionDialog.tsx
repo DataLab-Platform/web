@@ -31,7 +31,7 @@ import type {
   ImageData,
   JsonSchema,
   SchemaWithValues,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 export type ProfileFeatureId =
   | "line_profile"

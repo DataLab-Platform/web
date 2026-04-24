@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ObjectStats, SigimaRuntime } from "../sigima/runtime";
+import type { ObjectStats, SigimaRuntime } from "../runtime/runtime";
 
 interface Props {
   runtime: SigimaRuntime;

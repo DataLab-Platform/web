@@ -17,7 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MacroStreamKind } from "../sigima/MacroRuntime";
+import type { MacroStreamKind } from "../runtime/MacroRuntime";
 
 const MAX_LINES = 5000;
 

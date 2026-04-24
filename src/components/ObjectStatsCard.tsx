@@ -6,7 +6,7 @@
  * median, kept in sync with the underlying SignalObj / ImageObj.
  */
 
-import type { ObjectStats } from "../sigima/runtime";
+import type { ObjectStats } from "../runtime/runtime";
 
 interface Props {
   stats: ObjectStats | null;

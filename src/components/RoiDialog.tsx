@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { SignalRoiSegment } from "../sigima/runtime";
+import type { SignalRoiSegment } from "../runtime/runtime";
 
 interface Props {
   /** Initial ROI list (already cloned from the model). */

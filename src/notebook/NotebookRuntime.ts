@@ -11,12 +11,12 @@
  * one and the user is informed that the namespace was lost.
  */
 
-import type { SigimaRuntime } from "../sigima/runtime";
+import type { SigimaRuntime } from "../runtime/runtime";
 import {
   buildProxyBridge,
   type BridgeExternalCallbacks,
   type BridgeMethod,
-} from "../sigima/proxyBridge";
+} from "../runtime/proxyBridge";
 
 /** Outputs are MIME bundles, exactly like Jupyter ``display_data``. */
 export type MimeBundle = Record<string, unknown>;
@@ -170,7 +170,7 @@ export class NotebookRuntime {
   }
 
   private spawnWorker(): Worker {
-    const w = new Worker(new URL("../sigima/notebookWorker.ts", import.meta.url), {
+    const w = new Worker(new URL("../runtime/notebookWorker.ts", import.meta.url), {
       type: "module",
     });
     w.onmessage = (ev) => this.handleWorkerMessage(ev.data);

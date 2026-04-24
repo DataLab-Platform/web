@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { SigimaProvider } from "./sigima/SigimaContext";
+import { SigimaProvider } from "./runtime/SigimaContext";
 import { installConsoleCapture } from "./utils/consoleLog";
 import { initThemeEarly } from "./utils/theme";
 import "./styles.css";

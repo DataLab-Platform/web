@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ImageRoiSegment } from "../sigima/runtime";
+import type { ImageRoiSegment } from "../runtime/runtime";
 
 interface Props {
   /** Initial ROI list (already cloned from the model). */

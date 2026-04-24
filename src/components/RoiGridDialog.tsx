@@ -17,7 +17,7 @@ import type {
   ImageRoiSegment,
   JsonSchema,
   SchemaWithValues,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 interface Props {
   imageData: ImageData;

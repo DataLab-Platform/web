@@ -14,7 +14,7 @@ import type {
   MetadataEntry,
   MetadataValueType,
   SigimaRuntime,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 interface Props {
   runtime: SigimaRuntime;

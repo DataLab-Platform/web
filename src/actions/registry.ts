@@ -7,7 +7,7 @@ import type {
   SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 import { getAnalysisIconUrl } from "../assets/analysisIcons";
 import { getCreateIconUrl } from "../assets/createIcons";
 import { getEditIconUrl } from "../assets/editIcons";

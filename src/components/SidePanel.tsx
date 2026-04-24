@@ -16,7 +16,7 @@ import type {
   ObjectStats,
   SchemaWithValues,
   SigimaRuntime,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 import { DataSetForm } from "./DataSetForm";
 import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";

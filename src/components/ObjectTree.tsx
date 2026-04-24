@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { GroupNode, ObjectNode, PanelTree } from "../sigima/runtime";
+import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 
 interface Props {
   tree: PanelTree | null;

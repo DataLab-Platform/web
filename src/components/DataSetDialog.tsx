@@ -12,7 +12,7 @@ import type {
   DynamicChoice,
   JsonSchema,
   SchemaWithValues,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 interface Props {
   title: string;

@@ -37,7 +37,7 @@ DataLab Web mirrors a large portion of the desktop application surface:
 
 Code organisation:
 
-- `src/sigima/` — Pyodide loader and Python ↔ JS bridge.
+- `src/runtime/` — Pyodide loader and Python ↔ JS bridge.
   - `bootstrap.py` — Python module loaded into Pyodide; owns the hierarchical in-memory object model (panels, groups, objects) and exposes the helper functions the UI calls.
   - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI.
   - `runtime.ts` — typed wrapper around the Pyodide instance.
@@ -107,7 +107,7 @@ DataLab-Web ships a four-layer test pyramid that mirrors the engineering rigour 
 
 | Layer        | Tooling                          | Scope                                                   | Speed   |
 | ------------ | -------------------------------- | ------------------------------------------------------- | ------- |
-| Python       | pytest + coverage (CPython)      | `src/sigima/bootstrap.py` and `processor.py` headlessly | Fastest |
+| Python       | pytest + coverage (CPython)      | `src/runtime/bootstrap.py` and `processor.py` headlessly | Fastest |
 | TypeScript   | Vitest + jsdom                   | Pure-logic TS modules (action registry, theme, …)       | Fast    |
 | End-to-end   | Playwright (Chromium)            | Real browser boot of Pyodide + UI smoke tests           | Slow    |
 | Continuous   | GitHub Actions (`tests.yml`)     | All three layers on every push / PR                     | —       |
@@ -126,7 +126,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python -m pip install -r requirements-dev.txt
 
 # Python unit tests + coverage report (htmlcov-python/)
-.\.venv\Scripts\python -m pytest tests/python --cov=src/sigima --cov-report=html:htmlcov-python
+.\.venv\Scripts\python -m pytest tests/python --cov=src/runtime --cov-report=html:htmlcov-python
 
 # TypeScript unit tests + coverage report (coverage-ts/)
 npm test
@@ -164,9 +164,9 @@ When `LANG` is unset, [`guidata.configtools.get_translation`](https://github.com
 
 To keep the UI consistent today, both Pyodide instances pin the locale to the POSIX `C` locale **before** importing guidata or sigima:
 
-- [`src/sigima/runtime.ts`](src/sigima/runtime.ts) — main Pyodide instance, immediately after `loadPyodide(...)` and before `loadPackage` / `micropip.install` / the guidata shims.
-- [`src/sigima/macroWorker.ts`](src/sigima/macroWorker.ts) — secondary Pyodide instance for macros.
-- [`src/sigima/bootstrap.py`](src/sigima/bootstrap.py) carries a defensive comment reminding maintainers that `LANG` is already pinned by `runtime.ts` by the time the module runs, and that setting it from Python would be too late (guidata caches its translation object at import time).
+- [`src/runtime/runtime.ts`](src/runtime/runtime.ts) — main Pyodide instance, immediately after `loadPyodide(...)` and before `loadPackage` / `micropip.install` / the guidata shims.
+- [`src/runtime/macroWorker.ts`](src/runtime/macroWorker.ts) — secondary Pyodide instance for macros.
+- [`src/runtime/bootstrap.py`](src/runtime/bootstrap.py) carries a defensive comment reminding maintainers that `LANG` is already pinned by `runtime.ts` by the time the module runs, and that setting it from Python would be too late (guidata caches its translation object at import time).
 
 `LANG=C` (rather than `LANG=en` or `LANG=en_US`) is chosen because `C` is the canonical "no translation" POSIX locale: gettext returns the original English `msgid` strings without searching for an `en.mo` catalog that may not be packaged in the Sigima/guidata wheels.
 

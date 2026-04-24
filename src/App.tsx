@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSigima } from "./sigima/SigimaContext";
+import { useSigima } from "./runtime/SigimaContext";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
@@ -9,7 +9,7 @@ import type {
   PluginMenuAction,
   SchemaWithValues,
   SignalData,
-} from "./sigima/runtime";
+} from "./runtime/runtime";
 import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
@@ -66,7 +66,7 @@ import type {
   SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
-} from "./sigima/runtime";
+} from "./runtime/runtime";
 
 interface PendingFeature {
   feature: FeatureDescriptor;

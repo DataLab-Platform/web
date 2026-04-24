@@ -42,12 +42,12 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/main.tsx",
         // Python sources are tested under pytest.
-        "src/sigima/**/*.py",
+        "src/runtime/**/*.py",
         // Pyodide-side runtime cannot be exercised in jsdom.
-        "src/sigima/runtime.ts",
-        "src/sigima/macroWorker.ts",
-        "src/sigima/MacroRuntime.ts",
-        "src/sigima/SigimaContext.tsx",
+        "src/runtime/runtime.ts",
+        "src/runtime/macroWorker.ts",
+        "src/runtime/MacroRuntime.ts",
+        "src/runtime/SigimaContext.tsx",
       ],
     },
   },

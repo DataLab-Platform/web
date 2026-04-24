@@ -15,8 +15,8 @@
 
 import { useEffect, useState } from "react";
 import { DataSetDialog } from "./DataSetDialog";
-import { useSigima } from "../sigima/SigimaContext";
-import type { SchemaWithValues } from "../sigima/runtime";
+import { useSigima } from "../runtime/SigimaContext";
+import type { SchemaWithValues } from "../runtime/runtime";
 
 type DialogKind = "edit_dataset" | "message" | "confirm";
 

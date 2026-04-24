@@ -25,8 +25,8 @@ import type {
   H5BrowserNode,
   H5BrowserNodeAttrs,
   H5BrowserPreview,
-} from "../sigima/runtime";
-import { useSigima } from "../sigima/SigimaContext";
+} from "../runtime/runtime";
+import { useSigima } from "../runtime/SigimaContext";
 
 interface Props {
   /** Optional already-opened files (e.g. opened by the caller before

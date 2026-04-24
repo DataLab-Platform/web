@@ -19,13 +19,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Plot from "react-plotly.js";
-import { useSigima } from "../sigima/SigimaContext";
+import { useSigima } from "../runtime/SigimaContext";
 import {
   defaultTextImportParams,
   type TextImportParams,
   type TextImportPreview,
   type TextImportSignal,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 interface Props {
   /** Called with the list of newly created object ids on successful

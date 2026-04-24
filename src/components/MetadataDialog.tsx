@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ObjectMeta } from "../sigima/runtime";
+import type { ObjectMeta } from "../runtime/runtime";
 
 interface Props {
   initial: ObjectMeta;

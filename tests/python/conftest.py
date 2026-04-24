@@ -3,11 +3,11 @@
 """
 Pytest configuration for DataLab-Web's headless Python tests.
 
-The Python source code under :mod:`src/sigima` is normally loaded into
+The Python source code under :mod:`src/runtime` is normally loaded into
 Pyodide via :mod:`runtime.ts`. To exercise it under CPython we replicate
 the runtime's setup steps:
 
-* prepend ``src/sigima`` and ``src/sigima/dlplugins`` to :data:`sys.path`,
+* prepend ``src/runtime`` and ``src/runtime/dlplugins`` to :data:`sys.path`,
 * stub the Pyodide-only modules (:mod:`js`, :mod:`pyodide.ffi`) so that
   modules like :mod:`macro_proxy` import cleanly,
 * alias :mod:`processor` to :mod:`dlw_processor` (the runtime writes the
@@ -30,7 +30,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SIGIMA_SRC = REPO_ROOT / "src" / "sigima"
+SIGIMA_SRC = REPO_ROOT / "src" / "runtime"
 DLPLUGINS_DIR = SIGIMA_SRC / "dlplugins"
 
 for path in (SIGIMA_SRC, DLPLUGINS_DIR):

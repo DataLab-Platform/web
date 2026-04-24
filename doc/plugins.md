@@ -81,7 +81,7 @@ class MyPlugin(PluginBase):
   loaded you will be prompted to confirm execution. The decision is
   remembered (per source SHA-256) in `localStorage`.
 * **Bundled built-ins:** drop a file into
-  `src/sigima/builtin_plugins/`; it will be discovered automatically at
+  `src/runtime/builtin_plugins/`; it will be discovered automatically at
   startup.
 
 ## Hot reload

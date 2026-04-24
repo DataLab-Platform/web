@@ -1,9 +1,9 @@
 # DataLab-Web is a JavaScript/TypeScript project (see ``package.json``).
 # This ``pyproject.toml`` only carries Python tooling configuration for the
 # automated test suite that exercises the in-browser Python layer
-# (``src/sigima/*.py``) headlessly under CPython.
+# (``src/runtime/*.py``) headlessly under CPython.
 #
-# Python 3.11+ is required: ``src/sigima/processor.py`` relies on
+# Python 3.11+ is required: ``src/runtime/processor.py`` relies on
 # ``isinstance(list[SignalObj], type)`` returning ``False``, which is broken
 # under CPython 3.9 and 3.10 (both report ``True``) and was fixed in 3.11.
 
@@ -34,7 +34,7 @@ markers = [
 
 [tool.coverage.run]
 branch = true
-source = ["src/sigima"]
+source = ["src/runtime"]
 omit = [
     # Pyodide-only glue is not exercised under CPython.
     "*/macro_proxy.py",
@@ -59,10 +59,10 @@ directory = "htmlcov-python"
 output = "coverage-python.xml"
 
 [tool.pylint.MASTER]
-# ``__init__.py`` does not exist (the modules live under ``src/sigima`` and
+# ``__init__.py`` does not exist (the modules live under ``src/runtime`` and
 # are pushed into Pyodide individually); list the files explicitly so the
-# rare scenarios where users invoke ``pylint src/sigima`` still work.
-ignore-paths = ["src/sigima/dlplugins", "src/sigima/builtin_plugins"]
+# rare scenarios where users invoke ``pylint src/runtime`` still work.
+ignore-paths = ["src/runtime/dlplugins", "src/runtime/builtin_plugins"]
 
 [tool.pylint."MESSAGES CONTROL"]
 # Project-wide disables — each is justified by a recurring DataLab-Web

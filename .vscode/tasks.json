@@ -11,7 +11,7 @@
         "-m",
         "ruff",
         "format",
-        "src/sigima",
+        "src/runtime",
         "tests/python",
         "scripts"
       ],
@@ -38,7 +38,7 @@
         "ruff",
         "check",
         "--fix",
-        "src/sigima",
+        "src/runtime",
         "tests/python",
         "scripts"
       ],
@@ -77,7 +77,7 @@
         "${command:python.interpreterPath}",
         "-m",
         "pylint",
-        "src/sigima"
+        "src/runtime"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -185,7 +185,9 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "statusbar": { "hide": true }
+        "statusbar": {
+          "hide": true
+        }
       },
       "presentation": {
         "panel": "dedicated",
@@ -203,7 +205,9 @@
       ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "statusbar": { "hide": true }
+        "statusbar": {
+          "hide": true
+        }
       },
       "isBackground": true,
       "presentation": {
@@ -324,10 +328,15 @@
       "detail": "Background Vite dev server on http://localhost:5173/.",
       "type": "shell",
       "command": "npm",
-      "args": ["run", "dev"],
+      "args": [
+        "run",
+        "dev"
+      ],
       "options": {
         "cwd": "${workspaceFolder}",
-        "statusbar": { "hide": true }
+        "statusbar": {
+          "hide": true
+        }
       },
       "isBackground": true,
       "presentation": {
@@ -361,14 +370,18 @@
         "DataLab-Web running on http://localhost:5173/ — opening in Simple Browser…",
         "${input:openAppInSimpleBrowser}"
       ],
-      "options": { "cwd": "${workspaceFolder}" },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "presentation": {
         "panel": "dedicated",
         "reveal": "silent"
       },
       "problemMatcher": [],
       "dependsOrder": "sequence",
-      "dependsOn": ["🚀 Dev Server"]
+      "dependsOn": [
+        "🚀 Dev Server"
+      ]
     }
   ],
   "inputs": [

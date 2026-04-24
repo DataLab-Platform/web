@@ -6,7 +6,7 @@ import type {
   GeometryAnalysisResult,
   ImageData,
   ImageRoiSegment,
-} from "../sigima/runtime";
+} from "../runtime/runtime";
 
 /** Pure-visualization tools available in the image viewer toolbar. */
 type ImageTool = "profiles" | "contrast" | "stats" | null;
