@@ -60,9 +60,8 @@ export function Cell({
 
   return (
     <div
-      className={`nb-cell nb-cell-${cell.type}${active ? " nb-cell-active" : ""}${
-        cell.status === "running" ? " nb-cell-running" : ""
-      }${cell.status === "error" ? " nb-cell-error" : ""}`}
+      className={`nb-cell nb-cell-${cell.type}${active ? " nb-cell-active" : ""}${cell.status === "running" ? " nb-cell-running" : ""
+        }${cell.status === "error" ? " nb-cell-error" : ""}`}
       onClick={() => onActivate(cell.id)}
       role="group"
       aria-label={`${cell.type} cell`}
@@ -292,6 +291,5 @@ function MarkdownRendered({ source }: MarkdownRenderedProps) {
     }
   }, [source]);
   // The HTML is sanitised by DOMPurify above.
-  // eslint-disable-next-line react/no-danger
   return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
