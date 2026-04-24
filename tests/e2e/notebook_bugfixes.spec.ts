@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady, disableQuickstartTemplate } from "./fixtures";
+import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
 
 /**
  * End-to-end coverage for the four bugs reported by the user against
@@ -15,7 +15,7 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
   test.beforeEach(async ({ page }) => {
     await disableQuickstartTemplate(page);
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
     await page.getByRole("tab", { name: "Notebooks" }).click();
     await expect(page.locator(".nb-toolbar-status")).toContainText(
       /Kernel idle|Kernel running/,

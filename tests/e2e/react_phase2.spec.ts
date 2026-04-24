@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady } from "./fixtures";
+import { waitForRuntimeReady } from "./fixtures";
 
 /**
  * Phase 2 validation: React race conditions.
@@ -19,7 +19,7 @@ import { waitForSigimaReady } from "./fixtures";
 test.describe("Phase 2 — React race conditions", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto("/");
-        await waitForSigimaReady(page);
+        await waitForRuntimeReady(page);
     });
 
     test("rapid signal switching ends on the latest selection", async ({
@@ -27,14 +27,14 @@ test.describe("Phase 2 — React race conditions", () => {
     }) => {
         // Seed the panel with 6 signals with predictable titles.
         await page.evaluate(async () => {
-            const sigima = (
+            const runtime = (
                 window as unknown as {
-                    sigima: { addSignalFromArrays: (p: unknown) => Promise<string> };
+                    runtime: { addSignalFromArrays: (p: unknown) => Promise<string> };
                 }
-            ).sigima;
+            ).runtime;
             const x = Array.from({ length: 32 }, (_, i) => i);
             for (let i = 0; i < 6; i += 1) {
-                await sigima.addSignalFromArrays({
+                await runtime.addSignalFromArrays({
                     title: `phase2-${i}`,
                     xdata: x,
                     ydata: x.map((v) => v * (i + 1)),
@@ -84,16 +84,16 @@ test.describe("Phase 2 — React race conditions", () => {
 
         // Cross-check: runtime side believes the same.
         const runtimeTitle = await page.evaluate(async () => {
-            const sigima = (
+            const runtime = (
                 window as unknown as {
-                    sigima: {
+                    runtime: {
                         getPanelTree: (
                             k: string,
                         ) => Promise<{ groups: { objects: { title: string }[] }[] }>;
                     };
                 }
-            ).sigima;
-            const tree = await sigima.getPanelTree("signal");
+            ).runtime;
+            const tree = await runtime.getPanelTree("signal");
             return tree.groups
                 .flatMap((g) => g.objects)
                 .find((o) => o.title === "phase2-5")?.title;
@@ -136,15 +136,15 @@ test.describe("Phase 2 — React race conditions", () => {
 
         // Seed a signal so the Processing menu items become enabled.
         await page.evaluate(async () => {
-            const sigima = (
+            const runtime = (
                 window as unknown as {
-                    sigima: {
+                    runtime: {
                         addSignalFromArrays: (p: unknown) => Promise<string>;
                     };
                 }
-            ).sigima;
+            ).runtime;
             const x = Array.from({ length: 64 }, (_, i) => i);
-            await sigima.addSignalFromArrays({
+            await runtime.addSignalFromArrays({
                 title: "regression-windowing",
                 xdata: x,
                 ydata: x.map((v) => Math.sin(v / 4)),

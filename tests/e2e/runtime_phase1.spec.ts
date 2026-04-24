@@ -1,17 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady } from "./fixtures";
+import { waitForRuntimeReady } from "./fixtures";
 
 /**
  * Phase 1 validation: serialisation queue + PyProxy hygiene.
  *
- * These tests drive the runtime directly via ``window.sigima`` (exposed in
- * dev mode by ``SigimaContext``) so they assert the invariants without
+ * These tests drive the runtime directly via ``window.runtime`` (exposed in
+ * dev mode by ``RuntimeContext``) so they assert the invariants without
  * depending on the rest of the UI.
  */
 test.describe("Phase 1 — Pyodide runtime hardening", () => {
     test.beforeEach(async ({ page }) => {
         await page.goto("/");
-        await waitForSigimaReady(page);
+        await waitForRuntimeReady(page);
     });
 
     test("serialises parallel callPy invocations (no state corruption)", async ({
@@ -22,17 +22,17 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // added.  Without it, concurrent ``_STORE[id] = obj`` writes could
         // interleave and lose entries.
         const titles = await page.evaluate(async () => {
-            const sigima = (window as any).sigima;
+            const runtime = (window as any).runtime;
             const x = Array.from({ length: 16 }, (_, i) => i);
             const tasks = Array.from({ length: 10 }, (_, i) =>
-                sigima.addSignalFromArrays({
+                runtime.addSignalFromArrays({
                     title: `phase1-${i}`,
                     xdata: x,
                     ydata: x.map((v) => v * (i + 1)),
                 }),
             );
             await Promise.all(tasks);
-            const signals = await sigima.listSignals();
+            const signals = await runtime.listSignals();
             return signals
                 .map((s: { title: string }) => s.title)
                 .filter((t: string) => t.startsWith("phase1-"));
@@ -50,14 +50,14 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // 2) Fire a healthy call right after.  It must resolve normally,
         //    proving the queue's ``.catch`` keeps the chain alive.
         const result = await page.evaluate(async () => {
-            const sigima = (window as any).sigima;
+            const runtime = (window as any).runtime;
             let badRejected = false;
             try {
-                await sigima.getSignalData("does-not-exist");
+                await runtime.getSignalData("does-not-exist");
             } catch {
                 badRejected = true;
             }
-            const signals = await sigima.listSignals();
+            const signals = await runtime.listSignals();
             return { badRejected, ok: Array.isArray(signals) };
         });
         expect(result.badRejected).toBe(true);
@@ -71,23 +71,23 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
         // them so good ones still succeed and bad ones still reject — no race
         // conditions, no swallowed errors.
         const summary = await page.evaluate(async () => {
-            const sigima = (window as any).sigima;
+            const runtime = (window as any).runtime;
             const x = [0, 1, 2, 3];
             const tasks: Promise<unknown>[] = [];
             for (let i = 0; i < 5; i += 1) {
                 tasks.push(
-                    sigima.addSignalFromArrays({
+                    runtime.addSignalFromArrays({
                         title: `mix-${i}`,
                         xdata: x,
                         ydata: x,
                     }),
                 );
                 tasks.push(
-                    sigima.getSignalData("nope-" + i).catch(() => "rejected"),
+                    runtime.getSignalData("nope-" + i).catch(() => "rejected"),
                 );
             }
             const results = await Promise.all(tasks);
-            const titles = (await sigima.listSignals())
+            const titles = (await runtime.listSignals())
                 .map((s: { title: string }) => s.title)
                 .filter((t: string) => t.startsWith("mix-"));
             return {

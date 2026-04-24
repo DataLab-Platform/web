@@ -18,7 +18,7 @@ import type {
   InteractiveFitInit,
   InteractiveFitParam,
 } from "../runtime/runtime";
-import { useSigima } from "../runtime/SigimaContext";
+import { useRuntime } from "../runtime/RuntimeContext";
 
 interface Props {
   oid: string;
@@ -68,7 +68,7 @@ function ParamRow(props: {
 
 export function InteractiveFitDialog(props: Props) {
   const { oid, fit, onCommit, onCancel } = props;
-  const { runtime } = useSigima();
+  const { runtime } = useRuntime();
   const [degree, setDegree] = useState<number>(3);
   const [init, setInit] = useState<InteractiveFitInit | null>(null);
   const [params, setParams] = useState<InteractiveFitParam[]>([]);

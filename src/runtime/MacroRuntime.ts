@@ -4,10 +4,10 @@
  * Owns the live ``Worker`` instance plus a "warm" replacement worker
  * (kept ready so a Stop+Run sequence is fast despite Pyodide's ~5 s
  * cold-start).  Routes ``proxy.*`` bridge calls from the worker to a
- * whitelisted set of :class:`SigimaRuntime` methods.
+ * whitelisted set of :class:`DataLabRuntime` methods.
  */
 
-import type { SigimaRuntime } from "./runtime";
+import type { DataLabRuntime } from "./runtime";
 import {
   buildProxyBridge,
   type BridgeExternalCallbacks,
@@ -45,7 +45,7 @@ export class MacroRuntime {
   private currentRun: MacroRunCallbacks | null = null;
   private state: "idle" | "running" | "stopping" = "idle";
 
-  constructor(private readonly sigima: SigimaRuntime) {}
+  constructor(private readonly runtime: DataLabRuntime) {}
 
   // ---------------------------------------------------------------------
   // Public API
@@ -283,7 +283,7 @@ export class MacroRuntime {
   // ---------------------------------------------------------------------
 
   private get bridgeMethods(): Record<string, BridgeMethod> {
-    return buildProxyBridge(this.sigima, this.externalCallbacks);
+    return buildProxyBridge(this.runtime, this.externalCallbacks);
   }
 
   // ---------------------------------------------------------------------

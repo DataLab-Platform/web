@@ -66,7 +66,7 @@ export function notebookTitleAsMacroTitle(nb: NotebookModel): string {
 
 /**
  * Convenience wrapper returning ``{title, body}`` ready for
- * :meth:`SigimaRuntime.createMacro`. The caller still needs to
+ * :meth:`DataLabRuntime.createMacro`. The caller still needs to
  * prepend the standard ``makeFileHeader`` from MacroPanel.
  */
 export function notebookToMacro(nb: NotebookModel): {

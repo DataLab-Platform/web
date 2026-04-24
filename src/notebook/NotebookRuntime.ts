@@ -11,7 +11,7 @@
  * one and the user is informed that the namespace was lost.
  */
 
-import type { SigimaRuntime } from "../runtime/runtime";
+import type { DataLabRuntime } from "../runtime/runtime";
 import {
   buildProxyBridge,
   type BridgeExternalCallbacks,
@@ -65,7 +65,7 @@ export class NotebookRuntime {
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
-  constructor(private readonly sigima: SigimaRuntime) {}
+  constructor(private readonly runtime: DataLabRuntime) {}
 
   // ---------------------------------------------------------------------
   // Public API
@@ -322,6 +322,6 @@ export class NotebookRuntime {
   }
 
   private get bridgeMethods(): Record<string, BridgeMethod> {
-    return buildProxyBridge(this.sigima, this.externalCallbacks);
+    return buildProxyBridge(this.runtime, this.externalCallbacks);
   }
 }

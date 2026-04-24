@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
-import type { SigimaRuntime } from "../../runtime/runtime";
+import type { DataLabRuntime } from "../../runtime/runtime";
 import { NotebookRuntime } from "../../notebook/NotebookRuntime";
 import {
   emptyCodeCell,
@@ -48,7 +48,7 @@ import {
 import { Cell } from "./Cell";
 
 interface NotebookPanelProps {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   theme: "light" | "dark";
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSigima } from "../runtime/SigimaContext";
+import { useRuntime } from "../runtime/RuntimeContext";
 import type { PluginRecord } from "../runtime/runtime";
 import { PluginConsentDialog } from "./PluginConsentDialog";
 import {
@@ -22,7 +22,7 @@ interface Props {
 }
 
 export function PluginManagerDialog({ onClose }: Props) {
-  const { runtime } = useSigima();
+  const { runtime } = useRuntime();
   const [records, setRecords] = useState<PluginRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);

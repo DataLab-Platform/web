@@ -13,11 +13,11 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   MetadataEntry,
   MetadataValueType,
-  SigimaRuntime,
+  DataLabRuntime,
 } from "../runtime/runtime";
 
 interface Props {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   oid: string;
   /** Bumped by the parent whenever the underlying object changed. */
   refreshNonce: number;

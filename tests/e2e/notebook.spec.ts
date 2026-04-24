@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady, disableQuickstartTemplate } from "./fixtures";
+import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
 
 /**
  * End-to-end tests for the Notebook panel.
@@ -15,7 +15,7 @@ test.describe("Notebook panel", () => {
   test.beforeEach(async ({ page }) => {
     await disableQuickstartTemplate(page);
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
   });
 
   test("cell content survives a panel round-trip", async ({ page }) => {

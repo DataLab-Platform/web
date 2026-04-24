@@ -152,7 +152,7 @@ export interface InteractiveFitParam {
   max: number;
 }
 
-/** Payload returned by :meth:`SigimaRuntime.initInteractiveFit`. */
+/** Payload returned by :meth:`DataLabRuntime.initInteractiveFit`. */
 export interface InteractiveFitInit {
   fit_id: string;
   label: string;
@@ -169,7 +169,7 @@ export interface InteractiveFitInit {
   extras: Record<string, unknown>;
 }
 
-/** Payload returned by :meth:`SigimaRuntime.autoFitInteractive`. */
+/** Payload returned by :meth:`DataLabRuntime.autoFitInteractive`. */
 export interface InteractiveFitAuto {
   values: Record<string, number>;
   y_fit: number[];
@@ -336,7 +336,7 @@ export interface TextImportParams {
   dtypeStr: string;
 }
 
-/** Preview payload returned by :meth:`SigimaRuntime.parseTextImport`. */
+/** Preview payload returned by :meth:`DataLabRuntime.parseTextImport`. */
 export interface TextImportPreview {
   headers: string[];
   /** First N rows of the parsed matrix; NaN cells are encoded as
@@ -486,7 +486,7 @@ export interface DynamicChoice {
 }
 
 /** Read-only stats summary returned by
- *  :meth:`SigimaRuntime.getObjectStats`. */
+ *  :meth:`DataLabRuntime.getObjectStats`. */
 export type ObjectStats =
   | {
     kind: "signal";
@@ -516,7 +516,7 @@ export type ObjectStats =
 export type MetadataValueType = "string" | "number" | "bool" | "json";
 
 /** One row of the metadata editor (returned by
- *  :meth:`SigimaRuntime.listObjectMetadata`). */
+ *  :meth:`DataLabRuntime.listObjectMetadata`). */
 export interface MetadataEntry {
   key: string;
   value_type: MetadataValueType;
@@ -524,7 +524,7 @@ export interface MetadataEntry {
 }
 
 /** One entry of the "Create" menu, returned by
- *  :meth:`SigimaRuntime.listSignalCreationTypes`. */
+ *  :meth:`DataLabRuntime.listSignalCreationTypes`. */
 export interface SignalCreationType {
   /** Stable id (matches a ``SignalTypes`` enum value on the Python side). */
   value: string;
@@ -539,7 +539,7 @@ export interface SignalCreationType {
 }
 
 /** One I/O format descriptor returned by
- *  :meth:`SigimaRuntime.listSignalIoFormats`. */
+ *  :meth:`DataLabRuntime.listSignalIoFormats`. */
 export interface SignalIoFormat {
   name: string;
   extensions: string[];
@@ -650,12 +650,12 @@ function toJs(value: unknown): unknown {
   return value;
 }
 
-export class SigimaRuntime {
+export class DataLabRuntime {
   private constructor(private readonly py: PyodideAPI) { }
 
   static async load(
     onProgress?: (msg: string) => void,
-  ): Promise<SigimaRuntime> {
+  ): Promise<DataLabRuntime> {
     if (typeof window.loadPyodide !== "function") {
       throw new Error(
         "Pyodide failed to load from the CDN. Check the browser console " +
@@ -709,7 +709,7 @@ await micropip.install(["sigima", "guidata"])
       await py.runPythonAsync(guidataBackendsSource);
     }
     // Mirror the portable ``datalab.*`` shim into Pyodide site-packages.
-    SigimaRuntime.installShim(py, shimSources);
+    DataLabRuntime.installShim(py, shimSources);
     // Make ``processor.py``/``dlw_main.py``/``dlw_plugins.py`` importable.
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
@@ -722,7 +722,7 @@ await micropip.install(["sigima", "guidata"])
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
-    const runtime = new SigimaRuntime(py);
+    const runtime = new DataLabRuntime(py);
     runtime.installDialogBridge();
     await runtime.installBuiltinPlugins(builtinPluginSources);
     return runtime;
@@ -839,7 +839,7 @@ await micropip.install(["sigima", "guidata"])
         const awaited = result instanceof Promise ? await result : result;
         return toJs(awaited) as T;
       } catch (err) {
-        console.error(`[sigima] ${name} failed`, err);
+        console.error(`[runtime] ${name} failed`, err);
         throw err;
       } finally {
         fn.destroy?.();
@@ -1897,7 +1897,7 @@ if inspect.isawaitable(_result):
    */
   async reloadBootstrap(source: string = bootstrapSource): Promise<void> {
     await this.py.runPythonAsync(source);
-    console.info("[sigima] bootstrap.py re-executed (store preserved)");
+    console.info("[runtime] bootstrap.py re-executed (store preserved)");
   }
 
   /**
@@ -1918,6 +1918,6 @@ if "__main__" in sys.modules:
 _CATALOG.clear()
 _CATALOG.update(dlw_processor.build_signal_catalog())
 `);
-    console.info("[sigima] dlw_processor.py reloaded; catalog refreshed");
+    console.info("[runtime] dlw_processor.py reloaded; catalog refreshed");
   }
 }

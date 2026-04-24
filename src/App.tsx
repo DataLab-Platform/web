@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSigima } from "./runtime/SigimaContext";
+import { useRuntime } from "./runtime/RuntimeContext";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
@@ -125,7 +125,7 @@ function usePersistedSize(
 }
 
 export default function App() {
-  const { runtime, status, message, error } = useSigima();
+  const { runtime, status, message, error } = useRuntime();
   const [activePanel, setActivePanel] = useState<PanelKind>("signal");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
@@ -1753,7 +1753,7 @@ export default function App() {
   );
 
   return (
-    <div className="app" data-sigima-status={status}>
+    <div className="app" data-runtime-status={status}>
       <MenuBar
         status={status === "ready" ? "Ready" : message}
         statusKind={status}

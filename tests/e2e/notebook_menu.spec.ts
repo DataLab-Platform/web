@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady, disableQuickstartTemplate } from "./fixtures";
+import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
 
 /**
  * Phase 4 — verify the File → Notebook submenu actions are wired and
@@ -17,7 +17,7 @@ test.describe("Phase 4 — File → Notebook menu", () => {
   test.beforeEach(async ({ page }) => {
     await disableQuickstartTemplate(page);
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
     // Pre-warm notebook panel so the kernel is loaded.
     await page.getByRole("tab", { name: "Notebooks" }).click();
     await expect(page.locator(".nb-toolbar-status")).toContainText(

@@ -1,25 +1,25 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { SigimaRuntime } from "./runtime";
+import { DataLabRuntime } from "./runtime";
 
-interface SigimaContextValue {
-  runtime: SigimaRuntime | null;
+interface RuntimeContextValue {
+  runtime: DataLabRuntime | null;
   status: "loading" | "ready" | "error";
   message: string;
   error: string | null;
 }
 
-const SigimaContext = createContext<SigimaContextValue | null>(null);
+const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
-export function SigimaProvider({ children }: { children: ReactNode }) {
-  const [runtime, setRuntime] = useState<SigimaRuntime | null>(null);
-  const [status, setStatus] = useState<SigimaContextValue["status"]>("loading");
+export function RuntimeProvider({ children }: { children: ReactNode }) {
+  const [runtime, setRuntime] = useState<DataLabRuntime | null>(null);
+  const [status, setStatus] = useState<RuntimeContextValue["status"]>("loading");
   const [message, setMessage] = useState("Initialising…");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    SigimaRuntime.load((msg) => {
+    DataLabRuntime.load((msg) => {
       if (!cancelled) setMessage(msg);
     })
       .then((rt) => {
@@ -29,12 +29,12 @@ export function SigimaProvider({ children }: { children: ReactNode }) {
         if (import.meta.env.DEV) {
           // Expose for ad-hoc debugging from the DevTools console.
           // Examples (in DevTools console, no page reload needed):
-          //   await sigima.runPython("list(_STORE.keys())")
-          //   await sigima.listSignals()
-          //   await sigima.reloadBootstrap()  // re-run bootstrap.py
-          (window as unknown as { sigima: SigimaRuntime }).sigima = rt;
+          //   await runtime.runPython("list(_STORE.keys())")
+          //   await runtime.listSignals()
+          //   await runtime.reloadBootstrap()  // re-run bootstrap.py
+          (window as unknown as { runtime: DataLabRuntime }).runtime = rt;
           console.info(
-            "%c[sigima] runtime ready — try `await sigima.listSignals()`",
+            "%c[runtime] ready \u2014 try `await runtime.listSignals()`",
             "color:#0e639c;font-weight:bold",
           );
         }
@@ -61,7 +61,7 @@ export function SigimaProvider({ children }: { children: ReactNode }) {
       const promise = isProcessor
         ? runtime.reloadProcessor(data.source)
         : runtime.reloadBootstrap(data.source);
-      promise.catch((err) => console.error("[sigima] hot-reload failed", err));
+      promise.catch((err) => console.error("[runtime] hot-reload failed", err));
     };
     import.meta.hot.on("datalab-web:python-update", handler);
     return () => {
@@ -69,20 +69,20 @@ export function SigimaProvider({ children }: { children: ReactNode }) {
     };
   }, [runtime]);
 
-  const value = useMemo<SigimaContextValue>(
+  const value = useMemo<RuntimeContextValue>(
     () => ({ runtime, status, message, error }),
     [runtime, status, message, error],
   );
 
   return (
-    <SigimaContext.Provider value={value}>{children}</SigimaContext.Provider>
+    <RuntimeContext.Provider value={value}>{children}</RuntimeContext.Provider>
   );
 }
 
-export function useSigima(): SigimaContextValue {
-  const ctx = useContext(SigimaContext);
+export function useRuntime(): RuntimeContextValue {
+  const ctx = useContext(RuntimeContext);
   if (!ctx) {
-    throw new Error("useSigima must be used within a SigimaProvider");
+    throw new Error("useRuntime must be used within a RuntimeProvider");
   }
   return ctx;
 }

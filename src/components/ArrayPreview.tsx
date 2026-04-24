@@ -10,10 +10,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ObjectStats, SigimaRuntime } from "../runtime/runtime";
+import type { ObjectStats, DataLabRuntime } from "../runtime/runtime";
 
 interface Props {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   oid: string;
   stats: ObjectStats;
   refreshNonce: number;
@@ -40,7 +40,7 @@ function SignalArrayPreview({
   oid,
   refreshNonce,
 }: {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   oid: string;
   refreshNonce: number;
 }) {

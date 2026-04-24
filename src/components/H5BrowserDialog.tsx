@@ -26,7 +26,7 @@ import type {
   H5BrowserNodeAttrs,
   H5BrowserPreview,
 } from "../runtime/runtime";
-import { useSigima } from "../runtime/SigimaContext";
+import { useRuntime } from "../runtime/RuntimeContext";
 
 interface Props {
   /** Optional already-opened files (e.g. opened by the caller before
@@ -66,7 +66,7 @@ function findNode(root: H5BrowserNode, id: string): H5BrowserNode | null {
 }
 
 export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
-  const { runtime } = useSigima();
+  const { runtime } = useRuntime();
   const [files, setFiles] = useState<OpenFileState[]>(() =>
     (initial ?? []).map((f) => ({
       file: f,

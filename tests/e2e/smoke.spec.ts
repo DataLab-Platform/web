@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady } from "./fixtures";
+import { waitForRuntimeReady } from "./fixtures";
 
 test.describe("DataLab-Web smoke", () => {
   test("loads the application and boots Pyodide", async ({ page }) => {
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
 
     // Top-level menu bar is always rendered.
     await expect(page.locator("[role=menubar]")).toBeVisible();
@@ -15,7 +15,7 @@ test.describe("DataLab-Web smoke", () => {
 
   test("exposes the File and Help top-level menus", async ({ page }) => {
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
 
     const menubar = page.locator("[role=menubar]");
     await expect(menubar.getByText("File", { exact: true })).toBeVisible();

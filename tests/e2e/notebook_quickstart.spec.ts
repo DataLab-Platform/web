@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { waitForSigimaReady } from "./fixtures";
+import { waitForRuntimeReady } from "./fixtures";
 
 /**
  * Phase 4.2 — verify the bundled "Quickstart" notebook template loads
@@ -12,7 +12,7 @@ test.describe("Quickstart notebook template", () => {
     // Intentionally do NOT call ``disableQuickstartTemplate``: this is
     // the first-boot scenario.
     await page.goto("/");
-    await waitForSigimaReady(page);
+    await waitForRuntimeReady(page);
     await page.getByRole("tab", { name: "Notebooks" }).click();
     await expect(page.locator(".nb-toolbar-status")).toContainText(
       /Kernel idle|Kernel running/,

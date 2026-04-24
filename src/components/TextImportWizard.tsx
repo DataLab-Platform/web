@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Plot from "react-plotly.js";
-import { useSigima } from "../runtime/SigimaContext";
+import { useRuntime } from "../runtime/RuntimeContext";
 import {
   defaultTextImportParams,
   type TextImportParams,
@@ -70,7 +70,7 @@ const EMPTY_LABELS: LabelState = {
 };
 
 export function TextImportWizard({ onImport, onCancel }: Props) {
-  const { runtime } = useSigima();
+  const { runtime } = useRuntime();
   const [step, setStep] = useState<Step>(0);
   // ----- step 1: source -----
   const [sourceKind, setSourceKind] = useState<"file" | "clipboard">("file");

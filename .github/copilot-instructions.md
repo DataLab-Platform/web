@@ -22,9 +22,9 @@ React/TS UI  ──►  src/runtime/runtime.ts  ──►  Pyodide  ──►  b
     `apply_processing`, `delete_signal`, `list_processings`) that the JS layer
     calls. Every helper returns JSON-serialisable values.
 * **`src/runtime/runtime.ts`** is the only place that touches the Pyodide API.
-  All Python calls go through `SigimaRuntime`; the rest of the UI consumes a
+  All Python calls go through `DataLabRuntime`; the rest of the UI consumes a
   typed interface (`SignalMeta`, `SignalData`, `ProcessingDescriptor`, …).
-* **`src/runtime/SigimaContext.tsx`** loads the runtime exactly once via React
+* **`src/runtime/RuntimeContext.tsx`** loads the runtime exactly once via React
   context.
 * **`src/components/`** holds presentational components (no Pyodide imports).
 
@@ -61,7 +61,7 @@ when extending plot features (curve styles, ROI overlays, geometry results).
 * **Type-safety end-to-end**: never widen a Pyodide return value beyond the
   declared `SignalMeta` / `SignalData` / … types. Add new fields in the Python
   helper *and* the TS interface in lockstep.
-* **No business logic in components**: components consume `useSigima()` data
+* **No business logic in components**: components consume `useRuntime()` data
   and call back into `App.tsx`, which orchestrates the runtime.
 * **JSON across the bridge**: prefer plain dicts/lists in Python helpers
   (`tolist()` on arrays) over passing PyProxies to JS.

@@ -1,6 +1,6 @@
 /**
  * DialogBridge — services async dialog requests coming from Python
- * (via {@link SigimaRuntime.setDialogHandler}).
+ * (via {@link DataLabRuntime.setDialogHandler}).
  *
  * Three request kinds are handled:
  *   - ``"edit_dataset"`` → opens a {@link DataSetDialog} and resolves
@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from "react";
 import { DataSetDialog } from "./DataSetDialog";
-import { useSigima } from "../runtime/SigimaContext";
+import { useRuntime } from "../runtime/RuntimeContext";
 import type { SchemaWithValues } from "../runtime/runtime";
 
 type DialogKind = "edit_dataset" | "message" | "confirm";
@@ -27,7 +27,7 @@ interface PendingRequest {
 }
 
 export function DialogBridge() {
-  const { runtime } = useSigima();
+  const { runtime } = useRuntime();
   const [queue, setQueue] = useState<PendingRequest[]>([]);
 
   useEffect(() => {

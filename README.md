@@ -41,7 +41,7 @@ Code organisation:
   - `bootstrap.py` — Python module loaded into Pyodide; owns the hierarchical in-memory object model (panels, groups, objects) and exposes the helper functions the UI calls.
   - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI.
   - `runtime.ts` — typed wrapper around the Pyodide instance.
-  - `SigimaContext.tsx` — React context that loads the runtime once.
+  - `RuntimeContext.tsx` — React context that loads the runtime once.
   - `macroWorker.ts` — dedicated Web Worker hosting a second Pyodide instance for macro execution, isolated from the main UI thread.
   - `dlplugins/datalab/` — portable plugin shim providing the `PluginBase` API so DataLab desktop plugins run unchanged.
   - `dlw_h5browser.py`, `dlw_interactive_fit.py`, … — Python helpers backing specific dialogs.
@@ -192,7 +192,7 @@ Short-term:
 
 - Generic results-table view aligned with the desktop *Results* panel.
 - Richer image data preview (numeric grid with virtualised scrolling).
-- Move the main `SigimaRuntime` off the UI thread (macros already run in a dedicated Web Worker; the main computation Pyodide instance still lives on the main thread).
+- Move the main `DataLabRuntime` off the UI thread (macros already run in a dedicated Web Worker; the main computation Pyodide instance still lives on the main thread).
 - Additional file formats through `sigima.io` (currently focused on text and HDF5).
 
 Longer-term:

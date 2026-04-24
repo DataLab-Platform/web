@@ -47,7 +47,7 @@ export default defineConfig({
         "src/runtime/runtime.ts",
         "src/runtime/macroWorker.ts",
         "src/runtime/MacroRuntime.ts",
-        "src/runtime/SigimaContext.tsx",
+        "src/runtime/RuntimeContext.tsx",
       ],
     },
   },

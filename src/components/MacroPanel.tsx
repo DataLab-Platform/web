@@ -21,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MacroMeta, MacroRecord, SigimaRuntime } from "../runtime/runtime";
+import type { MacroMeta, MacroRecord, DataLabRuntime } from "../runtime/runtime";
 import { MacroRuntime } from "../runtime/MacroRuntime";
 import { MacroEditorTabs, type MacroTab } from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
@@ -80,7 +80,7 @@ const LS_MIRROR = "datalab-web.macros.mirror";
 const LS_EDITOR_HEIGHT = "datalab-web.macros.editorHeight";
 
 interface Props {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   /** Called by ``proxy.set_current_panel`` so the host can switch tabs. */
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];

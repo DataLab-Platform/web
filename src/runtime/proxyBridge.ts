@@ -8,7 +8,7 @@
  * This module is the single source of truth.
  */
 
-import type { SigimaRuntime } from "./runtime";
+import type { DataLabRuntime } from "./runtime";
 
 export interface BridgeExternalCallbacks {
   getSelection?: () => string[];
@@ -26,7 +26,7 @@ export interface BridgeExternalCallbacks {
 export type BridgeMethod = (payload: unknown) => Promise<unknown>;
 
 export function buildProxyBridge(
-  s: SigimaRuntime,
+  s: DataLabRuntime,
   ext: BridgeExternalCallbacks,
 ): Record<string, BridgeMethod> {
   return {

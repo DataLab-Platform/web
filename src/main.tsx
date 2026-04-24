@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { SigimaProvider } from "./runtime/SigimaContext";
+import { RuntimeProvider } from "./runtime/RuntimeContext";
 import { installConsoleCapture } from "./utils/consoleLog";
 import { initThemeEarly } from "./utils/theme";
 import "./styles.css";
@@ -16,8 +16,8 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <SigimaProvider>
+    <RuntimeProvider>
       <App />
-    </SigimaProvider>
+    </RuntimeProvider>
   </StrictMode>,
 );

@@ -15,7 +15,7 @@ import type {
   LastProcessingInfo,
   ObjectStats,
   SchemaWithValues,
-  SigimaRuntime,
+  DataLabRuntime,
 } from "../runtime/runtime";
 import { DataSetForm } from "./DataSetForm";
 import { ObjectStatsCard } from "./ObjectStatsCard";
@@ -25,7 +25,7 @@ import { ArrayPreview } from "./ArrayPreview";
 type TabId = "creation" | "properties" | "processing" | "results";
 
 interface Props {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   currentId: string | null;
   /** Bumped by the parent whenever the underlying object changed (e.g.
    *  a feature was applied), to force a re-fetch. */
@@ -326,7 +326,7 @@ export function SidePanel(props: Props) {
 // ---------------------------------------------------------------------------
 
 interface SubProps {
-  runtime: SigimaRuntime;
+  runtime: DataLabRuntime;
   oid: string;
   refreshNonce: number;
   onApplied: () => void;
