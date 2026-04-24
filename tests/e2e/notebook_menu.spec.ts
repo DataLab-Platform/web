@@ -31,7 +31,7 @@ test.describe("Phase 4 — File → Notebook menu", () => {
     // Switch back to Signal panel to verify menu also switches panel.
     await page.getByRole("tab", { name: "Signals" }).click();
     await openFileNotebookMenu(page);
-    await page.getByRole("menuitem", { name: /New notebook/ }).click();
+    await page.getByRole("menuitem", { name: "New notebook", exact: true }).click();
     // Notebook panel is active again and there are 2 tabs.
     await expect(page.locator(".nb-tab")).toHaveCount(2);
   });
