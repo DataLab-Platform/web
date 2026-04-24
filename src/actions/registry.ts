@@ -638,3 +638,62 @@ export function buildPluginActions(
 
   return [...fixed, ...dynamic];
 }
+
+/** Callbacks for the File → Notebook submenu. */
+export interface NotebookActionCallbacks {
+  onNew: () => void;
+  onNewFromQuickstart: () => void;
+  onOpen: () => void;
+  onSaveAs: () => void;
+  onRename: () => void;
+  /** Returns ``true`` when the notebook panel currently has an
+   * active notebook (so Save/Rename can be enabled accordingly). */
+  hasActiveNotebook: () => boolean;
+}
+
+/** Build File → Notebook menu actions (always available — no panel dependency). */
+export function buildNotebookActions(
+  cb: NotebookActionCallbacks,
+): ActionDescriptor[] {
+  const ready = (s: ActionState) => s.status === "ready" && !s.busy;
+  return [
+    {
+      id: "notebook.new",
+      label: "New notebook",
+      menuPath: "File/Notebook/New notebook",
+      beginGroup: true,
+      enabled: ready,
+      run: cb.onNew,
+    },
+    {
+      id: "notebook.new_quickstart",
+      label: "New notebook from template: Quickstart",
+      menuPath: "File/Notebook/New notebook from template/Quickstart",
+      enabled: ready,
+      run: cb.onNewFromQuickstart,
+    },
+    {
+      id: "notebook.open",
+      label: "Open notebook…",
+      menuPath: "File/Notebook/Open notebook…",
+      iconUrl: getIoIconUrl("fileopen_py.svg"),
+      enabled: ready,
+      run: cb.onOpen,
+    },
+    {
+      id: "notebook.save_as",
+      label: "Save notebook as…",
+      menuPath: "File/Notebook/Save notebook as…",
+      iconUrl: getIoIconUrl("filesave_py.svg"),
+      enabled: (s) => ready(s) && cb.hasActiveNotebook(),
+      run: cb.onSaveAs,
+    },
+    {
+      id: "notebook.rename",
+      label: "Rename notebook…",
+      menuPath: "File/Notebook/Rename notebook…",
+      enabled: (s) => ready(s) && cb.hasActiveNotebook(),
+      run: cb.onRename,
+    },
+  ];
+}

@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-export type PanelKind = "signal" | "image" | "macro";
+export type PanelKind = "signal" | "image" | "macro" | "notebook";
 
 export interface PanelSwitcherProps {
   active: PanelKind;
@@ -9,9 +9,10 @@ export interface PanelSwitcherProps {
 }
 
 /**
- * Three-tab switcher mirroring DataLab desktop's Signals / Images /
- * Macros panels.  The active tab determines the object kind shown by
- * the object tree (or the macro editor for ``"macro"``), the data
+ * Four-tab switcher mirroring DataLab desktop's Signals / Images /
+ * Macros panels, plus the DataLab-Web specific Notebooks tab.  The
+ * active tab determines the object kind shown by the object tree (or
+ * the macro/notebook editor for ``"macro"``/``"notebook"``), the data
  * displayed in the plot area, and the menu actions available.
  */
 export function PanelSwitcher({
@@ -50,6 +51,16 @@ export function PanelSwitcher({
         onClick={() => onChange("macro")}
       >
         Macros
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={active === "notebook"}
+        disabled={disabled}
+        className={`panel-switcher-tab${active === "notebook" ? " active" : ""}`}
+        onClick={() => onChange("notebook")}
+      >
+        Notebooks
       </button>
     </div>
   );

@@ -55,6 +55,8 @@ import dlw_interactive_fit as _ifit
 # multi-language perspective.
 import dlw_processor as _proc
 import numpy as np
+
+import sigima
 from sigima.objects import SignalObj
 from sigima.objects.signal.creation import (
     SIGNAL_TYPE_PARAM_CLASSES,
@@ -62,8 +64,6 @@ from sigima.objects.signal.creation import (
     create_signal_parameters,
 )
 from sigima.objects.signal.roi import SignalROI
-
-import sigima
 
 # Re-export interactive-fit helpers as module-level callables so the JS
 # runtime can resolve them via ``py.globals.get(...)``.
@@ -1339,6 +1339,110 @@ def delete_object(oid: str) -> None:
     _MODEL.delete_object(oid)
     _LAST_PROCESSING.pop(oid, None)
     _CREATION_PARAMS.pop(oid, None)
+
+
+# ---------------------------------------------------------------------------
+# Pickle-based object exchange (used by the macro proxy bridge for
+# ``add_object`` / ``set_object`` — i.e. when a worker macro builds a
+# fully-formed ``SignalObj`` / ``ImageObj`` and wants to publish it to
+# the live model). Both runtimes ship the same Sigima version so binary
+# compatibility holds.
+# ---------------------------------------------------------------------------
+
+
+def _decode_pickled_obj(b64: str):
+    """Return the ``SignalObj`` / ``ImageObj`` decoded from base-64 pickle."""
+    import base64  # noqa: PLC0415
+    import pickle  # noqa: PLC0415
+
+    return pickle.loads(base64.b64decode(b64.encode("ascii")))
+
+
+def add_object_pickled(pickled_b64: str, kind: str, group_id: str | None = None) -> str:
+    """Insert a pickled ``SignalObj`` / ``ImageObj`` in *kind*'s panel."""
+    obj = _decode_pickled_obj(pickled_b64)
+    return _MODEL.add_object(kind, obj, group_id=group_id)
+
+
+def set_object_pickled(pickled_b64: str) -> str:
+    """Replace an existing object's data, matched by its ``uuid`` attribute."""
+    obj = _decode_pickled_obj(pickled_b64)
+    target_uuid = getattr(obj, "uuid", None)
+    if target_uuid is None:
+        raise KeyError("Replacement object carries no UUID")
+    for entry in _MODEL._objects.values():  # noqa: SLF001
+        if getattr(entry.obj, "uuid", None) == target_uuid:
+            entry.obj = obj
+            return entry.oid
+    raise KeyError(f"No object with UUID {target_uuid!r} in the workspace")
+
+
+def get_group_titles_with_object_info(
+    panel: str = "signal",
+) -> tuple[list[str], list[list[str]], list[list[str]]]:
+    """Return ``(group_titles, group_obj_uuids, group_obj_titles)`` for *panel*.
+
+    Mirrors ``BaseProxy.get_group_titles_with_object_info`` — three
+    parallel lists, one entry per group, with inner lists holding the
+    object UUIDs and titles in their on-screen order.
+    """
+    p = _MODEL.panel(panel)
+    p.ensure_default_group()
+    titles: list[str] = []
+    uuids: list[list[str]] = []
+    obj_titles: list[list[str]] = []
+    for g in p.groups:
+        titles.append(g.name)
+        gids: list[str] = []
+        gtitles: list[str] = []
+        for oid in g.object_ids:
+            entry = _MODEL._objects.get(oid)  # noqa: SLF001
+            if entry is None:
+                continue
+            gids.append(getattr(entry.obj, "uuid", oid) or oid)
+            gtitles.append(getattr(entry.obj, "title", ""))
+        uuids.append(gids)
+        obj_titles.append(gtitles)
+    return titles, uuids, obj_titles
+
+
+def resolve_group_oids(panel: str, selection) -> list[str]:
+    """Return the flat list of object oids referenced by *selection*.
+
+    *selection* may contain group ids (str) or 1-based group indices (int).
+    ``None`` selects every group of *panel*.
+    """
+    p = _MODEL.panel(panel)
+    p.ensure_default_group()
+    if selection is None:
+        groups = list(p.groups)
+    else:
+        groups = []
+        for token in selection:
+            if isinstance(token, int):
+                if 1 <= token <= len(p.groups):
+                    groups.append(p.groups[token - 1])
+            else:
+                groups.append(p.find_group(str(token)))
+    out: list[str] = []
+    for g in groups:
+        out.extend(g.object_ids)
+    return out
+
+
+def reset_all() -> None:
+    """Delete every object and every group in every panel."""
+    for kind, panel in list(_MODEL._panels.items()):  # noqa: SLF001
+        for oid in [
+            entry.oid
+            for entry in list(_MODEL._objects.values())  # noqa: SLF001
+            if entry.kind == kind
+        ]:
+            _MODEL.delete_object(oid)
+        panel.groups.clear()
+        panel.ensure_default_group()
+    _LAST_PROCESSING.clear()
+    _CREATION_PARAMS.clear()
 
 
 # Backwards-compatible flat list (used by debug helpers / DevTools console).
@@ -2666,6 +2770,7 @@ def get_image_grid_param_schema() -> dict[str, Any]:
     ``@computation_function``.
     """
     from guidata.dataset import dataset_to_schema_with_values
+
     from sigima.proc.image import GridParam
 
     return dataset_to_schema_with_values(GridParam())
@@ -2785,6 +2890,7 @@ def reset_image_positions(source_ids: list[str]) -> None:
 def get_roi_grid_param_schema() -> dict[str, Any]:
     """Return the JSON schema + default values for ``ROIGridParam``."""
     from guidata.dataset import dataset_to_schema_with_values
+
     from sigima.proc.image import ROIGridParam
 
     return dataset_to_schema_with_values(ROIGridParam())
@@ -2804,6 +2910,7 @@ def create_image_roi_grid(
     overlay in a single round-trip.
     """
     from guidata.dataset import update_dataset
+
     from sigima.proc.image import ROIGridParam, generate_image_grid_roi
 
     if hasattr(params, "to_py"):
@@ -3591,6 +3698,7 @@ def open_workspace_from_bytes(
     import tempfile
 
     from guidata.io import HDF5Reader
+
     from sigima.objects import ImageObj as _ImageObj
 
     if hasattr(data, "to_py"):
@@ -3743,6 +3851,11 @@ __all__ = [
     "create_signal",
     "add_signal_from_arrays",
     "add_image_from_array",
+    "add_object_pickled",
+    "set_object_pickled",
+    "get_group_titles_with_object_info",
+    "resolve_group_oids",
+    "reset_all",
     "create_signal_typed",
     "list_signal_creation_types",
     "get_creation_param_schema",

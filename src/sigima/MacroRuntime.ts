@@ -8,6 +8,11 @@
  */
 
 import type { SigimaRuntime } from "./runtime";
+import {
+  buildProxyBridge,
+  type BridgeExternalCallbacks,
+  type BridgeMethod,
+} from "./proxyBridge";
 
 export type MacroStreamKind = "stdout" | "stderr" | "system";
 
@@ -31,9 +36,6 @@ interface OutboundReply {
   value?: unknown;
   error?: string;
 }
-
-/** Only these :class:`SigimaRuntime` methods are reachable from a macro. */
-type BridgeMethod = (...args: unknown[]) => Promise<unknown>;
 
 export class MacroRuntime {
   private worker: Worker | null = null;
@@ -276,141 +278,12 @@ export class MacroRuntime {
 
   // ---------------------------------------------------------------------
   // Bridge whitelist — methods reachable from a macro via ``proxy.*``.
-  // Each handler receives the raw payload (already JSON-deserialised).
+  // The actual handlers live in :file:`proxyBridge.ts` so the notebook
+  // worker (which speaks the same protocol) can reuse them verbatim.
   // ---------------------------------------------------------------------
 
   private get bridgeMethods(): Record<string, BridgeMethod> {
-    const s = this.sigima;
-    const ext = this.externalCallbacks;
-    const arr = (v: unknown): number[] | number[][] =>
-      v as number[] | number[][];
-    return {
-      add_signal: async (p: unknown) => {
-        const a = p as {
-          title: string;
-          xdata: number[];
-          ydata: number[];
-          xunit?: string;
-          yunit?: string;
-          xlabel?: string;
-          ylabel?: string;
-          group_id?: string | null;
-        };
-        const oid = await s.addSignalFromArrays({
-          title: a.title,
-          xdata: a.xdata,
-          ydata: a.ydata,
-          xunit: a.xunit ?? "",
-          yunit: a.yunit ?? "",
-          xlabel: a.xlabel ?? "",
-          ylabel: a.ylabel ?? "",
-          group_id: a.group_id ?? null,
-        });
-        ext.onModelChanged?.("signal");
-        return oid;
-      },
-      add_image: async (p: unknown) => {
-        const a = p as {
-          title: string;
-          data: number[][];
-          xunit?: string;
-          yunit?: string;
-          zunit?: string;
-          xlabel?: string;
-          ylabel?: string;
-          zlabel?: string;
-          group_id?: string | null;
-        };
-        const oid = await s.addImageFromArray({
-          title: a.title,
-          data: a.data,
-          xunit: a.xunit ?? "",
-          yunit: a.yunit ?? "",
-          zunit: a.zunit ?? "",
-          xlabel: a.xlabel ?? "",
-          ylabel: a.ylabel ?? "",
-          zlabel: a.zlabel ?? "",
-          group_id: a.group_id ?? null,
-        });
-        ext.onModelChanged?.("image");
-        return oid;
-      },
-      list_signals: async () => s.listSignals(),
-      list_images: async () =>
-        (await s.runPython(`
-[{"id": oid, "title": e.obj.title}
- for oid, e in _MODEL._objects.items() if e.kind == "image"]
-`)) as unknown,
-      get_object: async (p: unknown) => {
-        const oid = (p as { oid: string }).oid;
-        return (await s.runPython(`
-_e = _MODEL._objects[${JSON.stringify(oid)}]
-{
-  "id": _e.oid,
-  "kind": _e.kind,
-  "title": _e.obj.title,
-}
-`)) as unknown;
-      },
-      get_object_uuids: async (p: unknown) => {
-        const panel = (p as { panel: string }).panel;
-        return (await s.runPython(`
-[oid for oid, e in _MODEL._objects.items() if e.kind == ${JSON.stringify(panel)}]
-`)) as unknown;
-      },
-      delete_object: async (p: unknown) => {
-        const oid = (p as { oid: string }).oid;
-        await s.runPython(`_MODEL.delete_object(${JSON.stringify(oid)})`);
-        ext.onModelChanged?.(null);
-        return null;
-      },
-      apply_feature: async (p: unknown) => {
-        const a = p as {
-          feature_id: string;
-          params: Record<string, unknown> | null;
-          sources: string[] | null;
-          operand: string | null;
-        };
-        // Resolve sources: explicit ⇒ as-is; else current selection on
-        // the source's panel (delegated to JS layer via callbacks).
-        const sources = a.sources ?? ext.getSelection?.() ?? [];
-        const ids = await s.applyFeature(
-          a.feature_id,
-          sources,
-          a.operand,
-          a.params,
-        );
-        ext.onModelChanged?.(null);
-        return ids;
-      },
-      list_features: async () => s.listFeatures(),
-      get_current_panel: async () => ext.getCurrentPanel?.() ?? "signal",
-      set_current_panel: async (p: unknown) => {
-        const panel = (p as { panel: string }).panel;
-        ext.setCurrentPanel?.(panel);
-        return null;
-      },
-      select_objects: async (p: unknown) => {
-        const a = p as { oids: string[]; panel: string | null };
-        ext.selectObjects?.(a.oids, a.panel);
-        return null;
-      },
-      call_method: async (p: unknown) => {
-        const a = p as {
-          name: string;
-          args: unknown[];
-          kwargs: Record<string, unknown>;
-        };
-        const handler = ext.callMethod;
-        if (!handler) {
-          throw new Error("call_method bridge not wired");
-        }
-        return handler(a.name, a.args, a.kwargs);
-      },
-      // Reference ``arr`` so TypeScript does not flag it as unused if
-      // future bridge handlers want a quick array coercion helper.
-      _noop: async () => arr([]),
-    };
+    return buildProxyBridge(this.sigima, this.externalCallbacks);
   }
 
   // ---------------------------------------------------------------------
@@ -418,16 +291,5 @@ _e = _MODEL._objects[${JSON.stringify(oid)}]
   // current selection / active panel without re-implementing them here.
   // ---------------------------------------------------------------------
 
-  externalCallbacks: {
-    getSelection?: () => string[];
-    getCurrentPanel?: () => string;
-    setCurrentPanel?: (panel: string) => void;
-    selectObjects?: (ids: string[], panel: string | null) => void;
-    onModelChanged?: (panel: string | null) => void;
-    callMethod?: (
-      name: string,
-      args: unknown[],
-      kwargs: Record<string, unknown>,
-    ) => Promise<unknown>;
-  } = {};
+  externalCallbacks: BridgeExternalCallbacks = {};
 }

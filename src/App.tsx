@@ -14,6 +14,7 @@ import { MenuBar } from "./components/MenuBar";
 import {
   buildFeatureActions,
   buildHelpActions,
+  buildNotebookActions,
   buildImageAnalysisActions,
   buildImageCreationActions,
   buildImageGridActions,
@@ -53,7 +54,8 @@ import {
 import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
-import { MacroPanel } from "./components/MacroPanel";
+import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
+import { NotebookPanel, type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import type {
   AnalysisResult,
@@ -125,6 +127,8 @@ function usePersistedSize(
 export default function App() {
   const { runtime, status, message, error } = useSigima();
   const [activePanel, setActivePanel] = useState<PanelKind>("signal");
+  const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
+  const macroPanelRef = useRef<MacroPanelHandle | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = usePersistedSize(
     "datalab-web.leftPanelWidth",
     280,
@@ -223,23 +227,25 @@ export default function App() {
   >("properties");
 
   /** ``activePanel`` narrowed to the runtime's PanelKind ("signal" |
-   *  "image").  When the user is on the macro panel we still need a
-   *  "real" panel kind for the proxy bridge, so we fall back to the
-   *  last non-macro panel they used (defaults to "signal"). */
+   *  "image").  When the user is on the macro or notebook panel we
+   *  still need a "real" panel kind for the proxy bridge, so we fall
+   *  back to the last object panel they used (defaults to "signal"). */
   const lastObjectPanelRef = useRef<"signal" | "image">("signal");
-  const objectPanel: "signal" | "image" =
-    activePanel === "macro" ? lastObjectPanelRef.current : activePanel;
+  const isObjectPanel = activePanel === "signal" || activePanel === "image";
+  const objectPanel: "signal" | "image" = isObjectPanel
+    ? (activePanel as "signal" | "image")
+    : lastObjectPanelRef.current;
   useEffect(() => {
-    if (activePanel !== "macro") {
-      lastObjectPanelRef.current = activePanel;
+    if (isObjectPanel) {
+      lastObjectPanelRef.current = activePanel as "signal" | "image";
     }
-  }, [activePanel]);
+  }, [activePanel, isObjectPanel]);
   const theme = useTheme().theme;
 
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
-      if (activePanel === "macro") return;
+      if (activePanel !== "signal" && activePanel !== "image") return;
       const newTree = await runtime.getPanelTree(activePanel);
       setTree(newTree);
       const allIds: string[] = [];
@@ -267,7 +273,7 @@ export default function App() {
     async (kind: PanelKind, preferredCurrentId?: string | null) => {
       if (!runtime) return;
       setActivePanel(kind);
-      if (kind === "macro") return;
+      if (kind !== "signal" && kind !== "image") return;
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
@@ -1626,6 +1632,27 @@ export default function App() {
         onShowShortcuts: () => setHelpView("shortcuts"),
         onShowConsole: () => setHelpView("console"),
       }),
+      ...buildNotebookActions({
+        onNew: () => {
+          handleSwitchPanel("notebook");
+          notebookPanelRef.current?.newNotebook();
+        },
+        onNewFromQuickstart: () => {
+          handleSwitchPanel("notebook");
+          notebookPanelRef.current?.newFromQuickstart();
+        },
+        onOpen: () => {
+          handleSwitchPanel("notebook");
+          notebookPanelRef.current?.openFromDisk();
+        },
+        onSaveAs: () => notebookPanelRef.current?.saveActiveAsIpynb(),
+        onRename: () => {
+          handleSwitchPanel("notebook");
+          notebookPanelRef.current?.renameActive();
+        },
+        hasActiveNotebook: () =>
+          notebookPanelRef.current?.hasActiveNotebook() ?? false,
+      }),
       ...(activePanel === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
@@ -1745,10 +1772,12 @@ export default function App() {
               ? "Signals"
               : activePanel === "image"
                 ? "Images"
-                : "Macros"}
+                : activePanel === "notebook"
+                  ? "Notebooks"
+                  : "Macros"}
           </div>
           <div className="panel-body">
-            {activePanel === "macro" ? (
+            {!isObjectPanel ? (
               <div
                 style={{
                   padding: 12,
@@ -1756,7 +1785,9 @@ export default function App() {
                   color: "var(--text-dim)",
                 }}
               >
-                Macros are managed in the editor on the right.
+                {activePanel === "notebook"
+                  ? "Notebook cells are shown on the right. Use the Signals or Images tabs to manage workspace objects."
+                  : "Macros are managed in the editor on the right."}
               </div>
             ) : (
               <ObjectTree
@@ -1781,33 +1812,99 @@ export default function App() {
           ariaLabel="Resize left panel"
         />
         <main className="plot-area">
-          {activePanel === "macro" && runtime && (
-            <MacroPanel
-              runtime={runtime}
-              onSetCurrentPanel={(panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleSwitchPanel(panel);
-                }
+          {/*
+            NotebookPanel is mounted as soon as the runtime is ready and
+            kept mounted while switching panels — its in-memory cell
+            state (sources, outputs, execution counters) and the kernel
+            worker would otherwise be discarded on every tab switch.
+            Visibility is controlled with ``hidden`` so the layout
+            collapses cleanly when another panel is active.
+          */}
+          {runtime && (
+            <div
+              className="nb-panel-host"
+              hidden={activePanel !== "notebook"}
+              style={{
+                display: activePanel === "notebook" ? "flex" : "none",
+                flex: "1 1 auto",
+                minWidth: 0,
+                minHeight: 0,
               }}
-              getSelection={() => selectedIds}
-              getCurrentPanel={() => objectPanel}
-              selectObjects={(ids, panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleSwitchPanel(panel);
-                }
-                setSelectedIds(ids);
-                setCurrentId(ids[0] ?? null);
-              }}
-              onModelChanged={() => {
-                // The user is on the Macros panel; don't yank them away
-                // and don't waste a network round-trip refreshing a tree
-                // they can't see.  When they switch back to Signals /
-                // Images, ``handleSwitchPanel`` will refresh.
-              }}
-              theme={theme}
-            />
+            >
+              <NotebookPanel
+                ref={notebookPanelRef}
+                runtime={runtime}
+                theme={theme}
+                onSetCurrentPanel={(panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleSwitchPanel(panel);
+                  }
+                }}
+                getSelection={() => selectedIds}
+                getCurrentPanel={() => objectPanel}
+                selectObjects={(ids, panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleSwitchPanel(panel);
+                  }
+                  setSelectedIds(ids);
+                  setCurrentId(ids[0] ?? null);
+                }}
+                onModelChanged={() => {
+                  // Same rationale as MacroPanel: don't yank the user away.
+                }}
+                onConvertToMacro={(title, code) => {
+                  handleSwitchPanel("macro");
+                  void macroPanelRef.current?.importMacro(title, code);
+                }}
+              />
+            </div>
           )}
-          {activePanel !== "macro" && status === "error" && (
+          {runtime && (
+            <div
+              className="macro-panel-host"
+              hidden={activePanel !== "macro"}
+              style={{
+                display: activePanel === "macro" ? "flex" : "none",
+                flex: "1 1 auto",
+                minWidth: 0,
+                minHeight: 0,
+              }}
+            >
+              <MacroPanel
+                ref={macroPanelRef}
+                runtime={runtime}
+                onSetCurrentPanel={(panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleSwitchPanel(panel);
+                  }
+                }}
+                getSelection={() => selectedIds}
+                getCurrentPanel={() => objectPanel}
+                selectObjects={(ids, panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleSwitchPanel(panel);
+                  }
+                  setSelectedIds(ids);
+                  setCurrentId(ids[0] ?? null);
+                }}
+                onModelChanged={() => {
+                  // The user is on the Macros panel; don't yank them away
+                  // and don't waste a network round-trip refreshing a tree
+                  // they can't see.  When they switch back to Signals /
+                  // Images, ``handleSwitchPanel`` will refresh.
+                }}
+                onConvertToNotebook={(title, code) => {
+                  handleSwitchPanel("notebook");
+                  notebookPanelRef.current?.importMacroAsNotebook(
+                    title,
+                    code,
+                  );
+                }}
+                theme={theme}
+              />
+            </div>
+          )}
+          {isObjectPanel && status === "error" && (
             <div
               className="plot-empty"
               style={{ color: "#c4302b", padding: 16, textAlign: "center" }}
@@ -1829,7 +1926,7 @@ export default function App() {
               </div>
             </div>
           )}
-          {activePanel !== "macro" &&
+          {isObjectPanel &&
             status === "loading" &&
             !data &&
             !imageData && (
@@ -1844,7 +1941,7 @@ export default function App() {
                 <div className="plot-loading-message">{message}</div>
               </div>
             )}
-          {activePanel !== "macro" &&
+          {isObjectPanel &&
             status === "ready" &&
             !data &&
             !imageData && (
@@ -1887,7 +1984,7 @@ export default function App() {
             />
           )}
         </main>
-        {runtime && activePanel !== "macro" && (
+        {runtime && isObjectPanel && (
           <>
             <Splitter
               side="right"

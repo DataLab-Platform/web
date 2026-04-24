@@ -17,6 +17,9 @@ Macros must therefore use ``await proxy.add_signal(...)`` etc.
 
 from __future__ import annotations
 
+import base64
+import pickle
+
 import js  # type: ignore[import-not-found]
 import numpy as np
 from pyodide.ffi import to_js  # type: ignore[import-not-found]
@@ -51,6 +54,16 @@ async def _call(method: str, **kwargs):
     if hasattr(result, "to_py"):
         return result.to_py()
     return result
+
+
+def _detect_kind(obj) -> str:
+    """Return ``"signal"`` or ``"image"`` based on *obj* class name."""
+    cls = type(obj).__name__
+    if cls == "SignalObj":
+        return "signal"
+    if cls == "ImageObj":
+        return "image"
+    raise TypeError(f"Expected SignalObj or ImageObj, got {cls!r}")
 
 
 class _Proxy:
@@ -137,6 +150,71 @@ class _Proxy:
     async def delete_object(self, oid: str):
         """Remove object *oid* from the workspace."""
         return await _call("delete_object", oid=oid)
+
+    async def add_object(self, obj, group_id: str = "", set_current: bool = True):
+        """Publish a fully-formed ``SignalObj`` / ``ImageObj`` to the workspace.
+
+        Mirrors :meth:`RemoteProxy.add_object`. The object is pickled
+        and shipped across the worker bridge; both runtimes share the
+        same Sigima version so binary compatibility holds.
+        """
+        kind = _detect_kind(obj)
+        return await _call(
+            "add_object",
+            pickled_b64=base64.b64encode(pickle.dumps(obj)).decode("ascii"),
+            kind=kind,
+            group_id=group_id or None,
+            set_current=set_current,
+        )
+
+    async def set_object(self, obj):
+        """Replace an existing object's data, matched by its UUID.
+
+        The object must carry a UUID from a previous :meth:`get_object`
+        call (or have been built locally with one). Raises ``KeyError``
+        on the main side if no live object matches.
+        """
+        return await _call(
+            "set_object",
+            pickled_b64=base64.b64encode(pickle.dumps(obj)).decode("ascii"),
+        )
+
+    # -- Groups ------------------------------------------------------------
+
+    async def add_group(
+        self, title: str, panel: str | None = None, select: bool = False
+    ) -> str:
+        """Create a new group; return its id (mirrors :meth:`RemoteProxy.add_group`)."""
+        return await _call("add_group", title=title, panel=panel, select=select)
+
+    async def select_groups(self, selection=None, panel: str | None = None):
+        """Select groups in *panel* (or in the current panel if ``None``).
+
+        *selection* may be a list of group ids (str), 1-based indices
+        (int), or ``None`` to select every group.
+        """
+        sel = None if selection is None else list(selection)
+        return await _call("select_groups", selection=sel, panel=panel)
+
+    async def get_group_titles_with_object_info(self, panel: str | None = None):
+        """Return ``(group_titles, group_obj_uuids, group_obj_titles)`` for *panel*."""
+        return await _call("get_group_titles_with_object_info", panel=panel)
+
+    # -- Workspace ---------------------------------------------------------
+
+    async def reset_all(self) -> None:
+        """Clear every object and group in every panel."""
+        return await _call("reset_all")
+
+    # -- Raw data access (used by notebook ``show_signal`` / ``show_image``)
+
+    async def get_signal_xy(self, oid: str):
+        """Return ``{"x": [...], "y": [...]}`` for signal *oid*."""
+        return await _call("get_signal_xy", oid=oid)
+
+    async def get_image_data(self, oid: str):
+        """Return the 2D pixel array (list of lists) for image *oid*."""
+        return await _call("get_image_data", oid=oid)
 
     # -- Processing --------------------------------------------------------
 

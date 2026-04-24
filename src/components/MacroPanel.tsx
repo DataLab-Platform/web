@@ -12,7 +12,15 @@
  *   └──────────────────────────────────────┘
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MacroMeta, MacroRecord, SigimaRuntime } from "../sigima/runtime";
 import { MacroRuntime } from "../sigima/MacroRuntime";
 import { MacroEditorTabs, type MacroTab } from "./MacroEditorTabs";
@@ -80,6 +88,12 @@ interface Props {
   selectObjects: (ids: string[], panel: string | null) => void;
   /** Called whenever a macro mutates the model (so trees can refresh). */
   onModelChanged: (panel: string | null) => void;
+  /**
+   * Convert the current macro to a notebook and open it in the
+   * Notebook panel. The host wires this to
+   * :meth:`NotebookPanelHandle.importMacroAsNotebook`.
+   */
+  onConvertToNotebook?: (title: string, code: string) => void;
   /** "light"|"dark" — pulled from the host theme. */
   theme: "light" | "dark";
 }
@@ -91,15 +105,29 @@ interface MacroState extends MacroMeta {
   saved: string;
 }
 
-export function MacroPanel({
-  runtime,
-  onSetCurrentPanel,
-  getSelection,
-  getCurrentPanel,
-  selectObjects,
-  onModelChanged,
-  theme,
-}: Props) {
+/**
+ * Imperative handle exposed by :class:`MacroPanel` so external UI
+ * (notebook → macro conversion, future menu actions) can inject a
+ * ready-made macro into the panel without having to be visible.
+ */
+export interface MacroPanelHandle {
+  /** Persist a fresh macro and open it as the active tab. */
+  importMacro: (title: string, code: string) => Promise<string>;
+}
+
+export const MacroPanel = forwardRef<MacroPanelHandle, Props>(function MacroPanel(
+  {
+    runtime,
+    onSetCurrentPanel,
+    getSelection,
+    getCurrentPanel,
+    selectObjects,
+    onModelChanged,
+    onConvertToNotebook,
+    theme,
+  }: Props,
+  ref,
+) {
   const [macros, setMacros] = useState<MacroState[]>([]);
   const [openIds, setOpenIds] = useState<string[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -453,6 +481,37 @@ export function MacroPanel({
     setRunning(false);
   }, []);
 
+  const handleConvertToNotebook = useCallback(() => {
+    if (!activeId || !onConvertToNotebook) return;
+    const m = macros.find((x) => x.id === activeId);
+    if (!m) return;
+    onConvertToNotebook(m.title, m.code ?? "");
+  }, [activeId, macros, onConvertToNotebook]);
+
+  // ---------------------------------------------------------------------
+  // Imperative handle (notebook → macro conversion, etc.)
+  // ---------------------------------------------------------------------
+
+  const importMacro = useCallback(
+    async (title: string, code: string): Promise<string> => {
+      const rec = await runtime.createMacro(title, code);
+      const safe = rec.code ?? "";
+      setMacros((prev) => {
+        const next = [
+          ...prev,
+          { id: rec.id, title: rec.title, code: safe, saved: safe },
+        ];
+        persistMirror(next);
+        return next;
+      });
+      openMacro(rec.id);
+      return rec.id;
+    },
+    [runtime, openMacro, persistMirror],
+  );
+
+  useImperativeHandle(ref, () => ({ importMacro }), [importMacro]);
+
   // Close New ▾ menu on outside click.
   useEffect(() => {
     if (!newMenuOpen) return;
@@ -572,6 +631,17 @@ export function MacroPanel({
         >
           Export…
         </button>
+        {onConvertToNotebook && (
+          <button
+            type="button"
+            className="macro-btn"
+            onClick={handleConvertToNotebook}
+            disabled={!activeId}
+            title="Open this macro as a new notebook (cells split on # %% markers)"
+          >
+            Convert to notebook
+          </button>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -625,4 +695,4 @@ export function MacroPanel({
       </div>
     </div>
   );
-}
+});
