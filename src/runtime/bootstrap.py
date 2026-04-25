@@ -1469,7 +1469,7 @@ def delete_signal(oid: str) -> None:
 from sigima.objects.image.creation import (  # noqa: E402  pylint: disable=wrong-import-position
     DEFAULT_TITLE as _IMAGE_DEFAULT_TITLE,
 )
-from sigima.objects.image.creation import (
+from sigima.objects.image.creation import (  # noqa: E402  pylint: disable=wrong-import-position
     IMAGE_TYPE_PARAM_CLASSES,
     ImageTypes,
     NewImageParam,

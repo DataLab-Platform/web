@@ -10,8 +10,9 @@ import "@testing-library/jest-dom/vitest";
 // jsdom doesn't implement ``window.matchMedia`` — needed by the theme
 // helper. Provide an inert stub so calls don't blow up in tests.
 if (typeof window !== "undefined" && !window.matchMedia) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).matchMedia = (query: string) => ({
+  (window as unknown as { matchMedia: (q: string) => unknown }).matchMedia = (
+    query: string,
+  ) => ({
     matches: false,
     media: query,
     onchange: null,

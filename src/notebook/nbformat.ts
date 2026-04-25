@@ -133,7 +133,10 @@ function bundleToNbData(bundle: MimeBundle): Record<string, unknown> {
   // nbformat stores text-ish MIME types as list-of-lines too.
   const data: Record<string, unknown> = {};
   for (const [mime, value] of Object.entries(bundle)) {
-    if (typeof value === "string" && (mime === "text/plain" || mime.startsWith("text/"))) {
+    if (
+      typeof value === "string" &&
+      (mime === "text/plain" || mime.startsWith("text/"))
+    ) {
       data[mime] = splitSource(value);
     } else {
       data[mime] = value;
@@ -214,7 +217,8 @@ function nbOutputToCellOutput(out: NbOutput): CellOutput | null {
       return {
         type: "execute_result",
         data: nbDataToBundle(out.data),
-        execCount: typeof out.execution_count === "number" ? out.execution_count : 0,
+        execCount:
+          typeof out.execution_count === "number" ? out.execution_count : 0,
       };
     case "error":
       return {
@@ -231,7 +235,8 @@ function nbOutputToCellOutput(out: NbOutput): CellOutput | null {
 function nbCellToCell(nb: NbCell): CellModel | null {
   const source = joinSource(nb.source);
   // Preserve the original cell id when present (round-trip stability).
-  const id = typeof nb.id === "string" && nb.id.length > 0 ? nb.id : newCellId();
+  const id =
+    typeof nb.id === "string" && nb.id.length > 0 ? nb.id : newCellId();
   if (nb.cell_type === "markdown") {
     const c = emptyMarkdownCell(source);
     c.id = id;

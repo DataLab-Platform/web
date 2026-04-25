@@ -58,6 +58,13 @@ directory = "htmlcov-python"
 [tool.coverage.xml]
 output = "coverage-python.xml"
 
+[tool.ruff.lint.per-file-ignores]
+# Macro templates are evaluated inside Pyodide with a pre-injected ``proxy``
+# global and are wrapped in an async function by the macro runner before
+# execution. Both the ``proxy`` reference and top-level ``await`` are
+# intentional and not actionable on a per-file basis.
+"src/macros/templates/*.py" = ["F704", "F821"]
+
 [tool.pylint.MASTER]
 # ``__init__.py`` does not exist (the modules live under ``src/runtime`` and
 # are pushed into Pyodide individually); list the files explicitly so the

@@ -166,7 +166,6 @@ export function SidePanel(props: Props) {
       setPipWindow(win);
     } catch (err) {
       // User dismissed the picker, or browser denied — silently ignore.
-      // eslint-disable-next-line no-console
       console.warn("Pop-out failed:", err);
     }
   }, [width]);

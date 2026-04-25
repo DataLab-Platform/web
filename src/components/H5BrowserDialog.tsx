@@ -108,9 +108,10 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
 
   // Cleanup any still-open files on unmount.
   useEffect(() => {
+    const ownedRef = ownedFileIds;
     return () => {
       if (!runtime) return;
-      const ids = Array.from(ownedFileIds.current);
+      const ids = Array.from(ownedRef.current);
       ids.forEach((fid) => void runtime.closeH5Browser(fid).catch(() => {}));
     };
   }, [runtime]);

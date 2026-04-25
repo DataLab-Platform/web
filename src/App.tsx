@@ -55,7 +55,10 @@ import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { Splitter } from "./components/Splitter";
 import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
-import { NotebookPanel, type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
+import {
+  NotebookPanel,
+  type NotebookPanelHandle,
+} from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import type {
   AnalysisResult,
@@ -690,7 +693,7 @@ export default function App() {
         if (result === null) {
           window.alert(
             "The analysis function returned no result " +
-            "(e.g. FWHM on a flat curve, or no peak detected).",
+              "(e.g. FWHM on a flat curve, or no peak detected).",
           );
         }
         await refreshResults(oid);
@@ -800,7 +803,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [runtime, refresh, activePanel]);
+  }, [runtime, refresh, objectPanel]);
 
   const handleRenameObject = useCallback(
     async (oid: string, name: string) => {
@@ -1244,7 +1247,8 @@ export default function App() {
               setH5BrowserFiles([opened]);
             } catch (err2) {
               window.alert(
-                `Failed to open HDF5 file:\n${err2 instanceof Error ? err2.message : String(err2)
+                `Failed to open HDF5 file:\n${
+                  err2 instanceof Error ? err2.message : String(err2)
                 }`,
               );
             }
@@ -1484,7 +1488,6 @@ export default function App() {
                     const dot = name.lastIndexOf(".");
                     const stem = dot > 0 ? name.slice(0, dot) : name;
                     const ext = dot > 0 ? name.slice(dot) : "";
-                    // eslint-disable-next-line no-await-in-loop
                     while (
                       await dirHandle
                         .getFileHandle(finalName)
@@ -1515,12 +1518,12 @@ export default function App() {
                     err.name === "SecurityError");
                 const explanation = isBlocked
                   ? "The browser refused to write into this directory " +
-                  "(system folders such as Desktop, Documents, " +
-                  "Downloads or OneDrive-synced paths are blocked).\n\n" +
-                  "Click OK to download each file individually instead, " +
-                  "or Cancel to abort."
+                    "(system folders such as Desktop, Documents, " +
+                    "Downloads or OneDrive-synced paths are blocked).\n\n" +
+                    "Click OK to download each file individually instead, " +
+                    "or Cancel to abort."
                   : `Write failed:\n${msg}\n\nClick OK to download each ` +
-                  `file individually instead.`;
+                    `file individually instead.`;
                 if (!window.confirm(explanation)) return;
                 // Fall through to download-fallback below.
               }
@@ -1659,42 +1662,42 @@ export default function App() {
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
       ...(activePanel === "image"
         ? buildImageGridActions({
-          onDistributeOnGrid: handleDistributeOnGrid,
-          onResetPositions: handleResetImagePositions,
-        })
+            onDistributeOnGrid: handleDistributeOnGrid,
+            onResetPositions: handleResetImagePositions,
+          })
         : []),
       ...(activePanel === "image"
         ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
         : []),
       ...(activePanel === "signal"
         ? buildInteractiveFitActions(
-          interactiveFits,
-          handleLaunchInteractiveFit,
-        )
+            interactiveFits,
+            handleLaunchInteractiveFit,
+          )
         : []),
       ...(activePanel === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       ...(activePanel === "signal"
         ? buildRoiActions(roi, roiEditMode, {
-          onToggleEditMode: handleToggleRoiEditMode,
-          onEditNumerically: handleEditRoi,
-          onExtractEach: handleRoiExtractEach,
-          onExtractMerged: handleRoiExtractMerged,
-          onRemoveAt: handleRoiRemoveAt,
-          onRemoveAll: handleRoiRemoveAll,
-        })
+            onToggleEditMode: handleToggleRoiEditMode,
+            onEditNumerically: handleEditRoi,
+            onExtractEach: handleRoiExtractEach,
+            onExtractMerged: handleRoiExtractMerged,
+            onRemoveAt: handleRoiRemoveAt,
+            onRemoveAll: handleRoiRemoveAll,
+          })
         : buildImageRoiActions(imageRoi, imageRoiEditMode, {
-          onToggleEditMode: handleToggleImageRoiEditMode,
-          onAddRectangle: handleImageAddRectangle,
-          onAddCircle: handleImageAddCircle,
-          onCreateGrid: handleCreateRoiGrid,
-          onEditNumerically: handleImageEditRoi,
-          onExtractEach: handleImageRoiExtractEach,
-          onExtractMerged: handleImageRoiExtractMerged,
-          onRemoveAt: handleImageRoiRemoveAt,
-          onRemoveAll: handleImageRoiRemoveAll,
-        })),
+            onToggleEditMode: handleToggleImageRoiEditMode,
+            onAddRectangle: handleImageAddRectangle,
+            onAddCircle: handleImageAddCircle,
+            onCreateGrid: handleCreateRoiGrid,
+            onEditNumerically: handleImageEditRoi,
+            onExtractEach: handleImageRoiExtractEach,
+            onExtractMerged: handleImageRoiExtractMerged,
+            onRemoveAt: handleImageRoiRemoveAt,
+            onRemoveAll: handleImageRoiRemoveAll,
+          })),
       ...buildPluginActions(pluginActions, objectPanel, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),
@@ -1703,6 +1706,8 @@ export default function App() {
     ],
     [
       activePanel,
+      objectPanel,
+      handleSwitchPanel,
       visibleFeatures,
       signalTypes,
       imageTypes,
@@ -1895,10 +1900,7 @@ export default function App() {
                 }}
                 onConvertToNotebook={(title, code) => {
                   handleSwitchPanel("notebook");
-                  notebookPanelRef.current?.importMacroAsNotebook(
-                    title,
-                    code,
-                  );
+                  notebookPanelRef.current?.importMacroAsNotebook(title, code);
                 }}
                 theme={theme}
               />
@@ -1926,31 +1928,25 @@ export default function App() {
               </div>
             </div>
           )}
-          {isObjectPanel &&
-            status === "loading" &&
-            !data &&
-            !imageData && (
-              <div className="plot-empty plot-loading">
-                <img
-                  src={
-                    new URL("./assets/DataLab-Splash.svg", import.meta.url).href
-                  }
-                  alt="DataLab"
-                  className="plot-loading-logo"
-                />
-                <div className="plot-loading-message">{message}</div>
-              </div>
-            )}
-          {isObjectPanel &&
-            status === "ready" &&
-            !data &&
-            !imageData && (
-              <div className="plot-empty">
-                {activePanel === "signal"
-                  ? "Create a signal to get started."
-                  : "Create an image to get started."}
-              </div>
-            )}
+          {isObjectPanel && status === "loading" && !data && !imageData && (
+            <div className="plot-empty plot-loading">
+              <img
+                src={
+                  new URL("./assets/DataLab-Splash.svg", import.meta.url).href
+                }
+                alt="DataLab"
+                className="plot-loading-logo"
+              />
+              <div className="plot-loading-message">{message}</div>
+            </div>
+          )}
+          {isObjectPanel && status === "ready" && !data && !imageData && (
+            <div className="plot-empty">
+              {activePanel === "signal"
+                ? "Create a signal to get started."
+                : "Create an image to get started."}
+            </div>
+          )}
           {activePanel === "signal" && data && (
             <SignalPlot
               data={data}

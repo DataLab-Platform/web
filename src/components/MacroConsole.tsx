@@ -32,7 +32,7 @@ interface Line {
   text: string;
 }
 
-export const MacroConsole = forwardRef<MacroConsoleHandle, {}>(
+export const MacroConsole = forwardRef<MacroConsoleHandle, object>(
   function MacroConsole(_props, ref) {
     const [lines, setLines] = useState<Line[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);

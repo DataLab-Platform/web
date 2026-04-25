@@ -137,8 +137,7 @@ await micropip.install(["sigima", "guidata"])
     };
     // Expose on the JS global scope so ``import js; js._dlw_*(...)``
     // from Python works (Pyodide's ``js`` proxy reflects globalThis).
-    (self as unknown as Record<string, unknown>)._dlw_post_stream =
-      postStream;
+    (self as unknown as Record<string, unknown>)._dlw_post_stream = postStream;
     (self as unknown as Record<string, unknown>)._dlw_post_display =
       postDisplay;
     (self as unknown as Record<string, unknown>)._dlw_post_execute_result =

@@ -2193,7 +2193,6 @@ input {
   background: var(--accent-hover);
 }
 
-
 /* ============================================================ */
 /* Notebook panel                                                */
 /* ============================================================ */
@@ -2323,7 +2322,6 @@ input {
   overflow: auto;
 }
 
-
 /* Notebook tabs (multi-notebook bar) */
 .nb-tabs {
   display: flex;
@@ -2451,7 +2449,6 @@ input {
   color: #c4302b;
 }
 
-
 /* Notebook: rendered markdown */
 .nb-cell-markdown-rendered {
   padding: 8px 12px;
@@ -2527,7 +2524,6 @@ input {
   color: var(--accent);
   font-weight: 600;
 }
-
 
 .nb-tab-rename-input {
   font: inherit;

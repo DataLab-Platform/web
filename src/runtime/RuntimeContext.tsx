@@ -13,7 +13,8 @@ const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
   const [runtime, setRuntime] = useState<DataLabRuntime | null>(null);
-  const [status, setStatus] = useState<RuntimeContextValue["status"]>("loading");
+  const [status, setStatus] =
+    useState<RuntimeContextValue["status"]>("loading");
   const [message, setMessage] = useState("Initialising…");
   const [error, setError] = useState<string | null>(null);
 

@@ -60,8 +60,9 @@ export function Cell({
 
   return (
     <div
-      className={`nb-cell nb-cell-${cell.type}${active ? " nb-cell-active" : ""}${cell.status === "running" ? " nb-cell-running" : ""
-        }${cell.status === "error" ? " nb-cell-error" : ""}`}
+      className={`nb-cell nb-cell-${cell.type}${active ? " nb-cell-active" : ""}${
+        cell.status === "running" ? " nb-cell-running" : ""
+      }${cell.status === "error" ? " nb-cell-error" : ""}`}
       onClick={() => onActivate(cell.id)}
       role="group"
       aria-label={`${cell.type} cell`}

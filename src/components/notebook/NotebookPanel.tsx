@@ -23,7 +23,15 @@
  *   * Open/Save .ipynb buttons read/write nbformat v4.5.
  */
 
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, forwardRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+} from "react";
 import type { DataLabRuntime } from "../../runtime/runtime";
 import { NotebookRuntime } from "../../notebook/NotebookRuntime";
 import {
@@ -83,20 +91,22 @@ const LS_OPEN_NB_IDS = "datalab-web.notebooks.openIds";
 const LS_ACTIVE_NB_ID = "datalab-web.notebooks.activeId";
 const AUTOSAVE_DELAY_MS = 600;
 
-export const NotebookPanel = forwardRef<NotebookPanelHandle, NotebookPanelProps>(
-  function NotebookPanel(
-    {
-      runtime,
-      theme,
-      onSetCurrentPanel,
-      getSelection,
-      getCurrentPanel,
-      selectObjects,
-      onModelChanged,
-      onConvertToMacro,
-    },
-    ref,
-  ) {
+export const NotebookPanel = forwardRef<
+  NotebookPanelHandle,
+  NotebookPanelProps
+>(function NotebookPanel(
+  {
+    runtime,
+    theme,
+    onSetCurrentPanel,
+    getSelection,
+    getCurrentPanel,
+    selectObjects,
+    onModelChanged,
+    onConvertToMacro,
+  },
+  ref,
+) {
   // -- Open notebooks (in-memory) --------------------------------------
   const [notebooks, setNotebooks] = useState<NotebookModel[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -176,7 +186,7 @@ export const NotebookPanel = forwardRef<NotebookPanelHandle, NotebookPanelProps>
       setStoredList(list);
       const openIdsRaw = localStorage.getItem(LS_OPEN_NB_IDS);
       const activeIdRaw = localStorage.getItem(LS_ACTIVE_NB_ID);
-      let openIds: string[] = [];
+      let openIds: string[];
       try {
         openIds = openIdsRaw ? (JSON.parse(openIdsRaw) as string[]) : [];
       } catch {
@@ -809,9 +819,7 @@ export const NotebookPanel = forwardRef<NotebookPanelHandle, NotebookPanelProps>
                     handleNew();
                   }}
                 >
-                  <span className="nb-open-menu-name-text">
-                    Empty notebook
-                  </span>
+                  <span className="nb-open-menu-name-text">Empty notebook</span>
                   <span className="nb-open-menu-name-when">
                     Start from scratch
                   </span>
@@ -1016,5 +1024,4 @@ export const NotebookPanel = forwardRef<NotebookPanelHandle, NotebookPanelProps>
       </div>
     </div>
   );
-  },
-);
+});

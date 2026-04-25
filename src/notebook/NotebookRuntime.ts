@@ -27,7 +27,10 @@ export interface CellExecCallbacks {
   onDisplayData?: (mime: MimeBundle) => void;
   onExecuteResult?: (mime: MimeBundle, execCount: number) => void;
   onError?: (ename: string, evalue: string, traceback: string) => void;
-  onFinished?: (status: "ok" | "error" | "interrupted", execCount: number) => void;
+  onFinished?: (
+    status: "ok" | "error" | "interrupted",
+    execCount: number,
+  ) => void;
 }
 
 interface BridgeCallMessage {
@@ -170,9 +173,12 @@ export class NotebookRuntime {
   }
 
   private spawnWorker(): Worker {
-    const w = new Worker(new URL("../runtime/notebookWorker.ts", import.meta.url), {
-      type: "module",
-    });
+    const w = new Worker(
+      new URL("../runtime/notebookWorker.ts", import.meta.url),
+      {
+        type: "module",
+      },
+    );
     w.onmessage = (ev) => this.handleWorkerMessage(ev.data);
     w.onerror = (ev) => {
       const msg = ev.message || "notebook worker error";

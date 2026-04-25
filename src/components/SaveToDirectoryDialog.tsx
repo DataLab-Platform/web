@@ -51,7 +51,7 @@ Examples:
 function deduplicate(filenames: string[]): string[] {
   const used = new Set<string>();
   const out: string[] = [];
-  for (let original of filenames) {
+  for (const original of filenames) {
     let candidate = original;
     const dot = original.lastIndexOf(".");
     const stem = dot > 0 ? original.slice(0, dot) : original;

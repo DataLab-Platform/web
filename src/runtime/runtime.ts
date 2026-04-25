@@ -249,28 +249,28 @@ export interface SignalRoiSegment {
  *  ``dx``/``dy``).  ``inverse`` flips the masking logic (default false). */
 export type ImageRoiSegment =
   | {
-    geometry: "rectangle";
-    title?: string;
-    inverse?: boolean;
-    x0: number;
-    y0: number;
-    dx: number;
-    dy: number;
-  }
+      geometry: "rectangle";
+      title?: string;
+      inverse?: boolean;
+      x0: number;
+      y0: number;
+      dx: number;
+      dy: number;
+    }
   | {
-    geometry: "circle";
-    title?: string;
-    inverse?: boolean;
-    xc: number;
-    yc: number;
-    r: number;
-  }
+      geometry: "circle";
+      title?: string;
+      inverse?: boolean;
+      xc: number;
+      yc: number;
+      r: number;
+    }
   | {
-    geometry: "polygon";
-    title?: string;
-    inverse?: boolean;
-    points: [number, number][];
-  };
+      geometry: "polygon";
+      title?: string;
+      inverse?: boolean;
+      points: [number, number][];
+    };
 
 /** Image data payload returned by ``get_image_data``. */
 export interface ImageData {
@@ -444,12 +444,12 @@ export type H5BrowserPreview =
   | { kind: "unsupported"; error?: string }
   | { kind: "signal"; title: string; x: number[]; y: number[] }
   | {
-    kind: "image";
-    title: string;
-    width: number;
-    height: number;
-    data: number[][];
-  };
+      kind: "image";
+      title: string;
+      width: number;
+      height: number;
+      data: number[][];
+    };
 
 /** Raw array payload for the "Show array" spreadsheet view. */
 export interface H5BrowserArray {
@@ -489,28 +489,28 @@ export interface DynamicChoice {
  *  :meth:`DataLabRuntime.getObjectStats`. */
 export type ObjectStats =
   | {
-    kind: "signal";
-    n_points: number;
-    x_dtype: string;
-    y_dtype: string;
-    x_min: number | null;
-    x_max: number | null;
-    y_min: number | null;
-    y_max: number | null;
-    y_mean: number | null;
-    y_std: number | null;
-    y_median: number | null;
-  }
+      kind: "signal";
+      n_points: number;
+      x_dtype: string;
+      y_dtype: string;
+      x_min: number | null;
+      x_max: number | null;
+      y_min: number | null;
+      y_max: number | null;
+      y_mean: number | null;
+      y_std: number | null;
+      y_median: number | null;
+    }
   | {
-    kind: "image";
-    shape: number[];
-    dtype: string;
-    min: number | null;
-    max: number | null;
-    mean: number | null;
-    std: number | null;
-    median: number | null;
-  };
+      kind: "image";
+      shape: number[];
+      dtype: string;
+      min: number | null;
+      max: number | null;
+      mean: number | null;
+      std: number | null;
+      median: number | null;
+    };
 
 /** Discriminator for the metadata-editor widgets. */
 export type MetadataValueType = "string" | "number" | "bool" | "json";
@@ -573,14 +573,14 @@ export interface SignalAnalysisDescriptor {
  *  vertical markers for x₀ / x₅₀ / x₁₀₀). */
 export type AnalysisOverlay =
   | {
-    kind: "segment";
-    x0: number;
-    y0: number;
-    x1: number;
-    y1: number;
-    label?: string;
-    color?: string;
-  }
+      kind: "segment";
+      x0: number;
+      y0: number;
+      x1: number;
+      y1: number;
+      label?: string;
+      color?: string;
+    }
   | { kind: "vline"; x: number; label?: string; color?: string }
   | { kind: "hline"; y: number; label?: string; color?: string };
 
@@ -651,7 +651,7 @@ function toJs(value: unknown): unknown {
 }
 
 export class DataLabRuntime {
-  private constructor(private readonly py: PyodideAPI) { }
+  private constructor(private readonly py: PyodideAPI) {}
 
   static async load(
     onProgress?: (msg: string) => void,
@@ -659,7 +659,7 @@ export class DataLabRuntime {
     if (typeof window.loadPyodide !== "function") {
       throw new Error(
         "Pyodide failed to load from the CDN. Check the browser console " +
-        "and your network / Content-Security-Policy settings.",
+          "and your network / Content-Security-Policy settings.",
       );
     }
     onProgress?.("Loading Pyodide runtime…");
@@ -759,7 +759,7 @@ await micropip.install(["sigima", "guidata"])
       if (fn === null) {
         throw new Error(
           `Dialog requested (${String(kind)}) but no handler is registered. ` +
-          "Call sigima.setDialogHandler(...) on the JS side first.",
+            "Call sigima.setDialogHandler(...) on the JS side first.",
         );
       }
       // ``payload`` may be a Python proxy: convert to plain JS *and* destroy
