@@ -112,3 +112,100 @@ export function plotlyDash(value: string | null | undefined): string {
       return v;
   }
 }
+
+/** Normalised curve display modes mirroring PlotPy's ``CurveItem``
+ *  ``curvestyle``.  ``"lines"`` is the Plotly default; the others select
+ *  alternative renderings handled by :func:`buildCurveTrace`. */
+export type CurveMode = "lines" | "steps" | "sticks" | "dots";
+
+/** Map PlotPy / Qt curvestyle names (``Lines``, ``Sticks``, ``Steps``,
+ *  ``Dots``, ``NoCurve``) to the small set we render natively.  Unknown
+ *  / null values default to ``"lines"`` so plain Sigima signals (no
+ *  metadata) keep their historical look. */
+export function normalizeCurveStyle(
+  value: string | null | undefined,
+): CurveMode {
+  if (!value) return "lines";
+  switch (value.trim().toLowerCase()) {
+    case "sticks":
+    case "stem":
+      return "sticks";
+    case "steps":
+    case "step":
+      return "steps";
+    case "dots":
+    case "nocurve":
+    case "no_curve":
+    case "markers":
+      return "dots";
+    case "lines":
+    case "line":
+    default:
+      return "lines";
+  }
+}
+
+/** Plotly trace fragment for a single curve.  Returned object is meant
+ *  to be merged into a base trace ``{ x, y, name, … }`` via spread. */
+export interface CurveTracePartial {
+  type: "scatter";
+  mode: "lines" | "markers";
+  line?: { color: string; width: number; dash: string; shape?: "hv" };
+  marker?: { color: string; size: number };
+  /** Override ``x`` for stem rendering (``[xi, xi, NaN, …]``). */
+  x?: number[];
+  /** Override ``y`` for stem rendering (``[0, yi, NaN, …]``). */
+  y?: number[];
+}
+
+/** Build the Plotly trace fragment for one curve, given its raw data
+ *  arrays, the resolved color/width/dash and the normalised display mode. */
+export function buildCurveTrace(
+  x: readonly number[],
+  y: readonly number[],
+  color: string,
+  width: number,
+  dash: string,
+  mode: CurveMode = "lines",
+): CurveTracePartial {
+  switch (mode) {
+    case "dots":
+      return {
+        type: "scatter",
+        mode: "markers",
+        marker: { color, size: Math.max(3, Math.round(width * 2)) },
+      };
+    case "sticks": {
+      // Stem: for each (xi, yi) emit [xi, xi, NaN] / [0, yi, NaN] so a
+      // single ``lines`` trace renders all the vertical bars without
+      // joining them.
+      const xs: number[] = [];
+      const ys: number[] = [];
+      const n = Math.min(x.length, y.length);
+      for (let i = 0; i < n; i++) {
+        xs.push(x[i], x[i], NaN);
+        ys.push(0, y[i], NaN);
+      }
+      return {
+        type: "scatter",
+        mode: "lines",
+        line: { color, width, dash },
+        x: xs,
+        y: ys,
+      };
+    }
+    case "steps":
+      return {
+        type: "scatter",
+        mode: "lines",
+        line: { color, width, dash, shape: "hv" },
+      };
+    case "lines":
+    default:
+      return {
+        type: "scatter",
+        mode: "lines",
+        line: { color, width, dash },
+      };
+  }
+}

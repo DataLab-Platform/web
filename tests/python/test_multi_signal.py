@@ -27,7 +27,12 @@ def test_get_signal_xy_includes_style_block(fresh_bootstrap):
     # underlying SignalObj has no per-curve metadata yet.
     assert "style" in payload
     style = payload["style"]
-    assert style == {"color": None, "linestyle": None, "linewidth": None}
+    assert style == {
+        "color": None,
+        "linestyle": None,
+        "linewidth": None,
+        "curvestyle": None,
+    }
 
 
 def test_get_signal_xy_reads_style_from_metadata(fresh_bootstrap):
@@ -46,8 +51,14 @@ def test_get_signal_xy_reads_style_from_metadata(fresh_bootstrap):
     obj.metadata["color"] = "#ff7f0e"
     obj.metadata["linestyle"] = "DashLine"
     obj.metadata["linewidth"] = "2.5"
+    obj.metadata["curvestyle"] = "Sticks"
     style = bs.get_signal_xy(oid)["style"]
-    assert style == {"color": "#ff7f0e", "linestyle": "DashLine", "linewidth": 2.5}
+    assert style == {
+        "color": "#ff7f0e",
+        "linestyle": "DashLine",
+        "linewidth": 2.5,
+        "curvestyle": "Sticks",
+    }
 
 
 def test_get_signals_xy_returns_one_payload_per_known_id(fresh_bootstrap):

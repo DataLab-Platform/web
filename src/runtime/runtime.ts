@@ -99,6 +99,9 @@ export interface SignalStyle {
    *  ``line.dash`` value — :func:`plotlyDash` normalises both. */
   linestyle: string | null;
   linewidth: number | null;
+  /** PlotPy curve display mode (``Lines``, ``Sticks``, ``Steps``,
+   *  ``Dots``, ``NoCurve``) — :func:`normalizeCurveStyle` normalises. */
+  curvestyle: string | null;
 }
 
 export interface SignalData extends SignalMeta {

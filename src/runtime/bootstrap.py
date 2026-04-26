@@ -303,6 +303,7 @@ def _signal_style(obj: Any) -> dict[str, Any]:
     color = md.get("color") or md.get("curvecolor")
     linestyle = md.get("linestyle") or md.get("line_style")
     linewidth = md.get("linewidth") or md.get("line_width")
+    curvestyle = md.get("curvestyle") or md.get("curve_style")
     try:
         linewidth = float(linewidth) if linewidth is not None else None
     except (TypeError, ValueError):
@@ -311,6 +312,7 @@ def _signal_style(obj: Any) -> dict[str, Any]:
         "color": str(color) if color else None,
         "linestyle": str(linestyle) if linestyle else None,
         "linewidth": linewidth,
+        "curvestyle": str(curvestyle) if curvestyle else None,
     }
 
 

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import {
+  buildCurveTrace,
   getCurveStyle,
   hexToRgba,
+  normalizeCurveStyle,
   plotlyDash,
   roiLineColor,
 } from "../runtime/plotStyles";
@@ -286,12 +288,15 @@ export function SignalPlot({
         ? plotlyDash(sig.style.linestyle)
         : auto.dash;
       const width = sig.style?.linewidth ?? auto.width;
+      const mode = normalizeCurveStyle(sig.style?.curvestyle);
+      const partial = buildCurveTrace(sig.x, sig.y, color, width, dash, mode);
       return {
-        x: sig.x,
-        y: sig.y,
-        type: "scatter" as const,
-        mode: "lines" as const,
-        line: { color, width, dash },
+        x: partial.x ?? sig.x,
+        y: partial.y ?? sig.y,
+        type: partial.type,
+        mode: partial.mode,
+        ...(partial.line ? { line: partial.line } : {}),
+        ...(partial.marker ? { marker: partial.marker } : {}),
         name: sig.title,
         showlegend: true,
       };
