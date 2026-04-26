@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
+import { getCurveStyle, plotlyDash } from "../runtime/plotStyles";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -22,6 +23,10 @@ interface Props {
   onRoiChange?: (segments: SignalRoiSegment[]) => void;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
+  /** Additional signals overlaid on top of ``data`` (multi-selection).
+   *  Each entry uses metadata-defined style when present, otherwise the
+   *  shared cycling palette starting at ``index + 1``. */
+  extraSignals?: SignalData[];
 }
 
 export function SignalPlot({
@@ -33,6 +38,7 @@ export function SignalPlot({
   roiEditMode = false,
   onRoiChange,
   results = [],
+  extraSignals = [],
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
   const xAxisTitle = useMemo(
@@ -247,20 +253,31 @@ export function SignalPlot({
     () => [...resultAnnotations, ...localAnnotations],
     [resultAnnotations, localAnnotations],
   );
-  const allTraces = useMemo(
-    () => [
-      {
-        x: data.x,
-        y: data.y,
+  const allTraces = useMemo(() => {
+    // Build one Scatter trace per signal (primary first, then any
+    // selected extras).  Style precedence: explicit metadata > cycling
+    // palette.  Index 0 always uses palette slot 0 so a single signal
+    // keeps the historical muted-blue look.
+    const allSignals: SignalData[] = [data, ...extraSignals];
+    const curveTraces = allSignals.map((sig, i) => {
+      const auto = getCurveStyle(i);
+      const color = sig.style?.color ?? auto.color;
+      const dash = sig.style?.linestyle
+        ? plotlyDash(sig.style.linestyle)
+        : auto.dash;
+      const width = sig.style?.linewidth ?? auto.width;
+      return {
+        x: sig.x,
+        y: sig.y,
         type: "scatter" as const,
         mode: "lines" as const,
-        line: { color: "#1f77b4", width: 1.5 },
-        name: data.title,
-      },
-      ...resultTraces,
-    ],
-    [data.x, data.y, data.title, resultTraces],
-  );
+        line: { color, width, dash },
+        name: sig.title,
+        showlegend: true,
+      };
+    });
+    return [...curveTraces, ...resultTraces];
+  }, [data, extraSignals, resultTraces]);
 
   return (
     <Plot
@@ -273,7 +290,7 @@ export function SignalPlot({
           margin: { l: 60, r: 20, t: 40, b: 50 },
           xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
           yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
-          showlegend: resultTraces.length > 0,
+          showlegend: resultTraces.length > 0 || extraSignals.length > 0,
           legend: { ...plotlyTheme.legend, orientation: "h", y: -0.2 },
           // In ROI edit mode, default newshape style matches the ROI overlay
           // so freshly drawn rectangles are visually consistent.

@@ -144,6 +144,10 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [data, setData] = useState<SignalData | null>(null);
+  /** Other signals selected alongside ``currentId`` — overlaid on top
+   *  of ``data`` in :class:`SignalPlot` to mirror DataLab desktop's
+   *  multi-curve plot. */
+  const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
   const [imageData, setImageData] = useState<ImageData | null>(null);
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
@@ -326,6 +330,7 @@ export default function App() {
   useEffect(() => {
     if (!runtime || !currentId) {
       setData(null);
+      setExtraSignals([]);
       setImageData(null);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
@@ -338,6 +343,7 @@ export default function App() {
     if (activePanel === "image") {
       // Image panel: viewer + ROI + analysis results.
       setData(null);
+      setExtraSignals([]);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
       setImageLutRange(null);
@@ -387,6 +393,21 @@ export default function App() {
       .catch(() => {
         if (!cancelled) setData(null);
       });
+    // Fetch the other selected signals (excluding the current one) so
+    // they can be overlaid on the same plot.
+    const extraIds = selectedIds.filter((id) => id !== currentId);
+    if (extraIds.length === 0) {
+      setExtraSignals([]);
+    } else {
+      runtime
+        .getSignalsData(extraIds)
+        .then((sigs) => {
+          if (!cancelled) setExtraSignals(sigs);
+        })
+        .catch(() => {
+          if (!cancelled) setExtraSignals([]);
+        });
+    }
     runtime
       .getPlotlyAnnotations(currentId)
       .then((a) => {
@@ -414,7 +435,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, currentId, activePanel]);
+  }, [runtime, currentId, activePanel, selectedIds]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null) => {
@@ -431,6 +452,7 @@ export default function App() {
       setSelectedIds([]);
       setCurrentId(null);
       setData(null);
+      setExtraSignals([]);
       setImageData(null);
       setRoi([]);
       setImageRoi([]);
@@ -1957,6 +1979,7 @@ export default function App() {
               roiEditMode={roiEditMode}
               onRoiChange={handleRoiChangeFromPlot}
               results={results}
+              extraSignals={extraSignals}
             />
           )}
           {activePanel === "image" && imageData && (

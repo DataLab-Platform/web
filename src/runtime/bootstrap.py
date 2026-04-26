@@ -272,6 +272,7 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
             "ylabel": obj.ylabel or "",
             "xunit": obj.xunit or "",
             "yunit": obj.yunit or "",
+            "style": _signal_style(obj),
         }
     if entry.kind == "image":
         h, w = obj.data.shape[:2]
@@ -288,6 +289,29 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
             "yunit": obj.yunit or "",
         }
     return {"kind": entry.kind, "title": getattr(obj, "title", "")}
+
+
+def _signal_style(obj: Any) -> dict[str, Any]:
+    """Extract optional per-curve style from a SignalObj's metadata.
+
+    Sigima/PlotPy persist ``color`` / ``linestyle`` / ``linewidth`` (and
+    a few sibling keys) under the object's ``metadata`` dict so they
+    survive copy/save/restore.  Missing fields are returned as ``None``
+    so the front-end can fall back to the cycling palette.
+    """
+    md = getattr(obj, "metadata", None) or {}
+    color = md.get("color") or md.get("curvecolor")
+    linestyle = md.get("linestyle") or md.get("line_style")
+    linewidth = md.get("linewidth") or md.get("line_width")
+    try:
+        linewidth = float(linewidth) if linewidth is not None else None
+    except (TypeError, ValueError):
+        linewidth = None
+    return {
+        "color": str(color) if color else None,
+        "linestyle": str(linestyle) if linestyle else None,
+        "linewidth": linewidth,
+    }
 
 
 def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
@@ -685,6 +709,22 @@ def get_signal_xy(oid: str) -> dict[str, Any]:
         "y": obj.y.tolist(),
         **_object_meta(_ObjectEntry(oid=oid, kind="signal", obj=obj)),
     }
+
+
+def get_signals_xy(oids: list[str]) -> list[dict[str, Any]]:
+    """Batched variant of :func:`get_signal_xy`.
+
+    Used by the front-end when several signals are selected so they can
+    be overlaid on a single plot in one round-trip across the Pyodide
+    bridge.  Unknown ids are silently skipped.
+    """
+    out: list[dict[str, Any]] = []
+    for oid in oids:
+        try:
+            out.append(get_signal_xy(oid))
+        except KeyError:
+            continue
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1636,6 +1676,9 @@ def get_image_data(oid: str) -> dict[str, Any]:
     """
     obj = _MODEL.get(oid)
     data = obj.data
+    md = getattr(obj, "metadata", None) or {}
+    colormap = md.get("colormap") or md.get("colourmap")
+    invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
     return {
         "id": oid,
         "title": obj.title or "",
@@ -1655,6 +1698,8 @@ def get_image_data(oid: str) -> dict[str, Any]:
         "xunit": obj.xunit or "",
         "yunit": obj.yunit or "",
         "zunit": getattr(obj, "zunit", "") or "",
+        "colormap": str(colormap) if colormap else None,
+        "invert_colormap": bool(invert_cm) if invert_cm is not None else False,
     }
 
 
@@ -3875,6 +3920,7 @@ __all__ = [
     "format_signal_basenames",
     "list_signals",
     "get_signal_xy",
+    "get_signals_xy",
     "delete_signal",
     "create_image",
     "create_image_typed",

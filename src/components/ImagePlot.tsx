@@ -36,9 +36,10 @@ interface ImagePlotProps {
  * Read-only image viewer using Plotly.js's ``heatmap`` trace.
  *
  * Mirrors DataLab desktop's image plot defaults: equal axes (1 px = 1 px),
- * top-left origin (Y axis reversed), and a colormap close to the desktop
- * default ``jet``-like one.  Pixel coordinates respect the image's
- * ``x0`` / ``y0`` / ``dx`` / ``dy`` metadata.  Optional overlays:
+ * top-left origin (Y axis reversed), and the same default ``viridis``
+ * colormap (overridable via the image's ``colormap`` metadata).  Pixel
+ * coordinates respect the image's ``x0`` / ``y0`` / ``dx`` / ``dy``
+ * metadata.  Optional overlays:
  *
  * * ``roi`` — orange dotted shapes for each user-defined ROI;
  * * ``results`` — geometry results (peaks, blobs, contours…) coloured per
@@ -97,6 +98,13 @@ export function ImagePlot({
       { length: h },
       (_, j) => data.y0 + (j + 0.5) * data.dy,
     );
+    // Default to Viridis (matches DataLab Qt) and honour the per-image
+    // ``colormap`` / ``invert_colormap`` metadata when present.  Plotly's
+    // ``_r`` suffix convention reverses the scale.
+    const baseColormap = data.colormap || "Viridis";
+    const colorscale = data.invert_colormap
+      ? `${baseColormap}_r`
+      : baseColormap;
     return [
       {
         type: "heatmap" as const,
@@ -105,7 +113,7 @@ export function ImagePlot({
         y,
         zmin: effectiveLut[0],
         zmax: effectiveLut[1],
-        colorscale: "Jet" as const,
+        colorscale: colorscale as unknown as "Viridis",
         showscale: true,
         colorbar: {
           title: {

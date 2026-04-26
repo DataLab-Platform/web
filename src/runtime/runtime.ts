@@ -90,9 +90,21 @@ export interface SignalMeta {
   yunit: string;
 }
 
+/** Optional per-curve style read from PlotPy/Sigima metadata.  Honoured
+ *  by :class:`SignalPlot` when overlaying multiple signals; falls back
+ *  to the auto-cycling palette when fields are absent. */
+export interface SignalStyle {
+  color: string | null;
+  /** PlotPy linestyle name (``SolidLine``, ``DashLine`` …) or Plotly
+   *  ``line.dash`` value — :func:`plotlyDash` normalises both. */
+  linestyle: string | null;
+  linewidth: number | null;
+}
+
 export interface SignalData extends SignalMeta {
   x: number[];
   y: number[];
+  style?: SignalStyle;
 }
 
 export interface ProcessingDescriptor {
@@ -294,6 +306,12 @@ export interface ImageData {
   xunit: string;
   yunit: string;
   zunit: string;
+  /** Optional Plotly colorscale name persisted in the image's metadata
+   *  (``"Viridis"``, ``"Jet"``, ``"Gray"`` …).  When ``null``, the
+   *  viewer falls back to the :class:`ImagePlot` default. */
+  colormap?: string | null;
+  /** Reverse the colormap (appends ``_r`` to the Plotly colorscale). */
+  invert_colormap?: boolean;
 }
 
 /** Legacy synthetic image parameters (kept for backwards compatibility). */
@@ -1122,6 +1140,15 @@ await micropip.install(["sigima", "guidata"])
 
   async getSignalData(id: string): Promise<SignalData> {
     return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
+  }
+
+  /** Batched fetch for multi-signal overlay.  Returns one entry per
+   *  resolved id (unknown ids are silently skipped server-side). */
+  async getSignalsData(ids: string[]): Promise<SignalData[]> {
+    if (ids.length === 0) return [];
+    return (await this.callPy("get_signals_xy", {
+      oids: ids,
+    })) as SignalData[];
   }
 
   // ------------------------------------------------------------------
