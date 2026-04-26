@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
-import { getCurveStyle, plotlyDash } from "../runtime/plotStyles";
+import {
+  getCurveStyle,
+  hexToRgba,
+  plotlyDash,
+  roiLineColor,
+} from "../runtime/plotStyles";
+import { buildRoiAreaTrace } from "./signalRoi";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -205,37 +211,51 @@ export function SignalPlot({
     }
   };
 
-  const roiShapes = useMemo(
-    () =>
-      roi.map((seg) => ({
+  // Edit-mode ROI rectangles: kept anchored to the data Y-axis so
+  // Plotly's editable shapes can be dragged/resized.  Each rectangle is
+  // tinted with the per-ROI color so multi-ROI editing stays readable.
+  // In view mode we draw the ROI as a filled "area under curve" trace
+  // (see ``roiFillTraces`` below) instead of a flat vertical band, so
+  // ``roiShapes`` is empty there.
+  const roiShapes = useMemo(() => {
+    if (!roiEditMode) return [] as unknown[];
+    return roi.map((seg, i) => {
+      const lineColor = roiLineColor(i);
+      return {
         type: "rect" as const,
         xref: "x",
-        // In edit mode we anchor the rect to the data Y-axis (so Plotly's\n        // editable shapes can be dragged) but we still ignore Y on persist.
-        yref: roiEditMode ? ("y" as const) : ("paper" as const),
+        yref: "y" as const,
         x0: seg.xmin,
         x1: seg.xmax,
-        y0: roiEditMode ? yMin : 0,
-        y1: roiEditMode ? yMax : 1,
-        fillcolor: roiEditMode
-          ? "rgba(255, 165, 0, 0.10)"
-          : "rgba(255, 165, 0, 0.18)",
-        line: {
-          color: roiEditMode ? "#ff8c00" : "rgba(255, 140, 0, 0.7)",
-          width: roiEditMode ? 2 : 1,
-          dash: roiEditMode ? "dot" : "solid",
+        y0: yMin,
+        y1: yMax,
+        fillcolor: hexToRgba(lineColor, 0.1),
+        line: { color: lineColor, width: 2, dash: "dot" },
+        layer: "above" as const,
+        editable: true,
+        label: {
+          text: seg.title || `ROI${i + 1}`,
+          textposition: "top left",
+          font: { color: lineColor, size: 11 },
         },
-        layer: roiEditMode ? "above" : "below",
-        editable: roiEditMode,
-        label: roiEditMode
-          ? {
-              text: seg.title || "ROI",
-              textposition: "top left",
-              font: { color: "#ff8c00", size: 11 },
-            }
-          : undefined,
-      })),
-    [roi, roiEditMode, yMin, yMax],
-  );
+      };
+    });
+  }, [roi, roiEditMode, yMin, yMax]);
+
+  // View-mode "area under curve" overlay: one filled scatter trace per
+  // ROI, clipping the primary signal between ``xmin`` and ``xmax`` and
+  // filling down to ``y = 0``.  Mirrors the new desktop reference
+  // (``feature/309-spectral-analysis``: ``_CurveClippedXRangeSelection``)
+  // and the Plotly notebook backend (``plotly_backend.py``,
+  // ``ROI_FILL_COLORS`` palette).  Boundary x-values are linearly
+  // interpolated on the curve so the polygon edges align exactly with
+  // the requested interval.
+  const roiFillTraces = useMemo(() => {
+    if (roiEditMode) return [] as unknown[];
+    return roi
+      .map((seg, i) => buildRoiAreaTrace(seg, i, data.x, data.y))
+      .filter((t): t is Record<string, unknown> => t !== null);
+  }, [roi, roiEditMode, data.x, data.y]);
 
   // Convert each GeometryResult into Plotly shapes + a marker scatter trace
   // + textual annotations.  TableResults are *not* drawn here — they go to
@@ -276,8 +296,8 @@ export function SignalPlot({
         showlegend: true,
       };
     });
-    return [...curveTraces, ...resultTraces];
-  }, [data, extraSignals, resultTraces]);
+    return [...roiFillTraces, ...curveTraces, ...resultTraces];
+  }, [data, extraSignals, roiFillTraces, resultTraces]);
 
   return (
     <Plot
@@ -292,12 +312,17 @@ export function SignalPlot({
           yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
           showlegend: resultTraces.length > 0 || extraSignals.length > 0,
           legend: { ...plotlyTheme.legend, orientation: "h", y: -0.2 },
-          // In ROI edit mode, default newshape style matches the ROI overlay
-          // so freshly drawn rectangles are visually consistent.
+          // In ROI edit mode, the newshape default uses the next ROI's
+          // color so the freshly drawn rectangle matches its position in
+          // the cycling palette as soon as it is committed.
           newshape: roiEditMode
             ? {
-                line: { color: "#ff8c00", width: 2, dash: "dot" },
-                fillcolor: "rgba(255, 165, 0, 0.10)",
+                line: {
+                  color: roiLineColor(roi.length),
+                  width: 2,
+                  dash: "dot",
+                },
+                fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
                 opacity: 1,
               }
             : undefined,
