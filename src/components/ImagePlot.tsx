@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
+import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
+import { buildRoiOverlays } from "./imageRoi";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -219,8 +221,8 @@ export function ImagePlot({
       annotations: [...roiAnnotations, ...resultAnnotations],
       newshape: roiEditMode
         ? {
-            line: { color: ROI_COLOR, width: 2, dash: "dot" },
-            fillcolor: "rgba(255,136,0,0.10)",
+            line: { color: roiLineColor(roi.length), width: 2, dash: "dot" },
+            fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
             opacity: 1,
           }
         : tool === "stats"
@@ -240,6 +242,7 @@ export function ImagePlot({
     resultAnnotations,
     toolShapes,
     roiEditMode,
+    roi.length,
     tool,
   ]);
 
@@ -847,114 +850,6 @@ function computeHistogram(
     (_, i) => minV + (i + 0.5) * (span / bins),
   );
   return { centers, counts };
-}
-
-// ---------------------------------------------------------------------------
-// ROI overlay helpers
-// ---------------------------------------------------------------------------
-
-const ROI_COLOR = "#ff8800";
-
-function buildRoiOverlays(
-  roi: ImageRoiSegment[],
-  editMode = false,
-): {
-  roiShapes: unknown[];
-  roiAnnotations: unknown[];
-} {
-  const shapes: unknown[] = [];
-  const annotations: unknown[] = [];
-  roi.forEach((seg, idx) => {
-    const title =
-      seg.title ||
-      `${seg.geometry === "rectangle" ? "Rect" : seg.geometry === "circle" ? "Circle" : "Poly"} ${idx + 1}`;
-    if (seg.geometry === "rectangle") {
-      shapes.push({
-        type: "rect",
-        xref: "x",
-        yref: "y",
-        x0: seg.x0,
-        y0: seg.y0,
-        x1: seg.x0 + seg.dx,
-        y1: seg.y0 + seg.dy,
-        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
-        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
-        layer: "above",
-        editable: editMode,
-      });
-      annotations.push({
-        x: seg.x0,
-        y: seg.y0,
-        xref: "x",
-        yref: "y",
-        text: title,
-        showarrow: false,
-        font: { color: ROI_COLOR, size: 10 },
-        bgcolor: "rgba(0,0,0,0.6)",
-        borderpad: 2,
-        xanchor: "left",
-        yanchor: "bottom",
-        yshift: -2,
-      });
-    } else if (seg.geometry === "circle") {
-      shapes.push({
-        type: "circle",
-        xref: "x",
-        yref: "y",
-        x0: seg.xc - seg.r,
-        y0: seg.yc - seg.r,
-        x1: seg.xc + seg.r,
-        y1: seg.yc + seg.r,
-        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
-        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
-        layer: "above",
-        editable: editMode,
-      });
-      annotations.push({
-        x: seg.xc - seg.r,
-        y: seg.yc - seg.r,
-        xref: "x",
-        yref: "y",
-        text: title,
-        showarrow: false,
-        font: { color: ROI_COLOR, size: 10 },
-        bgcolor: "rgba(0,0,0,0.6)",
-        borderpad: 2,
-        xanchor: "left",
-        yanchor: "bottom",
-        yshift: -2,
-      });
-    } else if (seg.geometry === "polygon" && seg.points.length >= 3) {
-      // Plotly path syntax: M x,y L x,y L x,y Z
-      const path =
-        "M " + seg.points.map(([x, y]) => `${x},${y}`).join(" L ") + " Z";
-      shapes.push({
-        type: "path",
-        path,
-        xref: "x",
-        yref: "y",
-        line: { color: ROI_COLOR, width: editMode ? 2 : 1.5, dash: "dot" },
-        fillcolor: editMode ? "rgba(255,136,0,0.10)" : undefined,
-        layer: "above",
-        editable: editMode,
-      });
-      annotations.push({
-        x: seg.points[0][0],
-        y: seg.points[0][1],
-        xref: "x",
-        yref: "y",
-        text: title,
-        showarrow: false,
-        font: { color: ROI_COLOR, size: 10 },
-        bgcolor: "rgba(0,0,0,0.6)",
-        borderpad: 2,
-        xanchor: "left",
-        yanchor: "bottom",
-        yshift: -2,
-      });
-    }
-  });
-  return { roiShapes: shapes, roiAnnotations: annotations };
 }
 
 // Parse a Plotly path string ("M x,y L x,y ... Z") into an array of points.
