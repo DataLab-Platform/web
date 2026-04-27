@@ -32,6 +32,10 @@ interface ImagePlotProps {
   /** Called when the user commits a new LUT range from the contrast
    *  panel (slider release / Auto button). ``null`` clears the override. */
   onLutRangeChange?: (range: [number, number] | null) => void;
+  /** Called when the user picks a new colormap or toggles the invert
+   *  checkbox in the toolbar.  The new (name, inverted) pair should be
+   *  persisted on the image object so it survives panel switches. */
+  onColormapChange?: (name: string, inverted: boolean) => void;
 }
 
 /**
@@ -55,6 +59,7 @@ export function ImagePlot({
   results = [],
   lutRange = null,
   onLutRangeChange,
+  onColormapChange,
 }: ImagePlotProps) {
   const plotlyTheme = usePlotlyTheme();
   // ------------------------------------------------------------------
@@ -76,6 +81,18 @@ export function ImagePlot({
   // Local LUT range while the user is dragging contrast sliders. Committed
   // to ``onLutRangeChange`` only on slider release / Auto / panel close.
   const [draftLut, setDraftLut] = useState<[number, number] | null>(null);
+  // Local colormap state, initialised from the image's metadata and
+  // resync'd whenever it changes upstream (e.g. after switching images).
+  const [colormapName, setColormapName] = useState<string>(
+    data.colormap || "Viridis",
+  );
+  const [colormapInverted, setColormapInverted] = useState<boolean>(
+    Boolean(data.invert_colormap),
+  );
+  useEffect(() => {
+    setColormapName(data.colormap || "Viridis");
+    setColormapInverted(Boolean(data.invert_colormap));
+  }, [data.id, data.colormap, data.invert_colormap]);
   useEffect(() => {
     setCursor(null);
     setStatsRect(null);
@@ -101,12 +118,13 @@ export function ImagePlot({
       (_, j) => data.y0 + (j + 0.5) * data.dy,
     );
     // Default to Viridis (matches DataLab Qt) and honour the per-image
-    // ``colormap`` / ``invert_colormap`` metadata when present.  Plotly's
-    // ``_r`` suffix convention reverses the scale.
-    const baseColormap = data.colormap || "Viridis";
-    const colorscale = data.invert_colormap
-      ? `${baseColormap}_r`
-      : baseColormap;
+    // ``colormap`` / ``invert_colormap`` metadata when present.  The
+    // local ``colormapName`` / ``colormapInverted`` state lets the
+    // toolbar override both at runtime; changes are persisted via
+    // ``onColormapChange``.  Plotly's ``_r`` suffix convention reverses
+    // the scale.
+    const baseColormap = colormapName || "Viridis";
+    const colorscale = colormapInverted ? `${baseColormap}_r` : baseColormap;
     return [
       {
         type: "heatmap" as const,
@@ -129,7 +147,7 @@ export function ImagePlot({
           `${data.zlabel || "z"}: %{z}<extra></extra>`,
       },
     ];
-  }, [data, effectiveLut]);
+  }, [data, effectiveLut, colormapName, colormapInverted]);
 
   const { roiShapes, roiAnnotations } = useMemo(
     () => buildRoiOverlays(roi, roiEditMode),
@@ -481,7 +499,21 @@ export function ImagePlot({
 
   return (
     <div className={wrapperClass}>
-      <ImageToolbar tool={tool} setTool={setTool} disabled={roiEditMode} />
+      <ImageToolbar
+        tool={tool}
+        setTool={setTool}
+        disabled={roiEditMode}
+        colormap={colormapName}
+        inverted={colormapInverted}
+        onColormapChange={(name) => {
+          setColormapName(name);
+          onColormapChange?.(name, colormapInverted);
+        }}
+        onInvertChange={(inv) => {
+          setColormapInverted(inv);
+          onColormapChange?.(colormapName, inv);
+        }}
+      />
       <div className="image-plot-area">
         {showProfiles ? (
           <div className="image-plot-grid">
@@ -621,10 +653,18 @@ function ImageToolbar({
   tool,
   setTool,
   disabled,
+  colormap,
+  inverted,
+  onColormapChange,
+  onInvertChange,
 }: {
   tool: ImageTool;
   setTool: (t: ImageTool) => void;
   disabled: boolean;
+  colormap: string;
+  inverted: boolean;
+  onColormapChange: (name: string) => void;
+  onInvertChange: (inverted: boolean) => void;
 }) {
   const buttons: Array<{
     id: Exclude<ImageTool, null>;
@@ -666,9 +706,55 @@ function ImageToolbar({
           {b.label}
         </button>
       ))}
+      <span className="image-tools-separator" aria-hidden="true" />
+      <label className="image-tools-colormap" title="Colormap (lookup table)">
+        <span className="image-tools-colormap-label">Colormap</span>
+        <select
+          aria-label="Colormap"
+          value={colormap}
+          onChange={(e) => onColormapChange(e.target.value)}
+        >
+          {COLORMAP_CHOICES.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label
+        className="image-tools-invert"
+        title="Reverse the colormap (Plotly _r suffix)"
+      >
+        <input
+          type="checkbox"
+          checked={inverted}
+          onChange={(e) => onInvertChange(e.target.checked)}
+        />
+        <span>Invert</span>
+      </label>
     </div>
   );
 }
+
+/** Colormaps offered in the toolbar.  These are all built-in Plotly
+ *  colorscales so they need no extra runtime resources.  ``Viridis`` is
+ *  the default to match DataLab Qt. */
+const COLORMAP_CHOICES: readonly string[] = [
+  "Viridis",
+  "Plasma",
+  "Inferno",
+  "Magma",
+  "Cividis",
+  "Hot",
+  "Jet",
+  "Greys",
+  "Greens",
+  "Blues",
+  "Reds",
+  "RdBu",
+  "Picnic",
+  "Portland",
+] as const;
 
 // ---------------------------------------------------------------------------
 // Contrast panel — histogram + dual range slider + Auto.

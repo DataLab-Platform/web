@@ -2000,6 +2000,15 @@ export default function App() {
                     );
                 }
               }}
+              onColormapChange={(name, inverted) => {
+                if (runtime && currentId) {
+                  runtime
+                    .setColormap(currentId, name, inverted)
+                    .catch((e) =>
+                      console.error("Failed to persist colormap:", e),
+                    );
+                }
+              }}
             />
           )}
         </main>

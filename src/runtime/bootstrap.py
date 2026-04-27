@@ -2056,6 +2056,25 @@ def set_lut_range(oid: str, payload: list[float] | None) -> None:
     obj.metadata[_LUT_RANGE_KEY] = [zmin, zmax]
 
 
+def set_colormap(oid: str, name: str | None, inverted: bool = False) -> None:
+    """Persist the colormap (name + inversion flag) for image *oid*.
+
+    The values are stored under the canonical ``colormap`` /
+    ``invert_colormap`` metadata keys so :func:`get_image_data` picks
+    them up on the next read.  Pass ``name=None`` (or empty) to clear
+    the override; ``invert_colormap`` is removed alongside it.
+    """
+    obj = _MODEL.get(oid)
+    if not name:
+        obj.metadata.pop("colormap", None)
+        obj.metadata.pop("colourmap", None)
+        obj.metadata.pop("invert_colormap", None)
+        obj.metadata.pop("colormap_inverted", None)
+        return
+    obj.metadata["colormap"] = str(name)
+    obj.metadata["invert_colormap"] = bool(inverted)
+
+
 # ---------------------------------------------------------------------------
 # Signal ROI (Phase 5)
 # ---------------------------------------------------------------------------

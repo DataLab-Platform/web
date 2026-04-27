@@ -1241,6 +1241,17 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("set_lut_range", { oid, payload });
   }
 
+  /** Persist the colormap (Plotly named colorscale + invert flag) on
+   *  image *oid*.  Pass ``name=null`` to clear the override and let the
+   *  viewer fall back to its built-in default. */
+  async setColormap(
+    oid: string,
+    name: string | null,
+    inverted = false,
+  ): Promise<void> {
+    await this.callPy("set_colormap", { oid, name, inverted });
+  }
+
   // ------------------------------------------------------------------
   // Signal ROI (Phase 5)
   // ------------------------------------------------------------------

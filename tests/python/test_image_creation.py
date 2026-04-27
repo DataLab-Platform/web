@@ -61,3 +61,22 @@ def test_lut_range_round_trips(fresh_bootstrap):
     assert bs.get_lut_range(oid) == [0.0, 10.0]
     bs.set_lut_range(oid, None)
     assert bs.get_lut_range(oid) is None
+
+
+def test_set_colormap_round_trips_via_image_data(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.arange(16, dtype=float).reshape(4, 4))
+    payload = bs.get_image_data(oid)
+    # Default: no override -> get_image_data returns None / False.
+    assert payload["colormap"] is None
+    assert payload["invert_colormap"] is False
+    # Set: round-trips through the image's metadata so the next read sees it.
+    bs.set_colormap(oid, "Plasma", True)
+    payload = bs.get_image_data(oid)
+    assert payload["colormap"] == "Plasma"
+    assert payload["invert_colormap"] is True
+    # Clear: removes both keys (and their aliases).
+    bs.set_colormap(oid, None)
+    payload = bs.get_image_data(oid)
+    assert payload["colormap"] is None
+    assert payload["invert_colormap"] is False

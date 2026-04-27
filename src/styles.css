@@ -1774,6 +1774,32 @@ input {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   flex: 0 0 auto;
+  align-items: center;
+}
+.image-tools-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--border);
+}
+.image-tools-colormap,
+.image-tools-invert {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+.image-tools-colormap select {
+  font-size: 12px;
+  padding: 2px 4px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.image-tools-invert input[type="checkbox"] {
+  margin: 0;
 }
 .image-tools-button {
   padding: 3px 10px;
