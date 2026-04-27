@@ -26,6 +26,7 @@ import {
   buildSignalAnalysisActions,
   buildSignalCreationActions,
   buildStaticActions,
+  buildViewActions,
 } from "./actions/registry";
 import { ObjectTree } from "./components/ObjectTree";
 import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
@@ -128,6 +129,36 @@ function usePersistedSize(
   return [value, update];
 }
 
+const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
+
+/** Persist a boolean preference to localStorage. */
+function usePersistedBool(
+  key: string,
+  defaultValue: boolean,
+): [boolean, (next: boolean) => void] {
+  const [value, setValue] = useState<boolean>(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return defaultValue;
+      return raw === "true";
+    } catch {
+      return defaultValue;
+    }
+  });
+  const update = useCallback(
+    (next: boolean) => {
+      setValue(next);
+      try {
+        window.localStorage.setItem(key, String(next));
+      } catch {
+        /* ignore quota / disabled storage */
+      }
+    },
+    [key],
+  );
+  return [value, update];
+}
+
 export default function App() {
   const { runtime, status, message, error } = useRuntime();
   const [activePanel, setActivePanel] = useState<PanelKind>("signal");
@@ -140,6 +171,18 @@ export default function App() {
   const [sidePanelWidth, setSidePanelWidth] = usePersistedSize(
     "datalab-web.sidePanelWidth",
     360,
+  );
+  // View > "Show results overlay on plot" toggle.  Off by default
+  // because the right-hand Results panel already renders the same
+  // numbers in a structured grid.  Useful when the user pops out
+  // the panel or hides it.
+  const [showResultsOverlay, setShowResultsOverlay] = usePersistedBool(
+    SHOW_RESULTS_OVERLAY_KEY,
+    false,
+  );
+  const toggleResultsOverlay = useCallback(
+    () => setShowResultsOverlay(!showResultsOverlay),
+    [showResultsOverlay, setShowResultsOverlay],
   );
   const [tree, setTree] = useState<PanelTree | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -1684,6 +1727,10 @@ export default function App() {
         onShowShortcuts: () => setHelpView("shortcuts"),
         onShowConsole: () => setHelpView("console"),
       }),
+      ...buildViewActions({
+        showResultsOverlay,
+        onToggleResultsOverlay: toggleResultsOverlay,
+      }),
       ...buildNotebookActions({
         onNew: () => {
           handleSwitchPanel("notebook");
@@ -1803,6 +1850,8 @@ export default function App() {
       handleReloadPlugins,
       interactiveFits,
       handleLaunchInteractiveFit,
+      showResultsOverlay,
+      toggleResultsOverlay,
     ],
   );
 
@@ -2006,6 +2055,7 @@ export default function App() {
               roiEditMode={roiEditMode}
               onRoiChange={handleRoiChangeFromPlot}
               results={results}
+              showResultsOverlay={showResultsOverlay}
               extraSignals={extraSignals}
             />
           )}
@@ -2022,6 +2072,7 @@ export default function App() {
               roiEditMode={imageRoiEditMode}
               onRoiChange={handleImageRoiChangeFromPlot}
               results={results}
+              showResultsOverlay={showResultsOverlay}
               lutRange={imageLutRange}
               onLutRangeChange={(r) => {
                 setImageLutRange(r);

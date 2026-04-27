@@ -189,6 +189,31 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
   ];
 }
 
+export interface ViewActionCallbacks {
+  /** Current value of the "show results overlay on plot" preference. */
+  showResultsOverlay: boolean;
+  /** Toggle the preference (and persist the new value). */
+  onToggleResultsOverlay: () => void;
+}
+
+/** Wire View menu actions (UI preferences only). */
+export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
+  const always = () => true;
+  // Use a leading checkmark glyph as a poor-man's "checkable" item;
+  // the menu bar otherwise renders flat labels and we don't want to
+  // grow the action descriptor schema for a single toggle.
+  const prefix = cb.showResultsOverlay ? "\u2713 " : "    ";
+  return [
+    {
+      id: "view.results_overlay",
+      label: `${prefix}Show results overlay on plot`,
+      menuPath: `View/${prefix}Show results overlay on plot`,
+      enabled: always,
+      run: cb.onToggleResultsOverlay,
+    },
+  ];
+}
+
 /** Wire feature-driven actions (Operations / Processing / …) ---------- */
 export function buildFeatureActions(
   features: FeatureDescriptor[],

@@ -3,6 +3,8 @@ import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
 import { buildRoiOverlays } from "./imageRoi";
+import { buildResultAnnotationBox } from "./resultBox";
+import { useTheme } from "../utils/theme";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -25,6 +27,11 @@ interface ImagePlotProps {
   onRoiChange?: (segments: ImageRoiSegment[]) => void;
   /** Analysis results (centroid, peaks, blobs, …) drawn as overlays. */
   results?: AnalysisResult[];
+  /** When true, append a paper-coords summary annotation listing
+   *  TableAnalysisResult values in the top-right corner. Defaults
+   *  to ``false`` since the right-hand Results panel already shows
+   *  the same numbers in a structured grid. */
+  showResultsOverlay?: boolean;
   /** Optional LUT range override ``[zmin, zmax]``. When ``null``/omitted,
    *  the heatmap falls back to the image's intrinsic ``data_min``/
    *  ``data_max``. Driven by the contrast tool. */
@@ -57,6 +64,7 @@ export function ImagePlot({
   roiEditMode = false,
   onRoiChange,
   results = [],
+  showResultsOverlay = false,
   lutRange = null,
   onLutRangeChange,
   onColormapChange,
@@ -158,6 +166,17 @@ export function ImagePlot({
     () => buildImageGeometryOverlays(results),
     [results],
   );
+  // Top-right paper-coords summary box for TableAnalysisResult rows
+  // (centroid, blob coordinates, peak positions, …).  Mirrors
+  // PlotPy's "computing results" annotation in DataLab desktop.
+  const { theme } = useTheme();
+  const { annotations: resultBoxAnnotations } = useMemo(
+    () =>
+      showResultsOverlay
+        ? buildResultAnnotationBox(results, { dark: theme === "dark" })
+        : { annotations: [] },
+    [results, theme, showResultsOverlay],
+  );
 
   // Crosshair shapes (profiles tool) and stats rectangle shape.
   const toolShapes = useMemo(() => {
@@ -236,7 +255,11 @@ export function ImagePlot({
         autorange: "reversed" as const,
       },
       shapes: [...roiShapes, ...resultShapes, ...toolShapes],
-      annotations: [...roiAnnotations, ...resultAnnotations],
+      annotations: [
+        ...roiAnnotations,
+        ...resultAnnotations,
+        ...resultBoxAnnotations,
+      ],
       newshape: roiEditMode
         ? {
             line: { color: roiLineColor(roi.length), width: 2, dash: "dot" },
@@ -258,6 +281,7 @@ export function ImagePlot({
     roiAnnotations,
     resultShapes,
     resultAnnotations,
+    resultBoxAnnotations,
     toolShapes,
     roiEditMode,
     roi.length,

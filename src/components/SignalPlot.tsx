@@ -10,6 +10,8 @@ import {
   roiLineColor,
 } from "../runtime/plotStyles";
 import { buildRoiAreaTrace } from "./signalRoi";
+import { buildResultAnnotationBox } from "./resultBox";
+import { useTheme } from "../utils/theme";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -31,6 +33,11 @@ interface Props {
   onRoiChange?: (segments: SignalRoiSegment[]) => void;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
+  /** When true, append a paper-coords summary annotation listing
+   *  TableAnalysisResult values in the top-right corner. Defaults
+   *  to ``false`` since the right-hand Results panel already shows
+   *  the same numbers in a structured grid. */
+  showResultsOverlay?: boolean;
   /** Additional signals overlaid on top of ``data`` (multi-selection).
    *  Each entry uses metadata-defined style when present, otherwise the
    *  shared cycling palette starting at ``index + 1``. */
@@ -46,6 +53,7 @@ export function SignalPlot({
   roiEditMode = false,
   onRoiChange,
   results = [],
+  showResultsOverlay = false,
   extraSignals = [],
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
@@ -266,14 +274,25 @@ export function SignalPlot({
     () => buildGeometryOverlays(results),
     [results],
   );
+  // Top-right paper-coords summary box for TableAnalysisResult rows
+  // (FWHM, centroid, peaks, …).  Mirrors PlotPy's "computing results"
+  // annotation in DataLab desktop.
+  const { theme } = useTheme();
+  const { annotations: resultBoxAnnotations } = useMemo(
+    () =>
+      showResultsOverlay
+        ? buildResultAnnotationBox(results, { dark: theme === "dark" })
+        : { annotations: [] },
+    [results, theme, showResultsOverlay],
+  );
 
   const allShapes = useMemo(
     () => [...roiShapes, ...resultShapes, ...localShapes],
     [roiShapes, resultShapes, localShapes],
   );
   const allAnnotations = useMemo(
-    () => [...resultAnnotations, ...localAnnotations],
-    [resultAnnotations, localAnnotations],
+    () => [...resultAnnotations, ...resultBoxAnnotations, ...localAnnotations],
+    [resultAnnotations, resultBoxAnnotations, localAnnotations],
   );
   const allTraces = useMemo(() => {
     // Build one Scatter trace per signal (primary first, then any
