@@ -80,3 +80,19 @@ def test_set_colormap_round_trips_via_image_data(fresh_bootstrap):
     payload = bs.get_image_data(oid)
     assert payload["colormap"] is None
     assert payload["invert_colormap"] is False
+
+
+def test_get_images_data_batched(fresh_bootstrap):
+    bs = fresh_bootstrap
+    a = bs.add_image_from_array("A", np.arange(4, dtype=float).reshape(2, 2))
+    b = bs.add_image_from_array("B", np.arange(9, dtype=float).reshape(3, 3))
+    payloads = bs.get_images_data([a, b])
+    assert [p["id"] for p in payloads] == [a, b]
+    assert payloads[0]["width"] == 2 and payloads[0]["height"] == 2
+    assert payloads[1]["width"] == 3 and payloads[1]["height"] == 3
+    # Each payload carries the full read-only image fields.
+    assert all("data" in p and "data_min" in p for p in payloads)
+    # Unknown ids are silently skipped (mirrors get_signals_xy).
+    assert bs.get_images_data([a, "does-not-exist", b]) == payloads
+    # Empty input returns an empty list (no crash).
+    assert bs.get_images_data([]) == []

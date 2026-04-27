@@ -1762,6 +1762,23 @@ def get_image_data(oid: str) -> dict[str, Any]:
     }
 
 
+def get_images_data(oids: list[str]) -> list[dict[str, Any]]:
+    """Batched variant of :func:`get_image_data`.
+
+    Used by the front-end when several images are selected so they can
+    be laid out side-by-side in one round-trip across the Pyodide
+    bridge.  Unknown ids are silently skipped (mirrors
+    :func:`get_signals_xy`).
+    """
+    out: list[dict[str, Any]] = []
+    for oid in oids:
+        try:
+            out.append(get_image_data(oid))
+        except KeyError:
+            continue
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Image ROI (Phase 13)
 # ---------------------------------------------------------------------------
@@ -4006,6 +4023,7 @@ __all__ = [
     "list_image_creation_types",
     "update_image_creation_params",
     "get_image_data",
+    "get_images_data",
     "get_image_roi",
     "set_image_roi",
     "delete_image_roi_at",

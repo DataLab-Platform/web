@@ -31,6 +31,7 @@ import { ObjectTree } from "./components/ObjectTree";
 import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
+import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import {
   ProfileDefinitionDialog,
@@ -149,6 +150,10 @@ export default function App() {
    *  multi-curve plot. */
   const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
   const [imageData, setImageData] = useState<ImageData | null>(null);
+  /** Other images selected alongside ``currentId`` - laid out as a
+   *  read-only grid in :class:`MultiImagePlot` to mirror DataLab
+   *  desktop's multi-image viewer. */
+  const [extraImages, setExtraImages] = useState<ImageData[]>([]);
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingFeature | null>(null);
@@ -332,6 +337,7 @@ export default function App() {
       setData(null);
       setExtraSignals([]);
       setImageData(null);
+      setExtraImages([]);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
       setImageRoi([]);
@@ -355,6 +361,26 @@ export default function App() {
         .catch(() => {
           if (!cancelled) setImageData(null);
         });
+      // Fetch the other selected images (excluding the current one) so
+      // they can be laid out side-by-side in MultiImagePlot.  We cap
+      // the request at MULTI_IMAGE_LIMIT to keep the bridge payload
+      // bounded; the component renders a "+N more" banner when the
+      // selection exceeds that limit.
+      const extraImgIds = selectedIds
+        .filter((id) => id !== currentId)
+        .slice(0, MULTI_IMAGE_LIMIT - 1);
+      if (extraImgIds.length === 0) {
+        setExtraImages([]);
+      } else {
+        runtime
+          .getImagesData(extraImgIds)
+          .then((imgs) => {
+            if (!cancelled) setExtraImages(imgs);
+          })
+          .catch(() => {
+            if (!cancelled) setExtraImages([]);
+          });
+      }
       runtime
         .getImageRoi(currentId)
         .then((segs) => {
@@ -384,6 +410,7 @@ export default function App() {
       };
     }
     setImageData(null);
+    setExtraImages([]);
     setImageRoi([]);
     runtime
       .getSignalData(currentId)
@@ -1982,7 +2009,13 @@ export default function App() {
               extraSignals={extraSignals}
             />
           )}
-          {activePanel === "image" && imageData && (
+          {activePanel === "image" && imageData && extraImages.length > 0 && (
+            <MultiImagePlot
+              images={[imageData, ...extraImages]}
+              totalSelected={selectedIds.length}
+            />
+          )}
+          {activePanel === "image" && imageData && extraImages.length === 0 && (
             <ImagePlot
               data={imageData}
               roi={imageRoi}

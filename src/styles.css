@@ -1897,6 +1897,66 @@ input {
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* ----- Multi-image grid (shown when more than one image is selected) - */
+.multi-image-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+.multi-image-banner {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 4px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  opacity: 0.85;
+}
+.multi-image-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  overflow: auto;
+}
+.multi-image-cell {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.multi-image-title {
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.multi-image-cell > .js-plotly-plot {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.multi-image-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  opacity: 0.6;
+  font-size: 13px;
+}
 .image-plot-grid {
   display: grid;
   width: 100%;

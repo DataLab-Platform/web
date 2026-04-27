@@ -1470,6 +1470,16 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_image_data", { oid })) as ImageData;
   }
 
+  /** Batched fetch for multi-image grid display.  Returns one entry per
+   *  resolved id (unknown ids are silently skipped server-side).
+   *  Mirrors :meth:`getSignalsData` for the image panel. */
+  async getImagesData(ids: string[]): Promise<ImageData[]> {
+    if (ids.length === 0) return [];
+    return (await this.callPy("get_images_data", {
+      oids: ids,
+    })) as ImageData[];
+  }
+
   /** Return the catalog of image creation types (mirrors signals). */
   async listImageCreationTypes(): Promise<ImageCreationType[]> {
     return (await this.callPy(
