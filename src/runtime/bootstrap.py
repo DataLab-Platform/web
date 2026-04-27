@@ -729,6 +729,63 @@ def get_signals_xy(oids: list[str]) -> list[dict[str, Any]]:
     return out
 
 
+def set_signal_style(
+    oid: str,
+    color: str | None = None,
+    linestyle: str | None = None,
+    linewidth: float | None = None,
+    curvestyle: str | None = None,
+) -> None:
+    """Persist per-curve style attributes on signal *oid*.
+
+    Each argument writes to the canonical metadata key consumed by
+    :func:`_signal_style` (and therefore by ``SignalPlot`` on the JS
+    side).  Pass ``None`` (the default) to **clear** that attribute and
+    fall back to the auto-cycling palette / Plotly defaults; pass an
+    explicit value to set it.
+
+    Recognised values:
+
+    * ``color``      — any valid CSS / Plotly color string
+                       (``"#rrggbb"``, ``"red"``, ``"rgb(...)"``).
+    * ``linestyle``  — ``SolidLine`` / ``DashLine`` / ``DotLine`` /
+                       ``DashDotLine`` / ``DashDotDotLine`` (or the
+                       lowercase Plotly ``dash`` values).
+    * ``linewidth``  — positive number; coerced to ``float``.
+    * ``curvestyle`` — ``Lines`` / ``Sticks`` / ``Steps`` / ``Dots`` /
+                       ``NoCurve``.
+    """
+    obj = _MODEL.get(oid)
+    md = obj.metadata
+    # ``color`` and its alias.
+    if color is None:
+        md.pop("color", None)
+        md.pop("curvecolor", None)
+    else:
+        md["color"] = str(color)
+    # ``linestyle`` and its alias.
+    if linestyle is None:
+        md.pop("linestyle", None)
+        md.pop("line_style", None)
+    else:
+        md["linestyle"] = str(linestyle)
+    # ``linewidth`` and its alias.
+    if linewidth is None:
+        md.pop("linewidth", None)
+        md.pop("line_width", None)
+    else:
+        try:
+            md["linewidth"] = float(linewidth)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid linewidth: {linewidth!r}") from exc
+    # ``curvestyle`` and its alias.
+    if curvestyle is None:
+        md.pop("curvestyle", None)
+        md.pop("curve_style", None)
+    else:
+        md["curvestyle"] = str(curvestyle)
+
+
 # ---------------------------------------------------------------------------
 # Typed signal creation (mirrors DataLab desktop's "Create" menu)
 # ---------------------------------------------------------------------------
@@ -3942,6 +3999,7 @@ __all__ = [
     "list_signals",
     "get_signal_xy",
     "get_signals_xy",
+    "set_signal_style",
     "delete_signal",
     "create_image",
     "create_image_typed",

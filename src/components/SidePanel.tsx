@@ -20,6 +20,7 @@ import type {
 import { DataSetForm } from "./DataSetForm";
 import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";
+import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
 
 type TabId = "creation" | "properties" | "processing" | "results";
@@ -27,6 +28,10 @@ type TabId = "creation" | "properties" | "processing" | "results";
 interface Props {
   runtime: DataLabRuntime;
   currentId: string | null;
+  /** Which object panel the side panel is currently mirroring.  Lets
+   *  panel-specific subviews (e.g. the curve-style editor for signals)
+   *  branch on the active panel without having to query the runtime. */
+  panelKind: "signal" | "image";
   /** Bumped by the parent whenever the underlying object changed (e.g.
    *  a feature was applied), to force a re-fetch. */
   refreshNonce: number;
@@ -75,6 +80,7 @@ export function SidePanel(props: Props) {
   const {
     runtime,
     currentId,
+    panelKind,
     refreshNonce,
     onObjectChanged,
     preferredTab,
@@ -255,6 +261,7 @@ export function SidePanel(props: Props) {
           <PropertiesPanel
             runtime={runtime}
             oid={currentId}
+            panelKind={panelKind}
             refreshNonce={refreshNonce}
             onApplied={() => onObjectChanged(currentId)}
           />
@@ -331,6 +338,10 @@ interface SubProps {
   onApplied: () => void;
 }
 
+interface PropertiesProps extends SubProps {
+  panelKind: "signal" | "image";
+}
+
 function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
   const [payload, setPayload] = useState<
     (SchemaWithValues & { stype: string }) | null
@@ -400,7 +411,13 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
 // Properties tab (full SignalObj DataSet editor)
 // ---------------------------------------------------------------------------
 
-function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
+function PropertiesPanel({
+  runtime,
+  oid,
+  panelKind,
+  refreshNonce,
+  onApplied,
+}: PropertiesProps) {
   const [payload, setPayload] = useState<SchemaWithValues | null>(null);
   const [stats, setStats] = useState<ObjectStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -484,6 +501,14 @@ function PropertiesPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
         onApply={apply}
         initialError={error}
       />
+      {panelKind === "signal" && (
+        <CurveStyleEditor
+          runtime={runtime}
+          oid={oid}
+          refreshNonce={refreshNonce}
+          onApplied={onApplied}
+        />
+      )}
       <MetadataEditor
         runtime={runtime}
         oid={oid}

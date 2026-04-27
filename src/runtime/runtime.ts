@@ -1154,6 +1154,23 @@ await micropip.install(["sigima", "guidata"])
     })) as SignalData[];
   }
 
+  /** Persist per-curve render style on a signal.  Each field follows
+   *  the "``null`` clears the override" rule honoured by
+   *  :func:`bootstrap.set_signal_style`; pass an explicit value to
+   *  override.  Omitted fields default to ``null`` (clear). */
+  async setSignalStyle(
+    oid: string,
+    style: Partial<SignalStyle>,
+  ): Promise<void> {
+    await this.callPy("set_signal_style", {
+      oid,
+      color: style.color ?? null,
+      linestyle: style.linestyle ?? null,
+      linewidth: style.linewidth ?? null,
+      curvestyle: style.curvestyle ?? null,
+    });
+  }
+
   // ------------------------------------------------------------------
   // Object model (groups + objects per panel kind)
   // ------------------------------------------------------------------

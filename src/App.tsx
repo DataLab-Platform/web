@@ -2025,6 +2025,7 @@ export default function App() {
             <SidePanel
               runtime={runtime}
               currentId={currentId}
+              panelKind={activePanel === "image" ? "image" : "signal"}
               refreshNonce={sideRefreshNonce}
               onObjectChanged={handleSideObjectChanged}
               preferredTab={preferredSideTab}
