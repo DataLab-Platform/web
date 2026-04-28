@@ -47,7 +47,7 @@ describe("trustStore", () => {
   it("revokes trust by filename + hash", async () => {
     const src = "code";
     await trustPlugin("p.py", src);
-    const hash = (await hashSource(src));
+    const hash = await hashSource(src);
     revokePluginTrust("p.py", hash);
     expect(await isPluginTrusted("p.py", src)).toBe(false);
     expect(listTrustedPlugins()).toEqual([]);

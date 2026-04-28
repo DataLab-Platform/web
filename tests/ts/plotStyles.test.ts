@@ -92,7 +92,14 @@ describe("plotStyles", () => {
   });
 
   it("buildCurveTrace renders ``sticks`` as a stem (NaN-separated bars)", () => {
-    const t = buildCurveTrace([0, 1, 2], [3, 4, 5], "#000", 1, "solid", "sticks");
+    const t = buildCurveTrace(
+      [0, 1, 2],
+      [3, 4, 5],
+      "#000",
+      1,
+      "solid",
+      "sticks",
+    );
     expect(t.mode).toBe("lines");
     expect(t.x).toEqual([0, 0, NaN, 1, 1, NaN, 2, 2, NaN]);
     expect(t.y).toEqual([0, 3, NaN, 0, 4, NaN, 0, 5, NaN]);

@@ -138,9 +138,7 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
   }) => {
     // Fresh-start contract: an untouched notebook must NOT appear in
     // browser storage. The "Browser…" button is therefore disabled.
-    await expect(
-      page.getByRole("button", { name: /Browser…/ }),
-    ).toBeDisabled();
+    await expect(page.getByRole("button", { name: /Browser…/ })).toBeDisabled();
 
     // Type something so the current notebook is persisted, then create
     // a brand-new tab (also untouched ⇒ not persisted yet).
@@ -160,7 +158,9 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
     const items = page.locator(".nb-open-menu-item");
     await expect(items).toHaveCount(1);
     await expect(items.first()).toHaveClass(/nb-open-menu-item-open/);
-    await expect(items.first().locator(".nb-open-menu-name-when")).toBeVisible();
+    await expect(
+      items.first().locator(".nb-open-menu-name-when"),
+    ).toBeVisible();
 
     // Click the entry — should refocus the existing tab (no second tab
     // is added) and close the menu.

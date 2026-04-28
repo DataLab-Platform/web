@@ -43,7 +43,7 @@ describe("buildRoiAreaTrace", () => {
     expect(t0).not.toBeNull();
     expect(t10).not.toBeNull();
     // Index 10 wraps back to index 0 in the ROI_FILL_COLORS palette.
-    expect((t0!.fillcolor as string)).toBe(t10!.fillcolor as string);
+    expect(t0!.fillcolor as string).toBe(t10!.fillcolor as string);
   });
 
   it("returns null when the ROI does not overlap the curve", () => {
@@ -65,12 +65,7 @@ describe("buildRoiAreaTrace", () => {
   });
 
   it("uses the segment title as trace name when provided", () => {
-    const t = buildRoiAreaTrace(
-      { xmin: 0, xmax: 4, title: "Peak A" },
-      0,
-      x,
-      y,
-    );
+    const t = buildRoiAreaTrace({ xmin: 0, xmax: 4, title: "Peak A" }, 0, x, y);
     expect(t!.name).toBe("Peak A");
     const t2 = buildRoiAreaTrace({ xmin: 0, xmax: 4 }, 2, x, y);
     expect(t2!.name).toBe("ROI3");

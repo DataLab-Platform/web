@@ -164,7 +164,12 @@ describe("buildSignalCreationActions / buildImageCreationActions", () => {
   it("preserves the catalogue order and separator flags", () => {
     const sigActions = buildSignalCreationActions(
       [
-        { value: "gauss", label: "Gaussian", icon: "g.svg", separator_before: false },
+        {
+          value: "gauss",
+          label: "Gaussian",
+          icon: "g.svg",
+          separator_before: false,
+        },
         { value: "sine", label: "Sine", icon: "s.svg", separator_before: true },
       ],
       vi.fn(),
@@ -179,7 +184,14 @@ describe("buildSignalCreationActions / buildImageCreationActions", () => {
   it("calls onCreate with the type value", () => {
     const onCreate = vi.fn();
     const [act] = buildImageCreationActions(
-      [{ value: "ramp", label: "Ramp", icon: "r.svg", separator_before: false }],
+      [
+        {
+          value: "ramp",
+          label: "Ramp",
+          icon: "r.svg",
+          separator_before: false,
+        },
+      ],
       onCreate,
     );
     act.run();

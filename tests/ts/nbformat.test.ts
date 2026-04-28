@@ -47,7 +47,8 @@ function buildSampleNotebook(): NotebookModel {
       type: "error",
       ename: "ZeroDivisionError",
       evalue: "division by zero",
-      traceback: "Traceback (most recent call last):\n  File ...\nZeroDivisionError: division by zero",
+      traceback:
+        "Traceback (most recent call last):\n  File ...\nZeroDivisionError: division by zero",
     },
   ];
   nb.cells = [code, md, errored];

@@ -31,9 +31,7 @@ describe("buildMenuTree", () => {
   });
 
   it("nests folders for multi-segment paths", () => {
-    const tree = buildMenuTree([
-      action("x", "Processing/Fitting/Polynomial"),
-    ]);
+    const tree = buildMenuTree([action("x", "Processing/Fitting/Polynomial")]);
     const processing = tree.find((n) => n.label === "Processing");
     const fitting = processing?.children?.find((c) => c.label === "Fitting");
     expect(fitting?.children?.[0].action?.id).toBe("x");

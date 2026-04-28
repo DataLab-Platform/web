@@ -55,7 +55,6 @@ import dlw_interactive_fit as _ifit
 # multi-language perspective.
 import dlw_processor as _proc
 import numpy as np
-
 import sigima
 from sigima.objects import SignalObj
 from sigima.objects.signal.creation import (
@@ -2910,7 +2909,6 @@ def get_image_grid_param_schema() -> dict[str, Any]:
     ``@computation_function``.
     """
     from guidata.dataset import dataset_to_schema_with_values
-
     from sigima.proc.image import GridParam
 
     return dataset_to_schema_with_values(GridParam())
@@ -3030,7 +3028,6 @@ def reset_image_positions(source_ids: list[str]) -> None:
 def get_roi_grid_param_schema() -> dict[str, Any]:
     """Return the JSON schema + default values for ``ROIGridParam``."""
     from guidata.dataset import dataset_to_schema_with_values
-
     from sigima.proc.image import ROIGridParam
 
     return dataset_to_schema_with_values(ROIGridParam())
@@ -3050,7 +3047,6 @@ def create_image_roi_grid(
     overlay in a single round-trip.
     """
     from guidata.dataset import update_dataset
-
     from sigima.proc.image import ROIGridParam, generate_image_grid_roi
 
     if hasattr(params, "to_py"):
@@ -3838,7 +3834,6 @@ def open_workspace_from_bytes(
     import tempfile
 
     from guidata.io import HDF5Reader
-
     from sigima.objects import ImageObj as _ImageObj
 
     if hasattr(data, "to_py"):

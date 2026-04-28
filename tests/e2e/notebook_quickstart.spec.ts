@@ -25,9 +25,7 @@ test.describe("Quickstart notebook template", () => {
     // The template ships with 5 cells (3 markdown + 2 code).
     await expect(page.locator(".nb-cell")).toHaveCount(5);
     // First markdown cell renders the H1 "Welcome to DataLab Web Notebooks".
-    const firstRendered = page
-      .locator(".nb-cell-markdown-rendered")
-      .first();
+    const firstRendered = page.locator(".nb-cell-markdown-rendered").first();
     await expect(firstRendered.locator("h1")).toContainText(
       "Welcome to DataLab Web Notebooks",
     );

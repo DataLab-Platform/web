@@ -59,7 +59,7 @@ describe("notebookToMacro", () => {
 
 describe("macroToNotebook", () => {
   it("splits a body on # %% markers", () => {
-    const src = '# %%\nprint(1)\n\n# %%\nprint(2)\n';
+    const src = "# %%\nprint(1)\n\n# %%\nprint(2)\n";
     const nb = macroToNotebook("M", src);
     expect(nb.cells).toHaveLength(2);
     expect(nb.cells[0].type).toBe("code");

@@ -14,7 +14,12 @@ type Shape = {
   fillcolor?: string;
   editable: boolean;
 };
-type Annotation = { text: string; font: { color: string }; x: number; y: number };
+type Annotation = {
+  text: string;
+  font: { color: string };
+  x: number;
+  y: number;
+};
 
 describe("buildRoiOverlays", () => {
   const rect: ImageRoiSegment = {
