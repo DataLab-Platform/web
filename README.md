@@ -105,12 +105,12 @@ The next `npm run dev` or `npm run build` automatically picks up the new value �
 
 DataLab-Web ships a four-layer test pyramid that mirrors the engineering rigour of the DataLab desktop pytest suite:
 
-| Layer        | Tooling                          | Scope                                                   | Speed   |
-| ------------ | -------------------------------- | ------------------------------------------------------- | ------- |
-| Python       | pytest + coverage (CPython)      | `src/runtime/bootstrap.py` and `processor.py` headlessly | Fastest |
-| TypeScript   | Vitest + jsdom                   | Pure-logic TS modules (action registry, theme, …)       | Fast    |
-| End-to-end   | Playwright (Chromium)            | Real browser boot of Pyodide + UI smoke tests           | Slow    |
-| Continuous   | GitHub Actions (`tests.yml`)     | All three layers on every push / PR                     | —       |
+| Layer        | Tooling                      | Scope                                                    | Speed   |
+| ------------ | ---------------------------- | -------------------------------------------------------- | ------- |
+| Python       | pytest + coverage (CPython)  | `src/runtime/bootstrap.py` and `processor.py` headlessly | Fastest |
+| TypeScript   | Vitest + jsdom               | Pure-logic TS modules (action registry, theme, …)        | Fast    |
+| End-to-end   | Playwright (Chromium)        | Real browser boot of Pyodide + UI smoke tests            | Slow    |
+| Continuous   | GitHub Actions (`tests.yml`) | All three layers on every push / PR                      | —       |
 
 The Python layer runs `bootstrap.py` directly under CPython through fixtures that stub the Pyodide-only modules (`js`, `pyodide.ffi`); this gives fast feedback and high coverage without booting WebAssembly.
 

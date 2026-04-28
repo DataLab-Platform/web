@@ -52,7 +52,7 @@ class MyPlugin(PluginBase):
 `PluginBase` exposes the same surface as the desktop counterpart:
 
 | Attribute / method | Purpose |
-|---|---|
+| --- | --- |
 | `self.main` | Bridge to the React main window (parent for dialogs) |
 | `self.signalpanel`, `self.imagepanel` | Panels with `processor`, `acthandler`, `get_newparam_from_current` |
 | `self.proxy` | `LocalProxy`-compatible API: `add_object`, `add_group`, `calc`, `get_object*`, `call_method` |
