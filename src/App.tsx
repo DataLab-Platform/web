@@ -45,6 +45,10 @@ import {
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { DialogBridge } from "./components/DialogBridge";
+import {
+  SeparateViewDialog,
+  type SeparateViewContent,
+} from "./components/SeparateViewDialog";
 import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { MetadataDialog } from "./components/MetadataDialog";
@@ -134,6 +138,7 @@ function usePersistedSize(
 }
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
+const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
 
 /** Persist a boolean preference to localStorage. */
 function usePersistedBool(
@@ -188,6 +193,23 @@ export default function App() {
     () => setShowResultsOverlay(!showResultsOverlay),
     [showResultsOverlay, setShowResultsOverlay],
   );
+  // View > "Show graphical object titles" toggle.  On by default to
+  // mirror DataLab desktop, where ROI labels and analysis-result text
+  // (FWHM, segment lengths, peak names…) are visible out of the box.
+  const [showGraphicalTitles, setShowGraphicalTitles] = usePersistedBool(
+    SHOW_GRAPHICAL_TITLES_KEY,
+    true,
+  );
+  const toggleGraphicalTitles = useCallback(
+    () => setShowGraphicalTitles(!showGraphicalTitles),
+    [showGraphicalTitles, setShowGraphicalTitles],
+  );
+  // View > "View in a new window…" — opens a full-screen modal hosting
+  // the current selection's plot, so the user can see it without the
+  // surrounding panels.
+  const [separateViewOpen, setSeparateViewOpen] = useState(false);
+  const openSeparateView = useCallback(() => setSeparateViewOpen(true), []);
+  const closeSeparateView = useCallback(() => setSeparateViewOpen(false), []);
   const [tree, setTree] = useState<PanelTree | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -1739,6 +1761,10 @@ export default function App() {
       ...buildViewActions({
         showResultsOverlay,
         onToggleResultsOverlay: toggleResultsOverlay,
+        showGraphicalTitles,
+        onToggleGraphicalTitles: toggleGraphicalTitles,
+        onOpenSeparateView: openSeparateView,
+        hasSelection: selectedIds.length > 0 || currentId !== null,
       }),
       ...buildNotebookActions({
         onNew: () => {
@@ -1861,6 +1887,11 @@ export default function App() {
       handleLaunchInteractiveFit,
       showResultsOverlay,
       toggleResultsOverlay,
+      showGraphicalTitles,
+      toggleGraphicalTitles,
+      openSeparateView,
+      selectedIds.length,
+      currentId,
     ],
   );
 
@@ -2065,6 +2096,7 @@ export default function App() {
               onRoiChange={handleRoiChangeFromPlot}
               results={results}
               showResultsOverlay={showResultsOverlay}
+              showGraphicalTitles={showGraphicalTitles}
               extraSignals={extraSignals}
             />
           )}
@@ -2082,6 +2114,7 @@ export default function App() {
               onRoiChange={handleImageRoiChangeFromPlot}
               results={results}
               showResultsOverlay={showResultsOverlay}
+              showGraphicalTitles={showGraphicalTitles}
               lutRange={imageLutRange}
               onLutRangeChange={(r) => {
                 setImageLutRange(r);
@@ -2286,6 +2319,41 @@ export default function App() {
           }}
         />
       )}
+      {separateViewOpen &&
+        (() => {
+          // Build the popout payload lazily so we don't allocate the
+          // (potentially large) signal/image content on every render of
+          // the main App.
+          let content: SeparateViewContent | null = null;
+          if (activePanel === "signal" && data) {
+            content = {
+              kind: "signal",
+              data,
+              oid: currentId,
+              annotations,
+              roi,
+              results,
+              extraSignals,
+            };
+          } else if (activePanel === "image" && imageData) {
+            content = {
+              kind: "image",
+              data: imageData,
+              roi: imageRoi,
+              results,
+              lutRange: imageLutRange,
+            };
+          }
+          if (!content) return null;
+          return (
+            <SeparateViewDialog
+              content={content}
+              showResultsOverlay={showResultsOverlay}
+              showGraphicalTitles={showGraphicalTitles}
+              onClose={closeSeparateView}
+            />
+          );
+        })()}
       <DialogBridge />
     </div>
   );

@@ -6,6 +6,7 @@ import {
   buildInteractiveFitActions,
   buildSignalCreationActions,
   buildImageCreationActions,
+  buildViewActions,
 } from "../../../src/actions/registry";
 import type { ActionState } from "../../../src/actions/types";
 
@@ -196,5 +197,94 @@ describe("buildSignalCreationActions / buildImageCreationActions", () => {
     );
     act.run();
     expect(onCreate).toHaveBeenCalledWith("ramp");
+  });
+});
+
+describe("buildViewActions", () => {
+  function makeViewCallbacks(
+    over: Partial<Parameters<typeof buildViewActions>[0]> = {},
+  ) {
+    return {
+      showResultsOverlay: false,
+      onToggleResultsOverlay: vi.fn(),
+      showGraphicalTitles: true,
+      onToggleGraphicalTitles: vi.fn(),
+      onOpenSeparateView: vi.fn(),
+      hasSelection: true,
+      ...over,
+    };
+  }
+
+  it("exposes one popout entry and two checkable toggles", () => {
+    const actions = buildViewActions(makeViewCallbacks());
+    expect(actions.map((a) => a.id)).toEqual([
+      "view.open_separate_view",
+      "view.results_overlay",
+      "view.show_graphical_titles",
+    ]);
+  });
+
+  it("prefixes the active toggle with a checkmark glyph", () => {
+    const offActions = buildViewActions(
+      makeViewCallbacks({
+        showResultsOverlay: false,
+        showGraphicalTitles: false,
+      }),
+    );
+    const onActions = buildViewActions(
+      makeViewCallbacks({
+        showResultsOverlay: true,
+        showGraphicalTitles: true,
+      }),
+    );
+    expect(
+      offActions.find((a) => a.id === "view.results_overlay")!.label,
+    ).not.toMatch(/^\u2713/);
+    expect(
+      onActions.find((a) => a.id === "view.results_overlay")!.label,
+    ).toMatch(/^\u2713 /);
+    expect(
+      onActions.find((a) => a.id === "view.show_graphical_titles")!.label,
+    ).toMatch(/^\u2713 /);
+  });
+
+  it("disables the popout when nothing is selected", () => {
+    const actions = buildViewActions(
+      makeViewCallbacks({ hasSelection: false }),
+    );
+    const popout = actions.find((a) => a.id === "view.open_separate_view")!;
+    expect(popout.enabled(makeState({ currentId: null }))).toBe(false);
+    expect(
+      popout.enabled(makeState({ currentId: "x", selectedIds: ["x"] })),
+    ).toBe(false);
+  });
+
+  it("disables the popout when the runtime is busy", () => {
+    const actions = buildViewActions(makeViewCallbacks());
+    const popout = actions.find((a) => a.id === "view.open_separate_view")!;
+    expect(
+      popout.enabled(
+        makeState({ busy: true, currentId: "x", selectedIds: ["x"] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("enables the popout when there is a current object and a selection", () => {
+    const actions = buildViewActions(makeViewCallbacks({ hasSelection: true }));
+    const popout = actions.find((a) => a.id === "view.open_separate_view")!;
+    expect(
+      popout.enabled(makeState({ currentId: "x", selectedIds: ["x"] })),
+    ).toBe(true);
+  });
+
+  it("toggles trigger their callbacks", () => {
+    const cb = makeViewCallbacks();
+    const actions = buildViewActions(cb);
+    actions.find((a) => a.id === "view.results_overlay")!.run();
+    actions.find((a) => a.id === "view.show_graphical_titles")!.run();
+    actions.find((a) => a.id === "view.open_separate_view")!.run();
+    expect(cb.onToggleResultsOverlay).toHaveBeenCalledOnce();
+    expect(cb.onToggleGraphicalTitles).toHaveBeenCalledOnce();
+    expect(cb.onOpenSeparateView).toHaveBeenCalledOnce();
   });
 });

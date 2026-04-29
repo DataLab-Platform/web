@@ -32,6 +32,10 @@ interface ImagePlotProps {
    *  to ``false`` since the right-hand Results panel already shows
    *  the same numbers in a structured grid. */
   showResultsOverlay?: boolean;
+  /** When true (default), draw textual labels on ROI shapes and on
+   *  geometry analysis results.  Wired to View > "Show graphical
+   *  object titles". */
+  showGraphicalTitles?: boolean;
   /** Optional LUT range override ``[zmin, zmax]``. When ``null``/omitted,
    *  the heatmap falls back to the image's intrinsic ``data_min``/
    *  ``data_max``. Driven by the contrast tool. */
@@ -65,6 +69,7 @@ export function ImagePlot({
   onRoiChange,
   results = [],
   showResultsOverlay = false,
+  showGraphicalTitles = true,
   lutRange = null,
   onLutRangeChange,
   onColormapChange,
@@ -154,14 +159,20 @@ export function ImagePlot({
     ];
   }, [data, effectiveLut, colormapName, colormapInverted]);
 
-  const { roiShapes, roiAnnotations } = useMemo(
+  const { roiShapes, roiAnnotations: rawRoiAnnotations } = useMemo(
     () => buildRoiOverlays(roi, roiEditMode),
     [roi, roiEditMode],
   );
+  // ROI titles are dropped when the user disabled them via the View
+  // menu; the colored shapes themselves stay visible.
+  const roiAnnotations = useMemo(
+    () => (showGraphicalTitles ? rawRoiAnnotations : []),
+    [rawRoiAnnotations, showGraphicalTitles],
+  );
 
   const { resultShapes, resultAnnotations, resultTraces } = useMemo(
-    () => buildImageGeometryOverlays(results),
-    [results],
+    () => buildImageGeometryOverlays(results, showGraphicalTitles),
+    [results, showGraphicalTitles],
   );
   // Top-right paper-coords summary box for TableAnalysisResult rows
   // (centroid, blob coordinates, peak positions, …).  Mirrors
@@ -1093,7 +1104,10 @@ function colorFor(funcName: string | null, idx: number): string {
   return RESULT_COLORS[idx % RESULT_COLORS.length];
 }
 
-function buildImageGeometryOverlays(results: AnalysisResult[]): {
+function buildImageGeometryOverlays(
+  results: AnalysisResult[],
+  showTitles = true,
+): {
   resultShapes: unknown[];
   resultAnnotations: unknown[];
   resultTraces: unknown[];
@@ -1246,7 +1260,9 @@ function buildImageGeometryOverlays(results: AnalysisResult[]): {
   }
   return {
     resultShapes: shapes,
-    resultAnnotations: annotations,
+    // "Show graphical object titles" is honoured here so analysis-result
+    // text overlays disappear in lockstep with ROI labels.
+    resultAnnotations: showTitles ? annotations : [],
     resultTraces: traces,
   };
 }

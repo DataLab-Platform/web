@@ -38,6 +38,10 @@ interface Props {
    *  to ``false`` since the right-hand Results panel already shows
    *  the same numbers in a structured grid. */
   showResultsOverlay?: boolean;
+  /** When true (default), draw textual labels on ROI rectangles and
+   *  on geometry analysis results (segment lengths, peak names, …).
+   *  Wired to the View > "Show graphical object titles" toggle. */
+  showGraphicalTitles?: boolean;
   /** Additional signals overlaid on top of ``data`` (multi-selection).
    *  Each entry uses metadata-defined style when present, otherwise the
    *  shared cycling palette starting at ``index + 1``. */
@@ -54,6 +58,7 @@ export function SignalPlot({
   onRoiChange,
   results = [],
   showResultsOverlay = false,
+  showGraphicalTitles = true,
   extraSignals = [],
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
@@ -231,7 +236,7 @@ export function SignalPlot({
     if (!roiEditMode) return [] as unknown[];
     return roi.map((seg, i) => {
       const lineColor = roiLineColor(i);
-      return {
+      const baseShape = {
         type: "rect" as const,
         xref: "x",
         yref: "y" as const,
@@ -243,6 +248,10 @@ export function SignalPlot({
         line: { color: lineColor, width: 2, dash: "dot" },
         layer: "above" as const,
         editable: true,
+      };
+      if (!showGraphicalTitles) return baseShape;
+      return {
+        ...baseShape,
         label: {
           text: seg.title || `ROI${i + 1}`,
           textposition: "top left",
@@ -250,7 +259,7 @@ export function SignalPlot({
         },
       };
     });
-  }, [roi, roiEditMode, yMin, yMax]);
+  }, [roi, roiEditMode, yMin, yMax, showGraphicalTitles]);
 
   // View-mode "area under curve" overlay: one filled scatter trace per
   // ROI, clipping the primary signal between ``xmin`` and ``xmax`` and
@@ -271,8 +280,8 @@ export function SignalPlot({
   // + textual annotations.  TableResults are *not* drawn here — they go to
   // the side panel.  Mirrors DataLab desktop's PlotPy overlay behaviour.
   const { resultShapes, resultAnnotations, resultTraces } = useMemo(
-    () => buildGeometryOverlays(results),
-    [results],
+    () => buildGeometryOverlays(results, showGraphicalTitles),
+    [results, showGraphicalTitles],
   );
   // Top-right paper-coords summary box for TableAnalysisResult rows
   // (FWHM, centroid, peaks, …).  Mirrors PlotPy's "computing results"
@@ -404,7 +413,10 @@ function fmt(n: number): string {
   return Number(n.toPrecision(5)).toString();
 }
 
-function buildGeometryOverlays(results: AnalysisResult[]): {
+function buildGeometryOverlays(
+  results: AnalysisResult[],
+  showTitles = true,
+): {
   resultShapes: unknown[];
   resultAnnotations: unknown[];
   resultTraces: unknown[];
@@ -625,7 +637,11 @@ function buildGeometryOverlays(results: AnalysisResult[]): {
   }
   return {
     resultShapes: shapes,
-    resultAnnotations: annotations,
+    // When the user disabled "Show graphical object titles", drop every
+    // textual annotation produced above (segment lengths, baseline
+    // labels, x₀/x₅₀ vertical-line tags, …) while keeping the shapes
+    // themselves visible.
+    resultAnnotations: showTitles ? annotations : [],
     resultTraces: traces,
   };
 }

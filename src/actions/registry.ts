@@ -194,6 +194,15 @@ export interface ViewActionCallbacks {
   showResultsOverlay: boolean;
   /** Toggle the preference (and persist the new value). */
   onToggleResultsOverlay: () => void;
+  /** Current value of the "show graphical object titles" preference. */
+  showGraphicalTitles: boolean;
+  /** Toggle the preference (and persist the new value). */
+  onToggleGraphicalTitles: () => void;
+  /** Open the current selection in a full-screen popout dialog. */
+  onOpenSeparateView: () => void;
+  /** True when the active panel has at least one object selected
+   *  (drives the enabled state of "View in a new window…"). */
+  hasSelection: boolean;
 }
 
 /** Wire View menu actions (UI preferences only). */
@@ -201,15 +210,36 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   const always = () => true;
   // Use a leading checkmark glyph as a poor-man's "checkable" item;
   // the menu bar otherwise renders flat labels and we don't want to
-  // grow the action descriptor schema for a single toggle.
-  const prefix = cb.showResultsOverlay ? "\u2713 " : "    ";
+  // grow the action descriptor schema for toggles.
+  const checkPrefix = (on: boolean) => (on ? "\u2713 " : "    ");
+  const overlayPrefix = checkPrefix(cb.showResultsOverlay);
+  const titlesPrefix = checkPrefix(cb.showGraphicalTitles);
   return [
     {
+      id: "view.open_separate_view",
+      label: "View in a new window\u2026",
+      menuPath: "View/View in a new window\u2026",
+      enabled: (s) =>
+        s.status === "ready" &&
+        !s.busy &&
+        cb.hasSelection &&
+        s.currentId !== null,
+      run: cb.onOpenSeparateView,
+    },
+    {
       id: "view.results_overlay",
-      label: `${prefix}Show results overlay on plot`,
-      menuPath: `View/${prefix}Show results overlay on plot`,
+      label: `${overlayPrefix}Show results overlay on plot`,
+      menuPath: `View/${overlayPrefix}Show results overlay on plot`,
+      beginGroup: true,
       enabled: always,
       run: cb.onToggleResultsOverlay,
+    },
+    {
+      id: "view.show_graphical_titles",
+      label: `${titlesPrefix}Show graphical object titles`,
+      menuPath: `View/${titlesPrefix}Show graphical object titles`,
+      enabled: always,
+      run: cb.onToggleGraphicalTitles,
     },
   ];
 }
