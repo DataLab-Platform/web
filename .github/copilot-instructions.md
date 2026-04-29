@@ -72,6 +72,22 @@ when extending plot features (curve styles, ROI overlays, geometry results).
   `<script>` tag in `index.html`). Bump both together; Pyodide’s wheel index
   is version-specific.
 
+## Testing
+
+DataLab-Web has three test layers (pytest in Pyodide, Vitest + RTL,
+Playwright). Pick the cheapest layer that can express the behaviour;
+the full decision tree, promotion criteria, and authoring rules for
+permanent E2E specs live in [`doc/testing-strategy.md`](../doc/testing-strategy.md).
+
+**Mandatory rule for UI changes**: every change that touches the UI
+— bug fix, feature, or **any phase** of a multi-phase implementation —
+must be exercised end-to-end with Playwright before it is declared
+done. Type-checks, unit tests, and "looks fine in the dev server" are
+not enough; Pyodide round-trips and async state interactions silently
+break in ways only a browser-driven test catches reliably. Use a
+throwaway probe (`tests/e2e/_repro_*.spec.ts`, deleted afterwards) when
+the change does not warrant a permanent regression spec.
+
 ## Git workflow
 
 * **Never commit without explicit approval.** Before running `git commit`,
