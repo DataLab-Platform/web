@@ -253,6 +253,7 @@ export function SidePanel(props: Props) {
           <CreationPanel
             runtime={runtime}
             oid={currentId}
+            panelKind={panelKind}
             refreshNonce={refreshNonce}
             onApplied={() => onObjectChanged(currentId)}
           />
@@ -342,18 +343,44 @@ interface PropertiesProps extends SubProps {
   panelKind: "signal" | "image";
 }
 
-function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
+function CreationPanel({
+  runtime,
+  oid,
+  panelKind,
+  refreshNonce,
+  onApplied,
+}: PropertiesProps) {
+  // ``payload`` is cleared to ``null`` at the start of every fetch so
+  // the inner ``EditableForm`` (whose ``useState`` snapshots ``values``
+  // at mount time) is unmounted between two objects.  Without this,
+  // switching from object A to object B briefly re-renders the form
+  // with B's id but A's stale values; an in-place ``Apply`` made from
+  // that state would then write A's values back into B.
   const [payload, setPayload] = useState<
     (SchemaWithValues & { stype: string }) | null
   >(null);
   const [available, setAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Derived-state pattern: when ``oid`` or ``refreshNonce`` changes we must
+  // clear ``payload`` *during the same render* so that ``EditableForm`` is
+  // not remounted with the previous payload.  ``useEffect`` runs *after*
+  // the render that sees the new prop, which would otherwise cause
+  // ``EditableForm`` to snapshot stale values into its draft state.
+  const [shownKey, setShownKey] = useState(`${oid}:${refreshNonce}`);
+  const currentKey = `${oid}:${refreshNonce}`;
+  if (shownKey !== currentKey) {
+    setShownKey(currentKey);
+    setPayload(null);
+    setLoading(true);
+    setError(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPayload(null);
     runtime
       .getCreationParamSchema(oid)
       .then((p) => {
@@ -380,10 +407,19 @@ function CreationPanel({ runtime, oid, refreshNonce, onApplied }: SubProps) {
 
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
-      await runtime.updateSignalCreationParams(oid, values);
+      // Dispatch to the correct backend helper: image objects cache a
+      // ``NewImageParam`` (no ``generate_1d_data``) and must go through
+      // ``update_image_creation_params``.  Hard-coding the signal path
+      // here used to silently drop image edits with a Pyodide
+      // ``AttributeError``.
+      if (panelKind === "image") {
+        await runtime.updateImageCreationParams(oid, values);
+      } else {
+        await runtime.updateSignalCreationParams(oid, values);
+      }
       onApplied();
     },
-    [runtime, oid, onApplied],
+    [runtime, oid, panelKind, onApplied],
   );
 
   if (loading) return <div className="side-panel-info">Loading…</div>;
@@ -418,16 +454,32 @@ function PropertiesPanel({
   refreshNonce,
   onApplied,
 }: PropertiesProps) {
+  // See ``CreationPanel`` for the rationale of clearing ``payload`` /
+  // ``stats`` at the start of each fetch (avoids leaking the previous
+  // object's values into the inner stateful form).
   const [payload, setPayload] = useState<SchemaWithValues | null>(null);
   const [stats, setStats] = useState<ObjectStats | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Derived-state pattern: clear payload synchronously when ``oid`` or
+  // ``refreshNonce`` changes (see ``CreationPanel`` for the rationale).
+  const [shownKey, setShownKey] = useState(`${oid}:${refreshNonce}`);
+  const currentKey = `${oid}:${refreshNonce}`;
+  if (shownKey !== currentKey) {
+    setShownKey(currentKey);
+    setPayload(null);
+    setStats(null);
+    setStatsError(null);
+    setLoading(true);
+    setError(null);
+  }
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setPayload(null);
     runtime
       .getObjectPropertySchema(oid)
       .then((p) => {
@@ -449,6 +501,7 @@ function PropertiesPanel({
   useEffect(() => {
     let cancelled = false;
     setStatsError(null);
+    setStats(null);
     runtime
       .getObjectStats(oid)
       .then((s) => {

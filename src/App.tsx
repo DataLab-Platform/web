@@ -584,6 +584,11 @@ export default function App() {
         /* ignore — object may have been deleted */
       }
       await refresh(oid);
+      // Re-fetch the side panel's schema/values from the backend so the
+      // form's "applied" baseline matches what was actually stored
+      // (including any normalization), and so a subsequent object
+      // selection cannot leak the previous draft.
+      setSideRefreshNonce((n) => n + 1);
     },
     [runtime, refresh, activePanel],
   );
