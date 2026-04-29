@@ -32,7 +32,11 @@ import { ObjectTree } from "./components/ObjectTree";
 import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
-import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
+import {
+  MultiImagePlot,
+  MULTI_IMAGE_LIMIT,
+  MULTI_IMAGE_MAX_SIZE,
+} from "./components/MultiImagePlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import {
   ProfileDefinitionDialog,
@@ -416,7 +420,7 @@ export default function App() {
         setExtraImages([]);
       } else {
         runtime
-          .getImagesData(extraImgIds)
+          .getImagesData(extraImgIds, MULTI_IMAGE_MAX_SIZE)
           .then((imgs) => {
             if (!cancelled) setExtraImages(imgs);
           })

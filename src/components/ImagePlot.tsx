@@ -115,16 +115,6 @@ export function ImagePlot({
 
   const traces = useMemo(() => {
     const z = data.data;
-    const h = data.height;
-    const w = data.width;
-    const x = Array.from(
-      { length: w },
-      (_, i) => data.x0 + (i + 0.5) * data.dx,
-    );
-    const y = Array.from(
-      { length: h },
-      (_, j) => data.y0 + (j + 0.5) * data.dy,
-    );
     // Default to Viridis (matches DataLab Qt) and honour the per-image
     // ``colormap`` / ``invert_colormap`` metadata when present.  The
     // local ``colormapName`` / ``colormapInverted`` state lets the
@@ -137,8 +127,15 @@ export function ImagePlot({
       {
         type: "heatmap" as const,
         z,
-        x,
-        y,
+        // Use Plotly's ``x0``/``dx`` shorthand instead of materialising
+        // ``width``/``height`` coordinate arrays — saves O(W+H)
+        // allocations on every re-render and skips Plotly's array
+        // validation pass.  ``+ 0.5 * d`` aligns ticks to pixel
+        // centres (DataLab desktop convention).
+        x0: data.x0 + 0.5 * data.dx,
+        dx: data.dx,
+        y0: data.y0 + 0.5 * data.dy,
+        dy: data.dy,
         zmin: effectiveLut[0],
         zmax: effectiveLut[1],
         colorscale: colorscale as unknown as "Viridis",

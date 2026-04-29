@@ -293,7 +293,11 @@ export interface ImageData {
   title: string;
   width: number;
   height: number;
-  data: number[][];
+  /** Pixel grid.  When the runtime requests ``encoding="bytes"``
+   *  (the default for the front-end), this is an array of
+   *  ``Float32Array`` rows, one per image line.  Plotly accepts
+   *  typed-array rows directly as ``z``. */
+  data: Float32Array[] | number[][];
   dtype: string;
   /** Pixel origin (top-left corner) and pixel spacing. */
   x0: number;
@@ -669,6 +673,42 @@ function toJs(value: unknown): unknown {
     return result;
   }
   return value;
+}
+
+/**
+ * Reshape a flat ``Float32`` byte buffer into a list of typed-array
+ * rows that Plotly's ``heatmap`` trace consumes directly as ``z``.
+ *
+ * When the Python helper was asked to encode the image as bytes it
+ * returns ``data`` either as a :class:`Uint8Array` (Pyodide's default
+ * for ``bytes``) or as a memoryview-like object exposing a ``buffer``.
+ * Either way we end up with ``H`` rows of ``W`` floats with zero
+ * structural copies — only the typed-array views are allocated.
+ *
+ * Inputs already in the legacy ``number[][]`` form (Python tests, the
+ * notebook display path) are returned unchanged.
+ */
+function decodeImagePayload<
+  T extends { encoding?: string; data: unknown; width: number; height: number },
+>(payload: T): T {
+  if (payload.encoding !== "f32") return payload;
+  const raw = payload.data as ArrayBufferView | ArrayBuffer;
+  const view =
+    raw instanceof ArrayBuffer
+      ? new Float32Array(raw)
+      : new Float32Array(
+          raw.buffer,
+          raw.byteOffset,
+          raw.byteLength / Float32Array.BYTES_PER_ELEMENT,
+        );
+  const w = payload.width;
+  const h = payload.height;
+  const rows: Float32Array[] = new Array(h);
+  for (let j = 0; j < h; j += 1) {
+    // ``subarray`` shares the underlying buffer — no per-row copy.
+    rows[j] = view.subarray(j * w, (j + 1) * w);
+  }
+  return { ...payload, data: rows };
 }
 
 export class DataLabRuntime {
@@ -1467,17 +1507,31 @@ await micropip.install(["sigima", "guidata"])
   }
 
   async getImageData(oid: string): Promise<ImageData> {
-    return (await this.callPy("get_image_data", { oid })) as ImageData;
+    const raw = (await this.callPy("get_image_data", {
+      oid,
+      encoding: "bytes",
+    })) as ImageData & { encoding?: string };
+    return decodeImagePayload(raw);
   }
 
   /** Batched fetch for multi-image grid display.  Returns one entry per
    *  resolved id (unknown ids are silently skipped server-side).
-   *  Mirrors :meth:`getSignalsData` for the image panel. */
-  async getImagesData(ids: string[]): Promise<ImageData[]> {
+   *  Mirrors :meth:`getSignalsData` for the image panel.
+   *
+   *  ``maxSize`` instructs Pyodide to decimate each image so its
+   *  largest dimension is at most that many pixels.  The grid uses
+   *  cells of a few hundred pixels wide, so a default of 512
+   *  shrinks the bridge payload by 1–2 orders of magnitude on
+   *  default ``1024×1024`` images while remaining visually
+   *  indistinguishable. */
+  async getImagesData(ids: string[], maxSize?: number): Promise<ImageData[]> {
     if (ids.length === 0) return [];
-    return (await this.callPy("get_images_data", {
+    const raw = (await this.callPy("get_images_data", {
       oids: ids,
-    })) as ImageData[];
+      max_size: maxSize ?? null,
+      encoding: "bytes",
+    })) as Array<ImageData & { encoding?: string }>;
+    return raw.map(decodeImagePayload);
   }
 
   /** Return the catalog of image creation types (mirrors signals). */

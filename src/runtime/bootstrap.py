@@ -1725,31 +1725,74 @@ def create_image(
     return _MODEL.add_object("image", obj, group_id=group_id)
 
 
-def get_image_data(oid: str) -> dict[str, Any]:
+def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
+    """Return *data* decimated so its largest dimension is ≤ *max_size*.
+
+    Uses simple integer striding (``data[::s, ::s]``) — fast,
+    allocation-free, and good enough for the multi-image grid where
+    cells are only a few hundred pixels wide.  When *max_size* is
+    ``None`` or the image is already small enough, returns *data*
+    unchanged.
+    """
+    if max_size is None:
+        return data
+    h, w = data.shape[:2]
+    longest = max(h, w)
+    if longest <= max_size:
+        return data
+    stride = int(np.ceil(longest / max_size))
+    return data[::stride, ::stride]
+
+
+def get_image_data(
+    oid: str,
+    max_size: int | None = None,
+    encoding: str = "list",
+) -> dict[str, Any]:
     """Return *oid* image data (read-only viewer payload).
 
     Coordinates honour ``x0``/``y0``/``dx``/``dy`` (image origin and pixel
-    spacing).  ``data`` is exposed as nested lists.  ``data_min``/``max``
-    let the front-end pick a default LUT range without re-iterating.
+    spacing).  ``data_min``/``max`` let the front-end pick a default LUT
+    range without re-iterating.
+
+    Args:
+        oid: image identifier in the in-memory store.
+        max_size: when set, decimate the image so its largest dimension
+            is at most ``max_size`` pixels.  Used by the multi-image
+            grid to keep the bridge payload bounded.  ``None`` keeps the
+            original resolution.
+        encoding: ``"bytes"`` (default) returns ``data`` as raw
+            little-endian ``float32`` bytes — Pyodide hands them to JS
+            as a single ``Uint8Array`` memcpy, which the front-end
+            decodes into a typed array.  ``"list"`` returns the legacy
+            nested-list representation (kept for tests that consume the
+            payload from Python).
     """
     obj = _MODEL.get(oid)
-    data = obj.data
+    raw = obj.data
     md = getattr(obj, "metadata", None) or {}
     colormap = md.get("colormap") or md.get("colourmap")
     invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
-    return {
+    # LUT extrema are computed on the *full* resolution so the colour
+    # range stays representative even when we ship a downsampled view.
+    data_min = float(np.nanmin(raw))
+    data_max = float(np.nanmax(raw))
+    data = _maybe_downsample(raw, max_size)
+    payload: dict[str, Any] = {
         "id": oid,
         "title": obj.title or "",
         "width": int(data.shape[1]),
         "height": int(data.shape[0]),
-        "data": data.tolist(),
         "dtype": str(data.dtype),
+        # Adjust pixel spacing if we downsampled so physical
+        # coordinates remain correct (one pixel covers ``stride * dx``
+        # of the original image).
         "x0": float(getattr(obj, "x0", 0.0) or 0.0),
         "y0": float(getattr(obj, "y0", 0.0) or 0.0),
-        "dx": float(getattr(obj, "dx", 1.0) or 1.0),
-        "dy": float(getattr(obj, "dy", 1.0) or 1.0),
-        "data_min": float(np.nanmin(data)),
-        "data_max": float(np.nanmax(data)),
+        "dx": float(getattr(obj, "dx", 1.0) or 1.0) * (raw.shape[1] / data.shape[1]),
+        "dy": float(getattr(obj, "dy", 1.0) or 1.0) * (raw.shape[0] / data.shape[0]),
+        "data_min": data_min,
+        "data_max": data_max,
         "xlabel": obj.xlabel or "",
         "ylabel": obj.ylabel or "",
         "zlabel": getattr(obj, "zlabel", "") or "",
@@ -1759,20 +1802,39 @@ def get_image_data(oid: str) -> dict[str, Any]:
         "colormap": str(colormap) if colormap else None,
         "invert_colormap": bool(invert_cm) if invert_cm is not None else False,
     }
+    if encoding == "bytes":
+        # ``np.ascontiguousarray`` guarantees the byte buffer is a
+        # tight (H, W) float32 grid — required because ``_maybe_
+        # downsample`` returns a strided view.
+        payload["data"] = np.ascontiguousarray(data, dtype=np.float32).tobytes()
+        payload["encoding"] = "f32"
+    else:
+        payload["data"] = data.tolist()
+        payload["encoding"] = "list"
+    return payload
 
 
-def get_images_data(oids: list[str]) -> list[dict[str, Any]]:
+def get_images_data(
+    oids: list[str],
+    max_size: int | None = None,
+    encoding: str = "list",
+) -> list[dict[str, Any]]:
     """Batched variant of :func:`get_image_data`.
 
     Used by the front-end when several images are selected so they can
     be laid out side-by-side in one round-trip across the Pyodide
     bridge.  Unknown ids are silently skipped (mirrors
     :func:`get_signals_xy`).
+
+    The ``max_size`` and ``encoding`` arguments are forwarded to
+    :func:`get_image_data` so the multi-image grid can request a
+    downsampled, byte-encoded payload (≈ 50× smaller than the legacy
+    full-resolution nested-list form).
     """
     out: list[dict[str, Any]] = []
     for oid in oids:
         try:
-            out.append(get_image_data(oid))
+            out.append(get_image_data(oid, max_size=max_size, encoding=encoding))
         except KeyError:
             continue
     return out

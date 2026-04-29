@@ -2244,6 +2244,44 @@ input {
   min-height: 0;
 }
 
+/* Canvas-based thumbnail wrapper.  ``aspect-ratio`` (set inline on
+ * the wrapper) preserves the image's physical proportions so non-
+ * square images render correctly without stretching. */
+.multi-image-canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.multi-image-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  /* Pixel-perfect upscaling — preview thumbnails should not blur. */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  cursor: crosshair;
+}
+
+.multi-image-hover {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border-radius: 3px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
 .multi-image-empty {
   flex: 1 1 auto;
   display: flex;

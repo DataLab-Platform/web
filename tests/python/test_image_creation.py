@@ -96,3 +96,43 @@ def test_get_images_data_batched(fresh_bootstrap):
     assert bs.get_images_data([a, "does-not-exist", b]) == payloads
     # Empty input returns an empty list (no crash).
     assert bs.get_images_data([]) == []
+
+
+def test_get_image_data_bytes_encoding_round_trips(fresh_bootstrap):
+    """``encoding="bytes"`` ships data as little-endian float32 bytes.
+
+    Used by the JS bridge to skip the costly ``data.tolist()``
+    PyProxy → JS conversion.  Decoding back to a NumPy array must
+    reproduce the original pixel values within float32 precision.
+    """
+    bs = fresh_bootstrap
+    arr = np.arange(12, dtype=float).reshape(3, 4)
+    oid = bs.add_image_from_array("I", arr)
+    payload = bs.get_image_data(oid, encoding="bytes")
+    assert payload["encoding"] == "f32"
+    assert isinstance(payload["data"], (bytes, bytearray))
+    decoded = np.frombuffer(payload["data"], dtype=np.float32).reshape(3, 4)
+    np.testing.assert_allclose(decoded, arr, rtol=1e-6)
+
+
+def test_get_image_data_max_size_decimates_and_adjusts_spacing(fresh_bootstrap):
+    """``max_size`` decimates the image and rescales ``dx``/``dy``.
+
+    The downsampled view must keep the same physical extent so the
+    multi-image grid renders at the correct world coordinates.  LUT
+    extrema are computed on the *full* image so the colour scale stays
+    representative.
+    """
+    bs = fresh_bootstrap
+    arr = np.arange(40000, dtype=float).reshape(200, 200)
+    oid = bs.add_image_from_array("big", arr)
+    full = bs.get_image_data(oid)
+    small = bs.get_image_data(oid, max_size=50)
+    assert max(small["width"], small["height"]) <= 50
+    # Physical extent preserved within one stride.
+    assert small["width"] * small["dx"] == pytest.approx(
+        full["width"] * full["dx"], rel=0.05
+    )
+    # LUT extrema unchanged (computed before decimation).
+    assert small["data_min"] == full["data_min"]
+    assert small["data_max"] == full["data_max"]
