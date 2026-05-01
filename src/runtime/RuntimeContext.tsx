@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { DataLabRuntime } from "./runtime";
+import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
 
 interface RuntimeContextValue {
   runtime: DataLabRuntime | null;
@@ -20,6 +21,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let remoteBridgeHandle: RemoteBridgeHandle | null = null;
     DataLabRuntime.load((msg) => {
       if (!cancelled) setMessage(msg);
     })
@@ -27,6 +29,24 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setRuntime(rt);
         setStatus("ready");
+        // Activate the iframe-embedded remote-control bridge if (and only
+        // if) the URL carries a ``?allowedOrigins=`` parameter. No-op
+        // otherwise — the standalone app is unaffected. The handle is
+        // disposed by the cleanup function below.
+        try {
+          remoteBridgeHandle = activateRemoteBridge(rt, {
+            version: import.meta.env.VITE_APP_VERSION,
+          });
+          if (remoteBridgeHandle && import.meta.env.DEV) {
+            console.info(
+              "%c[remoteBridge] active for origins: " +
+                remoteBridgeHandle.allowedOrigins.join(", "),
+              "color:#0e639c;font-weight:bold",
+            );
+          }
+        } catch (err) {
+          console.error("[remoteBridge] activation failed", err);
+        }
         if (import.meta.env.DEV) {
           // Expose for ad-hoc debugging from the DevTools console.
           // Examples (in DevTools console, no page reload needed):
@@ -47,6 +67,8 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      remoteBridgeHandle?.dispose();
+      remoteBridgeHandle = null;
     };
   }, []);
 

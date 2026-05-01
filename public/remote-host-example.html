@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DataLab-Web — Remote control demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+      #panel { width: 360px; padding: 12px; border-right: 1px solid #ccc; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+      #panel h1 { font-size: 16px; margin: 0 0 4px; }
+      #panel button { padding: 6px 10px; cursor: pointer; }
+      #panel button:disabled { opacity: 0.5; cursor: not-allowed; }
+      #log { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #111; color: #d4d4d4; padding: 8px; overflow: auto; white-space: pre-wrap; border: 1px solid #333; }
+      #frame-host { flex: 1; }
+      iframe { width: 100%; height: 100%; border: 0; }
+      .row { display: flex; gap: 6px; }
+      .row > * { flex: 1; }
+      .status { font-size: 12px; color: #555; }
+      .status.ok { color: #2e7d32; }
+      .status.err { color: #c62828; }
+    </style>
+  </head>
+  <body>
+    <div id="panel">
+      <h1>Remote control demo</h1>
+      <div id="status" class="status">Booting…</div>
+      <div class="row">
+        <button id="btn-version" disabled>get_version</button>
+        <button id="btn-list" disabled>list_signals</button>
+      </div>
+      <button id="btn-add-signal" disabled>add_signal (sine)</button>
+      <button id="btn-add-image" disabled>add_image (gradient)</button>
+      <div class="row">
+        <button id="btn-fft" disabled>calc(fft) on last</button>
+        <button id="btn-get" disabled>get_signal_xy(last)</button>
+      </div>
+      <button id="btn-remove" disabled>delete_object(last)</button>
+      <button id="btn-reset" disabled>reset_all</button>
+      <div id="log" aria-live="polite"></div>
+    </div>
+    <div id="frame-host">
+      <iframe
+        id="dlw"
+        title="DataLab-Web"
+        src="/index.html?allowedOrigins=ORIGIN_PLACEHOLDER"
+      ></iframe>
+    </div>
+
+    <script type="module">
+      // The SDK is consumed via Vite's dev server (TS on the fly) so this
+      // demo page can be used unmodified for both manual testing and the
+      // Playwright E2E spec.
+      import { DataLabWebClient } from "/src/sdk/DataLabWebClient.ts";
+
+      const log = document.getElementById("log");
+      const status = document.getElementById("status");
+      const iframe = document.getElementById("dlw");
+
+      // The iframe whitelists this host's origin. Patched in at load time
+      // so the same file works whether served from localhost:5173 or any
+      // other deployment.
+      iframe.src = iframe.src.replace(
+        "ORIGIN_PLACEHOLDER",
+        encodeURIComponent(window.location.origin),
+      );
+
+      function logLine(kind, text) {
+        const ts = new Date().toISOString().slice(11, 23);
+        log.textContent += `[${ts}] ${kind} ${text}\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+
+      const client = new DataLabWebClient(iframe, {
+        targetOrigin: new URL(iframe.src).origin,
+      });
+
+      // Expose for Playwright (`page.evaluate(() => window.__client.…)`).
+      window.__client = client;
+
+      let lastId = null;
+
+      const buttons = {
+        version: document.getElementById("btn-version"),
+        list: document.getElementById("btn-list"),
+        addSignal: document.getElementById("btn-add-signal"),
+        addImage: document.getElementById("btn-add-image"),
+        fft: document.getElementById("btn-fft"),
+        get: document.getElementById("btn-get"),
+        remove: document.getElementById("btn-remove"),
+        reset: document.getElementById("btn-reset"),
+      };
+
+      function setEnabled(enabled) {
+        for (const btn of Object.values(buttons)) btn.disabled = !enabled;
+      }
+
+      async function wrap(label, fn) {
+        try {
+          logLine("→", label);
+          const result = await fn();
+          logLine("←", `${label} → ${JSON.stringify(result)?.slice(0, 200)}`);
+          return result;
+        } catch (err) {
+          logLine("✗", `${label} → ${err.message ?? err}`);
+          throw err;
+        }
+      }
+
+      buttons.version.onclick = () => wrap("get_version", () => client.getVersion());
+      buttons.list.onclick = () => wrap("list_signals", () => client.listSignals());
+      buttons.addSignal.onclick = async () => {
+        const N = 256;
+        const xs = Array.from({ length: N }, (_, i) => i / N);
+        const ys = xs.map((x) => Math.sin(2 * Math.PI * 5 * x));
+        lastId = await wrap("add_signal", () => client.addSignal("Sine 5 Hz", xs, ys));
+      };
+      buttons.addImage.onclick = async () => {
+        const N = 32;
+        const data = Array.from({ length: N }, (_, i) =>
+          Array.from({ length: N }, (_, j) => i + j),
+        );
+        lastId = await wrap("add_image", () => client.addImage("Gradient", data));
+      };
+      buttons.fft.onclick = () => {
+        if (!lastId) return logLine("!", "no lastId — add a signal first");
+        return wrap("calc(fft)", () => client.calc("fft", null, [lastId]));
+      };
+      buttons.get.onclick = () => {
+        if (!lastId) return logLine("!", "no lastId");
+        return wrap("get_signal_xy", () => client.getSignalXY(lastId));
+      };
+      buttons.remove.onclick = async () => {
+        if (!lastId) return logLine("!", "no lastId");
+        await wrap("delete_object", () => client.deleteObject(lastId));
+        lastId = null;
+      };
+      buttons.reset.onclick = () => wrap("reset_all", () => client.resetAll());
+
+      (async () => {
+        try {
+          status.textContent = "Waiting for DataLab-Web to be ready…";
+          const version = await client.ready(180_000);
+          status.textContent = `Ready — DataLab-Web v${version}`;
+          status.className = "status ok";
+          setEnabled(true);
+          // Marker for E2E: a test waits on this to know the demo is wired.
+          document.body.dataset.remoteReady = "1";
+        } catch (err) {
+          status.textContent = `Failed: ${err.message ?? err}`;
+          status.className = "status err";
+          logLine("✗", `ready: ${err.message ?? err}`);
+        }
+      })();
+    </script>
+  </body>
+</html>

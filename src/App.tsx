@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRuntime } from "./runtime/RuntimeContext";
+import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
@@ -370,6 +371,35 @@ export default function App() {
     },
     [runtime],
   );
+
+  // Refresh the UI whenever a remote-control RPC mutates the object
+  // model (signal/image added/removed, processing applied…). The
+  // bridge in ``remoteBridge.ts`` dispatches this CustomEvent on
+  // ``window`` so we don't need to wire a callback through the
+  // RuntimeContext provider.
+  useEffect(() => {
+    if (!runtime) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ panel: string | null }>).detail;
+      const target = detail?.panel;
+      if (target === "signal" || target === "image") {
+        if (target === activePanel) {
+          void refresh();
+        } else {
+          // The result landed in a panel the user isn't looking at.
+          // Don't yank them away — they'll see it on next switch
+          // (handled by ``handleSwitchPanel``).
+        }
+      } else {
+        // Unknown / null panel: best-effort refresh of the active one.
+        void refresh();
+      }
+    };
+    window.addEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
+    return () => {
+      window.removeEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
+    };
+  }, [runtime, activePanel, refresh]);
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
