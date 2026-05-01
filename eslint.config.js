@@ -22,6 +22,9 @@ export default [
       "**/*.d.ts",
       "vite.config.js",
       "vite.config.d.ts",
+      // Documentation snippets — not part of the build, ship without
+      // their Angular dependencies, see ``doc/examples/angular/README.md``.
+      "doc/examples/**",
     ],
   },
   js.configs.recommended,
