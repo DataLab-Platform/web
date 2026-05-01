@@ -55,10 +55,9 @@ test.describe("Remote control via postMessage", () => {
     //     regression here was the original bug ("signal doesn't appear
     //     until you switch tabs").
     const iframe = page.frameLocator("#dlw");
-    await expect(iframe.locator(".object-tree-item")).toContainText(
-      "Probe",
-      { timeout: 5_000 },
-    );
+    await expect(iframe.locator(".object-tree-item")).toContainText("Probe", {
+      timeout: 5_000,
+    });
 
     // 3. Run a registered Sigima processing on it (FFT — always
     //    available in DataLab-Web). The result is a new object.
@@ -126,5 +125,80 @@ test.describe("Remote control via postMessage", () => {
       });
     });
     expect(dropped).toBe(true);
+  });
+
+  test("can push and read back a 50k-sample signal in binary mode", async ({
+    page,
+  }) => {
+    // Smoke-test for the binary fast path: ``Float64Array`` →
+    // ``np.frombuffer`` on push, ``encoding="bytes"`` → typed array
+    // on read.  50 k samples (400 kB per array) is large enough that
+    // the legacy boxed/JSON path would be obviously slower (multiple
+    // seconds vs sub-second), so the perf budget below would catch
+    // any regression that re-introduced ``Array.from`` boxing.
+    //
+    // We don't need a separate big-image E2E: the same coercion code
+    // path (``_coerce_array`` + flat-buffer reshape) is exercised by
+    // the Python ``test_binary_transfer.py`` and SDK Vitest suites,
+    // and the live image read path is already covered by
+    // ``image_perf.spec.ts``.
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      { timeout: 180_000 },
+    );
+
+    const N = 50_000;
+    const probes = await page.evaluate(async (n) => {
+      const xs = new Float64Array(n);
+      const ys = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        xs[i] = i * 1e-3;
+        ys[i] = Math.sin(2 * Math.PI * xs[i]) * 0.5;
+      }
+      const t0 = performance.now();
+      // @ts-expect-error injected by the demo page
+      const id = await window.__client.addSignal("Big", xs, ys);
+      const tPush = performance.now() - t0;
+      const t1 = performance.now();
+      // @ts-expect-error see above
+      const data = await window.__client.getSignalXY(id);
+      const tPull = performance.now() - t1;
+      // Sample a handful of points instead of shipping every float
+      // back through Playwright's serialiser.
+      const probeIdx = [0, 1, 100, 12_345, n - 2, n - 1];
+      const xv = data.x as Float64Array;
+      const yv = data.y as Float64Array;
+      return {
+        id,
+        size: xv.length,
+        x_is_typed: xv instanceof Float64Array,
+        y_is_typed: yv instanceof Float64Array,
+        sampled_x: probeIdx.map((i) => xv[i]),
+        sampled_y: probeIdx.map((i) => yv[i]),
+        expected_x: probeIdx.map((i) => i * 1e-3),
+        expected_y: probeIdx.map((i) => Math.sin(2 * Math.PI * i * 1e-3) * 0.5),
+        push_ms: tPush,
+        pull_ms: tPull,
+      };
+    }, N);
+
+    expect(probes.size).toBe(N);
+    expect(probes.x_is_typed).toBe(true);
+    expect(probes.y_is_typed).toBe(true);
+    // X is exactly representable (i*1e-3 round-trips bit-perfectly
+    // through float64), but Y goes through sin() — JS's
+    // ``Math.sin`` and numpy's may differ by ~1 ULP for large
+    // indices, so we compare with float-aware tolerance.
+    for (let i = 0; i < probes.sampled_x.length; i++) {
+      expect(probes.sampled_x[i]).toBeCloseTo(probes.expected_x[i], 12);
+      expect(probes.sampled_y[i]).toBeCloseTo(probes.expected_y[i], 12);
+    }
+    // Soft perf budget: the binary path should round-trip 50 k
+    // samples in well under 5 s on CI; the legacy boxed/JSON path
+    // would take noticeably longer, so a regression here would fire.
+    expect(probes.push_ms).toBeLessThan(5_000);
+    expect(probes.pull_ms).toBeLessThan(5_000);
   });
 });

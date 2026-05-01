@@ -19,10 +19,10 @@ function makeRuntimeStub(): DataLabRuntime {
     addSignalFromArrays: vi.fn(async () => "sig-id-1"),
     addImageFromArray: vi.fn(async () => "img-id-1"),
     listSignals: vi.fn(async () => [
-      { id: "sig-id-1", title: "Sine", size: 256 },
+      { id: "sig-id-1", title: "Sine", size: 256 } as never,
     ]),
     listFeatures: vi.fn(async () => [
-      { id: "fft", label: "FFT", has_params: false },
+      { id: "fft", label: "FFT", has_params: false } as never,
     ]),
     applyFeature: vi.fn(async () => ["sig-id-2"]),
     getSignalData: vi.fn(async () => ({

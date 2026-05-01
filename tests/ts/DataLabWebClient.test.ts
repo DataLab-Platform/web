@@ -147,4 +147,74 @@ describe("DataLabWebClient", () => {
     // After dispose, further calls reject immediately.
     await expect(client.call("again")).rejects.toThrow(/disposed/);
   });
+
+  it("addSignal forwards Float64Array payloads without copying to JS lists", async () => {
+    // The legacy implementation called ``Array.from`` on each input,
+    // boxing every sample into a ``Number`` — at 1 M samples that
+    // alone allocated tens of MB and dominated the round-trip cost.
+    // The optimised path must hand a typed array straight to the
+    // bridge so structured-clone (and Pyodide downstream) treat it
+    // as a single binary blob.
+    const xs = new Float64Array([0, 1, 2, 3]);
+    const ys = new Float64Array([10, 11, 12, 13]);
+    const promise = client.addSignal("Probe", xs, ys);
+    const [request] = iframe.contentWindow.postMessage.mock.calls[0];
+    const params = (request as { params: { xdata: unknown; ydata: unknown } })
+      .params;
+    expect(params.xdata).toBeInstanceOf(Float64Array);
+    expect(params.ydata).toBeInstanceOf(Float64Array);
+    const id = (request as { id: number }).id;
+    reply(iframe, { id, type: "response", result: "obj-1" });
+    await expect(promise).resolves.toBe("obj-1");
+  });
+
+  it("addImage flat-buffer mode forwards width/height/dtype", async () => {
+    const data = new Float32Array(2 * 3);
+    const promise = client.addImage("Img", { width: 3, height: 2, data });
+    const [request] = iframe.contentWindow.postMessage.mock.calls[0];
+    const params = (
+      request as {
+        params: {
+          data: unknown;
+          width: number;
+          height: number;
+          dtype: string;
+        };
+      }
+    ).params;
+    expect(params.data).toBeInstanceOf(Float32Array);
+    expect(params.width).toBe(3);
+    expect(params.height).toBe(2);
+    expect(params.dtype).toBe("float32");
+    const id = (request as { id: number }).id;
+    reply(iframe, { id, type: "response", result: "img-1" });
+    await expect(promise).resolves.toBe("img-1");
+  });
+
+  it("getSignalXY decodes binary float64 payloads zero-copy", async () => {
+    const xs = new Float64Array([1.5, 2.5, 3.5, 4.5]);
+    const ys = new Float64Array([-1, 0, 1, 2]);
+    const promise = client.getSignalXY("oid-42");
+    const [request] = iframe.contentWindow.postMessage.mock.calls[0];
+    const params = (request as { params: { encoding?: string } }).params;
+    expect(params.encoding).toBe("bytes");
+    const id = (request as { id: number }).id;
+    reply(iframe, {
+      id,
+      type: "response",
+      result: {
+        id: "oid-42",
+        encoding: "f64",
+        dtype: "float64",
+        size: xs.length,
+        x_bytes: new Uint8Array(xs.buffer.slice(0)),
+        y_bytes: new Uint8Array(ys.buffer.slice(0)),
+      },
+    });
+    const data = (await promise) as { x: Float64Array; y: Float64Array };
+    expect(data.x).toBeInstanceOf(Float64Array);
+    expect(data.y).toBeInstanceOf(Float64Array);
+    expect(Array.from(data.x)).toEqual([1.5, 2.5, 3.5, 4.5]);
+    expect(Array.from(data.y)).toEqual([-1, 0, 1, 2]);
+  });
 });

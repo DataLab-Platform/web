@@ -643,6 +643,43 @@ def create_signal(
     return _MODEL.add_object("signal", obj, group_id=group_id)
 
 
+def _coerce_array(data: Any, dtype: Any) -> np.ndarray:
+    """Convert a JS-side array payload into a 1-D numpy array.
+
+    Optimised for the bridge: when the JS side hands us a typed array
+    (Pyodide auto-converts ``Float64Array``/``Float32Array`` to
+    ``memoryview``, ``Uint8Array`` to ``bytes``), we wrap it through
+    :func:`numpy.frombuffer` for a true zero-copy view.  Plain JS
+    arrays (``number[]``) still work via the slow ``np.asarray`` path
+    so existing callers using nested lists are unaffected.
+
+    Args:
+        data: ``bytes``/``bytearray``/``memoryview`` (zero-copy),
+         a JsProxy with a ``to_py`` method (e.g. unconverted
+         ``Float64Array``), or a Python iterable / list.
+        dtype: target numpy dtype.  Must match the binary layout of
+         the input when the latter is a buffer.
+    """
+    np_dtype = np.dtype(dtype)
+    # Buffer-like inputs -> zero-copy view.
+    if isinstance(data, (bytes, bytearray, memoryview)):
+        return np.frombuffer(data, dtype=np_dtype)
+    # Pyodide JsProxy of a TypedArray -> use ``.to_py()`` which returns
+    # a memoryview without copying the underlying WASM heap.
+    if hasattr(data, "to_py"):
+        try:
+            converted = data.to_py()
+        except Exception:  # pragma: no cover - defensive only
+            converted = None
+        if isinstance(converted, memoryview):
+            arr = np.frombuffer(converted, dtype=np_dtype)
+            return arr
+        if converted is not None:
+            return np.asarray(converted, dtype=np_dtype)
+    # Last resort: plain Python list / iterable.
+    return np.asarray(data, dtype=np_dtype)
+
+
 def add_signal_from_arrays(
     title: str,
     xdata,
@@ -652,14 +689,17 @@ def add_signal_from_arrays(
     xlabel: str = "",
     ylabel: str = "",
     group_id: str | None = None,
+    dtype: str = "float64",
 ) -> str:
     """Create a signal from raw X / Y arrays and store it.
 
     Used by the macro proxy bridge so the JS side can pass plain
     nested lists / typed arrays without building Python source code.
+    Typed arrays (``Float64Array`` / ``Float32Array``) and ``bytes``
+    are converted via :func:`_coerce_array` for zero-copy ingest.
     """
-    x = np.asarray(xdata, dtype=float)
-    y = np.asarray(ydata, dtype=float)
+    x = _coerce_array(xdata, dtype)
+    y = _coerce_array(ydata, dtype)
     obj: SignalObj = sigima.create_signal(title=title, x=x, y=y)
     if xunit:
         obj.xunit = xunit
@@ -682,9 +722,31 @@ def add_image_from_array(
     ylabel: str = "",
     zlabel: str = "",
     group_id: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+    dtype: str = "float64",
 ) -> str:
-    """Create an image from a raw 2D array and store it."""
-    arr = np.asarray(data, dtype=float)
+    """Create an image from a raw 2D array and store it.
+
+    ``data`` may be a Python nested list (legacy slow path), a JsProxy
+    of a nested array, or — for large transfers — a flat 1-D buffer
+    (``bytes`` / typed array) accompanied by ``width`` and ``height``.
+    The buffer mode is zero-copy and dramatically lowers the bandwidth
+    cost for large remote transfers.
+    """
+    if width is not None and height is not None:
+        flat = _coerce_array(data, dtype)
+        if flat.size != width * height:
+            raise ValueError(
+                f"flat buffer size {flat.size} does not match width*height "
+                f"= {width * height}"
+            )
+        arr = flat.reshape((height, width))
+    else:
+        # Legacy nested-list path: accept JsProxy via .to_py() too.
+        if hasattr(data, "to_py"):
+            data = data.to_py()
+        arr = np.asarray(data, dtype=float)
     obj = sigima.create_image(title=title, data=arr)
     if xunit:
         obj.xunit = xunit
@@ -701,15 +763,38 @@ def add_image_from_array(
     return _MODEL.add_object("image", obj, group_id=group_id)
 
 
-def get_signal_xy(oid: str) -> dict[str, Any]:
-    """Return the X / Y arrays of *oid* in JSON-friendly form."""
+def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
+    """Return the X / Y arrays of *oid* in JSON-friendly form.
+
+    Args:
+        oid: signal identifier in the in-memory store.
+        encoding: ``"list"`` (default) returns ``x``/``y`` as Python
+         lists (slow but JSON-trivial — kept for backwards compat).
+         ``"bytes"`` returns ``x_bytes``/``y_bytes`` as raw
+         little-endian ``float64`` byte strings — Pyodide hands them
+         to JS as a single ``Uint8Array`` memcpy, which the front-end
+         decodes into a typed array.  Use this on the remote bridge
+         for large signals: a 1 M-sample signal goes from ~50 MB of
+         intermediate JSON allocations to a single 8 MB memcpy.
+    """
     obj = _MODEL.get(oid)
-    return {
+    payload: dict[str, Any] = {
         "id": oid,
-        "x": obj.x.tolist(),
-        "y": obj.y.tolist(),
         **_object_meta(_ObjectEntry(oid=oid, kind="signal", obj=obj)),
     }
+    if encoding == "bytes":
+        x_arr = np.ascontiguousarray(obj.x, dtype=np.float64)
+        y_arr = np.ascontiguousarray(obj.y, dtype=np.float64)
+        payload["x_bytes"] = x_arr.tobytes()
+        payload["y_bytes"] = y_arr.tobytes()
+        payload["dtype"] = "float64"
+        payload["size"] = int(x_arr.size)
+        payload["encoding"] = "f64"
+    else:
+        payload["x"] = obj.x.tolist()
+        payload["y"] = obj.y.tolist()
+        payload["encoding"] = "list"
+    return payload
 
 
 def get_signals_xy(oids: list[str]) -> list[dict[str, Any]]:

@@ -924,13 +924,14 @@ await micropip.install(["sigima", "guidata"])
    *  bridge — mirrors :func:`bootstrap.add_signal_from_arrays`). */
   async addSignalFromArrays(params: {
     title: string;
-    xdata: number[];
-    ydata: number[];
+    xdata: number[] | Float32Array | Float64Array;
+    ydata: number[] | Float32Array | Float64Array;
     xunit?: string;
     yunit?: string;
     xlabel?: string;
     ylabel?: string;
     group_id?: string | null;
+    dtype?: string;
   }): Promise<string> {
     return (await this.callPy(
       "add_signal_from_arrays",
@@ -942,7 +943,7 @@ await micropip.install(["sigima", "guidata"])
    *  :func:`bootstrap.add_image_from_array`). */
   async addImageFromArray(params: {
     title: string;
-    data: number[][];
+    data: number[][] | Float32Array | Float64Array | Uint8Array;
     xunit?: string;
     yunit?: string;
     zunit?: string;
@@ -950,6 +951,9 @@ await micropip.install(["sigima", "guidata"])
     ylabel?: string;
     zlabel?: string;
     group_id?: string | null;
+    width?: number;
+    height?: number;
+    dtype?: string;
   }): Promise<string> {
     return (await this.callPy(
       "add_image_from_array",
@@ -1183,6 +1187,17 @@ await micropip.install(["sigima", "guidata"])
 
   async getSignalData(id: string): Promise<SignalData> {
     return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
+  }
+
+  /** Binary variant of :meth:`getSignalData` — used by the remote
+   *  bridge to ship large signals across the iframe boundary as a
+   *  pair of ``Uint8Array`` (raw float64 little-endian) instead of
+   *  serialising every sample as a JSON number. */
+  async getSignalDataBinary(id: string): Promise<unknown> {
+    return await this.callPy("get_signal_xy", {
+      oid: id,
+      encoding: "bytes",
+    });
   }
 
   /** Batched fetch for multi-signal overlay.  Returns one entry per

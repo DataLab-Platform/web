@@ -33,13 +33,14 @@ export function buildProxyBridge(
     add_signal: async (p: unknown) => {
       const a = p as {
         title: string;
-        xdata: number[];
-        ydata: number[];
+        xdata: number[] | Float32Array | Float64Array;
+        ydata: number[] | Float32Array | Float64Array;
         xunit?: string;
         yunit?: string;
         xlabel?: string;
         ylabel?: string;
         group_id?: string | null;
+        dtype?: string;
       };
       const oid = await s.addSignalFromArrays({
         title: a.title,
@@ -50,6 +51,7 @@ export function buildProxyBridge(
         xlabel: a.xlabel ?? "",
         ylabel: a.ylabel ?? "",
         group_id: a.group_id ?? null,
+        dtype: a.dtype,
       });
       ext.onModelChanged?.("signal");
       return oid;
@@ -57,7 +59,7 @@ export function buildProxyBridge(
     add_image: async (p: unknown) => {
       const a = p as {
         title: string;
-        data: number[][];
+        data: number[][] | Float32Array | Float64Array | Uint8Array;
         xunit?: string;
         yunit?: string;
         zunit?: string;
@@ -65,6 +67,9 @@ export function buildProxyBridge(
         ylabel?: string;
         zlabel?: string;
         group_id?: string | null;
+        width?: number;
+        height?: number;
+        dtype?: string;
       };
       const oid = await s.addImageFromArray({
         title: a.title,
@@ -76,6 +81,9 @@ export function buildProxyBridge(
         ylabel: a.ylabel ?? "",
         zlabel: a.zlabel ?? "",
         group_id: a.group_id ?? null,
+        width: a.width,
+        height: a.height,
+        dtype: a.dtype,
       });
       ext.onModelChanged?.("image");
       return oid;
@@ -183,10 +191,16 @@ _e = _MODEL._objects[${JSON.stringify(oid)}]
       ext.onModelChanged?.(null);
       return null;
     },
-    /** Read back the X/Y arrays of a signal (notebook ``show_signal``). */
+    /** Read back the X/Y arrays of a signal (notebook ``show_signal``).
+     *  Honours ``encoding="bytes"`` requests from the remote SDK so
+     *  large signals travel as a typed-array memcpy rather than
+     *  through a million-element JSON list. */
     get_signal_xy: async (p: unknown) => {
-      const oid = (p as { oid: string }).oid;
-      return s.getSignalData(oid);
+      const a = p as { oid: string; encoding?: string };
+      if (a.encoding === "bytes") {
+        return s.getSignalDataBinary(a.oid);
+      }
+      return s.getSignalData(a.oid);
     },
     /** Read back the 2D array of an image (notebook ``show_image``). */
     get_image_data: async (p: unknown) => {

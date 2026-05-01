@@ -218,10 +218,18 @@ export class DataLabWebClient {
     return this.call("get_version") as Promise<string>;
   }
 
+  /** Push a 1-D signal to DataLab-Web.
+   *
+   *  ``xdata``/``ydata`` may be a ``Float64Array`` (recommended for
+   *  large signals — passed zero-copy via structured-clone
+   *  transferables and ingested as a numpy view), a
+   *  ``Float32Array`` (will be widened to float64 on the Python
+   *  side), or a plain ``number[]`` (slow legacy path, kept for
+   *  convenience on small signals). */
   addSignal(
     title: string,
-    xdata: number[] | Float64Array,
-    ydata: number[] | Float64Array,
+    xdata: number[] | Float32Array | Float64Array,
+    ydata: number[] | Float32Array | Float64Array,
     extras: {
       xunit?: string;
       yunit?: string;
@@ -230,17 +238,33 @@ export class DataLabWebClient {
       group_id?: string | null;
     } = {},
   ): Promise<string> {
+    // Normalise to Float64Array so the wire payload is a single
+    // typed-array memcpy on every browser.  ``Array.from`` would
+    // boxify each value into a JS Number — at 1 M samples that's
+    // ~50 MB of intermediate JS heap allocations.
+    const xs = toFloat64Array(xdata);
+    const ys = toFloat64Array(ydata);
     return this.call("add_signal", {
       title,
-      xdata: Array.from(xdata),
-      ydata: Array.from(ydata),
+      xdata: xs,
+      ydata: ys,
       ...extras,
     }) as Promise<string>;
   }
 
+  /** Push a 2-D image to DataLab-Web.
+   *
+   *  Accepts either:
+   *  - a nested ``number[][]`` (legacy, slow but trivially serialisable);
+   *  - a flat typed array + ``{ width, height }`` (fast path:
+   *    zero-copy across iframe and Pyodide).  Use this for any image
+   *    larger than a few hundred kB.
+   */
   addImage(
     title: string,
-    data: number[][],
+    data:
+      | number[][]
+      | { width: number; height: number; data: Float32Array | Float64Array },
     extras: {
       xunit?: string;
       yunit?: string;
@@ -251,9 +275,19 @@ export class DataLabWebClient {
       group_id?: string | null;
     } = {},
   ): Promise<string> {
+    if (Array.isArray(data)) {
+      return this.call("add_image", {
+        title,
+        data,
+        ...extras,
+      }) as Promise<string>;
+    }
     return this.call("add_image", {
       title,
-      data,
+      data: data.data,
+      width: data.width,
+      height: data.height,
+      dtype: data.data instanceof Float32Array ? "float32" : "float64",
       ...extras,
     }) as Promise<string>;
   }
@@ -282,8 +316,31 @@ export class DataLabWebClient {
     return this.call("delete_object", { oid }) as Promise<null>;
   }
 
-  getSignalXY(oid: string): Promise<SignalXY> {
-    return this.call("get_signal_xy", { oid }) as Promise<SignalXY>;
+  /** Read back X / Y arrays of a signal.
+   *
+   *  Uses the binary ``encoding="bytes"`` mode of ``get_signal_xy``
+   *  — the Pyodide side ships raw little-endian float64 bytes which
+   *  we re-wrap as ``Float64Array`` here.  For a 1 M-sample signal
+   *  this is a single 8 MB memcpy across the bridge instead of
+   *  building a 1 M-element JSON array.
+   */
+  async getSignalXY(oid: string): Promise<SignalXY> {
+    const raw = (await this.call("get_signal_xy", {
+      oid,
+      encoding: "bytes",
+    })) as SignalXY & {
+      encoding?: string;
+      x_bytes?: ArrayBufferView | ArrayBuffer;
+      y_bytes?: ArrayBufferView | ArrayBuffer;
+    };
+    if (raw.encoding === "f64" && raw.x_bytes && raw.y_bytes) {
+      return {
+        ...raw,
+        x: bytesToFloat64Array(raw.x_bytes),
+        y: bytesToFloat64Array(raw.y_bytes),
+      };
+    }
+    return raw as SignalXY;
   }
 
   getImageData(oid: string): Promise<ImageData2D> {
@@ -399,4 +456,25 @@ function collectTransferables(value: unknown, depth = 0): ArrayBuffer[] {
     out.push(...collectTransferables(v, depth + 1));
   }
   return out;
+}
+
+/** Coerce ``number[]`` / ``Float32Array`` / ``Float64Array`` into a
+ *  ``Float64Array`` without copying when the input already is one. */
+function toFloat64Array(
+  data: number[] | Float32Array | Float64Array,
+): Float64Array {
+  if (data instanceof Float64Array) return data;
+  if (data instanceof Float32Array) return Float64Array.from(data);
+  return Float64Array.from(data);
+}
+
+/** Re-wrap a raw ``Uint8Array`` / ``ArrayBuffer`` returned by the
+ *  Pyodide bridge as a ``Float64Array`` view (zero-copy). */
+function bytesToFloat64Array(raw: ArrayBufferView | ArrayBuffer): Float64Array {
+  if (raw instanceof ArrayBuffer) return new Float64Array(raw);
+  return new Float64Array(
+    raw.buffer,
+    raw.byteOffset,
+    raw.byteLength / Float64Array.BYTES_PER_ELEMENT,
+  );
 }

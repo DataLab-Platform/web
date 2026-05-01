@@ -171,7 +171,11 @@ export function activateRemoteBridge(
   // ``post`` is defined further down; declare a forward reference so
   // the notification helpers below can capture it via closure.
   let post:
-    | ((target: MessageEventSource, origin: string, msg: OutboundMessage) => void)
+    | ((
+        target: MessageEventSource,
+        origin: string,
+        msg: OutboundMessage,
+      ) => void)
     | null = null;
 
   const flushEvents = () => {
@@ -221,11 +225,7 @@ export function activateRemoteBridge(
         : "unknown"),
   };
 
-  post = (
-    target: MessageEventSource,
-    origin: string,
-    msg: OutboundMessage,
-  ) => {
+  post = (target: MessageEventSource, origin: string, msg: OutboundMessage) => {
     const transfer = collectTransferables(msg);
     const targetOrigin = origin === "" ? "*" : origin;
     try {
