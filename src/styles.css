@@ -254,6 +254,51 @@ input {
   flex-direction: row;
   min-height: 0;
   min-width: 0;
+  position: relative;
+}
+
+/* AI Assistant — floating overlay variant. The host is anchored to the
+   bottom-right of the workspace so it never compresses the plot or the
+   results panel. */
+.ai-floating-host {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: 400px;
+  max-width: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel, #1e1e1e);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.ai-floating-pill {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  border: 1px solid var(--border, #333);
+  background: var(--accent, #2d7ff9);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-floating-pill:hover {
+  filter: brightness(1.1);
 }
 
 /* Vertical drag handle between two flex children of .workspace. */

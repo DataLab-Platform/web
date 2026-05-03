@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { pythonHmr } from "./plugins/vite-plugin-python-hmr";
+import { openAiKeyDevEndpoint } from "./plugins/vite-plugin-openai-key-dev";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,7 +29,7 @@ const PLOTLY_DIST_MIN = resolve(
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), pythonHmr()],
+  plugins: [react(), pythonHmr(), openAiKeyDevEndpoint()],
   // Static deployment friendly: relative paths so it works from any sub-path
   // (e.g. GitHub Pages project sites).
   base: "./",

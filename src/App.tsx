@@ -13,6 +13,7 @@ import type {
 } from "./runtime/runtime";
 import { MenuBar } from "./components/MenuBar";
 import {
+  buildAIAssistantActions,
   buildFeatureActions,
   buildHelpActions,
   buildNotebookActions,
@@ -64,6 +65,8 @@ import {
 } from "./components/SaveToDirectoryDialog";
 import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
+import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
+import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
 import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
 import {
@@ -182,6 +185,22 @@ export default function App() {
     "datalab-web.sidePanelWidth",
     360,
   );
+  const [aiPanelVisible, setAIPanelVisible] = usePersistedBool(
+    "datalab-web.aiPanelVisible",
+    false,
+  );
+  const [aiPanelCollapsed, setAIPanelCollapsed] = usePersistedBool(
+    "datalab-web.aiPanelCollapsed",
+    false,
+  );
+  const toggleAIPanel = useCallback(() => {
+    setAIPanelVisible(!aiPanelVisible);
+    // Re-opening from the menu always shows the full panel, never the
+    // pill — otherwise the menu entry would seem to do nothing if the
+    // panel had been minimised before the previous hide.
+    if (!aiPanelVisible) setAIPanelCollapsed(false);
+  }, [aiPanelVisible, setAIPanelVisible, setAIPanelCollapsed]);
+  const [showAISettings, setShowAISettings] = useState(false);
   // View > "Show results overlay on plot" toggle.  Off by default
   // because the right-hand Results panel already renders the same
   // numbers in a structured grid.  Useful when the user pops out
@@ -1796,6 +1815,11 @@ export default function App() {
         onOpenSeparateView: openSeparateView,
         hasSelection: selectedIds.length > 0 || currentId !== null,
       }),
+      ...buildAIAssistantActions({
+        visible: aiPanelVisible,
+        onTogglePanel: toggleAIPanel,
+        onOpenSettings: () => setShowAISettings(true),
+      }),
       ...buildNotebookActions({
         onNew: () => {
           handleSwitchPanel("notebook");
@@ -1920,6 +1944,8 @@ export default function App() {
       showGraphicalTitles,
       toggleGraphicalTitles,
       openSeparateView,
+      aiPanelVisible,
+      toggleAIPanel,
       selectedIds.length,
       currentId,
     ],
@@ -2191,7 +2217,30 @@ export default function App() {
             />
           </>
         )}
+        {runtime && aiPanelVisible && aiPanelCollapsed && (
+          <button
+            type="button"
+            className="ai-floating-pill"
+            onClick={() => setAIPanelCollapsed(false)}
+            title="Expand AI Assistant"
+            aria-label="Expand AI Assistant"
+          >
+            AI
+          </button>
+        )}
+        {runtime && aiPanelVisible && !aiPanelCollapsed && (
+          <div className="ai-floating-host">
+            <AIAssistantPanel
+              runtime={runtime}
+              onMinimize={() => setAIPanelCollapsed(true)}
+              onClose={() => setAIPanelVisible(false)}
+            />
+          </div>
+        )}
       </div>
+      {showAISettings && (
+        <AISettingsDialog onClose={() => setShowAISettings(false)} />
+      )}
       {pendingOperand && (
         <OperandPicker
           title={pendingOperand.feature.label.replace(/\u2026$/, "")}

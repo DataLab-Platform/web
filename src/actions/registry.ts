@@ -244,6 +244,41 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   ];
 }
 
+/** Callbacks for the AI Assistant menu entries. */
+export interface AIAssistantActionCallbacks {
+  /** Current visibility of the AI Assistant panel. */
+  visible: boolean;
+  /** Toggle the panel (and persist the new value). */
+  onTogglePanel: () => void;
+  /** Open the AI Assistant settings dialog. */
+  onOpenSettings: () => void;
+}
+
+/** Wire AI Assistant menu actions (under the View menu). */
+export function buildAIAssistantActions(
+  cb: AIAssistantActionCallbacks,
+): ActionDescriptor[] {
+  const always = () => true;
+  const checkPrefix = cb.visible ? "\u2713 " : "    ";
+  return [
+    {
+      id: "view.ai_assistant.toggle",
+      label: `${checkPrefix}Show AI Assistant`,
+      menuPath: `View/${checkPrefix}Show AI Assistant`,
+      beginGroup: true,
+      enabled: always,
+      run: cb.onTogglePanel,
+    },
+    {
+      id: "view.ai_assistant.settings",
+      label: "AI Assistant settings\u2026",
+      menuPath: "View/AI Assistant settings\u2026",
+      enabled: always,
+      run: cb.onOpenSettings,
+    },
+  ];
+}
+
 /** Wire feature-driven actions (Operations / Processing / …) ---------- */
 export function buildFeatureActions(
   features: FeatureDescriptor[],
