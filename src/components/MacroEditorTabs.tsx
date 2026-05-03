@@ -43,7 +43,18 @@ interface Props {
   onChange: (id: string, code: string) => void;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  /** Request to start inline tab rename for *id* (double-click / button). */
   onRenameRequest: (id: string) => void;
+  /** Id currently being renamed inline, or ``null`` if no rename in flight. */
+  renamingId?: string | null;
+  /** Current value of the rename input. */
+  renameDraft?: string;
+  /** Called as the rename input changes. */
+  onRenameDraftChange?: (value: string) => void;
+  /** Commit the in-flight rename. */
+  onCommitRename?: () => void;
+  /** Abort the in-flight rename. */
+  onCancelRename?: () => void;
   /** Theme: "light" or "dark". */
   theme?: "light" | "dark";
 }
@@ -55,6 +66,11 @@ export function MacroEditorTabs({
   onActivate,
   onClose,
   onRenameRequest,
+  renamingId = null,
+  renameDraft = "",
+  onRenameDraftChange,
+  onCommitRename,
+  onCancelRename,
   theme = "dark",
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -169,10 +185,32 @@ export function MacroEditorTabs({
             onDoubleClick={() => onRenameRequest(t.id)}
             title="Double-click to rename"
           >
-            <span className="macro-tab-title">
-              {t.title}
-              {t.dirty ? " •" : ""}
-            </span>
+            {renamingId === t.id ? (
+              <input
+                className="nb-tab-rename-input"
+                type="text"
+                autoFocus
+                value={renameDraft}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => onRenameDraftChange?.(e.target.value)}
+                onBlur={() => onCommitRename?.()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onCommitRename?.();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCancelRename?.();
+                  }
+                }}
+                aria-label="Macro name"
+              />
+            ) : (
+              <span className="macro-tab-title">
+                {t.title}
+                {t.dirty ? " •" : ""}
+              </span>
+            )}
             <button
               type="button"
               className="macro-tab-close"

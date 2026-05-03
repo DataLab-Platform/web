@@ -137,6 +137,8 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     const [openIds, setOpenIds] = useState<string[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [running, setRunning] = useState(false);
+    const [renamingId, setRenamingId] = useState<string | null>(null);
+    const [renameDraft, setRenameDraft] = useState<string>("");
     /** ``true`` once the initial load effect has hydrated state from
      *  Python + localStorage.  Used to gate persistence effects so they
      *  don't overwrite saved state with the empty initial values during
@@ -365,23 +367,40 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     );
 
     const handleRename = useCallback(
-      async (id: string) => {
+      (id: string) => {
         const m = macros.find((x) => x.id === id);
         if (!m) return;
-        const next = window.prompt("Rename macro:", m.title);
-        if (next === null) return;
-        const trimmed = next.trim() || "Untitled";
-        await runtime.renameMacro(id, trimmed);
-        setMacros((prev) => {
-          const updated = prev.map((x) =>
-            x.id === id ? { ...x, title: trimmed } : x,
-          );
-          persistMirror(updated);
-          return updated;
-        });
+        // Make sure the tab is visible & active before entering rename mode.
+        setOpenIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        setActiveId(id);
+        setRenameDraft(m.title);
+        setRenamingId(id);
       },
-      [macros, runtime, persistMirror],
+      [macros],
     );
+
+    const commitRename = useCallback(() => {
+      const id = renamingId;
+      if (id == null) return;
+      const trimmed = renameDraft.trim() || "Untitled";
+      setRenamingId(null);
+      const current = macros.find((x) => x.id === id);
+      if (!current || current.title === trimmed) return;
+      runtime.renameMacro(id, trimmed).catch((err) => {
+        console.error("Failed to rename macro:", err);
+      });
+      setMacros((prev) => {
+        const updated = prev.map((x) =>
+          x.id === id ? { ...x, title: trimmed } : x,
+        );
+        persistMirror(updated);
+        return updated;
+      });
+    }, [renamingId, renameDraft, macros, runtime, persistMirror]);
+
+    const cancelRename = useCallback(() => {
+      setRenamingId(null);
+    }, []);
 
     const handleDuplicate = useCallback(async () => {
       if (!activeId) return;
@@ -685,6 +704,11 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
               onActivate={setActiveId}
               onClose={closeTab}
               onRenameRequest={handleRename}
+              renamingId={renamingId}
+              renameDraft={renameDraft}
+              onRenameDraftChange={setRenameDraft}
+              onCommitRename={commitRename}
+              onCancelRename={cancelRename}
               theme={theme}
             />
           </div>
