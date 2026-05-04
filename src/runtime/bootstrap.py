@@ -472,6 +472,117 @@ def replace_macros(records: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Notebook store (mirrors :data:`_MACROS` for Jupyter-style notebooks)
+# ---------------------------------------------------------------------------
+#
+# Notebooks are stored as opaque ``nbformat`` v4.5 JSON strings — the
+# Python side does not parse them.  This keeps the bootstrap layer
+# symmetric with macros (``code`` ⇄ ``content``) and lets the JS
+# notebook UI remain the sole owner of the nbformat schema.
+
+_NOTEBOOKS: list[dict[str, str]] = globals().get(  # type: ignore[assignment]
+    "_NOTEBOOKS", []
+)
+
+
+def _notebook_index(notebook_id: str) -> int:
+    for idx, n in enumerate(_NOTEBOOKS):
+        if n["id"] == notebook_id:
+            return idx
+    raise KeyError(f"Unknown notebook: {notebook_id!r}")
+
+
+def _next_untitled_notebook_title() -> str:
+    """Return a unique ``"Untitled N"`` notebook title."""
+    used = {n["title"] for n in _NOTEBOOKS}
+    n = 1
+    while f"Untitled {n}" in used:
+        n += 1
+    return f"Untitled {n}"
+
+
+def list_notebooks() -> list[dict[str, str]]:
+    """Return a JSON-friendly snapshot of every notebook (id + title only)."""
+    return [{"id": n["id"], "title": n["title"]} for n in _NOTEBOOKS]
+
+
+def get_notebook(notebook_id: str) -> dict[str, str]:
+    """Return ``{id, title, content}`` for *notebook_id*."""
+    return dict(_NOTEBOOKS[_notebook_index(notebook_id)])
+
+
+def create_notebook(
+    title: str | None = None, content: str | None = None
+) -> dict[str, str]:
+    """Create a new notebook and return its full record.
+
+    *content* must be a serialised nbformat v4.5 JSON string.  When
+    omitted, an empty string is stored — the JS layer is then expected
+    to push an initial template via :func:`set_notebook_content`.
+    """
+    new_title = title if title else _next_untitled_notebook_title()
+    new_content = content if content is not None else ""
+    record = {"id": _new_id("n"), "title": new_title, "content": new_content}
+    _NOTEBOOKS.append(record)
+    return dict(record)
+
+
+def set_notebook_content(notebook_id: str, content: str) -> None:
+    """Update the nbformat JSON content of *notebook_id*."""
+    _NOTEBOOKS[_notebook_index(notebook_id)]["content"] = content
+
+
+def rename_notebook(notebook_id: str, title: str) -> None:
+    """Rename notebook *notebook_id*."""
+    _NOTEBOOKS[_notebook_index(notebook_id)]["title"] = title or "Untitled"
+
+
+def delete_notebook(notebook_id: str) -> None:
+    """Remove notebook *notebook_id* from the store."""
+    _NOTEBOOKS.pop(_notebook_index(notebook_id))
+
+
+def duplicate_notebook(notebook_id: str) -> dict[str, str]:
+    """Insert a copy of *notebook_id* right after it; return the new record."""
+    idx = _notebook_index(notebook_id)
+    src = _NOTEBOOKS[idx]
+    record = {
+        "id": _new_id("n"),
+        "title": f"{src['title']} (copy)",
+        "content": src["content"],
+    }
+    _NOTEBOOKS.insert(idx + 1, record)
+    return dict(record)
+
+
+def reorder_notebooks(notebook_ids: Any) -> None:
+    """Reorder ``_NOTEBOOKS`` according to *notebook_ids* (must contain every id)."""
+    if hasattr(notebook_ids, "to_py"):
+        notebook_ids = notebook_ids.to_py()
+    new_order: list[dict[str, str]] = []
+    by_id = {n["id"]: n for n in _NOTEBOOKS}
+    for nid in notebook_ids:
+        if nid in by_id:
+            new_order.append(by_id.pop(nid))
+    # Append any leftovers (defensive — should not happen).
+    new_order.extend(by_id.values())
+    _NOTEBOOKS[:] = new_order
+
+
+def replace_notebooks(records: Any) -> None:
+    """Replace the whole notebook store (used for IndexedDB restore)."""
+    if hasattr(records, "to_py"):
+        records = records.to_py()
+    cleaned: list[dict[str, str]] = []
+    for rec in records or []:
+        rid = str(rec.get("id") or _new_id("n"))
+        title = str(rec.get("title") or "Untitled")
+        content = str(rec.get("content") or "")
+        cleaned.append({"id": rid, "title": title, "content": content})
+    _NOTEBOOKS[:] = cleaned
+
+
+# ---------------------------------------------------------------------------
 # Plugin system bootstrap
 # ---------------------------------------------------------------------------
 
@@ -3876,6 +3987,9 @@ _H5_PANEL_PREFIXES: dict[str, str] = {
     "image": "DataLab_Ima",
 }
 _H5_MACRO_PREFIX = "DataLab_Mac"
+# DataLab-Web specific: notebooks have no equivalent in Qt DataLab so we
+# pick a fresh prefix (Qt readers will simply ignore the unknown group).
+_H5_NOTEBOOK_PREFIX = "DataLab_Nb"
 
 
 def _h5_sanitize_name(short_id: str, title: str) -> str:
@@ -3945,6 +4059,26 @@ def save_workspace_to_bytes() -> bytes:
                                 writer.write_str(mac["title"])
                             with writer.group("contents"):
                                 writer.write_str(mac["code"])
+            # Notebooks — symmetric to macros: one subgroup per notebook
+            # named ``"n<idx:03d>: <safe_title>"`` containing ``title`` &
+            # ``contents`` string sub-groups (``contents`` holds the raw
+            # nbformat v4.5 JSON).
+            if _NOTEBOOKS:
+                import re as _re
+
+                with writer.group(_H5_NOTEBOOK_PREFIX):
+                    for idx, ntb in enumerate(_NOTEBOOKS):
+                        safe = _re.sub(
+                            "[^-a-zA-Z0-9_.() ]+",
+                            "",
+                            (ntb["title"] or "").replace("/", "_"),
+                        )
+                        name = f"n{idx + 1:03d}: {safe}".rstrip(": ").rstrip()
+                        with writer.group(name):
+                            with writer.group("title"):
+                                writer.write_str(ntb["title"])
+                            with writer.group("contents"):
+                                writer.write_str(ntb["content"])
         finally:
             writer.close()
         with open(path, "rb") as fh:
@@ -4007,6 +4141,8 @@ def open_workspace_from_bytes(
             if replace:
                 _MODEL._panels.clear()  # noqa: SLF001
                 _MODEL._objects.clear()  # noqa: SLF001
+                _MACROS.clear()
+                _NOTEBOOKS.clear()
             klass_for_kind = {"signal": SignalObj, "image": _ImageObj}
             for kind, prefix in _H5_PANEL_PREFIXES.items():
                 if prefix not in reader.h5:
@@ -4055,6 +4191,30 @@ def open_workspace_from_bytes(
                                 "id": _new_id("m"),
                                 "title": title,
                                 "code": code,
+                            }
+                        )
+            # Notebooks — symmetric to macros.
+            if _H5_NOTEBOOK_PREFIX in reader.h5:
+                if replace:
+                    _NOTEBOOKS.clear()
+                with reader.group(_H5_NOTEBOOK_PREFIX):
+                    for name in list(reader.h5[_H5_NOTEBOOK_PREFIX]):
+                        with reader.group(name):
+                            try:
+                                with reader.group("title"):
+                                    title = reader.read_str() or name
+                            except Exception:  # noqa: BLE001
+                                title = name
+                            try:
+                                with reader.group("contents"):
+                                    content = reader.read_str() or ""
+                            except Exception:  # noqa: BLE001
+                                content = ""
+                        _NOTEBOOKS.append(
+                            {
+                                "id": _new_id("n"),
+                                "title": title,
+                                "content": content,
                             }
                         )
         finally:
@@ -4197,6 +4357,15 @@ __all__ = [
     "duplicate_macro",
     "reorder_macros",
     "replace_macros",
+    "list_notebooks",
+    "get_notebook",
+    "create_notebook",
+    "set_notebook_content",
+    "rename_notebook",
+    "delete_notebook",
+    "duplicate_notebook",
+    "reorder_notebooks",
+    "replace_notebooks",
     "h5_browser_open",
     "h5_browser_close",
     "h5_browser_close_all",

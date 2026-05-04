@@ -661,6 +661,18 @@ export interface MacroRecord extends MacroMeta {
   code: string;
 }
 
+/** Lightweight notebook entry returned by ``listNotebooks`` (no content). */
+export interface NotebookMeta {
+  id: string;
+  title: string;
+}
+
+/** Full notebook record (with raw nbformat v4.5 JSON content). */
+export interface NotebookRecord extends NotebookMeta {
+  /** Serialised nbformat v4.5 JSON document (opaque to Python). */
+  content: string;
+}
+
 /** Convert a PyProxy result into a plain JS value (recursively). */
 function toJs(value: unknown): unknown {
   if (value && typeof value === "object" && "toJs" in value) {
@@ -2014,6 +2026,64 @@ if inspect.isawaitable(_result):
 
   async replaceMacros(records: MacroRecord[]): Promise<void> {
     await this.callPy("replace_macros", { records });
+  }
+
+  // ---------------------------------------------------------------------
+  // Notebooks (mirror of the macro API — see above).
+  //
+  // Notebooks are stored on the Python side as opaque nbformat v4.5
+  // JSON strings; Python never parses them.  This keeps ``bootstrap.py``
+  // schema-agnostic and lets the JS notebook UI remain the sole owner
+  // of the nbformat representation.
+  // ---------------------------------------------------------------------
+
+  async listNotebooks(): Promise<NotebookMeta[]> {
+    return (await this.callPy("list_notebooks")) as NotebookMeta[];
+  }
+
+  async getNotebook(notebookId: string): Promise<NotebookRecord> {
+    return (await this.callPy("get_notebook", {
+      notebook_id: notebookId,
+    })) as NotebookRecord;
+  }
+
+  async createNotebook(
+    title?: string,
+    content?: string,
+  ): Promise<NotebookRecord> {
+    return (await this.callPy("create_notebook", {
+      title: title ?? null,
+      content: content ?? null,
+    })) as NotebookRecord;
+  }
+
+  async setNotebookContent(notebookId: string, content: string): Promise<void> {
+    await this.callPy("set_notebook_content", {
+      notebook_id: notebookId,
+      content,
+    });
+  }
+
+  async renameNotebook(notebookId: string, title: string): Promise<void> {
+    await this.callPy("rename_notebook", { notebook_id: notebookId, title });
+  }
+
+  async deleteNotebook(notebookId: string): Promise<void> {
+    await this.callPy("delete_notebook", { notebook_id: notebookId });
+  }
+
+  async duplicateNotebook(notebookId: string): Promise<NotebookRecord> {
+    return (await this.callPy("duplicate_notebook", {
+      notebook_id: notebookId,
+    })) as NotebookRecord;
+  }
+
+  async reorderNotebooks(notebookIds: string[]): Promise<void> {
+    await this.callPy("reorder_notebooks", { notebook_ids: notebookIds });
+  }
+
+  async replaceNotebooks(records: NotebookRecord[]): Promise<void> {
+    await this.callPy("replace_notebooks", { records });
   }
 
   // ---------------------------------------------------------------------
