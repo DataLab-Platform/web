@@ -114,7 +114,7 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: /Save as/ }).click(),
+      page.getByRole("button", { name: /Export/ }).click(),
     ]);
     const path = await download.path();
     expect(path).toBeTruthy();

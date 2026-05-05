@@ -27,16 +27,18 @@ import type {
   DataLabRuntime,
 } from "../runtime/runtime";
 import { MacroRuntime } from "../runtime/MacroRuntime";
-import { MacroEditorTabs, type MacroTab } from "./MacroEditorTabs";
+import { MacroEditorTabs, type MacroTab, type MacroNewMenuEntry } from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
 import {
+  getRecent,
   listRecent,
   recordRecent,
   removeRecent,
+  type RecentEntry,
 } from "../storage/recentStore";
 
 const FILE_HEADER_LINES = [
@@ -77,10 +79,22 @@ function parseImportedMacro(
   return { title, code };
 }
 
-const TEMPLATES: Array<{ label: string; code: string }> = [
-  { label: "Simple example", code: simpleTemplate },
-  { label: "Image processing", code: imageprocTemplate },
-  { label: "Call methods", code: callMethodTemplate },
+const TEMPLATES: Array<{ label: string; description: string; code: string }> = [
+  {
+    label: "Simple example",
+    description: "Minimal print + sip math example",
+    code: simpleTemplate,
+  },
+  {
+    label: "Image processing",
+    description: "Read/write images, basic filters",
+    code: imageprocTemplate,
+  },
+  {
+    label: "Call methods",
+    description: "Drive DataLab through proxy.call_method()",
+    code: callMethodTemplate,
+  },
 ];
 
 const LS_LAST_ACTIVE = "datalab-web.macros.activeId";
@@ -115,8 +129,6 @@ interface Props {
 interface MacroState extends MacroMeta {
   /** Loaded code (``null`` ⇒ not yet fetched). */
   code: string | null;
-  /** Last code persisted to the Python store — used to flag dirtiness. */
-  saved: string;
 }
 
 /**
@@ -164,8 +176,10 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     const consoleRef = useRef<MacroConsoleHandle>(null);
     const macroRtRef = useRef<MacroRuntime | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const newMenuRef = useRef<HTMLDivElement>(null);
-    const [newMenuOpen, setNewMenuOpen] = useState(false);
+    /** Cross-workspace recent-macro cache (mirrors notebook "Recent…"). */
+    const [recentList, setRecentList] = useState<RecentEntry[]>([]);
+    const [recentMenuOpen, setRecentMenuOpen] = useState(false);
+    const recentMenuRef = useRef<HTMLDivElement>(null);
     const [editorHeight, setEditorHeight] = useState<number>(() => {
       try {
         const raw = window.localStorage.getItem(LS_EDITOR_HEIGHT);
@@ -248,9 +262,18 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             id: m.id,
             title: m.title,
             code: m.code,
-            saved: m.code,
           })),
         );
+        // Seed the cross-workspace recent cache with every macro
+        // we just hydrated, so workspace bootstrap (or auto-created
+        // default macros) are surfaced through the "Recent…" menu.
+        for (const m of full) {
+          void recordRecent("macro", {
+            id: m.id,
+            title: m.title,
+            content: m.code,
+          }).catch(() => undefined);
+        }
         // Restore previously open tabs / active id.
         const savedActive = window.localStorage.getItem(LS_LAST_ACTIVE);
         const savedOpen = window.localStorage.getItem(LS_OPEN_TABS);
@@ -291,7 +314,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         void recordRecent("macro", {
           id: m.id,
           title: m.title,
-          content: m.code ?? m.saved,
+          content: m.code ?? "",
         }).catch(() => undefined);
       }
     }, []);
@@ -331,9 +354,6 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           runtime.setMacroCode(id, code).catch((err) => {
             console.error("Failed to save macro:", err);
           });
-          setMacros((prev) =>
-            prev.map((m) => (m.id === id ? { ...m, saved: code } : m)),
-          );
           saveTimers.current.delete(id);
         }, 500);
         saveTimers.current.set(id, handle);
@@ -350,20 +370,39 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       setActiveId(id);
     }, []);
 
-    const closeTab = useCallback((id: string) => {
-      setOpenIds((prev) => {
-        const idx = prev.indexOf(id);
-        if (idx < 0) return prev;
-        const next = prev.filter((x) => x !== id);
-        // Pick a neighbour as new active if we closed the active one.
-        setActiveId((cur) => {
-          if (cur !== id) return cur;
-          const fallback = next[idx] ?? next[idx - 1] ?? next[0] ?? null;
-          return fallback;
+    /**
+     * Close a macro tab in the panel **without** deleting the macro
+     * from the workspace. The macro stays in the Python store and is
+     * still listed in the cross-workspace recent cache, so the user
+     * can re-open it from "Recent…". A confirmation dialog matches
+     * the notebook close-tab semantics.
+     */
+    const closeTab = useCallback(
+      (id: string) => {
+        const macro = macros.find((m) => m.id === id);
+        const label = macro?.title ?? "this macro";
+        if (
+          !window.confirm(
+            `Close macro "${label}"? It will stay in the workspace and the recent cache.`,
+          )
+        ) {
+          return;
+        }
+        setOpenIds((prev) => {
+          const idx = prev.indexOf(id);
+          if (idx < 0) return prev;
+          const next = prev.filter((x) => x !== id);
+          // Pick a neighbour as new active if we closed the active one.
+          setActiveId((cur) => {
+            if (cur !== id) return cur;
+            const fallback = next[idx] ?? next[idx - 1] ?? next[0] ?? null;
+            return fallback;
+          });
+          return next;
         });
-        return next;
-      });
-    }, []);
+      },
+      [macros],
+    );
 
     // ---------------------------------------------------------------------
     // Toolbar actions
@@ -379,13 +418,12 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         setMacros((prev) => {
           const next = [
             ...prev,
-            { id: rec.id, title: rec.title, code, saved: code },
+            { id: rec.id, title: rec.title, code },
           ];
           persistMirror(next);
           return next;
         });
         openMacro(rec.id);
-        setNewMenuOpen(false);
       },
       [runtime, openMacro, persistMirror],
     );
@@ -433,28 +471,13 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       setMacros((prev) => {
         const next = [
           ...prev,
-          { id: rec.id, title: rec.title, code, saved: code },
+          { id: rec.id, title: rec.title, code },
         ];
         persistMirror(next);
         return next;
       });
       openMacro(rec.id);
     }, [activeId, runtime, openMacro, persistMirror]);
-
-    const handleDelete = useCallback(async () => {
-      if (!activeId) return;
-      const m = macros.find((x) => x.id === activeId);
-      if (!m) return;
-      if (!window.confirm(`Delete macro "${m.title}"?`)) return;
-      await runtime.deleteMacro(activeId);
-      await removeRecent("macro", activeId).catch(() => undefined);
-      setMacros((prev) => {
-        const next = prev.filter((x) => x.id !== activeId);
-        persistMirror(next);
-        return next;
-      });
-      closeTab(activeId);
-    }, [activeId, macros, runtime, persistMirror, closeTab]);
 
     const handleImport = useCallback(() => {
       fileInputRef.current?.click();
@@ -471,7 +494,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         setMacros((prev) => {
           const next = [
             ...prev,
-            { id: rec.id, title: rec.title, code, saved: code },
+            { id: rec.id, title: rec.title, code },
           ];
           persistMirror(next);
           return next;
@@ -540,6 +563,55 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     }, [activeId, macros, onConvertToNotebook]);
 
     // ---------------------------------------------------------------------
+    // Recent… dropdown (cross-workspace cache, mirrors NotebookPanel).
+    // ---------------------------------------------------------------------
+
+    /**
+     * Open a macro from the cross-workspace recent cache.
+     *
+     * If the entry is already loaded in the current workspace, just
+     * focus its tab. Otherwise re-import the cached source code into
+     * Python via :meth:`runtime.createMacro` and open the new tab.
+     */
+    const handleOpenRecent = useCallback(
+      async (id: string) => {
+        setRecentMenuOpen(false);
+        const existing = macros.find((m) => m.id === id);
+        if (existing) {
+          openMacro(id);
+          return;
+        }
+        const cached = await getRecent("macro", id).catch(() => null);
+        if (!cached) return;
+        const rec = await runtime.createMacro(cached.title, cached.content);
+        const code = rec.code ?? cached.content;
+        setMacros((prev) => {
+          const next = [
+            ...prev,
+            { id: rec.id, title: rec.title, code },
+          ];
+          persistMirror(next);
+          return next;
+        });
+        openMacro(rec.id);
+      },
+      [macros, openMacro, persistMirror, runtime],
+    );
+
+    const handleDeleteRecent = useCallback(
+      async (id: string) => {
+        const meta = recentList.find((m) => m.id === id);
+        if (!meta) return;
+        if (!window.confirm(`Remove macro "${meta.title}" from recent cache?`)) {
+          return;
+        }
+        await removeRecent("macro", id).catch(() => undefined);
+        setRecentList(await listRecent("macro").catch(() => []));
+      },
+      [recentList],
+    );
+
+    // ---------------------------------------------------------------------
     // Imperative handle (notebook → macro conversion, etc.)
     // ---------------------------------------------------------------------
 
@@ -550,7 +622,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         setMacros((prev) => {
           const next = [
             ...prev,
-            { id: rec.id, title: rec.title, code: safe, saved: safe },
+            { id: rec.id, title: rec.title, code: safe },
           ];
           persistMirror(next);
           return next;
@@ -563,16 +635,29 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
 
     useImperativeHandle(ref, () => ({ importMacro }), [importMacro]);
 
-    // Close New ▾ menu on outside click.
+    // Close Recent… menu on outside click.
     useEffect(() => {
-      if (!newMenuOpen) return;
+      if (!recentMenuOpen) return;
       const onDoc = (e: MouseEvent) => {
-        if (!newMenuRef.current?.contains(e.target as Node))
-          setNewMenuOpen(false);
+        if (!recentMenuRef.current?.contains(e.target as Node))
+          setRecentMenuOpen(false);
       };
       document.addEventListener("mousedown", onDoc);
       return () => document.removeEventListener("mousedown", onDoc);
-    }, [newMenuOpen]);
+    }, [recentMenuOpen]);
+
+    // Refresh the cross-workspace recent cache list whenever macros change.
+    useEffect(() => {
+      let cancelled = false;
+      listRecent("macro")
+        .then((entries) => {
+          if (!cancelled) setRecentList(entries);
+        })
+        .catch(() => undefined);
+      return () => {
+        cancelled = true;
+      };
+    }, [macros]);
 
     // ---------------------------------------------------------------------
     // Render
@@ -587,16 +672,24 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             id: m.id,
             title: m.title,
             code: m.code ?? "",
-            dirty: (m.code ?? "") !== m.saved,
           })),
       [openIds, macros],
     );
 
-    // Macros not currently shown as tabs, so the user can re-open them.
-    const closedMacros = useMemo(
-      () => macros.filter((m) => !openIds.includes(m.id)),
-      [macros, openIds],
+    const newMenuEntries: MacroNewMenuEntry[] = useMemo(
+      () => [
+        { label: "Blank macro", description: "Start from scratch" },
+        ...TEMPLATES.map((t) => ({
+          label: `From template: ${t.label}`,
+          description: t.description,
+          templateCode: t.code,
+        })),
+      ],
+      [],
     );
+
+    const openIdsSet = useMemo(() => new Set(openIds), [openIds]);
+    const runStatusLabel = running ? "● Macro running" : "○ Idle";
 
     return (
       <div className="macro-panel">
@@ -620,65 +713,90 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             ■ Stop
           </button>
           <span className="macro-toolbar-sep" />
-          <div className="macro-new-wrapper" ref={newMenuRef}>
-            <button
-              type="button"
-              className="macro-btn"
-              onClick={() => setNewMenuOpen((o) => !o)}
-              title="New macro"
-            >
-              New ▾
-            </button>
-            {newMenuOpen && (
-              <ul className="macro-new-menu" role="menu">
-                <li role="menuitem" onClick={() => handleNew()}>
-                  Blank macro
-                </li>
-                {TEMPLATES.map((t) => (
-                  <li
-                    key={t.label}
-                    role="menuitem"
-                    onClick={() => handleNew(t.code)}
-                  >
-                    From template: {t.label}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <button
-            type="button"
-            className="macro-btn"
-            onClick={() => activeId && handleRename(activeId)}
-            disabled={!activeId}
-          >
-            Rename
-          </button>
           <button
             type="button"
             className="macro-btn"
             onClick={handleDuplicate}
             disabled={!activeId}
+            title="Duplicate current macro"
           >
-            Duplicate
+            ⧉ Duplicate
           </button>
+          <span className="macro-toolbar-sep" />
           <button
             type="button"
             className="macro-btn"
-            onClick={handleDelete}
-            disabled={!activeId}
+            onClick={handleImport}
+            title="Import .py file from disk"
           >
-            Delete
-          </button>
-          <span className="macro-toolbar-sep" />
-          <button type="button" className="macro-btn" onClick={handleImport}>
             Import…
           </button>
+          <div className="macro-recent-wrapper" ref={recentMenuRef}>
+            <button
+              type="button"
+              className="macro-btn"
+              onClick={() => setRecentMenuOpen((o) => !o)}
+              disabled={recentList.length === 0}
+              title="Open macro from recent cache"
+            >
+              Recent… ({recentList.length})
+            </button>
+            {recentMenuOpen && (
+              <div className="macro-recent-menu" role="menu">
+                {recentList.length === 0 && (
+                  <div className="macro-recent-menu-empty">
+                    No macros in recent cache.
+                  </div>
+                )}
+                {recentList.map((m) => {
+                  const alreadyOpen = openIdsSet.has(m.id);
+                  const when = new Date(m.lastSeen).toLocaleString();
+                  return (
+                    <div
+                      key={m.id}
+                      className={`macro-recent-menu-item${
+                        alreadyOpen ? " macro-recent-menu-item-open" : ""
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="macro-recent-menu-name"
+                        onClick={() => handleOpenRecent(m.id)}
+                        title={
+                          alreadyOpen
+                            ? `Already open — click to focus tab (last seen ${when})`
+                            : `Last seen ${when}`
+                        }
+                      >
+                        <span className="macro-recent-menu-name-text">
+                          {m.title}
+                          {alreadyOpen ? " (open)" : ""}
+                        </span>
+                        <span className="macro-recent-menu-name-when">
+                          {when}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="macro-recent-menu-delete"
+                        onClick={() => handleDeleteRecent(m.id)}
+                        title="Remove from recent cache"
+                        aria-label={`Remove ${m.title} from recent cache`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className="macro-btn"
             onClick={handleExport}
             disabled={!activeId}
+            title="Export current macro as .py"
           >
             Export…
           </button>
@@ -700,25 +818,8 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             style={{ display: "none" }}
             onChange={handleFileSelected}
           />
-          {closedMacros.length > 0 && (
-            <>
-              <span className="macro-toolbar-sep" />
-              <select
-                className="macro-reopen"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) openMacro(e.target.value);
-                }}
-              >
-                <option value="">Open closed macro…</option>
-                {closedMacros.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
+          <span className="macro-toolbar-spacer" />
+          <span className="macro-toolbar-status">{runStatusLabel}</span>
         </div>
         <div className="macro-body">
           <div className="macro-editor-wrap" style={{ height: editorHeight }}>
@@ -734,6 +835,8 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
               onRenameDraftChange={setRenameDraft}
               onCommitRename={commitRename}
               onCancelRename={cancelRename}
+              onNew={handleNew}
+              newMenuEntries={newMenuEntries}
               theme={theme}
             />
           </div>

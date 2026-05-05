@@ -7,7 +7,7 @@
  * preserves the cursor position and selection.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -33,7 +33,16 @@ export interface MacroTab {
   title: string;
   /** Source code as last read from the model — change ⇒ editor resets. */
   code: string;
-  dirty: boolean;
+}
+
+/** One "+" menu entry: blank macro or template-based macro creation. */
+export interface MacroNewMenuEntry {
+  /** User-visible label shown in the dropdown. */
+  label: string;
+  /** Optional short description rendered below the label. */
+  description?: string;
+  /** Optional template source code; when omitted ⇒ blank macro. */
+  templateCode?: string;
 }
 
 interface Props {
@@ -55,6 +64,14 @@ interface Props {
   onCommitRename?: () => void;
   /** Abort the in-flight rename. */
   onCancelRename?: () => void;
+  /**
+   * Optional "+" button at the right of the tab strip mirroring the
+   * notebook tab strip's :code:`nb-tab-new` button. When omitted, the
+   * button is hidden.
+   */
+  onNew?: (templateCode?: string) => void;
+  /** Entries for the "+" dropdown (blank + templates). */
+  newMenuEntries?: MacroNewMenuEntry[];
   /** Theme: "light" or "dark". */
   theme?: "light" | "dark";
 }
@@ -71,9 +88,28 @@ export function MacroEditorTabs({
   onRenameDraftChange,
   onCommitRename,
   onCancelRename,
+  onNew,
+  newMenuEntries,
   theme = "dark",
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const newMenuRef = useRef<HTMLDivElement>(null);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [newMenuAnchor, setNewMenuAnchor] = useState<
+    { left: number; top: number } | null
+  >(null);
+
+  // Close the "+" dropdown on outside click.
+  useEffect(() => {
+    if (!newMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!newMenuRef.current?.contains(e.target as Node)) {
+        setNewMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [newMenuOpen]);
   // One EditorView per tab id — kept across rerenders.
   const viewsRef = useRef<Map<string, EditorView>>(new Map());
   const onChangeRef = useRef(onChange);
@@ -206,10 +242,7 @@ export function MacroEditorTabs({
                 aria-label="Macro name"
               />
             ) : (
-              <span className="macro-tab-title">
-                {t.title}
-                {t.dirty ? " •" : ""}
-              </span>
+              <span className="macro-tab-title">{t.title}</span>
             )}
             <button
               type="button"
@@ -227,6 +260,64 @@ export function MacroEditorTabs({
         ))}
         {tabs.length === 0 && (
           <div className="macro-tabs-empty">No macro open.</div>
+        )}
+        {onNew && (
+          <div className="macro-tab-new-container" ref={newMenuRef}>
+            <button
+              type="button"
+              className="macro-tab-new"
+              onClick={(e) => {
+                const rect = (
+                  e.currentTarget as HTMLButtonElement
+                ).getBoundingClientRect();
+                setNewMenuAnchor({
+                  left: rect.left,
+                  top: rect.bottom + 4,
+                });
+                setNewMenuOpen((o) => !o);
+              }}
+              title="New macro…"
+              aria-haspopup="menu"
+              aria-expanded={newMenuOpen}
+            >
+              +
+            </button>
+            {newMenuOpen && newMenuAnchor && (
+              <div
+                className="macro-tab-new-menu"
+                role="menu"
+                style={{
+                  position: "fixed",
+                  left: newMenuAnchor.left,
+                  top: newMenuAnchor.top,
+                }}
+              >
+                {(newMenuEntries ?? [{ label: "Blank macro" }]).map(
+                  (entry, i) => (
+                    <button
+                      type="button"
+                      key={`${entry.label}-${i}`}
+                      className="macro-tab-new-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setNewMenuOpen(false);
+                        onNew(entry.templateCode);
+                      }}
+                    >
+                      <span className="macro-tab-new-menu-label">
+                        {entry.label}
+                      </span>
+                      {entry.description && (
+                        <span className="macro-tab-new-menu-desc">
+                          {entry.description}
+                        </span>
+                      )}
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="macro-editor-host" ref={containerRef} />

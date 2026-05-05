@@ -37,7 +37,7 @@ test.describe("Notebook UI", () => {
     await expect(page.locator(".nb-tab").nth(1)).toHaveClass(/active/);
   });
 
-  test("Save as… triggers a .ipynb download with valid nbformat content", async ({
+  test("Export… triggers a .ipynb download with valid nbformat content", async ({
     page,
   }) => {
     // Add a marker line so the downloaded payload is identifiable.
@@ -48,7 +48,7 @@ test.describe("Notebook UI", () => {
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: /Save as/ }).click(),
+      page.getByRole("button", { name: /Export/ }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.ipynb$/);
 

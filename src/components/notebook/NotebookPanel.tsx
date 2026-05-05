@@ -634,8 +634,26 @@ export const NotebookPanel = forwardRef<
     onConvertToMacro(title, body);
   }, [activeNotebook, onConvertToMacro]);
 
+  /**
+   * Close a notebook tab in the panel **without** deleting the
+   * notebook from the workspace. The notebook stays in the Python
+   * store and is still listed in the cross-workspace recent cache,
+   * so the user can re-open it from "Recent…". When the last tab is
+   * closed, a fresh blank notebook is spawned to keep the panel
+   * non-empty. A confirmation dialog matches the macro close-tab
+   * semantics.
+   */
   const handleCloseTab = useCallback(
     (id: string) => {
+      const nb = notebooksRef.current.find((n) => n.id === id);
+      const label = nb?.name ?? "this notebook";
+      if (
+        !window.confirm(
+          `Close notebook "${label}"? It will stay in the workspace and the recent cache.`,
+        )
+      ) {
+        return;
+      }
       setNotebooks((prev) => {
         const next = prev.filter((n) => n.id !== id);
         if (next.length === 0) {
@@ -1060,18 +1078,10 @@ export const NotebookPanel = forwardRef<
         <span className="nb-toolbar-sep" />
         <button
           type="button"
-          onClick={handleRenameActive}
-          disabled={!activeNotebook}
-          title="Rename current notebook"
-        >
-          ✎ Rename
-        </button>
-        <button
-          type="button"
           onClick={handleOpenFromDisk}
-          title="Open .ipynb file from disk"
+          title="Import .ipynb file from disk"
         >
-          Open…
+          Import…
         </button>
         <div className="nb-open-menu-container" ref={openMenuRef}>
           <button
@@ -1137,9 +1147,9 @@ export const NotebookPanel = forwardRef<
           type="button"
           onClick={handleSaveAs}
           disabled={!activeNotebook}
-          title="Save as .ipynb to disk"
+          title="Export current notebook as .ipynb"
         >
-          Save as…
+          Export…
         </button>
         {onConvertToMacro && (
           <button

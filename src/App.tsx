@@ -16,7 +16,6 @@ import {
   buildAIAssistantActions,
   buildFeatureActions,
   buildHelpActions,
-  buildNotebookActions,
   buildImageAnalysisActions,
   buildImageCreationActions,
   buildImageGridActions,
@@ -1836,27 +1835,6 @@ export default function App() {
         onTogglePanel: toggleAIPanel,
         onOpenSettings: () => setShowAISettings(true),
       }),
-      ...buildNotebookActions({
-        onNew: () => {
-          handleSwitchPanel("notebook");
-          notebookPanelRef.current?.newNotebook();
-        },
-        onNewFromQuickstart: () => {
-          handleSwitchPanel("notebook");
-          notebookPanelRef.current?.newFromQuickstart();
-        },
-        onOpen: () => {
-          handleSwitchPanel("notebook");
-          notebookPanelRef.current?.openFromDisk();
-        },
-        onSaveAs: () => notebookPanelRef.current?.saveActiveAsIpynb(),
-        onRename: () => {
-          handleSwitchPanel("notebook");
-          notebookPanelRef.current?.renameActive();
-        },
-        hasActiveNotebook: () =>
-          notebookPanelRef.current?.hasActiveNotebook() ?? false,
-      }),
       ...(activePanel === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
@@ -1908,7 +1886,6 @@ export default function App() {
     [
       activePanel,
       objectPanel,
-      handleSwitchPanel,
       visibleFeatures,
       signalTypes,
       imageTypes,
