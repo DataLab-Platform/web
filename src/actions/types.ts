@@ -13,6 +13,10 @@ export interface ActionState {
   selectedIds: string[];
   currentId: string | null;
   hasObjects: boolean;
+  /** ``true`` when at least one macro is loaded in the workspace. */
+  hasMacros: boolean;
+  /** ``true`` when at least one notebook is loaded in the workspace. */
+  hasNotebooks: boolean;
 }
 
 export interface ActionDescriptor {

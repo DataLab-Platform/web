@@ -2,14 +2,17 @@ import { test, expect } from "@playwright/test";
 import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
 
 /**
- * End-to-end coverage for Phase 3 — notebook persistence (IndexedDB
- * autosave + ``.ipynb`` download) and the multi-tab UI.
+ * End-to-end coverage for the notebook panel's user-facing surface
+ * (multi-tab UI, ``.ipynb`` download).
  *
- * Each test gets a fresh browser context, so IndexedDB starts empty.
- * A clean fresh-load opens the panel with exactly one blank notebook.
+ * Cross-session persistence is exercised by ``notebook_hdf5_roundtrip``
+ * — under the Phase 4+ design, the HDF5 workspace is the source of
+ * truth for notebooks, and IndexedDB is just a roll-over cache. A
+ * "type in a cell, hit reload, expect the content back" probe would
+ * encode the *old* invariant and is intentionally absent here.
  */
 
-test.describe("Notebook persistence (Phase 3)", () => {
+test.describe("Notebook UI", () => {
   test.beforeEach(async ({ page }) => {
     await disableQuickstartTemplate(page);
     await page.goto("/");
@@ -21,41 +24,6 @@ test.describe("Notebook persistence (Phase 3)", () => {
       { timeout: 180_000 },
     );
     await expect(page.locator(".nb-tab")).toHaveCount(1);
-  });
-
-  test("autosaves cell edits and restores them after a full page reload", async ({
-    page,
-  }) => {
-    // Type a distinctive marker into the cell.
-    const marker = `# autosave-test ${Date.now()}`;
-    const editor = page.locator(".nb-cell-editor .cm-content").first();
-    await editor.click();
-    await page.keyboard.type(marker);
-
-    // Wait long enough for the 600 ms debounce + IndexedDB write.
-    await page.waitForTimeout(1500);
-
-    // Hard-reload the whole page — clears in-memory state but not
-    // IndexedDB. Pyodide will boot afresh; the notebook content must
-    // come back from storage.
-    await page.reload();
-    await waitForRuntimeReady(page);
-    await page.getByRole("tab", { name: "Notebooks" }).click();
-    await expect(page.locator(".nb-toolbar-status")).toContainText(
-      /Kernel idle|Kernel running/,
-      { timeout: 180_000 },
-    );
-
-    // Marker must have survived the reload. Restore happens
-    // asynchronously after kernel ready, so poll the editor until it
-    // contains the marker (or timeout).
-    await expect
-      .poll(
-        async () =>
-          page.locator(".nb-cell-editor .cm-content").first().innerText(),
-        { timeout: 30_000, intervals: [200, 500, 1000] },
-      )
-      .toContain(marker);
   });
 
   test("creating a new notebook adds a tab and switches to it", async ({

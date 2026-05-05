@@ -245,6 +245,19 @@ export default function App() {
   const [extraImages, setExtraImages] = useState<ImageData[]>([]);
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Live counts of macros / notebooks reported by their panels.
+   *  Used to enable "Save HDF5 workspace…" for workspaces that
+   *  contain only macros or notebooks (no signals/images). */
+  const [macroCount, setMacroCount] = useState(0);
+  const [notebookCount, setNotebookCount] = useState(0);
+  /**
+   * Bumped every time the Python ``_STORE`` is wholesale replaced
+   * (e.g. opening an HDF5 workspace with ``replace=True``). Used as
+   * the React ``key`` of the Macro and Notebook panels so they are
+   * remounted and re-hydrate from the runtime instead of clinging to
+   * the previous workspace's tabs.
+   */
+  const [workspaceVersion, setWorkspaceVersion] = useState(0);
   const [pending, setPending] = useState<PendingFeature | null>(null);
   const [pendingProfile, setPendingProfile] = useState<{
     feature: FeatureDescriptor;
@@ -1431,6 +1444,7 @@ export default function App() {
         }
         setSelectedIds([]);
         setCurrentId(null);
+        setWorkspaceVersion((v) => v + 1);
         await refresh(null);
       } finally {
         setBusy(false);
@@ -1776,8 +1790,10 @@ export default function App() {
       selectedIds,
       currentId,
       hasObjects,
+      hasMacros: macroCount > 0,
+      hasNotebooks: notebookCount > 0,
     }),
-    [status, busy, selectedIds, currentId, hasObjects],
+    [status, busy, selectedIds, currentId, hasObjects, macroCount, notebookCount],
   );
 
   // Restrict feature actions, creation menu and signal-only menus
@@ -2031,9 +2047,11 @@ export default function App() {
               }}
             >
               <NotebookPanel
+                key={`nb-${workspaceVersion}`}
                 ref={notebookPanelRef}
                 runtime={runtime}
                 theme={theme}
+                onCountChanged={setNotebookCount}
                 onSetCurrentPanel={(panel) => {
                   if (panel === "signal" || panel === "image") {
                     handleSwitchPanel(panel);
@@ -2070,8 +2088,10 @@ export default function App() {
               }}
             >
               <MacroPanel
+                key={`macro-${workspaceVersion}`}
                 ref={macroPanelRef}
                 runtime={runtime}
+                onCountChanged={setMacroCount}
                 onSetCurrentPanel={(panel) => {
                   if (panel === "signal" || panel === "image") {
                     handleSwitchPanel(panel);

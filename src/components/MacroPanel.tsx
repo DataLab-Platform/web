@@ -33,6 +33,11 @@ import { Splitter } from "./Splitter";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
+import {
+  listRecent,
+  recordRecent,
+  removeRecent,
+} from "../storage/recentStore";
 
 const FILE_HEADER_LINES = [
   "# -*- coding: utf-8 -*-",
@@ -80,7 +85,6 @@ const TEMPLATES: Array<{ label: string; code: string }> = [
 
 const LS_LAST_ACTIVE = "datalab-web.macros.activeId";
 const LS_OPEN_TABS = "datalab-web.macros.openTabIds";
-const LS_MIRROR = "datalab-web.macros.mirror";
 const LS_EDITOR_HEIGHT = "datalab-web.macros.editorHeight";
 
 interface Props {
@@ -98,6 +102,12 @@ interface Props {
    * :meth:`NotebookPanelHandle.importMacroAsNotebook`.
    */
   onConvertToNotebook?: (title: string, code: string) => void;
+  /**
+   * Notify the host whenever the number of loaded macros changes,
+   * so workspace-level gating (e.g. "Save HDF5 workspace…") can
+   * react. Fires once on mount with the initial count.
+   */
+  onCountChanged?: (count: number) => void;
   /** "light"|"dark" — pulled from the host theme. */
   theme: "light" | "dark";
 }
@@ -129,6 +139,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       selectObjects,
       onModelChanged,
       onConvertToNotebook,
+      onCountChanged,
       theme,
     }: Props,
     ref,
@@ -139,6 +150,12 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     const [running, setRunning] = useState(false);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState<string>("");
+
+    // Notify the host when the macro count changes so workspace-level
+    // gating (e.g. "Save HDF5 workspace…") can react.
+    useEffect(() => {
+      onCountChanged?.(macros.length);
+    }, [macros.length, onCountChanged]);
     /** ``true`` once the initial load effect has hydrated state from
      *  Python + localStorage.  Used to gate persistence effects so they
      *  don't overwrite saved state with the empty initial values during
@@ -197,17 +214,23 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       (async () => {
         let metas = await runtime.listMacros();
         if (metas.length === 0) {
-          const raw = window.localStorage.getItem(LS_MIRROR);
-          if (raw) {
-            try {
-              const records = JSON.parse(raw) as MacroRecord[];
-              if (Array.isArray(records) && records.length > 0) {
-                await runtime.replaceMacros(records);
-                metas = await runtime.listMacros();
-              }
-            } catch {
-              /* ignore corrupt mirror */
+          // Workspace has no macros yet — try to recover anything from
+          // the unified IndexedDB recent cache (macros that survived a
+          // workspace switch). The cache only feeds the fallback; once
+          // the user is in a workspace, Python is the source of truth.
+          try {
+            const recent = await listRecent("macro");
+            if (recent.length > 0) {
+              const records: MacroRecord[] = recent.map((e) => ({
+                id: e.id,
+                title: e.title,
+                code: e.content,
+              }));
+              await runtime.replaceMacros(records);
+              metas = await runtime.listMacros();
             }
+          } catch {
+            /* ignore cache errors */
           }
         }
         if (metas.length === 0) {
@@ -260,15 +283,16 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     // ---------------------------------------------------------------------
 
     const persistMirror = useCallback((next: MacroState[]) => {
-      try {
-        const records: MacroRecord[] = next.map((m) => ({
+      // Push every macro into the unified IndexedDB recent cache so
+      // they survive workspace switches and can be re-opened from a
+      // future "Open recent…" UI. Fire-and-forget: cache failures
+      // never block the UI.
+      for (const m of next) {
+        void recordRecent("macro", {
           id: m.id,
           title: m.title,
-          code: m.code ?? m.saved,
-        }));
-        window.localStorage.setItem(LS_MIRROR, JSON.stringify(records));
-      } catch {
-        /* quota / disabled */
+          content: m.code ?? m.saved,
+        }).catch(() => undefined);
       }
     }, []);
 
@@ -423,6 +447,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       if (!m) return;
       if (!window.confirm(`Delete macro "${m.title}"?`)) return;
       await runtime.deleteMacro(activeId);
+      await removeRecent("macro", activeId).catch(() => undefined);
       setMacros((prev) => {
         const next = prev.filter((x) => x.id !== activeId);
         persistMirror(next);

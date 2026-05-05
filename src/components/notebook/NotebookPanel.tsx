@@ -42,17 +42,17 @@ import {
   type CellOutput,
   type NotebookModel,
 } from "../../notebook/types";
-import { jsonStringToNotebook } from "../../notebook/nbformat";
+import { jsonStringToNotebook, notebookToJsonString } from "../../notebook/nbformat";
 import { buildQuickstartNotebook } from "../../notebook/templates/quickstart";
 import { notebookToMacro } from "../../notebook/notebookToMacro";
 import { macroToNotebook } from "../../macros/macroToNotebook";
 import {
-  deleteNotebook,
-  downloadNotebookAsIpynb,
-  listNotebooks,
-  loadNotebook,
-  saveNotebook,
-} from "../../notebook/notebookStore";
+  getRecent,
+  listRecent,
+  recordRecent,
+  removeRecent,
+  type RecentEntry,
+} from "../../storage/recentStore";
 import { Cell } from "./Cell";
 
 interface NotebookPanelProps {
@@ -69,6 +69,12 @@ interface NotebookPanelProps {
    * :meth:`MacroPanelHandle.importMacro`.
    */
   onConvertToMacro?: (title: string, code: string) => void;
+  /**
+   * Notify the host whenever the number of open notebooks changes,
+   * so global state (e.g. the "Save HDF5 workspace…" enabled
+   * predicate) can react. Fires once on mount with the initial count.
+   */
+  onCountChanged?: (count: number) => void;
 }
 
 /**
@@ -91,6 +97,28 @@ const LS_OPEN_NB_IDS = "datalab-web.notebooks.openIds";
 const LS_ACTIVE_NB_ID = "datalab-web.notebooks.activeId";
 const AUTOSAVE_DELAY_MS = 600;
 
+/**
+ * Trigger a browser download for *nb* as ``<safeName>.ipynb``.
+ *
+ * Inlined here (was previously exported by ``notebookStore``) since
+ * the IndexedDB-as-source-of-truth helper module has been retired.
+ */
+function downloadNotebookAsIpynb(nb: NotebookModel): void {
+  const text = notebookToJsonString(nb);
+  const blob = new Blob([text], {
+    type: "application/x-ipynb+json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const safe = nb.name.replace(/[^-A-Za-z0-9_.() ]+/g, "_") || "notebook";
+  a.download = `${safe}.ipynb`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const NotebookPanel = forwardRef<
   NotebookPanelHandle,
   NotebookPanelProps
@@ -104,6 +132,7 @@ export const NotebookPanel = forwardRef<
     selectObjects,
     onModelChanged,
     onConvertToMacro,
+    onCountChanged,
   },
   ref,
 ) {
@@ -114,9 +143,7 @@ export const NotebookPanel = forwardRef<
   const [kernelStatus, setKernelStatus] = useState<
     "idle" | "loading" | "running" | "stopping"
   >("idle");
-  const [storedList, setStoredList] = useState<
-    { id: string; name: string; updatedAt: number }[]
-  >([]);
+  const [storedList, setStoredList] = useState<RecentEntry[]>([]);
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
   const [newMenuAnchor, setNewMenuAnchor] = useState<{
     left: number;
@@ -136,6 +163,13 @@ export const NotebookPanel = forwardRef<
 
   const notebooksRef = useRef(notebooks);
   notebooksRef.current = notebooks;
+
+  // Notify host when the count changes so it can drive workspace-level
+  // gating (e.g. enabling "Save HDF5 workspace…" for notebook-only
+  // workspaces).
+  useEffect(() => {
+    onCountChanged?.(notebooks.length);
+  }, [notebooks.length, onCountChanged]);
 
   // -- One NotebookRuntime instance shared across notebooks ------------
   const ntbRuntimeRef = useRef<NotebookRuntime | null>(null);
@@ -182,48 +216,91 @@ export const NotebookPanel = forwardRef<
       });
 
     void (async () => {
-      const list = await listNotebooks().catch(() => []);
-      setStoredList(list);
-      const openIdsRaw = localStorage.getItem(LS_OPEN_NB_IDS);
-      const activeIdRaw = localStorage.getItem(LS_ACTIVE_NB_ID);
-      let openIds: string[];
-      try {
-        openIds = openIdsRaw ? (JSON.parse(openIdsRaw) as string[]) : [];
-      } catch {
-        openIds = [];
-      }
+      // Workspace notebooks live in the Python ``_NOTEBOOKS`` store
+      // (and are serialised to the workspace HDF5). IndexedDB is only
+      // a roll-over cache surfaced through the "Recent…" menu.
+      const recent = await listRecent("notebook").catch(() => []);
+      setStoredList(recent);
+
+      const metas = await runtime.listNotebooks().catch(() => []);
       const restoredNbs: NotebookModel[] = [];
-      for (const id of openIds) {
-        const nb = await loadNotebook(id).catch(() => null);
-        if (nb) restoredNbs.push(nb);
-      }
-      if (restoredNbs.length === 0) {
-        // Fresh start — open one blank notebook. Do NOT persist it
-        // yet: persistence kicks in as soon as the user edits or runs
-        // a cell, so the browser store doesn't accumulate a pile of
-        // identically-named empty notebooks across sessions.
-        //
-        // First-time visitors (no saved notebooks AND no localStorage
-        // entry) get the bundled "Quickstart" template instead, so
-        // they have something to read and run right away.
-        const isFirstBoot = list.length === 0 && openIdsRaw === null;
-        if (isFirstBoot) {
-          try {
-            restoredNbs.push(buildQuickstartNotebook());
-          } catch (err) {
-            console.error("Failed to load quickstart template:", err);
-            restoredNbs.push(emptyNotebook());
+      for (const meta of metas) {
+        try {
+          const rec = await runtime.getNotebook(meta.id);
+          let nb: NotebookModel;
+          if (rec.content && rec.content.length > 0) {
+            nb = jsonStringToNotebook(rec.content, rec.title);
+          } else {
+            nb = emptyNotebook(rec.title);
           }
-        } else {
-          restoredNbs.push(emptyNotebook());
+          // Force the Python id so saves round-trip without dupes.
+          nb.id = rec.id;
+          nb.name = rec.title;
+          restoredNbs.push(nb);
+        } catch (err) {
+          console.error("Failed to load notebook", meta, err);
         }
       }
-      setNotebooks(restoredNbs);
-      const wantedActive = restoredNbs.find((n) => n.id === activeIdRaw);
-      const initialActive = wantedActive ?? restoredNbs[0];
+
+      const openIdsRaw = localStorage.getItem(LS_OPEN_NB_IDS);
+      const activeIdRaw = localStorage.getItem(LS_ACTIVE_NB_ID);
+      let wantedOpen: string[];
+      try {
+        wantedOpen = openIdsRaw ? (JSON.parse(openIdsRaw) as string[]) : [];
+      } catch {
+        wantedOpen = [];
+      }
+      // Filter to ids we actually loaded; fall back to "all" if the
+      // session record is empty/stale.
+      const idSet = new Set(restoredNbs.map((n) => n.id));
+      const openIds = wantedOpen.filter((id) => idSet.has(id));
+      const ordered =
+        openIds.length > 0
+          ? openIds
+              .map((id) => restoredNbs.find((n) => n.id === id))
+              .filter((n): n is NotebookModel => Boolean(n))
+          : restoredNbs;
+
+      if (ordered.length === 0) {
+        // Empty workspace — open one blank notebook (or the bundled
+        // Quickstart on first boot) and persist it eagerly so the
+        // workspace HDF5 reflects the open tab.
+        const isFirstBoot =
+          metas.length === 0 && openIdsRaw === null && recent.length === 0;
+        let nb: NotebookModel;
+        if (isFirstBoot) {
+          try {
+            nb = buildQuickstartNotebook();
+          } catch (err) {
+            console.error("Failed to load quickstart template:", err);
+            nb = emptyNotebook();
+          }
+        } else {
+          nb = emptyNotebook();
+        }
+        try {
+          const rec = await runtime.createNotebook(
+            nb.name,
+            notebookToJsonString(nb),
+          );
+          nb.id = rec.id;
+          await recordRecent("notebook", {
+            id: rec.id,
+            title: rec.title,
+            content: rec.content,
+          }).catch(() => undefined);
+        } catch (err) {
+          console.error("Failed to create initial notebook:", err);
+        }
+        ordered.push(nb);
+      }
+
+      setNotebooks(ordered);
+      const wantedActive = ordered.find((n) => n.id === activeIdRaw);
+      const initialActive = wantedActive ?? ordered[0];
       setActiveId(initialActive.id);
       setActiveCellId(initialActive.cells[0]?.id ?? null);
-      setStoredList(await listNotebooks().catch(() => []));
+      setStoredList(await listRecent("notebook").catch(() => []));
       setRestored(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -252,8 +329,7 @@ export const NotebookPanel = forwardRef<
 
   // -- Autosave (debounced per notebook) -----------------------------
   // A notebook counts as "touched" once the user typed something or
-  // ran a cell. We don't persist pristine empties — see init effect
-  // for the rationale.
+  // ran a cell. We don't bother re-saving pristine empties.
   const isNotebookTouched = useCallback((nb: NotebookModel): boolean => {
     if (nb.cells.length > 1) return true;
     return nb.cells.some(
@@ -271,14 +347,23 @@ export const NotebookPanel = forwardRef<
       if (prev) window.clearTimeout(prev);
       const handle = window.setTimeout(() => {
         saveTimers.current.delete(nb.id);
-        void saveNotebook(nb)
-          .then(() => listNotebooks())
+        const json = notebookToJsonString(nb);
+        void runtime
+          .setNotebookContent(nb.id, json)
+          .then(() =>
+            recordRecent("notebook", {
+              id: nb.id,
+              title: nb.name,
+              content: json,
+            }),
+          )
+          .then(() => listRecent("notebook"))
           .then(setStoredList)
           .catch((err) => console.error("Notebook autosave failed:", err));
       }, AUTOSAVE_DELAY_MS);
       saveTimers.current.set(nb.id, handle);
     },
-    [isNotebookTouched],
+    [isNotebookTouched, runtime],
   );
 
   // -- Mutation helpers ----------------------------------------------
@@ -500,24 +585,47 @@ export const NotebookPanel = forwardRef<
     [activateNotebook],
   );
 
+  /**
+   * Persist *nb* into the Python ``_NOTEBOOKS`` store and the
+   * IndexedDB recent cache, then open it. The returned id matches the
+   * Python record (same id is used as ``NotebookModel.id`` so saves
+   * round-trip cleanly). Falls back to opening a transient model on
+   * persistence failure so the UI remains usable.
+   */
+  const persistAndOpen = useCallback(
+    async (nb: NotebookModel): Promise<void> => {
+      const json = notebookToJsonString(nb);
+      try {
+        const rec = await runtime.createNotebook(nb.name, json);
+        nb.id = rec.id;
+        nb.name = rec.title;
+        await recordRecent("notebook", {
+          id: rec.id,
+          title: rec.title,
+          content: json,
+        }).catch(() => undefined);
+        setStoredList(await listRecent("notebook").catch(() => []));
+      } catch (err) {
+        console.error("Failed to persist new notebook:", err);
+      }
+      openOrFocusNotebook(nb);
+    },
+    [runtime, openOrFocusNotebook],
+  );
+
   const handleNew = useCallback(() => {
-    // Don't persist the new notebook eagerly — autosave kicks in as
-    // soon as the user types, which avoids piling up empty entries.
-    openOrFocusNotebook(emptyNotebook());
-  }, [openOrFocusNotebook]);
+    void persistAndOpen(emptyNotebook());
+  }, [persistAndOpen]);
 
   const handleNewFromQuickstart = useCallback(() => {
-    // Open the bundled "Quickstart" template as a fresh notebook.
-    // Autosave kicks in on first edit / run, same as a blank notebook.
-    openOrFocusNotebook(buildQuickstartNotebook());
-  }, [openOrFocusNotebook]);
+    void persistAndOpen(buildQuickstartNotebook());
+  }, [persistAndOpen]);
 
   const importMacroAsNotebook = useCallback(
     (title: string, source: string) => {
-      const nb = macroToNotebook(title, source);
-      openOrFocusNotebook(nb);
+      void persistAndOpen(macroToNotebook(title, source));
     },
-    [openOrFocusNotebook],
+    [persistAndOpen],
   );
 
   const handleConvertToMacro = useCallback(() => {
@@ -531,9 +639,12 @@ export const NotebookPanel = forwardRef<
       setNotebooks((prev) => {
         const next = prev.filter((n) => n.id !== id);
         if (next.length === 0) {
-          // Always keep at least one notebook open — spawn a fresh
-          // empty one (not persisted, see scheduleSave for details).
-          return [emptyNotebook()];
+          // Always keep at least one notebook open. Spawn a transient
+          // empty model and persist it via the runtime so its id is
+          // stable across save/reload cycles.
+          const blank = emptyNotebook();
+          void persistAndOpen(blank);
+          return [blank];
         }
         return next;
       });
@@ -544,7 +655,7 @@ export const NotebookPanel = forwardRef<
         });
       }
     },
-    [activeId],
+    [activeId, persistAndOpen],
   );
 
   const handleRenameActive = useCallback(() => {
@@ -563,11 +674,25 @@ export const NotebookPanel = forwardRef<
       prev.map((n) => {
         if (n.id !== id || n.name === trimmed) return n;
         const next = { ...n, name: trimmed };
+        // Push the title to Python (workspace HDF5 stores the title)
+        // and refresh the recent cache entry so it surfaces the new
+        // name in the "Recent…" menu.
+        runtime.renameNotebook(id, trimmed).catch((err) => {
+          console.error("Failed to rename notebook:", err);
+        });
+        recordRecent("notebook", {
+          id,
+          title: trimmed,
+          content: notebookToJsonString(next),
+        })
+          .then(() => listRecent("notebook"))
+          .then(setStoredList)
+          .catch(() => undefined);
         scheduleSave(next);
         return next;
       }),
     );
-  }, [renamingId, renameDraft, scheduleSave]);
+  }, [renamingId, renameDraft, runtime, scheduleSave]);
 
   const cancelRename = useCallback(() => {
     setRenamingId(null);
@@ -607,11 +732,7 @@ export const NotebookPanel = forwardRef<
       try {
         const nameNoExt = file.name.replace(/\.ipynb$/i, "") || "Untitled";
         const nb = jsonStringToNotebook(text, nameNoExt);
-        await saveNotebook(nb).catch((err) => {
-          console.error("Persisting opened notebook failed:", err);
-        });
-        setStoredList(await listNotebooks().catch(() => []));
-        openOrFocusNotebook(nb);
+        await persistAndOpen(nb);
       } catch (err) {
         console.error("Failed to parse .ipynb file:", err);
         window.alert(
@@ -622,7 +743,7 @@ export const NotebookPanel = forwardRef<
         input.value = "";
       }
     },
-    [openOrFocusNotebook],
+    [persistAndOpen],
   );
 
   // -- Open menu (browser-stored) ------------------------------------
@@ -646,33 +767,64 @@ export const NotebookPanel = forwardRef<
 
   const handleOpenStored = useCallback(
     async (id: string) => {
+      // Already open as a workspace tab — just focus it.
       const existing = notebooksRef.current.find((n) => n.id === id);
       if (existing) {
         activateNotebook(id);
         setOpenMenuFor(null);
         return;
       }
-      const nb = await loadNotebook(id).catch(() => null);
-      if (nb) openOrFocusNotebook(nb);
+      // Not in the current workspace — try to fetch from Python first
+      // (we may have a stale recent entry after the workspace was
+      // wiped). Fall back to the recent cache content.
+      let title: string;
+      let content: string;
+      try {
+        const rec = await runtime.getNotebook(id);
+        title = rec.title;
+        content = rec.content;
+      } catch {
+        const cached = await getRecent("notebook", id);
+        if (!cached) {
+          setOpenMenuFor(null);
+          return;
+        }
+        title = cached.title;
+        content = cached.content;
+        // Re-import into the current workspace.
+        try {
+          const rec = await runtime.createNotebook(title, content);
+          id = rec.id;
+        } catch (err) {
+          console.error("Failed to import recent notebook into workspace:", err);
+        }
+      }
+      try {
+        const nb = content
+          ? jsonStringToNotebook(content, title)
+          : emptyNotebook(title);
+        nb.id = id;
+        nb.name = title;
+        openOrFocusNotebook(nb);
+      } catch (err) {
+        console.error("Failed to parse cached notebook:", err);
+      }
       setOpenMenuFor(null);
     },
-    [activateNotebook, openOrFocusNotebook],
+    [activateNotebook, openOrFocusNotebook, runtime],
   );
 
   const handleDeleteStored = useCallback(
     async (id: string) => {
       const meta = storedList.find((m) => m.id === id);
       if (!meta) return;
-      if (
-        !window.confirm(`Delete notebook "${meta.name}" from browser storage?`)
-      ) {
+      if (!window.confirm(`Remove notebook "${meta.title}" from recent cache?`)) {
         return;
       }
-      await deleteNotebook(id).catch(() => undefined);
-      setStoredList(await listNotebooks().catch(() => []));
-      handleCloseTab(id);
+      await removeRecent("notebook", id).catch(() => undefined);
+      setStoredList(await listRecent("notebook").catch(() => []));
     },
-    [storedList, handleCloseTab],
+    [storedList],
   );
 
   // --------------------------------------------------------------------
@@ -928,21 +1080,21 @@ export const NotebookPanel = forwardRef<
               setOpenMenuFor((prev) => (prev === "stored" ? null : "stored"))
             }
             disabled={storedList.length === 0}
-            title="Open notebook from browser storage"
+            title="Open notebook from recent cache"
           >
-            Browser… ({storedList.length})
+            Recent… ({storedList.length})
           </button>
           {openMenuFor === "stored" && (
             <div className="nb-open-menu" role="menu">
               {storedList.length === 0 && (
                 <div className="nb-open-menu-empty">
-                  No notebooks in browser storage.
+                  No notebooks in recent cache.
                 </div>
               )}
               {storedList.map((m) => {
                 const openIds = new Set(notebooks.map((n) => n.id));
                 const alreadyOpen = openIds.has(m.id);
-                const when = new Date(m.updatedAt).toLocaleString();
+                const when = new Date(m.lastSeen).toLocaleString();
                 return (
                   <div
                     key={m.id}
@@ -956,12 +1108,12 @@ export const NotebookPanel = forwardRef<
                       onClick={() => handleOpenStored(m.id)}
                       title={
                         alreadyOpen
-                          ? `Already open — click to focus tab (saved ${when})`
-                          : `Saved ${when}`
+                          ? `Already open — click to focus tab (last seen ${when})`
+                          : `Last seen ${when}`
                       }
                     >
                       <span className="nb-open-menu-name-text">
-                        {m.name}
+                        {m.title}
                         {alreadyOpen ? " (open)" : ""}
                       </span>
                       <span className="nb-open-menu-name-when">{when}</span>
@@ -970,8 +1122,8 @@ export const NotebookPanel = forwardRef<
                       type="button"
                       className="nb-open-menu-delete"
                       onClick={() => handleDeleteStored(m.id)}
-                      title="Delete from browser storage"
-                      aria-label={`Delete ${m.name} from browser storage`}
+                      title="Remove from recent cache"
+                      aria-label={`Remove ${m.title} from recent cache`}
                     >
                       ×
                     </button>

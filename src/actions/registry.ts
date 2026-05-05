@@ -94,7 +94,8 @@ export function buildStaticActions(
       label: "Save HDF5 workspace…",
       menuPath: "File/Save HDF5 workspace…",
       iconUrl: getIoIconUrl("filesave_h5.svg"),
-      enabled: (s) => ready(s) && s.hasObjects,
+      enabled: (s) =>
+        ready(s) && (s.hasObjects || s.hasMacros || s.hasNotebooks),
       run: cb.onSaveWorkspaceHdf5,
     },
     {

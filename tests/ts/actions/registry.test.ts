@@ -17,6 +17,8 @@ function makeState(over: Partial<ActionState> = {}): ActionState {
     selectedIds: [],
     currentId: null,
     hasObjects: false,
+    hasMacros: false,
+    hasNotebooks: false,
     ...over,
   };
 }
@@ -64,6 +66,17 @@ describe("buildStaticActions", () => {
     const del = actions.find((a) => a.id === "edit.delete")!;
     expect(del.enabled(makeState())).toBe(false);
     expect(del.enabled(makeState({ selectedIds: ["x"] }))).toBe(true);
+  });
+
+  it("enables ``file.save_workspace_h5`` for any persistable content", () => {
+    const actions = buildStaticActions(makeStaticCallbacks());
+    const save = actions.find((a) => a.id === "file.save_workspace_h5")!;
+    // Empty workspace — disabled.
+    expect(save.enabled(makeState())).toBe(false);
+    // Any of the three persistable kinds is enough to enable.
+    expect(save.enabled(makeState({ hasObjects: true }))).toBe(true);
+    expect(save.enabled(makeState({ hasMacros: true }))).toBe(true);
+    expect(save.enabled(makeState({ hasNotebooks: true }))).toBe(true);
   });
 
   it("delegates ``edit.new_group`` to the supplied callback", () => {
