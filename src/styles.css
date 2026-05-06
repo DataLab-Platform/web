@@ -84,9 +84,59 @@ input {
 }
 
 .app {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+}
+
+.app > .workspace {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Cold-start recovery banner — shown above the workspace when the
+   IndexedDB recent cache reseeded macros/notebooks (see
+   :file:`src/components/RecoveryBanner.tsx`). */
+.recovery-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.recovery-banner-message {
+  flex: 1;
+  line-height: 1.45;
+}
+
+.recovery-banner-message strong {
+  color: var(--text);
+  margin-right: 4px;
+}
+
+.recovery-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.recovery-banner-save {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-hover);
+}
+
+.recovery-banner-save:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.recovery-banner-dismiss {
+  background: transparent;
 }
 
 .menubar {

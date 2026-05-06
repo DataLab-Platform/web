@@ -76,6 +76,14 @@ wraps top-level `await` in cells, so this works out of the box.
 * Closing the last tab spawns a fresh empty notebook so the panel is
   never empty.
 
+> **What survives a reload?** The IndexedDB cache is a *roll-over
+> recovery cache*, not durable storage. Notebook **content** is
+> rehydrated automatically on the next page load (and surfaced
+> through a one-time recovery banner so you know the workspace was
+> reseeded from the cache). To make a complete workspace durable
+> — including signals, images, groups and metadata — use **File →
+> Save HDF5 workspace…**. See *Persistence model* in the README.
+
 ## File compatibility (`.ipynb`)
 
 DataLab-Web reads and writes the standard

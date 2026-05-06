@@ -51,6 +51,43 @@ Code organisation:
 - `src/macros/` — macro editor and execution helpers (templates, autocompletion bindings).
 - `src/App.tsx` — top-level layout (menu bar at the top, object tree on the left, central plot area, results panel on the right) with persisted splitter sizes.
 
+## Persistence model
+
+DataLab-Web treats the **HDF5 workspace file as the single durable
+source of truth**. Everything else — IndexedDB caches, the recent
+notebooks/macros menus, even the in-memory Python `_STORE` — is
+ephemeral and reset on a hard reload of the Pyodide instance.
+
+| Asset class           | Survives F5 reload?                                | How to make durable |
+| --------------------- | -------------------------------------------------- | ------------------- |
+| Signals & images      | **No** — wiped with Pyodide                        | **File → Save HDF5 workspace…** |
+| Groups, ROIs, metadata, plot annotations | **No** — wiped with Pyodide     | **File → Save HDF5 workspace…** |
+| Macro **content**     | Yes — IndexedDB *recovery cache*                   | **File → Save HDF5 workspace…** for the full workspace, or download individually |
+| Notebook **content**  | Yes — IndexedDB *recovery cache*                   | **File → Save HDF5 workspace…**, or **Save notebook as…** for a `.ipynb` |
+| Notebook **outputs / execution counters** | **No** — outputs aren't cached       | Save HDF5 workspace (outputs are persisted there too) |
+
+How this surfaces in the UI:
+
+- The window title shows `DataLab-Web — <filename or "Untitled">`,
+  with a `•` marker as soon as the workspace contains unsaved
+  changes. A `(recovered)` hint is added when the macros / notebooks
+  panels rehydrated from the IndexedDB cache; both clear on the next
+  **Open / Save HDF5 workspace…**.
+- A `beforeunload` confirmation prompt fires only when the workspace
+  is dirty.
+- A one-time recovery banner appears at cold start if the IndexedDB
+  cache reseeded macros or notebooks, reminding you that the
+  workspace is not yet durable. **Dismiss** hides the banner;
+  **Save HDF5 workspace…** promotes the recovered state to a real
+  file.
+- Fresh sessions are labelled **Untitled**. The first
+  **File → Save HDF5 workspace…** proposes a timestamped name
+  (`workspace-YYYYMMDD-HHMMSS.h5`); subsequent saves reuse the last
+  filename associated with the session.
+
+The behaviour mirrors DataLab desktop: closing without saving loses
+unsaved work; opening an HDF5 workspace replaces the in-memory state.
+
 ## Comparison with related projects
 
 | Project        | Purpose                                              | Runs where      |

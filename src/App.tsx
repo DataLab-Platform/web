@@ -60,6 +60,7 @@ import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { RoiGridDialog } from "./components/RoiGridDialog";
 import { H5BrowserDialog } from "./components/H5BrowserDialog";
+import { RecoveryBanner } from "./components/RecoveryBanner";
 import {
   SaveToDirectoryDialog,
   type SaveToDirectoryResult,
@@ -76,6 +77,7 @@ import {
   type NotebookPanelHandle,
 } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
+import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
   ImageCreationType,
@@ -184,6 +186,7 @@ export default function App() {
     markDirty,
     markClean,
     setFilename: setWorkspaceFilename,
+    setRecovered: setWorkspaceRecovered,
   } = workspace;
   // Window-title + reload-guard: the HDF5 workspace file is the single
   // durable contract. Anything in-memory that diverges from it must be
@@ -279,6 +282,24 @@ export default function App() {
    * the previous workspace's tabs.
    */
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
+  /**
+   * Cold-start recovery banner state (PR 2 of the workspace-dirty UX
+   * work). When the macro / notebook panels rehydrate from the
+   * IndexedDB "Recent…" cache on first mount, we surface a one-time
+   * informational banner reminding the user that signals/images do
+   * **not** survive a reload — only HDF5 saves are durable.
+   *
+   * ``null`` while we haven't checked yet; ``{ macros, notebooks }``
+   * once we know how many entries the cache held when the page
+   * loaded; reset to ``null`` after Save / Dismiss.
+   */
+  const [recoveryBanner, setRecoveryBanner] = useState<
+    { macros: number; notebooks: number } | null
+  >(null);
+  // Guard: evaluate the banner only once per mount. We don't want it
+  // to reappear after the user opens an HDF5 (which clears recovered
+  // via ``markClean``) and then reloads — that's a normal cycle.
+  const recoveryEvaluated = useRef(false);
   const [pending, setPending] = useState<PendingFeature | null>(null);
   const [pendingProfile, setPendingProfile] = useState<{
     feature: FeatureDescriptor;
@@ -472,6 +493,52 @@ export default function App() {
     });
     return unsubscribe;
   }, [runtime, markDirty]);
+
+  // Cold-start recovery banner: once after the runtime is ready and no
+  // HDF5 file is associated with this session, peek at the IndexedDB
+  // "Recent…" cache. If it holds any macros or notebooks the panels
+  // will have silently rehydrated them — surface that to the user with
+  // an informational banner so the (recovered) state isn't invisible.
+  // The banner sets ``recovered=true`` on the workspace context, which
+  // adds a "(recovered)" hint to the window title until the next
+  // ``markClean`` (= Open or Save HDF5).
+  useEffect(() => {
+    if (status !== "ready") return;
+    if (recoveryEvaluated.current) return;
+    if (workspaceFilename !== null) return;
+    recoveryEvaluated.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [macros, notebooks] = await Promise.all([
+          listRecent("macro"),
+          listRecent("notebook"),
+        ]);
+        if (cancelled) return;
+        if (macros.length === 0 && notebooks.length === 0) return;
+        setRecoveryBanner({
+          macros: macros.length,
+          notebooks: notebooks.length,
+        });
+        setWorkspaceRecovered(true);
+      } catch {
+        /* IndexedDB unavailable — banner stays hidden. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, workspaceFilename, setWorkspaceRecovered]);
+
+  // Auto-hide the recovery banner once the user has saved or opened
+  // an HDF5 workspace (both transitions clear ``workspaceRecovered``
+  // via ``markClean``). Keeping the banner around after Save would be
+  // confusing — the recovered state has been promoted to durable.
+  useEffect(() => {
+    if (recoveryBanner !== null && !workspaceRecovered) {
+      setRecoveryBanner(null);
+    }
+  }, [recoveryBanner, workspaceRecovered]);
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
@@ -2012,6 +2079,17 @@ export default function App() {
         state={actionState}
         actions={actions}
       />
+      {recoveryBanner && (
+        <RecoveryBanner
+          macroCount={recoveryBanner.macros}
+          notebookCount={recoveryBanner.notebooks}
+          onSave={() => {
+            void handleSaveWorkspaceHdf5();
+          }}
+          onDismiss={() => setRecoveryBanner(null)}
+          saveDisabled={status !== "ready" || busy}
+        />
+      )}
       <div className="workspace">
         <aside className="panel" style={{ width: leftPanelWidth }}>
           <PanelSwitcher
