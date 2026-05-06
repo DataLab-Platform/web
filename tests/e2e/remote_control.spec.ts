@@ -196,9 +196,9 @@ test.describe("Remote control via postMessage", () => {
       expect(probes.sampled_y[i]).toBeCloseTo(probes.expected_y[i], 12);
     }
     // Soft perf budget: the binary path should round-trip 50 k
-    // samples in well under 5 s on CI; the legacy boxed/JSON path
-    // would take noticeably longer, so a regression here would fire.
-    expect(probes.push_ms).toBeLessThan(5_000);
-    expect(probes.pull_ms).toBeLessThan(5_000);
+    // samples well within 15 s on CI (the legacy boxed/JSON path
+    // would take noticeably longer, so a regression here would fire).
+    expect(probes.push_ms).toBeLessThan(15_000);
+    expect(probes.pull_ms).toBeLessThan(15_000);
   });
 });

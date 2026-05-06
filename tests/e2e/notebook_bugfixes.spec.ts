@@ -46,14 +46,15 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
     await expect(rendered.locator("li")).toHaveCount(2);
   });
 
-  test("Bug 4 — Rename toolbar button updates the active tab title", async ({
+  test("Bug 4 — Rename tab title updates the active tab title", async ({
     page,
   }) => {
     // Initial name is "Untitled".
     await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
       "Untitled",
     );
-    await page.getByRole("button", { name: /Rename/ }).click();
+    // Rename is triggered by double-clicking the active tab title.
+    await page.locator(".nb-tab.active .nb-tab-title").dblclick();
     // Inline input appears in the active tab.
     const renameInput = page.locator(".nb-tab.active .nb-tab-rename-input");
     await expect(renameInput).toBeVisible();
@@ -66,24 +67,27 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
     );
     // Type something so autosave kicks in (the rename of an empty
     // notebook is intentionally not persisted on its own), then verify
-    // the browser store reflects the new name.
+    // the recent store reflects the new name.
     const editor = page.locator(".nb-cell-editor .cm-content").first();
     await editor.click();
     await page.keyboard.type("# spec");
     await page.waitForTimeout(1200);
     const stored = await page.evaluate(async () => {
-      const req = indexedDB.open("datalab-web.notebooks");
+      const req = indexedDB.open("datalab-web.recent");
       const db: IDBDatabase = await new Promise((res, rej) => {
         req.onsuccess = () => res(req.result);
         req.onerror = () => rej(req.error);
       });
-      const tx = db.transaction("notebooks", "readonly");
-      const all = await new Promise<{ name: string }[]>((res, rej) => {
-        const r = tx.objectStore("notebooks").getAll();
-        r.onsuccess = () => res(r.result as { name: string }[]);
-        r.onerror = () => rej(r.error);
-      });
-      return all.map((r) => r.name);
+      const tx = db.transaction("entries", "readonly");
+      const all = await new Promise<{ kind: string; title: string }[]>(
+        (res, rej) => {
+          const r = tx.objectStore("entries").getAll();
+          r.onsuccess = () =>
+            res(r.result as { kind: string; title: string }[]);
+          r.onerror = () => rej(r.error);
+        },
+      );
+      return all.filter((r) => r.kind === "notebook").map((r) => r.title);
     });
     expect(stored).toContain("My Spectroscopy Notes");
   });
@@ -91,7 +95,8 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
   test("Bug 4b — Escape cancels the rename without changing the name", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: /Rename/ }).click();
+    // Rename is triggered by double-clicking the active tab title.
+    await page.locator(".nb-tab.active .nb-tab-title").dblclick();
     const renameInput = page.locator(".nb-tab.active .nb-tab-rename-input");
     await expect(renameInput).toBeVisible();
     await renameInput.fill("Aborted Name");
@@ -137,8 +142,8 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
     page,
   }) => {
     // Fresh-start contract: an untouched notebook must NOT appear in
-    // browser storage. The "Browser…" button is therefore disabled.
-    await expect(page.getByRole("button", { name: /Browser…/ })).toBeDisabled();
+    // browser storage. The "Recent…" button is therefore disabled.
+    await expect(page.getByRole("button", { name: /Recent…/ })).toBeDisabled();
 
     // Type something so the current notebook is persisted, then create
     // a brand-new tab (also untouched ⇒ not persisted yet).
@@ -147,8 +152,8 @@ test.describe("Notebook bug fixes (Phase 3.1)", () => {
     await page.keyboard.type("first-marker");
     await page.waitForTimeout(1000);
 
-    // The Browser… button now has exactly one entry (the touched one).
-    const browserBtn = page.getByRole("button", { name: /Browser…\s*\(\d+\)/ });
+    // The Recent… button now has exactly one entry (the touched one).
+    const browserBtn = page.getByRole("button", { name: /Recent…\s*\(\d+\)/ });
     await expect(browserBtn).toBeEnabled();
     await expect(browserBtn).toContainText("(1)");
 
