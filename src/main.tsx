@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { RuntimeProvider } from "./runtime/RuntimeContext";
+import { WorkspaceProvider } from "./runtime/WorkspaceContext";
 import { installConsoleCapture } from "./utils/consoleLog";
 import { initThemeEarly } from "./utils/theme";
 import "./styles.css";
@@ -17,7 +18,9 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <RuntimeProvider>
-      <App />
+      <WorkspaceProvider>
+        <App />
+      </WorkspaceProvider>
     </RuntimeProvider>
   </StrictMode>,
 );

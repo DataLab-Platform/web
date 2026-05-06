@@ -726,6 +726,119 @@ function decodeImagePayload<
 export class DataLabRuntime {
   private constructor(private readonly py: PyodideAPI) {}
 
+  /**
+   * Workspace mutation tracker.
+   *
+   * The set below lists every ``bootstrap.py`` callable that mutates
+   * the durable workspace state — i.e. anything whose effect is
+   * persisted by ``save_workspace_to_bytes`` and would be lost on
+   * reload unless saved as an HDF5 workspace. ``callPy`` invokes all
+   * registered mutation listeners after each successful call to one
+   * of these functions, so the React layer can flip a single
+   * "workspace dirty" flag without sprinkling ``markDirty()`` at
+   * every UI call site.
+   *
+   * Keep this list narrow on purpose: read-only helpers
+   * (``list_*``, ``get_*``, schema queries, IO format probes) must
+   * NOT appear here. ``open_workspace_from_bytes`` and
+   * ``save_workspace_to_bytes`` are intentionally absent — they're
+   * the *clean* transitions, handled separately in ``App.tsx``.
+   */
+  private static readonly MUTATING_PY_FUNCTIONS: ReadonlySet<string> =
+    new Set<string>([
+      // Object model — signals & images
+      "create_signal",
+      "create_signal_typed",
+      "create_image",
+      "create_image_typed",
+      "add_signal_from_arrays",
+      "add_image_from_array",
+      "set_signal_style",
+      "update_signal_creation_params",
+      "update_image_creation_params",
+      "set_object_property_values",
+      "set_object_metadata_value",
+      "delete_object_metadata_key",
+      "set_object_meta",
+      "set_signal_roi",
+      "delete_signal_roi_at",
+      "set_image_roi",
+      "delete_image_roi_at",
+      "create_image_roi_grid",
+      "extract_signal_rois",
+      "extract_image_rois",
+      "delete_object",
+      "delete_signal",
+      "rename_object",
+      "move_object",
+      "create_group",
+      "rename_group",
+      "delete_group",
+      "set_plotly_annotations",
+      "set_lut_range",
+      "set_colormap",
+      "clear_signal_results",
+      "clear_image_results",
+      "erase_image_area",
+      "distribute_images_on_grid",
+      "reset_image_positions",
+      "apply_feature",
+      "apply_processing",
+      "reapply_last_processing",
+      "run_signal_analysis",
+      "run_image_analysis",
+      "open_signal_from_bytes",
+      "open_image_from_bytes",
+      "import_signal_csv",
+      "commit_text_import",
+      "add_object_pickled",
+      "set_object_pickled",
+      "reset_all",
+      // Macros
+      "create_macro",
+      "rename_macro",
+      "delete_macro",
+      "set_macro_code",
+      "duplicate_macro",
+      "reorder_macros",
+      "replace_macros",
+      // Notebooks
+      "create_notebook",
+      "rename_notebook",
+      "delete_notebook",
+      "set_notebook_content",
+      "duplicate_notebook",
+      "reorder_notebooks",
+      "replace_notebooks",
+    ]);
+
+  private mutationListeners: Set<(name: string) => void> = new Set();
+
+  /**
+   * Subscribe to durable-workspace mutations. The callback fires *after*
+   * any ``callPy`` invocation that mutates the workspace state.
+   *
+   * Returns an unsubscribe function. Listeners must not throw (errors
+   * are logged and otherwise ignored to keep the runtime queue clean).
+   */
+  onWorkspaceMutation(listener: (name: string) => void): () => void {
+    this.mutationListeners.add(listener);
+    return () => {
+      this.mutationListeners.delete(listener);
+    };
+  }
+
+  private emitWorkspaceMutation(name: string): void {
+    if (this.mutationListeners.size === 0) return;
+    for (const cb of this.mutationListeners) {
+      try {
+        cb(name);
+      } catch (err) {
+        console.warn("[runtime] workspace-mutation listener threw", err);
+      }
+    }
+  }
+
   static async load(
     onProgress?: (msg: string) => void,
   ): Promise<DataLabRuntime> {
@@ -892,6 +1005,7 @@ await micropip.install(["sigima", "guidata"])
   private async callPy<T = unknown>(
     name: string,
     kwargs: Record<string, unknown> = {},
+    options: { silent?: boolean } = {},
   ): Promise<T> {
     const doCall = async (): Promise<T> => {
       const fn = this.py.globals.get(name);
@@ -910,7 +1024,18 @@ await micropip.install(["sigima", "guidata"])
         // only, so the kwargs dict is also the only argument.
         const result = fn.callKwargs(kwargs);
         const awaited = result instanceof Promise ? await result : result;
-        return toJs(awaited) as T;
+        const value = toJs(awaited) as T;
+        // Notify workspace-mutation listeners *after* the Python side
+        // returns successfully — failed mutations don't dirty the
+        // workspace. ``silent`` lets panel bootstrap code seed default
+        // content without surfacing it as a user edit.
+        if (
+          !options.silent &&
+          DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)
+        ) {
+          this.emitWorkspaceMutation(name);
+        }
+        return value;
       } catch (err) {
         console.error(`[runtime] ${name} failed`, err);
         throw err;
@@ -1995,11 +2120,19 @@ if inspect.isawaitable(_result):
     })) as MacroRecord;
   }
 
-  async createMacro(title?: string, code?: string): Promise<MacroRecord> {
-    return (await this.callPy("create_macro", {
-      title: title ?? null,
-      code: code ?? null,
-    })) as MacroRecord;
+  async createMacro(
+    title?: string,
+    code?: string,
+    options: { silent?: boolean } = {},
+  ): Promise<MacroRecord> {
+    return (await this.callPy(
+      "create_macro",
+      {
+        title: title ?? null,
+        code: code ?? null,
+      },
+      options,
+    )) as MacroRecord;
   }
 
   async setMacroCode(macroId: string, code: string): Promise<void> {
@@ -2024,8 +2157,11 @@ if inspect.isawaitable(_result):
     await this.callPy("reorder_macros", { macro_ids: macroIds });
   }
 
-  async replaceMacros(records: MacroRecord[]): Promise<void> {
-    await this.callPy("replace_macros", { records });
+  async replaceMacros(
+    records: MacroRecord[],
+    options: { silent?: boolean } = {},
+  ): Promise<void> {
+    await this.callPy("replace_macros", { records }, options);
   }
 
   // ---------------------------------------------------------------------
@@ -2050,11 +2186,16 @@ if inspect.isawaitable(_result):
   async createNotebook(
     title?: string,
     content?: string,
+    options: { silent?: boolean } = {},
   ): Promise<NotebookRecord> {
-    return (await this.callPy("create_notebook", {
-      title: title ?? null,
-      content: content ?? null,
-    })) as NotebookRecord;
+    return (await this.callPy(
+      "create_notebook",
+      {
+        title: title ?? null,
+        content: content ?? null,
+      },
+      options,
+    )) as NotebookRecord;
   }
 
   async setNotebookContent(notebookId: string, content: string): Promise<void> {

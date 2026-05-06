@@ -216,6 +216,10 @@ export const NotebookPanel = forwardRef<
       });
 
     void (async () => {
+      // Initial hydration must not flag the workspace as dirty:
+      // seeding a Quickstart notebook on first boot or restoring
+      // open tabs from the IndexedDB cache are not user edits.
+      // The single mutating call below uses ``{ silent: true }``.
       // Workspace notebooks live in the Python ``_NOTEBOOKS`` store
       // (and are serialised to the workspace HDF5). IndexedDB is only
       // a roll-over cache surfaced through the "Recent…" menu.
@@ -282,6 +286,7 @@ export const NotebookPanel = forwardRef<
           const rec = await runtime.createNotebook(
             nb.name,
             notebookToJsonString(nb),
+            { silent: true },
           );
           nb.id = rec.id;
           await recordRecent("notebook", {

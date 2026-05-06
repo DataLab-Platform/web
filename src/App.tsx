@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRuntime } from "./runtime/RuntimeContext";
+import { useWorkspace } from "./runtime/WorkspaceContext";
+import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
+import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
 import type {
   FeatureDescriptor,
@@ -173,6 +176,25 @@ function usePersistedBool(
 
 export default function App() {
   const { runtime, status, message, error } = useRuntime();
+  const workspace = useWorkspace();
+  const {
+    dirty: workspaceDirty,
+    filename: workspaceFilename,
+    recovered: workspaceRecovered,
+    markDirty,
+    markClean,
+    setFilename: setWorkspaceFilename,
+  } = workspace;
+  // Window-title + reload-guard: the HDF5 workspace file is the single
+  // durable contract. Anything in-memory that diverges from it must be
+  // signalled (•) and protected against accidental reloads. See
+  // ``runtime/WorkspaceContext.tsx``.
+  useDocumentTitle({
+    filename: workspaceFilename,
+    dirty: workspaceDirty,
+    recovered: workspaceRecovered,
+  });
+  useBeforeUnloadGuard(workspaceDirty);
   const [activePanel, setActivePanel] = useState<PanelKind>("signal");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
@@ -431,6 +453,25 @@ export default function App() {
       window.removeEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
     };
   }, [runtime, activePanel, refresh]);
+
+  // Workspace-dirty tracking.
+  //
+  // The runtime tags every Python helper that mutates durable state
+  // (``MUTATING_PY_FUNCTIONS`` in ``runtime.ts``) and notifies
+  // listeners after each successful call. We subscribe once and flip
+  // the workspace context's ``dirty`` flag — UI indicators (window
+  // title •, ``beforeunload`` guard) react automatically.
+  //
+  // ``Open HDF5 workspace…`` and ``Save HDF5 workspace…`` are the
+  // only *clean* transitions; they call ``markClean()`` directly
+  // (see ``handleSaveWorkspaceHdf5`` / ``handleOpenWorkspaceHdf5``).
+  useEffect(() => {
+    if (!runtime) return;
+    const unsubscribe = runtime.onWorkspaceMutation(() => {
+      markDirty();
+    });
+    return unsubscribe;
+  }, [runtime, markDirty]);
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
@@ -1396,17 +1437,31 @@ export default function App() {
         type: "application/x-hdf",
       });
       const url = URL.createObjectURL(blob);
+      // When no filename has been associated with the session yet
+      // ("Untitled"), suggest a timestamped one. Otherwise keep the
+      // last known name, mirroring desktop "Save" semantics — the
+      // browser still drops the file in the user's Downloads folder.
+      const downloadName =
+        workspaceFilename ??
+        `workspace-${new Date()
+          .toISOString()
+          .replace(/[-:T]/g, "")
+          .replace(/\..+$/, "")}.h5`;
       const a = document.createElement("a");
       a.href = url;
-      a.download = "workspace.h5";
+      a.download = downloadName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      // Clean transition — the HDF5 file now contains the durable
+      // image of the in-memory state.
+      setWorkspaceFilename(downloadName);
+      markClean();
     } finally {
       setBusy(false);
     }
-  }, [runtime]);
+  }, [runtime, workspaceFilename, setWorkspaceFilename, markClean]);
 
   const handleOpenWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;
@@ -1444,13 +1499,18 @@ export default function App() {
         setSelectedIds([]);
         setCurrentId(null);
         setWorkspaceVersion((v) => v + 1);
+        // Clean transition — the loaded workspace *is* the source of
+        // truth, so clear any prior dirty/recovered flags and remember
+        // the filename for subsequent Save operations.
+        setWorkspaceFilename(file.name);
+        markClean();
         await refresh(null);
       } finally {
         setBusy(false);
       }
     };
     input.click();
-  }, [runtime, refresh]);
+  }, [runtime, refresh, setWorkspaceFilename, markClean]);
 
   const handleImportHdf5 = useCallback(() => {
     // Open the H5 browser dialog with no preloaded file; the user picks

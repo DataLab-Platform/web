@@ -226,6 +226,10 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     useEffect(() => {
       let cancelled = false;
       (async () => {
+        // Initial hydration must not flag the workspace as dirty
+        // (seeding a default macro / restoring from the recent cache
+        // are not user edits): the two mutating calls in this effect
+        // are issued with ``{ silent: true }``.
         let metas = await runtime.listMacros();
         if (metas.length === 0) {
           // Workspace has no macros yet — try to recover anything from
@@ -240,7 +244,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                 title: e.title,
                 code: e.content,
               }));
-              await runtime.replaceMacros(records);
+              await runtime.replaceMacros(records, { silent: true });
               metas = await runtime.listMacros();
             }
           } catch {
@@ -248,7 +252,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           }
         }
         if (metas.length === 0) {
-          await runtime.createMacro();
+          await runtime.createMacro(undefined, undefined, { silent: true });
           metas = await runtime.listMacros();
         }
         if (cancelled) return;
