@@ -289,11 +289,11 @@ export const NotebookPanel = forwardRef<
             { silent: true },
           );
           nb.id = rec.id;
-          await recordRecent("notebook", {
-            id: rec.id,
-            title: rec.title,
-            content: rec.content,
-          }).catch(() => undefined);
+          // Note: we deliberately do NOT seed the Recent… cache here.
+          // Pristine, untouched notebooks must not surface in browser
+          // storage (see ``notebook_bugfixes`` Bug 1 contract). The
+          // autosave path below will record the entry as soon as the
+          // user types something or runs a cell.
         } catch (err) {
           console.error("Failed to create initial notebook:", err);
         }

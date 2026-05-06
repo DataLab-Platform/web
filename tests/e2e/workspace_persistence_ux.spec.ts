@@ -90,29 +90,37 @@ test.describe("Workspace persistence UX (PR 2)", () => {
   test("recovery banner Save button promotes the recovered state to durable", async ({
     page,
   }) => {
-    // Seed the cache with a notebook this time.
+    // Seed the cache with a notebook this time. We persist the
+    // notebook in the Python store *and* explicitly seed the
+    // IndexedDB recent cache, mirroring what NotebookPanel's
+    // autosave does once a user touches a notebook (pristine
+    // empties are intentionally not recorded — see Bug 1 contract).
     await page.goto("/");
     await waitForRuntimeReady(page);
-    await page.evaluate(async () => {
-      await window.runtime.createNotebook(
-        "recovery-nb",
-        JSON.stringify({
-          nbformat: 4,
-          nbformat_minor: 5,
+    const nbContent = JSON.stringify({
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [
+        {
+          cell_type: "code",
+          id: "c1",
+          source: "# recovery-nb-probe",
           metadata: {},
-          cells: [
-            {
-              cell_type: "code",
-              id: "c1",
-              source: "# recovery-nb-probe",
-              metadata: {},
-              outputs: [],
-              execution_count: null,
-            },
-          ],
-        }),
-      );
+          outputs: [],
+          execution_count: null,
+        },
+      ],
     });
+    await page.evaluate(async (content) => {
+      const rec = await window.runtime.createNotebook("recovery-nb", content);
+      const { recordRecent } = await import("/src/storage/recentStore.ts");
+      await recordRecent("notebook", {
+        id: rec.id,
+        title: rec.title,
+        content,
+      });
+    }, nbContent);
     await page.getByRole("tab", { name: "Notebooks" }).click();
     await expect
       .poll(
