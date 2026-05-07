@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { waitForRuntimeReady } from "./fixtures";
+import { expect } from "@playwright/test";
+import { test, dismissAnyDialog } from "./fixtures-warm";
 
 /**
  * Phase 1 validation: serialisation queue + PyProxy hygiene.
@@ -7,15 +7,21 @@ import { waitForRuntimeReady } from "./fixtures";
  * These tests drive the runtime directly via ``window.runtime`` (exposed in
  * dev mode by ``RuntimeContext``) so they assert the invariants without
  * depending on the rest of the UI.
+ *
+ * Uses the worker-scoped warm fixture: Pyodide is booted once per
+ * Playwright worker; each test starts from a clean Python store via
+ * ``runtime.resetAll``.
  */
-test.describe("Phase 1 — Pyodide runtime hardening", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/");
-    await waitForRuntimeReady(page);
+test.describe.serial("Phase 1 — Pyodide runtime hardening", () => {
+  test.beforeEach(async ({ warmPage: page }) => {
+    await dismissAnyDialog(page);
+    await page.evaluate(async () => {
+      await window.runtime.resetAll();
+    });
   });
 
   test("serialises parallel callPy invocations (no state corruption)", async ({
-    page,
+    warmPage: page,
   }) => {
     // Fire 10 parallel signal-creation calls.  With the queue, every Python
     // call observes a fully consistent ``_STORE`` so the 10 signals are
@@ -44,7 +50,9 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
     }
   });
 
-  test("a failing call does not poison the queue", async ({ page }) => {
+  test("a failing call does not poison the queue", async ({
+    warmPage: page,
+  }) => {
     // 1) Fire an intentionally bad call (unknown signal id).  The promise
     //    rejects.
     // 2) Fire a healthy call right after.  It must resolve normally,
@@ -65,7 +73,7 @@ test.describe("Phase 1 — Pyodide runtime hardening", () => {
   });
 
   test("interleaved bad/good calls all reach Python in order", async ({
-    page,
+    warmPage: page,
   }) => {
     // Fire alternating good/bad calls in parallel; the queue serialises
     // them so good ones still succeed and bad ones still reject — no race

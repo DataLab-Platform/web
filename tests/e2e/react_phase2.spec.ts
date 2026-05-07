@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { waitForRuntimeReady } from "./fixtures";
+import { expect } from "@playwright/test";
+import { test, dismissAnyDialog } from "./fixtures-warm";
 
 /**
  * Phase 2 validation: React race conditions.
@@ -15,15 +15,23 @@ import { waitForRuntimeReady } from "./fixtures";
  *     it to ``useEffect``.  We exercise that hook indirectly by opening
  *     the H5 import dialog (which renders dynamic-choice fields) and
  *     verifying no stale state slips through.
+ *
+ * Uses the worker-scoped warm fixture (single Pyodide boot per worker).
  */
-test.describe("Phase 2 — React race conditions", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/");
-    await waitForRuntimeReady(page);
+test.describe.serial("Phase 2 — React race conditions", () => {
+  test.beforeEach(async ({ warmPage: page }) => {
+    await dismissAnyDialog(page);
+    await page.evaluate(async () => {
+      await window.runtime.resetAll();
+    });
+    // Refresh the tree from the now-empty store so previous-test
+    // signals stop showing up.
+    await page.getByRole("tab", { name: "Images" }).click();
+    await page.getByRole("tab", { name: "Signals" }).click();
   });
 
   test("rapid signal switching ends on the latest selection", async ({
-    page,
+    warmPage: page,
   }) => {
     // Seed the panel with 6 signals with predictable titles.
     await page.evaluate(async () => {
@@ -106,7 +114,7 @@ test.describe("Phase 2 — React race conditions", () => {
   });
 
   test("dialog mount/unmount does not leak unhandled rejections", async ({
-    page,
+    warmPage: page,
   }) => {
     // Repeatedly open and close the Help → About dialog.  If any of its
     // effects had a missing cleanup, fast unmount could yield rejected
@@ -129,7 +137,7 @@ test.describe("Phase 2 — React race conditions", () => {
   });
 
   test("opening a processing dialog with dynamic choices does not crash", async ({
-    page,
+    warmPage: page,
   }) => {
     // Regression test for a black screen when opening Processing >
     // Windowing or Processing > Detrending: ``DataSetForm.useChoices``
@@ -179,7 +187,11 @@ test.describe("Phase 2 — React race conditions", () => {
     await page
       .locator("[role=dialog]")
       .waitFor({ state: "visible", timeout: 15_000 });
-    await page.keyboard.press("Escape");
+    // Close cleanly (Escape is ignored by some dialogs — use Cancel).
+    await page.getByRole("button", { name: /^Cancel$/ }).click();
+    await page
+      .locator("[role=dialog]")
+      .waitFor({ state: "hidden", timeout: 5_000 });
     expect(errors).toEqual([]);
   });
 });

@@ -1725,7 +1725,12 @@ def resolve_group_oids(panel: str, selection) -> list[str]:
 
 
 def reset_all() -> None:
-    """Delete every object and every group in every panel."""
+    """Delete every object and every group in every panel.
+
+    Also wipes the macro and notebook stores so the in-Pyodide state
+    is fully reset to its post-bootstrap value.  Used by the E2E test
+    fixture that reuses a single Pyodide worker across multiple tests.
+    """
     for kind, panel in list(_MODEL._panels.items()):  # noqa: SLF001
         for oid in [
             entry.oid
@@ -1737,6 +1742,8 @@ def reset_all() -> None:
         panel.ensure_default_group()
     _LAST_PROCESSING.clear()
     _CREATION_PARAMS.clear()
+    _MACROS.clear()
+    _NOTEBOOKS.clear()
 
 
 # Backwards-compatible flat list (used by debug helpers / DevTools console).

@@ -1405,6 +1405,16 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("delete_object", { oid });
   }
 
+  /**
+   * Wipe every signal/image/macro/notebook from the in-Pyodide model.
+   *
+   * Used by the E2E worker-scoped fixture that reuses a single Pyodide
+   * instance across multiple tests; production UI never calls this.
+   */
+  async resetAll(): Promise<void> {
+    await this.callPy("reset_all");
+  }
+
   // ------------------------------------------------------------------
   // Metadata & annotations (Phase 4)
   // ------------------------------------------------------------------
