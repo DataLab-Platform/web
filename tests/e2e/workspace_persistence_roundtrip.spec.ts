@@ -26,9 +26,10 @@ declare global {
  *     through "Open HDF5 workspace…" restores all three asset classes
  *     and lands on a clean (no "•") titled workspace.
  *
- * The companion test ``notebook_hdf5_roundtrip.spec.ts`` covers a
- * notebook-only round-trip; this one is broader and explicitly
- * exercises the workspace-dirty / title machinery.
+ * Notebook content is part of the round-trip: we seed a uniquely
+ * named notebook before saving, hard-reload, re-open the file, and
+ * assert the notebook reappears with its source intact. This
+ * subsumes the previous notebook-only round-trip spec.
  */
 test("workspace HDF5 round-trip + dirty title transitions", async ({
   page,
@@ -61,6 +62,32 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   await page.evaluate(async (t) => {
     await window.runtime.createMacro(t, "# placeholder body\n");
   }, macroTitle);
+
+  // Add a uniquely-named notebook with a marker cell so we can
+  // assert its content survives the round-trip too.
+  const notebookTitle = `notebook-${marker}`;
+  const notebookSource = `# nb-roundtrip ${marker}`;
+  await page.evaluate(
+    async ({ t, src }) => {
+      const nb = {
+        nbformat: 4,
+        nbformat_minor: 5,
+        metadata: {},
+        cells: [
+          {
+            cell_type: "code",
+            id: "c1",
+            source: src,
+            metadata: {},
+            outputs: [],
+            execution_count: null,
+          },
+        ],
+      };
+      await window.runtime.createNotebook(t, JSON.stringify(nb));
+    },
+    { t: notebookTitle, src: notebookSource },
+  );
 
   // -- 3. Save HDF5 via the File menu ---------------------------------
   const downloadPromise = page.waitForEvent("download");
@@ -117,9 +144,11 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
         page.evaluate(async () => {
           const sigs = await window.runtime.listSignals();
           const macros = await window.runtime.listMacros();
+          const notebooks = await window.runtime.listNotebooks();
           return {
             sigTitles: sigs.map((s) => s.title),
             macroTitles: macros.map((m) => m.title),
+            notebookTitles: notebooks.map((n) => n.title),
           };
         }),
       { timeout: 30_000, intervals: [250, 500, 1000] },
@@ -127,7 +156,23 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
     .toEqual({
       sigTitles: expect.arrayContaining([marker]),
       macroTitles: expect.arrayContaining([macroTitle]),
+      notebookTitles: expect.arrayContaining([notebookTitle]),
     });
+
+  // The restored notebook's source must match the marker we wrote.
+  const restoredSource = await page.evaluate(async (t) => {
+    const list = await window.runtime.listNotebooks();
+    const meta = list.find((n) => n.title === t);
+    if (!meta) return null;
+    const nb = await window.runtime.getNotebook(meta.id);
+    const json = JSON.parse(nb.content) as {
+      cells: Array<{ source: string | string[] }>;
+    };
+    return json.cells
+      .map((c) => (Array.isArray(c.source) ? c.source.join("") : c.source))
+      .join("\n");
+  }, notebookTitle);
+  expect(restoredSource).toContain(notebookSource);
 
   // -- 7. After Open, mutating the workspace re-flips dirty ----------
   await page.evaluate(() => window.runtime.createSignalTyped("sine"));

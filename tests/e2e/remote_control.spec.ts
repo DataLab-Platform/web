@@ -142,6 +142,16 @@ test.describe("Remote control via postMessage", () => {
     // the Python ``test_binary_transfer.py`` and SDK Vitest suites,
     // and the live image read path is already covered by
     // ``image_perf.spec.ts``.
+    //
+    // This is a *perf budget* probe rather than a correctness
+    // invariant — the same coercion code path is already covered by
+    // the Python ``test_binary_transfer.py`` and the SDK Vitest
+    // suites — so it is opt-in via the ``PERF`` env var to keep the
+    // default CI run cheap.
+    test.skip(
+      !process.env.PERF,
+      "Perf budget probe — opt-in via PERF=1 npm run test:e2e",
+    );
     await page.goto("/remote-host-example.html");
     await expect(page.locator("body")).toHaveAttribute(
       "data-remote-ready",

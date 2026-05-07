@@ -17,6 +17,23 @@ Playwright runs serially (`workers: 1`, ~3 min Pyodide boot per spec
 file in CI), so adding E2E tests has a real, compounding cost. Treat
 them as a scarce resource.
 
+## Default suite vs perf project
+
+The default Playwright project (`chromium`) runs the regression suite
+and intentionally **excludes** performance benchmarks and `_repro_*`
+throwaway probes. Performance specs live under a separate `perf`
+project that must be opted into:
+
+```powershell
+npm run test:e2e                       # default chromium suite
+npx playwright test --project=perf     # perf benchmarks only
+PERF=1 npm run test:e2e                # default suite + PERF-gated tests
+```
+
+When you need a perf or budget-style probe, mark it with
+`test.skip(!process.env.PERF, "...")` or move the spec under the
+`perf` project's `testMatch` glob (currently `image_perf.spec.ts`).
+
 ## Decision tree for a bug fix
 
 1. **Reproduce the bug with the cheapest possible probe.**

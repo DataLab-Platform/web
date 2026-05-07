@@ -7,6 +7,14 @@ import { defineConfig, devices } from "@playwright/test";
  * micropip, so the CI-friendly defaults below give the boot sequence a
  * generous timeout. The Vite dev server is reused locally and started
  * fresh in CI.
+ *
+ * Two projects are defined:
+ *
+ *   * ``chromium`` (default) — the regression suite. Excludes
+ *     performance benchmarks and ``_repro_*`` throwaway probes.
+ *   * ``perf`` (opt-in) — performance-only specs (``image_perf``,
+ *     and any ``PERF``-gated tests). Run with
+ *     ``npx playwright test --project=perf``.
  */
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -29,6 +37,17 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      // The image-display benchmark is a perf probe, not a regression
+      // invariant; it lives under the ``perf`` project to keep the
+      // default CI run cheap. ``_repro_*`` throwaway specs are also
+      // excluded so a forgotten reproduction probe never lands in CI.
+      testIgnore: [/image_perf\.spec\.ts/, /_repro_.*\.spec\.ts/],
+    },
+    {
+      name: "perf",
+      use: { ...devices["Desktop Chrome"] },
+      testMatch: [/image_perf\.spec\.ts/],
+      timeout: 600_000,
     },
   ],
   webServer: {

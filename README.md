@@ -172,6 +172,11 @@ npm run test:cov
 # End-to-end browser tests (boots Pyodide in Chromium ~1.5 min)
 npx playwright install chromium   # one-time
 npm run test:e2e
+
+# Performance benchmarks (opt-in — ~5 min). Includes the image-display
+# benchmark and the 50k-sample binary transfer probe.
+npx playwright test --project=perf
+PERF=1 npm run test:e2e
 ```
 
 Test layout:
