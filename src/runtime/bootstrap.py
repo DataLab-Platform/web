@@ -893,9 +893,19 @@ def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
         "id": oid,
         **_object_meta(_ObjectEntry(oid=oid, kind="signal", obj=obj)),
     }
+    # Complex-valued Y arrays (e.g. raw FFT output) cannot be sent as
+    # plain ``float64`` to the JS side without losing information AND
+    # without crashing JS code that assumes ``y[i]`` is a number
+    # (``v.toPrecision`` etc.). Mirror NumPy/Plotly defaults: take the
+    # real part for both the ``list`` and ``bytes`` encodings. Sigima
+    # exposes the imaginary part separately when the user actually
+    # needs it (e.g. ``fft_imag``).
+    y_arr = obj.y
+    if np.iscomplexobj(y_arr):
+        y_arr = y_arr.real
     if encoding == "bytes":
         x_arr = np.ascontiguousarray(obj.x, dtype=np.float64)
-        y_arr = np.ascontiguousarray(obj.y, dtype=np.float64)
+        y_arr = np.ascontiguousarray(y_arr, dtype=np.float64)
         payload["x_bytes"] = x_arr.tobytes()
         payload["y_bytes"] = y_arr.tobytes()
         payload["dtype"] = "float64"
@@ -903,7 +913,7 @@ def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
         payload["encoding"] = "f64"
     else:
         payload["x"] = obj.x.tolist()
-        payload["y"] = obj.y.tolist()
+        payload["y"] = np.asarray(y_arr, dtype=np.float64).tolist()
         payload["encoding"] = "list"
     return payload
 

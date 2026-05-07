@@ -176,6 +176,9 @@ function ImageArrayPreview({
 }
 
 function fmt(v: number): string {
+  if (typeof v !== "number" || !Number.isFinite(v)) {
+    return String(v);
+  }
   const abs = Math.abs(v);
   if (abs !== 0 && (abs < 1e-3 || abs >= 1e6)) {
     return v.toExponential(4);
