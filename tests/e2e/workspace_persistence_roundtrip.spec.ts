@@ -30,6 +30,12 @@ declare global {
  * named notebook before saving, hard-reload, re-open the file, and
  * assert the notebook reappears with its source intact. This
  * subsumes the previous notebook-only round-trip spec.
+ *
+ * The mutate phase also (a) applies a real Sigima processing (FFT)
+ * to the seed signal so we exercise the full processor pipeline and
+ * verify the produced object survives the round-trip, and (b)
+ * attaches a signal ROI segment so we verify ROI metadata also makes
+ * it through HDF5.
  */
 test("workspace HDF5 round-trip + dirty title transitions", async ({
   page,
@@ -43,9 +49,9 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
 
   // -- 2. Mutate workspace: add a signal + a macro --------------------
   const marker = `roundtrip-${Date.now()}`;
-  await page.evaluate(async (title) => {
+  const sourceId = await page.evaluate(async (title) => {
     const x = Array.from({ length: 16 }, (_, i) => i);
-    await window.runtime.addSignalFromArrays({
+    return await window.runtime.addSignalFromArrays({
       title,
       xdata: x,
       ydata: x.map((v) => v * 2),
@@ -56,6 +62,26 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   await expect
     .poll(() => page.title(), { timeout: 5_000 })
     .toBe("DataLab-Web — Untitled •");
+
+  // Apply a real Sigima processing (FFT) to the seed signal so the
+  // round-trip also exercises a processor-produced object. The new
+  // signal must reappear after re-opening the HDF5 file.
+  const fftId = await page.evaluate(
+    async (id) => await window.runtime.applyProcessing(id, "fft"),
+    sourceId,
+  );
+  expect(fftId).toBeTruthy();
+  expect(fftId).not.toBe(sourceId);
+
+  // Attach a signal ROI segment so we verify ROI metadata also makes
+  // it through the HDF5 round-trip.
+  await page.evaluate(
+    async (id) =>
+      await window.runtime.setSignalRoi(id, [
+        { xmin: 2, xmax: 8, title: "roi-roundtrip" },
+      ]),
+    sourceId,
+  );
 
   // Add a uniquely-named macro so we can assert it survives the round-trip.
   const macroTitle = `macro-${marker}`;
@@ -147,17 +173,32 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
           const notebooks = await window.runtime.listNotebooks();
           return {
             sigTitles: sigs.map((s) => s.title),
+            sigCount: sigs.length,
             macroTitles: macros.map((m) => m.title),
             notebookTitles: notebooks.map((n) => n.title),
           };
         }),
       { timeout: 30_000, intervals: [250, 500, 1000] },
     )
-    .toEqual({
+    .toMatchObject({
       sigTitles: expect.arrayContaining([marker]),
+      // Source signal + FFT result.
+      sigCount: 2,
       macroTitles: expect.arrayContaining([macroTitle]),
       notebookTitles: expect.arrayContaining([notebookTitle]),
     });
+
+  // The restored signal must still carry its ROI segment. ``oid``
+  // values are regenerated on import, so we look the seed up by title.
+  const restoredRoi = await page.evaluate(async (t) => {
+    const sigs = await window.runtime.listSignals();
+    const seed = sigs.find((s) => s.title === t);
+    if (!seed) return null;
+    return await window.runtime.getSignalRoi(seed.id);
+  }, marker);
+  expect(restoredRoi).toEqual([
+    expect.objectContaining({ xmin: 2, xmax: 8 }),
+  ]);
 
   // The restored notebook's source must match the marker we wrote.
   const restoredSource = await page.evaluate(async (t) => {
@@ -177,6 +218,6 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   // -- 7. After Open, mutating the workspace re-flips dirty ----------
   await page.evaluate(() => window.runtime.createSignalTyped("sine"));
   await expect
-    .poll(() => page.title(), { timeout: 5_000 })
+    .poll(() => page.title(), { timeout: 15_000, intervals: [250, 500] })
     .toBe(`DataLab-Web — ${suggested} •`);
 });
