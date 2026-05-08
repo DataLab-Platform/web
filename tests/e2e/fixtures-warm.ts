@@ -22,7 +22,7 @@ type WarmFixtures = {
   warmPage: Page;
 };
 
-export const test = base.extend<{}, WarmFixtures>({
+export const test = base.extend<object, WarmFixtures>({
   warmPage: [
     async ({ browser }, use) => {
       const context = await browser.newContext();

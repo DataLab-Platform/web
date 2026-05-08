@@ -1,5 +1,5 @@
 import { test as coldTest, expect } from "@playwright/test";
-import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
+import { waitForRuntimeReady } from "./fixtures";
 import { test, resetWarmNotebookPanel } from "./fixtures-warm";
 
 /**
