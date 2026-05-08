@@ -167,7 +167,7 @@ export class AIController {
     // Mutating tools changed the workspace — broadcast a model-changed
     // event so the React App refreshes the panel tree (parity with the
     // remote-bridge fan-out used by the macro proxy).
-    if (!tool.readonly && result.ok) {
+    if (tool && !tool.readonly && result.ok) {
       try {
         window.dispatchEvent(
           new CustomEvent("datalab-web:remote-model-changed", {
