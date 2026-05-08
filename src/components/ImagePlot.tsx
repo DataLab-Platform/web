@@ -947,7 +947,7 @@ function fmt(v: number): string {
 }
 
 function computeHistogram(
-  data: number[][],
+  data: ArrayLike<number>[],
   minV: number,
   maxV: number,
   bins: number,
@@ -955,7 +955,8 @@ function computeHistogram(
   const counts = new Array<number>(bins).fill(0);
   const span = Math.max(maxV - minV, Number.EPSILON);
   for (const row of data) {
-    for (const v of row) {
+    for (let k = 0; k < row.length; k++) {
+      const v = row[k];
       if (!Number.isFinite(v)) continue;
       let idx = Math.floor(((v - minV) / span) * bins);
       if (idx < 0) idx = 0;
