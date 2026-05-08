@@ -55,6 +55,23 @@ export interface RemoteBridgeOptions {
  *  ``{ panel: "signal" | "image" | null }``. */
 export const REMOTE_MODEL_CHANGED_EVENT = "datalab-web:remote-model-changed";
 
+/** Version of the host ↔ iframe wire protocol (semver MAJOR.MINOR).
+ *
+ *  This is **distinct** from the application version (``get_version``):
+ *  the app may bump independently of any change to the wire protocol.
+ *
+ *  Bump rules:
+ *  - **MAJOR**: any breaking change to the message shape or to the
+ *    semantics of an existing method (clients must reject mismatched
+ *    MAJOR).
+ *  - **MINOR**: backwards-compatible additions (new methods, new event
+ *    names, new optional fields).
+ *
+ *  Exposed to clients via the synthetic ``get_protocol_version``
+ *  bridge method (see :class:`DataLabWebClient` for the negotiation
+ *  logic). */
+export const RPC_PROTOCOL_VERSION = "1.0";
+
 interface RpcRequest {
   id: number | string;
   type: "request";
@@ -223,6 +240,9 @@ export function activateRemoteBridge(
       ((globalThis as unknown as { __DLW_VERSION__?: string }).__DLW_VERSION__
         ? (globalThis as unknown as { __DLW_VERSION__: string }).__DLW_VERSION__
         : "unknown"),
+    // Synthetic method — wire-protocol version (independent of the app
+    // version). Clients negotiate compatibility on this value.
+    get_protocol_version: async () => RPC_PROTOCOL_VERSION,
   };
 
   post = (target: MessageEventSource, origin: string, msg: OutboundMessage) => {

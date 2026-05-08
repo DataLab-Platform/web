@@ -18,7 +18,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"],
+  "include": ["src", "packages/sdk/src"],
   "exclude": ["doc/examples/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

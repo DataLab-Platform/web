@@ -2,6 +2,8 @@
 node_modules/
 dist/
 build/
+release/
+packages/sdk/dist/
 *.tsbuildinfo
 
 # Compiled Vite config — the source of truth is vite.config.ts; a stale

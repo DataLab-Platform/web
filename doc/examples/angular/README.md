@@ -37,23 +37,37 @@ adapted to Angular conventions:
      `?allowedOrigins=<your-app-origin>` so the bridge accepts
      postMessage calls from your app.
 
-## Step 1 — Vendor the SDK
+## Step 1 — Install the SDK
 
-Copy `src/sdk/DataLabWebClient.ts` from this repository into your
-Angular project, e.g. under
-`src/app/datalab-web/sdk/DataLabWebClient.ts`. The file has zero
-runtime dependencies — it only needs `DOM` types, which are always
-available in Angular projects.
+The DataLab-Web SDK is distributed as a self-contained npm tarball
+(`datalab-platform-web-sdk-<version>.tgz`) produced by the
+DataLab-Web release pipeline. Drop the tarball anywhere reachable
+from your project and install it locally:
 
-> Once DataLab-Web ships the SDK as an npm package, this step will
-> be replaced by `npm install @datalab/web-sdk`.
+```sh
+npm install ./vendor/datalab-platform-web-sdk-<version>.tgz
+```
+
+The package has **zero runtime dependencies** — it only needs the
+DOM types, which are always available in Angular projects.
+
+> Once the SDK is published to a public registry, this step will
+> become `npm install @datalab-platform/web-sdk`.
 
 ## Step 2 — Drop in the three files
 
 Copy `datalab-web.service.ts`, `datalab-web-frame.component.ts` and
 `datalab-web-demo.component.ts` into your project (any location is
-fine, e.g. `src/app/datalab-web/`). Adjust the relative import paths
-that point to `./sdk/DataLabWebClient` if you placed it elsewhere.
+fine, e.g. `src/app/datalab-web/`).
+
+The service imports the SDK from the npm package name:
+
+```ts
+import { DataLabWebClient } from '@datalab-platform/web-sdk';
+```
+
+If you previously vendored the SDK source file, replace the relative
+import with the package name above.
 
 ## Step 3 — Configure the embed URL
 
@@ -147,3 +161,36 @@ through `postMessage`. **Always prefer typed arrays over plain
 `number[]`** when pushing signals/images — the SDK boxes plain arrays
 into `Float64Array` for you, but allocating the typed array upstream
 saves a copy and a pass over your data.
+
+## Compatibility & versioning
+
+The SDK and the DataLab-Web bundle negotiate a **wire-protocol
+version** (semver `MAJOR.MINOR`, distinct from the application
+version) when `client.ready()` is called. The promise rejects if the
+two sides disagree on `MAJOR`. The current value is exposed as
+`client.protocolVersion`.
+
+| SDK release | Bundle MAJOR supported |
+| ----------- | ---------------------- |
+| `0.x`       | `1`                    |
+
+When you upgrade either side, install matching `.tgz` files from the
+same DataLab-Web release. Mixing a SDK from release `N` with a bundle
+from release `N+1` is supported as long as the MAJOR is unchanged.
+
+## Hosting checklist
+
+Before shipping the integration to production, verify:
+
+- [ ] The bundle is served from a stable URL — relative URLs in the
+      bundle (`<base href="./">`) make any sub-path work.
+- [ ] The iframe `src` includes
+      `?allowedOrigins=<your-app-origin>` (URL-encoded, comma-separated
+      for multiple origins). Never use `*` outside development.
+- [ ] The host page's CSP allows `frame-src` for the bundle origin
+      (and `worker-src 'self' blob:` if your CSP is strict — Pyodide
+      uses workers).
+- [ ] Static assets under `assets/` are served with long-lived cache
+      headers (their filenames are hashed).
+- [ ] The SDK and bundle versions match the compatibility matrix
+      above.

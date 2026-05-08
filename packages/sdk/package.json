@@ -1,0 +1,45 @@
+{
+  "name": "@datalab-platform/web-sdk",
+  "version": "0.1.0",
+  "description": "Host-side TypeScript SDK to embed and control DataLab-Web (Pyodide-based scientific data processing) from any web app via postMessage.",
+  "license": "BSD-3-Clause",
+  "author": "DataLab Platform Developers",
+  "homepage": "https://github.com/DataLab-Platform/DataLab-Web#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DataLab-Platform/DataLab-Web.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "datalab",
+    "pyodide",
+    "scientific",
+    "iframe",
+    "postmessage",
+    "sdk"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"const f=require('fs');f.rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run clean && npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

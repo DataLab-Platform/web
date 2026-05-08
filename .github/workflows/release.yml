@@ -1,0 +1,70 @@
+name: Release tarballs
+
+# Trigger on tags ``vX.Y.Z`` and on manual dispatch (for re-runs).
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    name: Build & pack (app + SDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify SDK and app versions agree
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          SDK_VERSION=$(node -p "require('./packages/sdk/package.json').version")
+          echo "app=$APP_VERSION sdk=$SDK_VERSION"
+          if [ "$APP_VERSION" != "$SDK_VERSION" ]; then
+            echo "::error::package.json ($APP_VERSION) and packages/sdk/package.json ($SDK_VERSION) versions disagree."
+            exit 1
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm run test
+
+      - name: Build app bundle
+        run: npm run build
+
+      - name: Pack SDK tarball
+        run: npm run sdk:pack
+
+      - name: Pack app tarball
+        run: npm run app:pack
+
+      - name: List release artefacts
+        run: ls -lh release/
+
+      - name: Upload tarballs as workflow artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: datalab-web-release
+          path: release/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach tarballs to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.tgz
+          fail_on_unmatched_files: true
+          generate_release_notes: true

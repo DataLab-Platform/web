@@ -87,6 +87,20 @@ interface RpcEvent {
 
 type EventListener = (payload: unknown) => void;
 
+/** MAJOR version of the wire protocol this SDK supports.
+ *
+ *  When the iframe reports a different MAJOR via
+ *  ``get_protocol_version``, ``ready()`` rejects: the host page must
+ *  upgrade the SDK (or the bundle) to a compatible pair.
+ *
+ *  See ``RPC_PROTOCOL_VERSION`` in ``remoteBridge.ts`` for the
+ *  authoritative server-side value and bump rules. */
+export const SUPPORTED_PROTOCOL_MAJOR = 1;
+
+/** Default value assumed when the iframe does not implement
+ *  ``get_protocol_version`` (older bundle predating versioning). */
+const DEFAULT_PROTOCOL_VERSION = "1.0";
+
 export class DataLabWebClient {
   private readonly win: Window & typeof globalThis;
   private readonly targetOrigin: string;
@@ -95,6 +109,7 @@ export class DataLabWebClient {
   private pending = new Map<number | string, PendingRequest>();
   private listeners = new Map<string, Set<EventListener>>();
   private readyPromise: Promise<string> | null = null;
+  private _protocolVersion: string | null = null;
   private disposed = false;
 
   constructor(
@@ -111,9 +126,19 @@ export class DataLabWebClient {
   // Lifecycle
   // ---------------------------------------------------------------------
 
+  /** Wire-protocol version reported by the iframe (semver
+   *  ``MAJOR.MINOR``). ``null`` until ``ready()`` resolves. */
+  get protocolVersion(): string | null {
+    return this._protocolVersion;
+  }
+
   /** Wait until the iframe responds to a basic probe. Resolves with the
    *  reported version string. Memoised — repeated calls return the same
-   *  promise. Use this to gate calls that depend on Pyodide being ready. */
+   *  promise. Use this to gate calls that depend on Pyodide being ready.
+   *
+   *  Also negotiates the wire-protocol version: rejects if the iframe
+   *  reports a MAJOR incompatible with this SDK (see
+   *  ``SUPPORTED_PROTOCOL_MAJOR``). */
   ready(timeoutMs = 60_000): Promise<string> {
     if (!this.readyPromise) {
       this.readyPromise = this.pollReady(timeoutMs);
@@ -126,8 +151,51 @@ export class DataLabWebClient {
     let lastErr: unknown = null;
     while (Date.now() < deadline) {
       try {
-        return (await this.call("get_version", undefined, 5_000)) as string;
+        const version = (await this.call(
+          "get_version",
+          undefined,
+          5_000,
+        )) as string;
+        // Negotiate protocol compatibility *after* a successful probe.
+        // Older bundles may not implement ``get_protocol_version``; we
+        // treat ``unknown_method`` as "protocol 1.0" for graceful
+        // fallback. Any other failure surfaces as a normal rejection.
+        let proto: string;
+        try {
+          proto = (await this.call(
+            "get_protocol_version",
+            undefined,
+            5_000,
+          )) as string;
+        } catch (err) {
+          if (
+            err instanceof DataLabWebRemoteError &&
+            err.code === "unknown_method"
+          ) {
+            proto = DEFAULT_PROTOCOL_VERSION;
+          } else {
+            throw err;
+          }
+        }
+        const remoteMajor = parseProtocolMajor(proto);
+        if (remoteMajor !== SUPPORTED_PROTOCOL_MAJOR) {
+          throw new Error(
+            `DataLab-Web wire-protocol mismatch: iframe reports ${proto}, ` +
+              `SDK supports MAJOR ${SUPPORTED_PROTOCOL_MAJOR}. ` +
+              `Upgrade either the SDK or the DataLab-Web bundle to a ` +
+              `compatible pair.`,
+          );
+        }
+        this._protocolVersion = proto;
+        return version;
       } catch (err) {
+        // Protocol-mismatch errors are terminal — no point retrying.
+        if (
+          err instanceof Error &&
+          err.message.startsWith("DataLab-Web wire-protocol mismatch")
+        ) {
+          throw err;
+        }
         lastErr = err;
         await new Promise((r) => setTimeout(r, 250));
       }
@@ -216,6 +284,13 @@ export class DataLabWebClient {
 
   getVersion(): Promise<string> {
     return this.call("get_version") as Promise<string>;
+  }
+
+  /** Return the wire-protocol version reported by the iframe (semver
+   *  ``MAJOR.MINOR``). Independent from the application version
+   *  returned by :meth:`getVersion`. */
+  getProtocolVersion(): Promise<string> {
+    return this.call("get_protocol_version") as Promise<string>;
   }
 
   /** Push a 1-D signal to DataLab-Web.
@@ -433,6 +508,15 @@ export class DataLabWebClient {
       }
     }
   };
+}
+
+/** Parse the MAJOR component of a ``MAJOR.MINOR`` semver-ish string.
+ *  Returns ``NaN`` if the input is malformed. */
+function parseProtocolMajor(version: string): number {
+  if (typeof version !== "string") return NaN;
+  const head = version.split(".", 1)[0];
+  const n = Number.parseInt(head, 10);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 function collectTransferables(value: unknown, depth = 0): ArrayBuffer[] {

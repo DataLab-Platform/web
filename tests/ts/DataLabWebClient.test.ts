@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DataLabWebClient,
   DataLabWebRemoteError,
-} from "../../src/sdk/DataLabWebClient";
+} from "../../packages/sdk/src";
 
 interface FakeIframe {
   contentWindow: { postMessage: ReturnType<typeof vi.fn> };
@@ -216,5 +216,86 @@ describe("DataLabWebClient", () => {
     expect(data.y).toBeInstanceOf(Float64Array);
     expect(Array.from(data.x)).toEqual([1.5, 2.5, 3.5, 4.5]);
     expect(Array.from(data.y)).toEqual([-1, 0, 1, 2]);
+  });
+
+  // ----------------------------------------------------------------------
+  // Protocol-version negotiation in ``ready()``.
+  // ----------------------------------------------------------------------
+
+  /** Pump pending microtasks/timers so the SDK's polling loop advances. */
+  async function pump(): Promise<void> {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  }
+
+  /** Drive the ``ready()`` polling loop with scripted iframe responses.
+   *  Returns when both ``get_version`` and ``get_protocol_version`` (or
+   *  the version-only path, for the legacy fallback) have been served.
+   *
+   *  ``onProtocolRequest`` returns either a ``{ result }`` to resolve
+   *  with, or an ``{ error }`` to reject with. Returning ``null`` means
+   *  "do not reply" (used to test malformed remote behaviour). */
+  async function driveReady(
+    versionResult: string,
+    onProtocolRequest: () =>
+      | { result: string }
+      | { error: { code: string; message: string } }
+      | null,
+  ): Promise<void> {
+    await pump();
+    // First request is always ``get_version``.
+    const versionCall = iframe.contentWindow.postMessage.mock.calls[0][0] as {
+      id: number;
+      method: string;
+    };
+    expect(versionCall.method).toBe("get_version");
+    reply(iframe, {
+      id: versionCall.id,
+      type: "response",
+      result: versionResult,
+    });
+    await pump();
+    // Second request is ``get_protocol_version``.
+    const protoCall = iframe.contentWindow.postMessage.mock.calls[1][0] as {
+      id: number;
+      method: string;
+    };
+    expect(protoCall.method).toBe("get_protocol_version");
+    const next = onProtocolRequest();
+    if (next === null) return;
+    reply(iframe, {
+      id: protoCall.id,
+      type: "response",
+      ...next,
+    });
+  }
+
+  it("ready() resolves and exposes the negotiated protocolVersion", async () => {
+    const promise = client.ready(5_000);
+    await driveReady("9.9.9", () => ({ result: "1.0" }));
+    await expect(promise).resolves.toBe("9.9.9");
+    expect(client.protocolVersion).toBe("1.0");
+  });
+
+  it("ready() accepts forward-compatible MINOR bumps within MAJOR 1", async () => {
+    const promise = client.ready(5_000);
+    await driveReady("9.9.9", () => ({ result: "1.42" }));
+    await expect(promise).resolves.toBe("9.9.9");
+    expect(client.protocolVersion).toBe("1.42");
+  });
+
+  it("ready() rejects when the iframe reports an incompatible MAJOR", async () => {
+    const promise = client.ready(5_000);
+    await driveReady("9.9.9", () => ({ result: "2.0" }));
+    await expect(promise).rejects.toThrow(/wire-protocol mismatch/);
+    expect(client.protocolVersion).toBeNull();
+  });
+
+  it("ready() falls back to protocol 1.0 when the bundle predates versioning", async () => {
+    const promise = client.ready(5_000);
+    await driveReady("9.9.9", () => ({
+      error: { code: "unknown_method", message: "Unknown method" },
+    }));
+    await expect(promise).resolves.toBe("9.9.9");
+    expect(client.protocolVersion).toBe("1.0");
   });
 });

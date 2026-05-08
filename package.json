@@ -14,7 +14,11 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "sdk:build": "npm --prefix packages/sdk run build",
+    "sdk:pack": "node scripts/pack-sdk.mjs",
+    "app:pack": "node scripts/pack-app.mjs",
+    "release:pack": "npm run lint && npm run test && npm run build && npm run sdk:pack && npm run app:pack && node scripts/release-summary.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

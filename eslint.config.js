@@ -13,6 +13,8 @@ export default [
     ignores: [
       "dist/**",
       "build/**",
+      "release/**",
+      "packages/*/dist/**",
       "node_modules/**",
       "coverage-ts/**",
       "htmlcov-python/**",
@@ -68,6 +70,15 @@ export default [
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
+    // Node-side build/release scripts — pure Node ESM, no TS, no DOM.
+    files: ["scripts/**/*.{mjs,cjs,js}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node },
     },
   },
 ];

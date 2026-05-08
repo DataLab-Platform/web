@@ -382,6 +382,27 @@
       "dependsOn": [
         "🚀 Dev Server"
       ]
+    },
+    {
+      "label": "📦 Release Package (app + SDK)",
+      "detail": "Lint + Vitest + build, then produce datalab-web-<v>.tgz and datalab-platform-web-sdk-<v>.tgz under release/.",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "release:pack"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": true,
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ],
   "inputs": [

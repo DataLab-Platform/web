@@ -22,8 +22,8 @@
  *      bind to them with no manual change-detection.
  *
  * Drop this file into your Angular app under, e.g.,
- * ``src/app/datalab-web/datalab-web.service.ts`` and adjust the SDK
- * import path to match where you vendored ``DataLabWebClient.ts``.
+ * ``src/app/datalab-web/datalab-web.service.ts`` after installing the
+ * SDK with ``npm install ./datalab-platform-web-sdk-<version>.tgz``.
  */
 
 import { Injectable, OnDestroy, signal } from '@angular/core';
@@ -32,7 +32,7 @@ import {
   DataLabWebClient,
   type SignalXY,
   type ImageData2D,
-} from './sdk/DataLabWebClient';
+} from '@datalab-platform/web-sdk';
 
 @Injectable({ providedIn: 'root' })
 export class DataLabWebService implements OnDestroy {
