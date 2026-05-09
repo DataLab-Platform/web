@@ -6,6 +6,16 @@ engine in [Pyodide](https://pyodide.org/) (CPython compiled to WebAssembly,
 JupyterLite-style) and renders a custom React + TypeScript UI inspired by the
 desktop Qt application.
 
+## Generative AI policy (mandatory)
+
+This project follows the [NLnet GenAI
+policy](https://nlnet.nl/foundation/policies/generativeAI/). When you produce
+code, tests or documentation that ends up in a commit, the human author must
+add an `Assisted-by: <Model> <Version>` trailer to the commit message
+(e.g. `Assisted-by: Claude Opus 4.7`). Human review remains mandatory before
+any commit; structural decisions stay under human responsibility. See
+[CONTRIBUTING.md](../CONTRIBUTING.md) for the full rules.
+
 ## Architecture in one picture
 
 ```

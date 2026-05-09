@@ -249,6 +249,16 @@ A proper internationalisation story would require coordinated work on both sides
 
 Until that work happens, please keep all new UI strings in English and treat the `LANG=C` pin as a load-bearing piece of infrastructure.
 
+## Use of Generative AI
+
+DataLab-Web is funded under an [NLnet](https://nlnet.nl/) grant and complies with the [NLnet policy on the use of Generative AI](https://nlnet.nl/foundation/policies/generativeAI/). Generative AI (GenAI) models are used on this project as a development aid, on auxiliary tasks such as boilerplate, first drafts of tests and documentation, code exploration, log analysis and porting patterns from the Qt desktop codebase to React / TypeScript.
+
+High-level code review, architectural decisions, scientific validation of the Sigima algorithms and any structural choice remain under exclusive human responsibility. No AI-generated content is committed without prior human review, and contributions consisting solely of AI-generated output without substantial human intellectual contribution are not accepted.
+
+Provenance is tracked at the commit level: any commit containing (partially) AI-generated material carries an `Assisted-by: <Model> <Version>` trailer in its message (e.g. `Assisted-by: Claude Opus 4.7`). Commits without that trailer are deemed to contain no AI-assisted content.
+
+The full contributor-facing rules — including the commit convention and license-compatibility requirements — live in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Roadmap
 
 Short-term:
