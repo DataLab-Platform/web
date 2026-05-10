@@ -116,15 +116,15 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               autoComplete="off"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              Stored in your browser's <code>localStorage</code> — visible
-              to any script running on this origin. Leave blank for local
-              endpoints that don't require authentication.
+              Stored in your browser's <code>localStorage</code> — visible to
+              any script running on this origin. Leave blank for local endpoints
+              that don't require authentication.
               {devKeyAvailable && (
                 <>
                   {" "}
                   <strong>
-                    Pre-filled from the <code>OPENAI_API_KEY</code>{" "}
-                    environment variable detected by the Vite dev server.
+                    Pre-filled from the <code>OPENAI_API_KEY</code> environment
+                    variable detected by the Vite dev server.
                   </strong>
                 </>
               )}

@@ -46,14 +46,20 @@ describe("Recent… → workspace replay", () => {
     await recordRecent("notebook", {
       id: "n2",
       title: "Beta",
-      content: '{"nbformat":4,"nbformat_minor":5,"cells":[{"cell_type":"code","source":"print(1)"}]}',
+      content:
+        '{"nbformat":4,"nbformat_minor":5,"cells":[{"cell_type":"code","source":"print(1)"}]}',
     });
 
     // 2. Workspace #2 — list cached entries, newest first, and replay
     //    each one through a (mocked) runtime.
     const runtime = {
       createNotebook: vi
-        .fn<(title: string, content: string) => Promise<{ id: string; title: string; content: string }>>()
+        .fn<
+          (
+            title: string,
+            content: string,
+          ) => Promise<{ id: string; title: string; content: string }>
+        >()
         .mockImplementation(async (title, content) => ({
           id: `fresh-${title}`,
           title,
@@ -99,7 +105,11 @@ describe("Recent… → workspace replay", () => {
 
     const runtime = {
       replaceMacros: vi
-        .fn<(records: Array<{ id: string; title: string; code: string }>) => Promise<void>>()
+        .fn<
+          (
+            records: Array<{ id: string; title: string; code: string }>,
+          ) => Promise<void>
+        >()
         .mockResolvedValue(undefined),
     };
 

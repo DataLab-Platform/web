@@ -43,10 +43,7 @@ describe("aiassistant/settings", () => {
 
   it("ignores corrupted JSON", () => {
     window.localStorage.clear();
-    window.localStorage.setItem(
-      "datalab-web.aiassistant.settings",
-      "not json",
-    );
+    window.localStorage.setItem("datalab-web.aiassistant.settings", "not json");
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
   });
 

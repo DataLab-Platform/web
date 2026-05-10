@@ -1029,10 +1029,7 @@ await micropip.install(["sigima", "guidata"])
         // returns successfully — failed mutations don't dirty the
         // workspace. ``silent`` lets panel bootstrap code seed default
         // content without surfacing it as a user edit.
-        if (
-          !options.silent &&
-          DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)
-        ) {
+        if (!options.silent && DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)) {
           this.emitWorkspaceMutation(name);
         }
         return value;

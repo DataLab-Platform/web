@@ -71,10 +71,7 @@ afterEach(() => {
 
 describe("AIController", () => {
   it("returns assistant text on a one-shot reply with no tool calls", async () => {
-    vi.stubGlobal(
-      "fetch",
-      makeFetch([{ content: "hello", toolCalls: [] }]),
-    );
+    vi.stubGlobal("fetch", makeFetch([{ content: "hello", toolCalls: [] }]));
     const ctrl = new AIController({
       runtime: fakeRuntime,
       tools: [],
@@ -120,7 +117,9 @@ describe("AIController", () => {
     expect(confirm).not.toHaveBeenCalled();
     const toolMsg = ctrl
       .getHistory()
-      .find((m): m is Extract<ChatMessage, { role: "tool" }> => m.role === "tool");
+      .find(
+        (m): m is Extract<ChatMessage, { role: "tool" }> => m.role === "tool",
+      );
     expect(toolMsg).toBeDefined();
     expect(JSON.parse(toolMsg!.content)).toEqual({ ok: true, result: "pong" });
   });
@@ -155,7 +154,9 @@ describe("AIController", () => {
     expect(handler).not.toHaveBeenCalled();
     const toolMsg = ctrl
       .getHistory()
-      .find((m): m is Extract<ChatMessage, { role: "tool" }> => m.role === "tool");
+      .find(
+        (m): m is Extract<ChatMessage, { role: "tool" }> => m.role === "tool",
+      );
     expect(JSON.parse(toolMsg!.content)).toEqual({
       ok: false,
       error: "Rejected by user.",

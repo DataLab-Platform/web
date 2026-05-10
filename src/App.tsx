@@ -293,9 +293,10 @@ export default function App() {
    * once we know how many entries the cache held when the page
    * loaded; reset to ``null`` after Save / Dismiss.
    */
-  const [recoveryBanner, setRecoveryBanner] = useState<
-    { macros: number; notebooks: number } | null
-  >(null);
+  const [recoveryBanner, setRecoveryBanner] = useState<{
+    macros: number;
+    notebooks: number;
+  } | null>(null);
   // Guard: evaluate the banner only once per mount. We don't want it
   // to reappear after the user opens an HDF5 (which clears recovered
   // via ``markClean``) and then reloads — that's a normal cycle.
@@ -1919,7 +1920,15 @@ export default function App() {
       hasMacros: macroCount > 0,
       hasNotebooks: notebookCount > 0,
     }),
-    [status, busy, selectedIds, currentId, hasObjects, macroCount, notebookCount],
+    [
+      status,
+      busy,
+      selectedIds,
+      currentId,
+      hasObjects,
+      macroCount,
+      notebookCount,
+    ],
   );
 
   // Restrict feature actions, creation menu and signal-only menus

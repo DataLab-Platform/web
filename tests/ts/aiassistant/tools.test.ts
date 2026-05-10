@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { BUILTIN_TOOLS, callTool, indexTools } from "../../../src/aiassistant/tools";
+import {
+  BUILTIN_TOOLS,
+  callTool,
+  indexTools,
+} from "../../../src/aiassistant/tools";
 import type { DataLabRuntime } from "../../../src/runtime/runtime";
 
 function fakeRuntime(over: Partial<DataLabRuntime>): DataLabRuntime {

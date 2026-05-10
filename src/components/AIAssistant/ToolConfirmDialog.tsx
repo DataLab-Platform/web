@@ -34,8 +34,7 @@ export function ToolConfirmDialog({ request }: Props) {
   }, [request]);
 
   const argsText = JSON.stringify(request.args, null, 2);
-  const handleApprove = () =>
-    request.resolve({ approve: true, remember });
+  const handleApprove = () => request.resolve({ approve: true, remember });
   const handleReject = () =>
     request.resolve({ approve: false, remember: false });
 
@@ -54,8 +53,8 @@ export function ToolConfirmDialog({ request }: Props) {
       >
         <h2 id="ai-tool-confirm-title">Approve tool call?</h2>
         <p style={{ fontSize: 13 }}>
-          The assistant wants to run the following mutating tool. Review
-          the arguments and approve or reject.
+          The assistant wants to run the following mutating tool. Review the
+          arguments and approve or reject.
         </p>
         <div
           style={{
@@ -104,8 +103,8 @@ export function ToolConfirmDialog({ request }: Props) {
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
           />
-          Auto-approve <code>{request.tool.name}</code> for the rest of
-          this conversation
+          Auto-approve <code>{request.tool.name}</code> for the rest of this
+          conversation
         </label>
         <div className="actions" style={{ marginTop: 14 }}>
           <button type="button" onClick={handleReject}>

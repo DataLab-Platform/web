@@ -42,7 +42,10 @@ import {
   type CellOutput,
   type NotebookModel,
 } from "../../notebook/types";
-import { jsonStringToNotebook, notebookToJsonString } from "../../notebook/nbformat";
+import {
+  jsonStringToNotebook,
+  notebookToJsonString,
+} from "../../notebook/nbformat";
 import { buildQuickstartNotebook } from "../../notebook/templates/quickstart";
 import { notebookToMacro } from "../../notebook/notebookToMacro";
 import { macroToNotebook } from "../../macros/macroToNotebook";
@@ -819,7 +822,10 @@ export const NotebookPanel = forwardRef<
           const rec = await runtime.createNotebook(title, content);
           id = rec.id;
         } catch (err) {
-          console.error("Failed to import recent notebook into workspace:", err);
+          console.error(
+            "Failed to import recent notebook into workspace:",
+            err,
+          );
         }
       }
       try {
@@ -841,7 +847,9 @@ export const NotebookPanel = forwardRef<
     async (id: string) => {
       const meta = storedList.find((m) => m.id === id);
       if (!meta) return;
-      if (!window.confirm(`Remove notebook "${meta.title}" from recent cache?`)) {
+      if (
+        !window.confirm(`Remove notebook "${meta.title}" from recent cache?`)
+      ) {
         return;
       }
       await removeRecent("notebook", id).catch(() => undefined);

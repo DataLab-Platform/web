@@ -262,8 +262,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             }}
           >
             Ask the assistant to inspect the workspace, list available
-            processings, or apply one to the current selection. Mutating
-            calls will require your approval.
+            processings, or apply one to the current selection. Mutating calls
+            will require your approval.
           </div>
         )}
         {transcript.map((entry, idx) => (
@@ -410,8 +410,7 @@ function TranscriptItem({ entry }: { entry: TranscriptEntry }) {
         preview = `error: ${parsed.error ?? "unknown"}`;
       } else if (parsed.result !== undefined) {
         const compact = JSON.stringify(parsed.result);
-        preview =
-          compact.length > 160 ? compact.slice(0, 157) + "…" : compact;
+        preview = compact.length > 160 ? compact.slice(0, 157) + "…" : compact;
       }
     } catch {
       // leave as-is

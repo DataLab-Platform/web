@@ -61,14 +61,32 @@ export { expect };
 export async function dismissAnyDialog(page: Page): Promise<void> {
   const dialog = page.locator("[role=dialog]");
   if ((await dialog.count()) === 0) return;
-  if (!(await dialog.first().isVisible().catch(() => false))) return;
+  if (
+    !(await dialog
+      .first()
+      .isVisible()
+      .catch(() => false))
+  )
+    return;
   await page.keyboard.press("Escape").catch(() => {});
-  if (!(await dialog.first().isVisible().catch(() => false))) return;
+  if (
+    !(await dialog
+      .first()
+      .isVisible()
+      .catch(() => false))
+  )
+    return;
   const cancel = page.getByRole("button", { name: /^Cancel$/ });
   if ((await cancel.count()) > 0) {
-    await cancel.first().click({ timeout: 2_000 }).catch(() => {});
+    await cancel
+      .first()
+      .click({ timeout: 2_000 })
+      .catch(() => {});
   }
-  await dialog.first().waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
+  await dialog
+    .first()
+    .waitFor({ state: "hidden", timeout: 5_000 })
+    .catch(() => {});
 }
 
 /**

@@ -95,9 +95,10 @@ export function MacroEditorTabs({
   const containerRef = useRef<HTMLDivElement>(null);
   const newMenuRef = useRef<HTMLDivElement>(null);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
-  const [newMenuAnchor, setNewMenuAnchor] = useState<
-    { left: number; top: number } | null
-  >(null);
+  const [newMenuAnchor, setNewMenuAnchor] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
 
   // Close the "+" dropdown on outside click.
   useEffect(() => {

@@ -20,9 +20,6 @@ export function MarkdownView({ text }: Props) {
     return DOMPurify.sanitize(raw);
   }, [text]);
   return (
-    <div
-      className="ai-markdown"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="ai-markdown" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

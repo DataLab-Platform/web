@@ -15,7 +15,9 @@ function fakeRuntime(over: Partial<DataLabRuntime> = {}): DataLabRuntime {
   } as unknown as DataLabRuntime;
 }
 
-function mockOpenAI(responses: Array<{ content: string | null; toolCalls?: unknown[] }>) {
+function mockOpenAI(
+  responses: Array<{ content: string | null; toolCalls?: unknown[] }>,
+) {
   let i = 0;
   return vi.fn(async () => {
     const next = responses[i++];
@@ -103,7 +105,9 @@ describe("AIAssistantPanel", () => {
       ]),
     );
     const apply = vi.fn(async () => "new-id");
-    render(<AIAssistantPanel runtime={fakeRuntime({ applyProcessing: apply })} />);
+    render(
+      <AIAssistantPanel runtime={fakeRuntime({ applyProcessing: apply })} />,
+    );
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/AI Assistant input/i), "do it");
     await user.click(screen.getByRole("button", { name: /^Send$/ }));
@@ -139,7 +143,9 @@ describe("AIAssistantPanel", () => {
       ]),
     );
     const apply = vi.fn(async () => "new-id");
-    render(<AIAssistantPanel runtime={fakeRuntime({ applyProcessing: apply })} />);
+    render(
+      <AIAssistantPanel runtime={fakeRuntime({ applyProcessing: apply })} />,
+    );
     const user = userEvent.setup();
     await user.type(screen.getByLabelText(/AI Assistant input/i), "go");
     await user.click(screen.getByRole("button", { name: /^Send$/ }));

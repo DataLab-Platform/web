@@ -27,7 +27,11 @@ import type {
   DataLabRuntime,
 } from "../runtime/runtime";
 import { MacroRuntime } from "../runtime/MacroRuntime";
-import { MacroEditorTabs, type MacroTab, type MacroNewMenuEntry } from "./MacroEditorTabs";
+import {
+  MacroEditorTabs,
+  type MacroTab,
+  type MacroNewMenuEntry,
+} from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
@@ -420,10 +424,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         );
         const code = rec.code ?? "";
         setMacros((prev) => {
-          const next = [
-            ...prev,
-            { id: rec.id, title: rec.title, code },
-          ];
+          const next = [...prev, { id: rec.id, title: rec.title, code }];
           persistMirror(next);
           return next;
         });
@@ -473,10 +474,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       const rec = await runtime.duplicateMacro(activeId);
       const code = rec.code ?? "";
       setMacros((prev) => {
-        const next = [
-          ...prev,
-          { id: rec.id, title: rec.title, code },
-        ];
+        const next = [...prev, { id: rec.id, title: rec.title, code }];
         persistMirror(next);
         return next;
       });
@@ -496,10 +494,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         const { title, code } = parseImportedMacro(file.name, text);
         const rec = await runtime.createMacro(title, code);
         setMacros((prev) => {
-          const next = [
-            ...prev,
-            { id: rec.id, title: rec.title, code },
-          ];
+          const next = [...prev, { id: rec.id, title: rec.title, code }];
           persistMirror(next);
           return next;
         });
@@ -590,10 +585,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         const rec = await runtime.createMacro(cached.title, cached.content);
         const code = rec.code ?? cached.content;
         setMacros((prev) => {
-          const next = [
-            ...prev,
-            { id: rec.id, title: rec.title, code },
-          ];
+          const next = [...prev, { id: rec.id, title: rec.title, code }];
           persistMirror(next);
           return next;
         });
@@ -606,7 +598,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       async (id: string) => {
         const meta = recentList.find((m) => m.id === id);
         if (!meta) return;
-        if (!window.confirm(`Remove macro "${meta.title}" from recent cache?`)) {
+        if (
+          !window.confirm(`Remove macro "${meta.title}" from recent cache?`)
+        ) {
           return;
         }
         await removeRecent("macro", id).catch(() => undefined);
@@ -624,10 +618,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         const rec = await runtime.createMacro(title, code);
         const safe = rec.code ?? "";
         setMacros((prev) => {
-          const next = [
-            ...prev,
-            { id: rec.id, title: rec.title, code: safe },
-          ];
+          const next = [...prev, { id: rec.id, title: rec.title, code: safe }];
           persistMirror(next);
           return next;
         });

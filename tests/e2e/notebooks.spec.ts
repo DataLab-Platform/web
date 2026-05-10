@@ -49,7 +49,9 @@ test.describe("Notebook UI", () => {
     await resetWarmNotebookPanel(warmPage);
   });
 
-  test("cell content survives a panel round-trip", async ({ warmPage: page }) => {
+  test("cell content survives a panel round-trip", async ({
+    warmPage: page,
+  }) => {
     // Type a small program into the only cell. CodeMirror must be
     // focused first; clicking the cell editor area takes care of that.
     const cellEditor = page.locator(".nb-cell-editor .cm-content").first();
@@ -373,26 +375,27 @@ test.describe("Quickstart notebook template", () => {
   // scenario where the bundled Quickstart should auto-load. The
   // standard per-test ``page`` fixture is required — the warm fixture
   // explicitly suppresses the Quickstart on its (one-time) cold boot.
-  coldTest("loads on first boot in a fresh browser context", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    await waitForRuntimeReady(page);
-    await page.getByRole("tab", { name: "Notebooks" }).click();
-    await expect(page.locator(".nb-toolbar-status")).toContainText(
-      /Kernel idle|Kernel running/,
-      { timeout: 180_000 },
-    );
-    // Active tab should be named "Quickstart".
-    await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
-      "Quickstart",
-    );
-    // The template ships with 5 cells (3 markdown + 2 code).
-    await expect(page.locator(".nb-cell")).toHaveCount(5);
-    // First markdown cell renders the H1 "Welcome to DataLab Web Notebooks".
-    const firstRendered = page.locator(".nb-cell-markdown-rendered").first();
-    await expect(firstRendered.locator("h1")).toContainText(
-      "Welcome to DataLab Web Notebooks",
-    );
-  });
+  coldTest(
+    "loads on first boot in a fresh browser context",
+    async ({ page }) => {
+      await page.goto("/");
+      await waitForRuntimeReady(page);
+      await page.getByRole("tab", { name: "Notebooks" }).click();
+      await expect(page.locator(".nb-toolbar-status")).toContainText(
+        /Kernel idle|Kernel running/,
+        { timeout: 180_000 },
+      );
+      // Active tab should be named "Quickstart".
+      await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
+        "Quickstart",
+      );
+      // The template ships with 5 cells (3 markdown + 2 code).
+      await expect(page.locator(".nb-cell")).toHaveCount(5);
+      // First markdown cell renders the H1 "Welcome to DataLab Web Notebooks".
+      const firstRendered = page.locator(".nb-cell-markdown-rendered").first();
+      await expect(firstRendered.locator("h1")).toContainText(
+        "Welcome to DataLab Web Notebooks",
+      );
+    },
+  );
 });

@@ -69,12 +69,15 @@ export function RecoveryBanner({
   const summary = parts.join(" and ");
 
   return (
-    <div className="recovery-banner" role="status" data-testid="recovery-banner">
+    <div
+      className="recovery-banner"
+      role="status"
+      data-testid="recovery-banner"
+    >
       <div className="recovery-banner-message">
-        <strong>Recovered {summary} from the previous session.</strong>{" "}
-        Signals and images were not restored — only macros and notebooks are
-        cached in the browser. Save an HDF5 workspace to make the current
-        state durable.
+        <strong>Recovered {summary} from the previous session.</strong> Signals
+        and images were not restored — only macros and notebooks are cached in
+        the browser. Save an HDF5 workspace to make the current state durable.
       </div>
       <div className="recovery-banner-actions">
         <button

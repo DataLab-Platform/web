@@ -118,9 +118,7 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   // -- 3. Save HDF5 via the File menu ---------------------------------
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: "File" }).first().click();
-  await page
-    .getByRole("menuitem", { name: /Save HDF5 workspace/i })
-    .click();
+  await page.getByRole("menuitem", { name: /Save HDF5 workspace/i }).click();
   const download = await downloadPromise;
   const suggested = download.suggestedFilename();
   expect(suggested).toMatch(/^workspace-.*\.h5$/);
@@ -144,17 +142,15 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   await expect.poll(() => page.title()).not.toContain(suggested);
 
   // Sanity: signal store starts empty after reload.
-  const initialCount = await page.evaluate(async () =>
-    (await window.runtime.listSignals()).length,
+  const initialCount = await page.evaluate(
+    async () => (await window.runtime.listSignals()).length,
   );
   expect(initialCount).toBe(0);
 
   // -- 5. Re-open the saved HDF5 via the File menu --------------------
   const fileChooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("menuitem", { name: "File" }).first().click();
-  await page
-    .getByRole("menuitem", { name: /Open HDF5 workspace/i })
-    .click();
+  await page.getByRole("menuitem", { name: /Open HDF5 workspace/i }).click();
   const chooser = await fileChooserPromise;
   await chooser.setFiles(tmpPath);
 
@@ -196,9 +192,7 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
     if (!seed) return null;
     return await window.runtime.getSignalRoi(seed.id);
   }, marker);
-  expect(restoredRoi).toEqual([
-    expect.objectContaining({ xmin: 2, xmax: 8 }),
-  ]);
+  expect(restoredRoi).toEqual([expect.objectContaining({ xmin: 2, xmax: 8 })]);
 
   // The restored notebook's source must match the marker we wrote.
   const restoredSource = await page.evaluate(async (t) => {
