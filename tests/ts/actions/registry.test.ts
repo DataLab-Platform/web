@@ -99,13 +99,14 @@ describe("buildStaticActions", () => {
 });
 
 describe("buildHelpActions", () => {
-  it("provides four entries always enabled", () => {
+  it("provides five entries always enabled", () => {
     const actions = buildHelpActions({
       onShowAbout: vi.fn(),
       onShowShortcuts: vi.fn(),
       onShowConsole: vi.fn(),
+      onOpenUserGuide: vi.fn(),
     });
-    expect(actions).toHaveLength(4);
+    expect(actions).toHaveLength(5);
     for (const a of actions) {
       expect(a.enabled(makeState({ status: "loading" }))).toBe(true);
     }
