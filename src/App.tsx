@@ -2078,6 +2078,7 @@ export default function App() {
         statusKind={status}
         state={actionState}
         actions={actions}
+        onShowExperimentalInfo={() => setHelpView("about")}
       />
       {recoveryBanner && (
         <RecoveryBanner

@@ -9,6 +9,9 @@ interface Props {
   statusKind: "loading" | "ready" | "error";
   state: ActionState;
   actions: ActionDescriptor[];
+  /** Callback invoked when the user clicks the "Beta" badge
+   *  (typically opens the About dialog). */
+  onShowExperimentalInfo?: () => void;
 }
 
 /** Recursive submenu rendering. */
@@ -104,7 +107,7 @@ function SubmenuList({
 }
 
 export function MenuBar(props: Props) {
-  const { status, statusKind, state, actions } = props;
+  const { status, statusKind, state, actions, onShowExperimentalInfo } = props;
   const tree = useMemo(() => buildMenuTree(actions), [actions]);
   const [openTop, setOpenTop] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -133,6 +136,15 @@ export function MenuBar(props: Props) {
       <div className="menubar-brand">
         <img className="menubar-logo" src={logoUrl} alt="" aria-hidden="true" />
         <h1>DataLab Web</h1>
+        <button
+          type="button"
+          className="experimental-badge"
+          onClick={onShowExperimentalInfo}
+          title="DataLab-Web is currently in beta — click for details"
+          aria-label="DataLab-Web is currently in beta — click for details"
+        >
+          Beta
+        </button>
       </div>
       <nav className="menubar-nav" role="menubar">
         {tree.map((node) => {

@@ -91,6 +91,27 @@ function AboutView({ version }: { version: string }) {
           <div className="help-about-version">version {version}</div>
         </div>
       </div>
+      <div className="help-about-experimental" role="note">
+        <strong>Beta software.</strong> DataLab-Web is under active development
+        and some features may still be incomplete or behave unexpectedly. If you
+        run into an issue, please report it on the{" "}
+        <a
+          href="https://github.com/DataLab-Platform/DataLab-Web/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub issue tracker
+        </a>
+        . Contributions are welcome — see{" "}
+        <a
+          href="https://github.com/DataLab-Platform/DataLab-Web/blob/main/CONTRIBUTING.md"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          CONTRIBUTING.md
+        </a>
+        .
+      </div>
       <p>
         Browser-native sibling of the DataLab desktop application. The Sigima
         computation engine runs entirely client-side via Pyodide (CPython
