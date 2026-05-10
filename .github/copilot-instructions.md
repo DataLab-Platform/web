@@ -114,14 +114,20 @@ Playwright). Pick the cheapest layer that can express the behaviour;
 the full decision tree, promotion criteria, and authoring rules for
 permanent E2E specs live in [`doc/testing-strategy.md`](../doc/testing-strategy.md).
 
-**Mandatory rule for UI changes**: every change that touches the UI
-— bug fix, feature, or **any phase** of a multi-phase implementation —
-must be exercised end-to-end with Playwright before it is declared
-done. Type-checks, unit tests, and "looks fine in the dev server" are
-not enough; Pyodide round-trips and async state interactions silently
-break in ways only a browser-driven test catches reliably. Use a
-throwaway probe (`tests/e2e/_repro_*.spec.ts`, deleted afterwards) when
-the change does not warrant a permanent regression spec.
+**Mandatory pre-completion checks** — before declaring ANY change
+done (bug fix, feature, or any phase of a multi-phase task):
+
+1. **Always run the `🟢 Vitest (TS)` task** (`npm test`). Stale unit
+   tests (e.g. action-registry length assertions) silently break when
+   production code grows; type-checks and dev-server smoke do not catch
+   them. CI failures from skipping this step are not acceptable.
+2. **For UI changes**, additionally exercise the change end-to-end with
+   Playwright — Pyodide round-trips and async state interactions
+   silently break in ways only a browser-driven test catches reliably.
+   Use a throwaway probe (`tests/e2e/_repro_*.spec.ts`, deleted
+   afterwards) when the change does not warrant a permanent regression
+   spec.
+3. **For `src/runtime/*.py` changes**, run pytest (`tests/python`).
 
 ## Git workflow
 
