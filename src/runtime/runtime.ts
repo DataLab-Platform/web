@@ -948,22 +948,21 @@ await micropip.install(["sigima", "guidata"])
             "Call sigima.setDialogHandler(...) on the JS side first.",
         );
       }
-      // ``payload`` may be a Python proxy: convert to plain JS *and* destroy
-      // the proxy to avoid leaking PyProxy instances on every dialog call.
+      // Python side converts dict payloads to plain JS objects via
+      // ``pyodide.ffi.to_js`` before calling us, so ``payload`` is normally
+      // a JS object already.  Keep the legacy ``toJs`` fallback for safety
+      // (e.g. if a Python caller forgets the conversion), but never call
+      // ``destroy()`` on the proxy: Pyodide registers it with its own
+      // ``FinalizationRegistry`` after the awaited call resolves, and an
+      // explicit early destroy would race with that registration and abort
+      // the WASM runtime ("Object has already been destroyed").
       const proxy = payload as PyProxy | null | undefined;
-      const hasToJs = typeof proxy?.toJs === "function";
       let data: unknown = payload;
-      try {
-        if (hasToJs) {
-          data = proxy!.toJs!({
-            dict_converter: (entries) =>
-              Object.fromEntries(entries as Iterable<[string, unknown]>),
-          });
-        }
-      } finally {
-        if (hasToJs) {
-          proxy!.destroy?.();
-        }
+      if (typeof proxy?.toJs === "function") {
+        data = proxy.toJs({
+          dict_converter: (entries) =>
+            Object.fromEntries(entries as Iterable<[string, unknown]>),
+        });
       }
       return fn(String(kind), data);
     };

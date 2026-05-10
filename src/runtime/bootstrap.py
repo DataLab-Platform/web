@@ -620,6 +620,24 @@ def _require_bridge(slot: str) -> Any:
     return _DIALOG_BRIDGE
 
 
+def _to_js_payload(payload: dict) -> Any:
+    """Convert *payload* to a plain JS object before crossing the bridge.
+
+    Without this, Pyodide hands JS a ``PyProxy`` of the dict.  The JS bridge
+    then converts + destroys the proxy explicitly, but Pyodide's
+    ``FinalizationRegistry`` still tries to register the same proxy on the
+    next GC cycle — finding it destroyed and aborting the WASM runtime
+    ("Object has already been destroyed", from ``gc_register_proxies``).
+    Converting on the Python side avoids any PyProxy ever existing on JS.
+    """
+    try:
+        from js import Object  # type: ignore[import-not-found]
+        from pyodide.ffi import to_js  # type: ignore[import-not-found]
+    except Exception:  # pragma: no cover - non-Pyodide environments (tests)
+        return payload
+    return to_js(payload, dict_converter=Object.fromEntries)
+
+
 async def _async_edit_dataset(
     instance: Any, parent: Any = None, **_kwargs: Any
 ) -> bool:
@@ -630,7 +648,7 @@ async def _async_edit_dataset(
     bridge = _require_bridge("edit_dataset_async")
     payload = dataset_to_schema_with_values(instance)
     payload["title"] = getattr(instance, "_title", None) or type(instance).__name__
-    result = await bridge("edit_dataset", payload)
+    result = await bridge("edit_dataset", _to_js_payload(payload))
     if hasattr(result, "to_py"):
         result = result.to_py()
     if not result:
@@ -645,7 +663,9 @@ async def _async_show_message(
     bridge = _require_bridge("show_message_async")
     await bridge(
         "message",
-        {"kind": kind, "message": message, "title": title or ""},
+        _to_js_payload(
+            {"kind": kind, "message": message, "title": title or ""}
+        ),
     )
 
 
@@ -655,11 +675,13 @@ async def _async_ask_question(
     bridge = _require_bridge("ask_question_async")
     result = await bridge(
         "confirm",
-        {
-            "message": message,
-            "title": title or "",
-            "cancelable": bool(cancelable),
-        },
+        _to_js_payload(
+            {
+                "message": message,
+                "title": title or "",
+                "cancelable": bool(cancelable),
+            }
+        ),
     )
     if hasattr(result, "to_py"):
         result = result.to_py()
