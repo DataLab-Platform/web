@@ -96,7 +96,7 @@ function AboutView({ version }: { version: string }) {
         and some features may still be incomplete or behave unexpectedly. If you
         run into an issue, please report it on the{" "}
         <a
-          href="https://github.com/DataLab-Platform/DataLab-Web/issues"
+          href="https://github.com/DataLab-Platform/web/issues"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -104,7 +104,7 @@ function AboutView({ version }: { version: string }) {
         </a>
         . Contributions are welcome — see{" "}
         <a
-          href="https://github.com/DataLab-Platform/DataLab-Web/blob/main/CONTRIBUTING.md"
+          href="https://github.com/DataLab-Platform/web/blob/main/CONTRIBUTING.md"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -129,7 +129,7 @@ function AboutView({ version }: { version: string }) {
         </li>
         <li>
           <a
-            href="https://github.com/DataLab-Platform/DataLab-Web"
+            href="https://github.com/DataLab-Platform/web"
             target="_blank"
             rel="noopener noreferrer"
           >

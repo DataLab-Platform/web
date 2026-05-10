@@ -1,6 +1,6 @@
 # @datalab-platform/web-sdk
 
-Host-side TypeScript SDK to embed and control [DataLab-Web](https://github.com/DataLab-Platform/DataLab-Web) — the Pyodide-based browser version of [DataLab](https://github.com/DataLab-Platform/DataLab) — from any web application.
+Host-side TypeScript SDK to embed and control [DataLab-Web](https://github.com/DataLab-Platform/web) — the Pyodide-based browser version of [DataLab](https://github.com/DataLab-Platform/DataLab) — from any web application.
 
 The SDK has **zero runtime dependencies**: only the DOM is required. It works in any TS/JS framework (React, Angular, Vue, Svelte, vanilla, …).
 
@@ -53,7 +53,7 @@ If the iframe predates protocol versioning (no `get_protocol_version` method), t
 
 ## Framework-specific examples
 
-See [`doc/examples/angular/`](https://github.com/DataLab-Platform/DataLab-Web/tree/main/doc/examples/angular) in the DataLab-Web repository for an Angular integration template (service + component) that wraps this SDK.
+See [`doc/examples/angular/`](https://github.com/DataLab-Platform/web/tree/main/doc/examples/angular) in the DataLab-Web repository for an Angular integration template (service + component) that wraps this SDK.
 
 ## License
 

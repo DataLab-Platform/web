@@ -4,10 +4,10 @@
   "description": "Host-side TypeScript SDK to embed and control DataLab-Web (Pyodide-based scientific data processing) from any web app via postMessage.",
   "license": "BSD-3-Clause",
   "author": "DataLab Platform Developers",
-  "homepage": "https://github.com/DataLab-Platform/DataLab-Web#readme",
+  "homepage": "https://github.com/DataLab-Platform/web#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DataLab-Platform/DataLab-Web.git",
+    "url": "https://github.com/DataLab-Platform/web.git",
     "directory": "packages/sdk"
   },
   "keywords": [
