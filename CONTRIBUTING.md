@@ -42,6 +42,13 @@ Commits without the trailer are deemed to contain no AI-assisted content.
 
 This policy covers everything in the project repository: source code, tests, configuration, documentation and assets. It does not cover the runtime *features* of DataLab-Web that interact with LLMs (e.g. the in-app AI assistant under [src/aiassistant](src/aiassistant/)) — those are product features whose behaviour is documented separately.
 
+## Commit messages
+
+- Use a [Conventional Commits](https://www.conventionalcommits.org/) subject (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, …) of **at most 72 characters**.
+- **Keep messages short.** Most commits in this repo have **no body**. Add a body of **0 to 5 lines max**, and only to convey the *why*, a measurable impact (numbers, perf gains, suite duration) or a non-obvious design constraint — never to enumerate files or restate what the diff already shows.
+- Append the `Assisted-by: <Model> <Version>` trailer for AI-assisted commits (see above).
+- Group related changes in a single commit; split unrelated changes.
+
 ## Pull requests
 
 - Open a pull request against `main`.

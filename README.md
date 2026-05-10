@@ -39,23 +39,27 @@ Code organisation:
 
 - `src/runtime/` — Pyodide loader and Python ↔ JS bridge.
   - `bootstrap.py` — Python module loaded into Pyodide; owns the hierarchical in-memory object model (panels, groups, objects) and exposes the helper functions the UI calls.
-  - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI.
+  - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI (written into Pyodide as `dlw_processor.py`).
   - `runtime.ts` — typed wrapper around the Pyodide instance.
-  - `RuntimeContext.tsx` — React context that loads the runtime once.
-  - `macroWorker.ts` — dedicated Web Worker hosting a second Pyodide instance for macro execution, isolated from the main UI thread.
+  - `RuntimeContext.tsx`, `WorkspaceContext.tsx` — React contexts that load the runtime once and track workspace dirty / filename state.
+  - `macroWorker.ts`, `notebookWorker.ts` — dedicated Web Workers hosting secondary Pyodide instances for macro and notebook cell execution, isolated from the main UI thread.
+  - `MacroRuntime.ts`, `proxyBridge.ts`, `remoteBridge.ts` — proxy / remote-control surfaces shared by macros, notebooks and the SDK.
   - `dlplugins/datalab/` — portable plugin shim providing the `PluginBase` API so DataLab desktop plugins run unchanged.
-  - `dlw_h5browser.py`, `dlw_interactive_fit.py`, … — Python helpers backing specific dialogs.
-- `src/components/` — UI building blocks (menu bar, object tree, plots, dialogs, macro panel, side panels…), including `DialogBridge.tsx` which routes Python dialog requests to React components.
+  - `dlw_h5browser.py`, `dlw_interactive_fit.py`, `dlw_main.py`, `dlw_plugins.py`, `notebook_display.py`, `macro_proxy.py`, `_guidata_*_shim.py` — focused Python helpers backing specific dialogs and the plugin / notebook / macro hosts.
+- `src/components/` — UI building blocks (menu bar, object tree, plots, dialogs, macro panel, side panels…), including `DialogBridge.tsx` which routes Python dialog requests to React components and `DataSetDialog.tsx` / `DataSetForm/` which auto-generate parameter dialogs from guidata DataSet schemas.
 - `src/actions/` — action registry that maps Sigima features to menu items.
 - `src/plugins/` — host-side support for the Qt-compatible plugin API.
-- `src/macros/` — macro editor and execution helpers (templates, autocompletion bindings).
+- `src/macros/`, `src/notebook/` — macro and notebook editor / state logic.
+- `src/aiassistant/` — in-app AI assistant panel and tool wiring.
+- `src/storage/`, `src/utils/` — IndexedDB-backed recovery caches, recent-files store and shared utilities.
 - `src/App.tsx` — top-level layout (menu bar at the top, object tree on the left, central plot area, results panel on the right) with persisted splitter sizes.
+- `packages/sdk/` — host-side TypeScript SDK (`@datalab-platform/web-sdk`) shipped as a separate tarball; its `package.json` version must stay in sync with the app.
 
 ## Persistence model
 
 DataLab-Web treats the **HDF5 workspace file as the single durable
 source of truth**. Everything else — IndexedDB caches, the recent
-notebooks/macros menus, even the in-memory Python `_STORE` — is
+notebooks/macros menus, even the in-memory Python object model — is
 ephemeral and reset on a hard reload of the Pyodide instance.
 
 | Asset class           | Survives F5 reload?                                | How to make durable |
