@@ -69,6 +69,7 @@ import {
 import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
+import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
 import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
 import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
@@ -314,6 +315,7 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [h5BrowserFiles, setH5BrowserFiles] = useState<H5BrowserFile[] | null>(
     null,
   );
@@ -1957,6 +1959,7 @@ export default function App() {
         onShowAbout: () => setHelpView("about"),
         onShowShortcuts: () => setHelpView("shortcuts"),
         onShowConsole: () => setHelpView("console"),
+        onOpenUserGuide: () => setUserGuideOpen(true),
       }),
       ...buildViewActions({
         showResultsOverlay,
@@ -2380,6 +2383,11 @@ export default function App() {
               onMinimize={() => setAIPanelCollapsed(true)}
               onClose={() => setAIPanelVisible(false)}
             />
+          </div>
+        )}
+        {userGuideOpen && (
+          <div className="userguide-floating-host">
+            <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
           </div>
         )}
       </div>

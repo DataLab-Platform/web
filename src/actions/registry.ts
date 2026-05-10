@@ -139,6 +139,7 @@ export interface HelpActionCallbacks {
   onShowAbout: () => void;
   onShowShortcuts: () => void;
   onShowConsole: () => void;
+  onOpenUserGuide: () => void;
 }
 
 /** Wire Help / "?" menu actions. */
@@ -147,10 +148,18 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
   const always = () => true;
   return [
     {
-      id: "help.documentation",
-      label: "Online documentation",
-      menuPath: "Help/Online documentation",
+      id: "help.userguide",
+      label: "User guide",
+      menuPath: "Help/User guide",
       iconUrl: getHelpIconUrl("libre-gui-help.svg"),
+      enabled: always,
+      run: cb.onOpenUserGuide,
+    },
+    {
+      id: "help.documentation",
+      label: "DataLab project website",
+      menuPath: "Help/DataLab project website",
+      iconUrl: getHelpIconUrl("libre-gui-globe.svg"),
       enabled: always,
       run: () =>
         window.open(

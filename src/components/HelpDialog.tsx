@@ -117,6 +117,21 @@ function AboutView({ version }: { version: string }) {
         computation engine runs entirely client-side via Pyodide (CPython
         compiled to WebAssembly); no data leaves your browser.
       </p>
+      <div className="help-about-doc-scope" role="note">
+        <strong>About the online documentation.</strong> The{" "}
+        <a
+          href="https://datalab-platform.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          DataLab project website
+        </a>{" "}
+        is centred on the desktop application. Because DataLab-Web shares the
+        same computation engine (Sigima) and the same processing catalog, most
+        of that content remains directly relevant. Web-specific differences
+        (in-browser execution via Pyodide, persistence, plugins, macros,
+        notebooks) are not covered there.
+      </div>
       <ul className="help-about-links">
         <li>
           <a
@@ -125,7 +140,13 @@ function AboutView({ version }: { version: string }) {
             rel="noopener noreferrer"
           >
             DataLab project website
-          </a>
+          </a>{" "}
+          <span
+            className="help-about-link-tag"
+            title="Centred on the DataLab desktop application"
+          >
+            desktop-focused
+          </span>
         </li>
         <li>
           <a
