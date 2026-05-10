@@ -150,10 +150,15 @@ test.describe("Notebook UI", () => {
     const before = await page.locator(".nb-tab").count();
     await page.locator(".nb-tab-new").click();
     await page.getByRole("menuitem", { name: /Empty notebook/ }).click();
-    // One more tab and the latest one is active.
+    // One more tab and the latest one is active. ``persistAndOpen``
+    // appends the new tab to the React state and immediately activates
+    // it, so the newly-created notebook is always the *last* tab — use
+    // ``.last()`` rather than ``.nth(before)`` to keep the assertion
+    // robust if a stale, deferred state update from a previous test
+    // happens to land between the count snapshot and the assertions.
     await expect(page.locator(".nb-tab")).toHaveCount(before + 1);
     await expect(page.locator(".nb-tab.active")).toHaveCount(1);
-    await expect(page.locator(".nb-tab").nth(before)).toHaveClass(/active/);
+    await expect(page.locator(".nb-tab").last()).toHaveClass(/active/);
   });
 
   test("Export… triggers a .ipynb download with valid nbformat content", async ({

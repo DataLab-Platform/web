@@ -143,8 +143,29 @@ export async function resetWarmNotebookPanel(page: Page): Promise<void> {
     }
   });
   // 3. Spawn a fresh Empty notebook and ensure it is the active tab.
+  //
+  // ``persistAndOpen`` (in ``NotebookPanel``) awaits a Pyodide round-trip
+  // before it appends the new tab to the React state. Previous tests in
+  // the warm worker may have left several stale ``Untitled`` tabs around,
+  // and the *previously* active tab may also be titled ``Untitled``.
+  // Asserting only that "the active tab is named Untitled" is therefore
+  // racy: the assertion can match the prior active tab and return BEFORE
+  // the new tab has been appended, leaving a deferred React state update
+  // that pollutes the next test.
+  //
+  // To get a deterministic reset, snapshot the tab count first and wait
+  // for it to grow by exactly one before continuing.
+  const tabCountBefore = await page.locator(".nb-tab").count();
   await page.locator(".nb-tab-new").click();
   await page.getByRole("menuitem", { name: /Empty notebook/ }).click();
+  await expect(page.locator(".nb-tab")).toHaveCount(tabCountBefore + 1, {
+    timeout: 10_000,
+  });
+  // The newly-appended tab is always the last one (``openOrFocusNotebook``
+  // appends), and the panel activates it synchronously after the append.
+  await expect(page.locator(".nb-tab").last()).toHaveClass(/active/, {
+    timeout: 10_000,
+  });
   await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
     "Untitled",
     { timeout: 10_000 },
