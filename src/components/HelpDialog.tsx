@@ -159,26 +159,38 @@ interface Shortcut {
 
 const SHORTCUTS: { group: string; entries: Shortcut[] }[] = [
   {
-    group: "File",
-    entries: [
-      { keys: "Ctrl+O", action: "Open signal / image…" },
-      { keys: "Ctrl+S", action: "Save current signal / image…" },
-    ],
-  },
-  {
-    group: "Editing forms",
+    group: "Side panel (parameter form)",
     entries: [
       {
         keys: "Ctrl+Enter",
-        action: "Apply pending changes in the side panel",
+        action: "Apply pending changes (also Cmd+Enter on macOS)",
       },
+    ],
+  },
+  {
+    group: "Macros & Notebook",
+    entries: [
+      {
+        keys: "Ctrl+Enter",
+        action: "Run current macro / active notebook cell",
+      },
+    ],
+  },
+  {
+    group: "Object tree",
+    entries: [
+      { keys: "Enter", action: "Confirm rename of the edited item" },
+      { keys: "Esc", action: "Cancel rename of the edited item" },
     ],
   },
   {
     group: "Dialogs",
     entries: [
-      { keys: "Esc", action: "Close the active dialog" },
-      { keys: "Enter", action: "Submit the active dialog" },
+      { keys: "Esc", action: "Close / cancel the active dialog" },
+      {
+        keys: "Enter",
+        action: "Dismiss message dialogs and submit forms",
+      },
     ],
   },
   {
