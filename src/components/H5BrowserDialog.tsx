@@ -218,21 +218,48 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     [updateCurrent],
   );
 
-  const setExpandedAll = useCallback(
-    (expand: boolean) => {
-      updateCurrent((s) => {
-        const next = new Set<string>();
-        if (expand) collectIds(s.file.root, next);
-        else next.add(s.file.root.id);
-        return { ...s, expanded: next };
-      });
-    },
-    [updateCurrent],
-  );
+  const expandAll = useCallback(() => {
+    updateCurrent((s) => {
+      const next = new Set<string>();
+      collectIds(s.file.root, next);
+      return { ...s, expanded: next };
+    });
+  }, [updateCurrent]);
 
-  const restoreLayout = useCallback(() => {
+  // Collapse all = restore the initial layout (root + first level expanded),
+  // mirroring Qt's H5TreeWidget.restore() behaviour.
+  const collapseAll = useCallback(() => {
     updateCurrent((s) => ({ ...s, expanded: defaultExpanded(s.file.root) }));
   }, [updateCurrent]);
+
+  const expandSelection = useCallback(() => {
+    updateCurrent((s) => {
+      const target =
+        (selectedNodeId && findNode(s.file.root, selectedNodeId)) ||
+        s.file.root;
+      const next = new Set(s.expanded);
+      collectIds(target, next);
+      return { ...s, expanded: next };
+    });
+  }, [updateCurrent, selectedNodeId]);
+
+  const collapseSelection = useCallback(() => {
+    updateCurrent((s) => {
+      const target =
+        (selectedNodeId && findNode(s.file.root, selectedNodeId)) ||
+        s.file.root;
+      const ids = new Set<string>();
+      collectIds(target, ids);
+      // Keep the target itself expanded only if it is the root (so the tree
+      // never becomes a single collapsed line); descendants are all collapsed.
+      const next = new Set<string>();
+      for (const id of s.expanded) {
+        if (!ids.has(id)) next.add(id);
+      }
+      if (target === s.file.root) next.add(s.file.root.id);
+      return { ...s, expanded: next };
+    });
+  }, [updateCurrent, selectedNodeId]);
 
   const toggleCheck = useCallback(
     (id: string) => {
@@ -379,14 +406,33 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
             Close
           </button>
           <span className="h5browser-spacer" />
-          <button type="button" onClick={() => setExpandedAll(true)}>
+          <button
+            type="button"
+            onClick={expandAll}
+            disabled={!currentFile}
+          >
             Expand all
           </button>
-          <button type="button" onClick={() => setExpandedAll(false)}>
+          <button
+            type="button"
+            onClick={collapseAll}
+            disabled={!currentFile}
+          >
             Collapse all
           </button>
-          <button type="button" onClick={restoreLayout}>
-            Restore
+          <button
+            type="button"
+            onClick={expandSelection}
+            disabled={!currentFile}
+          >
+            Expand selection
+          </button>
+          <button
+            type="button"
+            onClick={collapseSelection}
+            disabled={!currentFile}
+          >
+            Collapse selection
           </button>
         </div>
 
