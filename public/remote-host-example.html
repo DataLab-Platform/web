@@ -76,7 +76,8 @@
       // Expose for Playwright (`page.evaluate(() => window.__client.…)`).
       window.__client = client;
 
-      let lastId = null;
+      let lastSignalId = null;
+      let lastImageId = null;
 
       const buttons = {
         version: document.getElementById("btn-version"),
@@ -111,29 +112,35 @@
         const N = 256;
         const xs = Array.from({ length: N }, (_, i) => i / N);
         const ys = xs.map((x) => Math.sin(2 * Math.PI * 5 * x));
-        lastId = await wrap("add_signal", () => client.addSignal("Sine 5 Hz", xs, ys));
+        lastSignalId = await wrap("add_signal", () => client.addSignal("Sine 5 Hz", xs, ys));
       };
       buttons.addImage.onclick = async () => {
         const N = 32;
         const data = Array.from({ length: N }, (_, i) =>
           Array.from({ length: N }, (_, j) => i + j),
         );
-        lastId = await wrap("add_image", () => client.addImage("Gradient", data));
+        lastImageId = await wrap("add_image", () => client.addImage("Gradient", data));
       };
       buttons.fft.onclick = () => {
-        if (!lastId) return logLine("!", "no lastId — add a signal first");
-        return wrap("calc(fft)", () => client.calc("fft", null, [lastId]));
+        if (!lastSignalId) return logLine("!", "no signal yet — add a signal first");
+        return wrap("calc(fft)", () => client.calc("fft", null, [lastSignalId]));
       };
       buttons.get.onclick = () => {
-        if (!lastId) return logLine("!", "no lastId");
-        return wrap("get_signal_xy", () => client.getSignalXY(lastId));
+        if (!lastSignalId) return logLine("!", "no signal yet");
+        return wrap("get_signal_xy", () => client.getSignalXY(lastSignalId));
       };
       buttons.remove.onclick = async () => {
-        if (!lastId) return logLine("!", "no lastId");
-        await wrap("delete_object", () => client.deleteObject(lastId));
-        lastId = null;
+        const id = lastSignalId ?? lastImageId;
+        if (!id) return logLine("!", "no object to delete");
+        await wrap("delete_object", () => client.deleteObject(id));
+        if (id === lastSignalId) lastSignalId = null;
+        else lastImageId = null;
       };
-      buttons.reset.onclick = () => wrap("reset_all", () => client.resetAll());
+      buttons.reset.onclick = async () => {
+        await wrap("reset_all", () => client.resetAll());
+        lastSignalId = null;
+        lastImageId = null;
+      };
 
       (async () => {
         try {
