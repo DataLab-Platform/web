@@ -462,6 +462,12 @@ export class DataLabWebClient {
     return this.call("select_objects", { oids, panel }) as Promise<null>;
   }
 
+  /** Return the ids currently selected on the active panel.
+   *  Empty array when nothing is selected. */
+  getSelection(): Promise<string[]> {
+    return this.call("get_selection") as Promise<string[]>;
+  }
+
   setCurrentPanel(panel: "signal" | "image" | "macro"): Promise<null> {
     return this.call("set_current_panel", { panel }) as Promise<null>;
   }

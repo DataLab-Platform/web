@@ -30,10 +30,10 @@
       <button id="btn-add-signal" disabled>add_signal (sine)</button>
       <button id="btn-add-image" disabled>add_image (gradient)</button>
       <div class="row">
-        <button id="btn-fft" disabled>calc(fft) on last</button>
-        <button id="btn-get" disabled>get_signal_xy(last)</button>
+        <button id="btn-fft" disabled>calc(fft) on selection</button>
+        <button id="btn-get" disabled>get_signal_xy(current)</button>
       </div>
-      <button id="btn-remove" disabled>delete_object(last)</button>
+      <button id="btn-remove" disabled>delete_object(current)</button>
       <button id="btn-reset" disabled>reset_all</button>
       <div id="log" aria-live="polite"></div>
     </div>
@@ -76,9 +76,6 @@
       // Expose for Playwright (`page.evaluate(() => window.__client.…)`).
       window.__client = client;
 
-      let lastSignalId = null;
-      let lastImageId = null;
-
       const buttons = {
         version: document.getElementById("btn-version"),
         list: document.getElementById("btn-list"),
@@ -112,35 +109,31 @@
         const N = 256;
         const xs = Array.from({ length: N }, (_, i) => i / N);
         const ys = xs.map((x) => Math.sin(2 * Math.PI * 5 * x));
-        lastSignalId = await wrap("add_signal", () => client.addSignal("Sine 5 Hz", xs, ys));
+        await wrap("add_signal", () => client.addSignal("Sine 5 Hz", xs, ys));
       };
       buttons.addImage.onclick = async () => {
         const N = 32;
         const data = Array.from({ length: N }, (_, i) =>
           Array.from({ length: N }, (_, j) => i + j),
         );
-        lastImageId = await wrap("add_image", () => client.addImage("Gradient", data));
+        await wrap("add_image", () => client.addImage("Gradient", data));
       };
-      buttons.fft.onclick = () => {
-        if (!lastSignalId) return logLine("!", "no signal yet — add a signal first");
-        return wrap("calc(fft)", () => client.calc("fft", null, [lastSignalId]));
-      };
-      buttons.get.onclick = () => {
-        if (!lastSignalId) return logLine("!", "no signal yet");
-        return wrap("get_signal_xy", () => client.getSignalXY(lastSignalId));
+      // Operate on whatever the user has selected inside the iframe.
+      // ``client.calc(...)`` with ``sources=null`` already defaults to
+      // the current selection on the DataLab-Web side.
+      buttons.fft.onclick = () =>
+        wrap("calc(fft)", () => client.calc("fft"));
+      buttons.get.onclick = async () => {
+        const sel = await client.getSelection();
+        if (sel.length === 0) return logLine("!", "no current selection");
+        return wrap("get_signal_xy", () => client.getSignalXY(sel[0]));
       };
       buttons.remove.onclick = async () => {
-        const id = lastSignalId ?? lastImageId;
-        if (!id) return logLine("!", "no object to delete");
-        await wrap("delete_object", () => client.deleteObject(id));
-        if (id === lastSignalId) lastSignalId = null;
-        else lastImageId = null;
+        const sel = await client.getSelection();
+        if (sel.length === 0) return logLine("!", "no current selection");
+        return wrap("delete_object", () => client.deleteObject(sel[0]));
       };
-      buttons.reset.onclick = async () => {
-        await wrap("reset_all", () => client.resetAll());
-        lastSignalId = null;
-        lastImageId = null;
-      };
+      buttons.reset.onclick = () => wrap("reset_all", () => client.resetAll());
 
       (async () => {
         try {

@@ -4,6 +4,7 @@ import { useWorkspace } from "./runtime/WorkspaceContext";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
+import { registerSelectionSource } from "./runtime/selectionState";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
@@ -712,6 +713,18 @@ export default function App() {
     },
     [],
   );
+
+  // Publish selection / panel snapshots to non-React consumers (the
+  // iframe-embedded remote bridge in particular, so host pages can
+  // call ``client.getSelection()`` / target the *current* object).
+  useEffect(() => {
+    registerSelectionSource(() => ({
+      ids: selectedIds,
+      currentId,
+      panel: activePanel,
+    }));
+    return () => registerSelectionSource(null);
+  }, [selectedIds, currentId, activePanel]);
 
   const handleSwitchPanel = useCallback(
     (kind: PanelKind) => {

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { DataLabRuntime } from "./runtime";
 import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
+import { getCurrentPanel, getSelection } from "./selectionState";
 
 interface RuntimeContextValue {
   runtime: DataLabRuntime | null;
@@ -36,6 +37,8 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         try {
           remoteBridgeHandle = activateRemoteBridge(rt, {
             version: import.meta.env.VITE_APP_VERSION,
+            getSelection,
+            getCurrentPanel,
           });
           if (remoteBridgeHandle && import.meta.env.DEV) {
             console.info(

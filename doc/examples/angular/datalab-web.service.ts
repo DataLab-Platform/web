@@ -175,6 +175,12 @@ export class DataLabWebService implements OnDestroy {
     return this.guard((c) => c.deleteObject(oid));
   }
 
+  /** Return the ids currently selected on the active panel inside
+   *  the iframe. Empty array when nothing is selected. */
+  getSelection(): Promise<string[]> {
+    return this.guard((c) => c.getSelection());
+  }
+
   resetAll(): Promise<null> {
     return this.guard((c) => c.resetAll());
   }

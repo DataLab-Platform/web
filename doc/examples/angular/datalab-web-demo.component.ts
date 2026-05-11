@@ -71,25 +71,16 @@ interface LogLine {
         </button>
 
         <div class="row">
-          <button
-            [disabled]="!dlw.ready() || lastId() === null"
-            (click)="onFft()"
-          >
-            calc(fft) on last
+          <button [disabled]="!dlw.ready()" (click)="onFft()">
+            calc(fft) on selection
           </button>
-          <button
-            [disabled]="!dlw.ready() || lastId() === null"
-            (click)="onGet()"
-          >
-            get_signal_xy(last)
+          <button [disabled]="!dlw.ready()" (click)="onGet()">
+            get_signal_xy(current)
           </button>
         </div>
 
-        <button
-          [disabled]="!dlw.ready() || lastId() === null"
-          (click)="onRemove()"
-        >
-          delete_object(last)
+        <button [disabled]="!dlw.ready()" (click)="onRemove()">
+          delete_object(current)
         </button>
         <button [disabled]="!dlw.ready()" (click)="onReset()">reset_all</button>
 
@@ -180,7 +171,6 @@ interface LogLine {
 export class DataLabWebDemoComponent {
   protected readonly dlw = inject(DataLabWebService);
 
-  protected readonly lastId = signal<string | null>(null);
   private readonly lines = signal<LogLine[]>([]);
 
   protected readonly logText = () =>
@@ -222,10 +212,9 @@ export class DataLabWebDemoComponent {
       xs[i] = i / N;
       ys[i] = Math.sin(2 * Math.PI * 5 * xs[i]);
     }
-    const id = await this.wrap('add_signal', () =>
+    await this.wrap('add_signal', () =>
       this.dlw.addSignal('Sine 5 Hz', xs, ys),
     );
-    if (id) this.lastId.set(id);
   }
 
   async onAddImage(): Promise<void> {
@@ -236,34 +225,33 @@ export class DataLabWebDemoComponent {
         data[i * N + j] = i + j;
       }
     }
-    const id = await this.wrap('add_image', () =>
+    await this.wrap('add_image', () =>
       this.dlw.addImage('Gradient', { width: N, height: N, data }),
     );
-    if (id) this.lastId.set(id);
   }
 
+  // Operate on whatever the user has selected inside the iframe.
+  // ``calc(...)`` with ``sources=null`` already defaults to the
+  // current selection on the DataLab-Web side; the other handlers
+  // ask the bridge for the focused id explicitly.
   onFft(): void {
-    const id = this.lastId();
-    if (!id) return this.note('no lastId — add a signal first');
-    void this.wrap('calc(fft)', () => this.dlw.calc('fft', null, [id]));
+    void this.wrap('calc(fft)', () => this.dlw.calc('fft'));
   }
 
-  onGet(): void {
-    const id = this.lastId();
-    if (!id) return this.note('no lastId');
-    void this.wrap('get_signal_xy', () => this.dlw.getSignalXY(id));
+  async onGet(): Promise<void> {
+    const sel = await this.dlw.getSelection();
+    if (sel.length === 0) return this.note('no current selection');
+    void this.wrap('get_signal_xy', () => this.dlw.getSignalXY(sel[0]));
   }
 
   async onRemove(): Promise<void> {
-    const id = this.lastId();
-    if (!id) return this.note('no lastId');
-    await this.wrap('delete_object', () => this.dlw.deleteObject(id));
-    this.lastId.set(null);
+    const sel = await this.dlw.getSelection();
+    if (sel.length === 0) return this.note('no current selection');
+    await this.wrap('delete_object', () => this.dlw.deleteObject(sel[0]));
   }
 
   onReset(): void {
     void this.wrap('reset_all', () => this.dlw.resetAll());
-    this.lastId.set(null);
   }
 
   // -----------------------------------------------------------------

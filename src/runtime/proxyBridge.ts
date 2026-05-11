@@ -236,6 +236,9 @@ _e = _MODEL._objects[${JSON.stringify(oid)}]
       ext.selectObjects?.(a.oids, a.panel);
       return null;
     },
+    /** Return the id list currently selected on the active panel.
+     *  Empty when nothing is selected (or no host is wired). */
+    get_selection: async () => ext.getSelection?.() ?? [],
     call_method: async (p: unknown) => {
       const a = p as {
         name: string;
