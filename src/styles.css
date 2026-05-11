@@ -975,13 +975,29 @@ input {
 }
 
 .object-tree-group-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--text-dim);
-  padding: 0 6px;
+  padding: 2px 4px;
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+  border-radius: 3px;
+  opacity: 0;
+}
+
+.object-tree-group-delete > img {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.object-tree-group-header:hover .object-tree-group-delete,
+.object-tree-group-delete:focus-visible {
+  opacity: 1;
 }
 
 .object-tree-group-delete:hover:not(:disabled) {
@@ -996,13 +1012,49 @@ input {
 }
 
 .object-tree-item {
-  padding: 4px 10px 4px 22px;
+  position: relative;
+  padding: 4px 32px 4px 22px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
 }
 
 .object-tree-item:hover {
   background: var(--panel-alt);
+}
+
+.object-tree-item-delete {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 2px 4px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 3px;
+  opacity: 0;
+}
+
+.object-tree-item-delete > img {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.object-tree-item:hover .object-tree-item-delete,
+.object-tree-item-delete:focus-visible {
+  opacity: 1;
+}
+
+.object-tree-item-delete:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
 }
 
 .object-tree-item.selected {

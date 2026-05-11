@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
+import { getEditIconUrl } from "../assets/editIcons";
+
+const DELETE_ICON_URL = getEditIconUrl("delete.svg");
 
 interface Props {
   tree: PanelTree | null;
@@ -9,6 +12,7 @@ interface Props {
   onRenameObject: (oid: string, name: string) => void;
   onRenameGroup: (gid: string, name: string) => void;
   onDeleteGroup: (gid: string) => void;
+  onDeleteObjects: (ids: string[]) => void;
   onMoveObject: (oid: string, targetGroupId: string) => void;
 }
 
@@ -36,6 +40,7 @@ export function ObjectTree(props: Props) {
     onRenameObject,
     onRenameGroup,
     onDeleteGroup,
+    onDeleteObjects,
     onMoveObject,
   } = props;
 
@@ -163,10 +168,20 @@ export function ObjectTree(props: Props) {
                 title="Delete group"
                 onClick={(e) => {
                   e.stopPropagation();
+                  const n = group.objects.length;
+                  const msg =
+                    n > 0
+                      ? `Delete group "${group.name}" and its ${n} object(s)?`
+                      : `Delete group "${group.name}"?`;
+                  if (!window.confirm(msg)) return;
                   onDeleteGroup(group.gid);
                 }}
               >
-                ×
+                {DELETE_ICON_URL ? (
+                  <img src={DELETE_ICON_URL} alt="" aria-hidden="true" />
+                ) : (
+                  "×"
+                )}
               </button>
             </div>
             {!isCollapsed && (
@@ -227,6 +242,33 @@ export function ObjectTree(props: Props) {
                           <div className="object-tree-meta">
                             #{o.id} · {o.size} pts
                           </div>
+                          <button
+                            type="button"
+                            className="object-tree-item-delete"
+                            title="Delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const ids = selectedSet.has(o.id)
+                                ? selectedIds
+                                : [o.id];
+                              const msg =
+                                ids.length > 1
+                                  ? `Delete ${ids.length} selected object(s)?`
+                                  : `Delete "${o.title}"?`;
+                              if (!window.confirm(msg)) return;
+                              onDeleteObjects(ids);
+                            }}
+                          >
+                            {DELETE_ICON_URL ? (
+                              <img
+                                src={DELETE_ICON_URL}
+                                alt=""
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              "×"
+                            )}
+                          </button>
                         </>
                       )}
                     </li>

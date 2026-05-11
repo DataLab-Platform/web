@@ -1087,20 +1087,27 @@ export default function App() {
     [runtime, currentId, refreshResults, activePanel],
   );
 
-  const handleDelete = useCallback(async () => {
-    if (!runtime || selectedIds.length === 0) return;
-    setBusy(true);
-    try {
-      for (const oid of selectedIds) {
-        await runtime.deleteObject(oid);
+  const deleteObjects = useCallback(
+    async (ids: string[]) => {
+      if (!runtime || ids.length === 0) return;
+      setBusy(true);
+      try {
+        for (const oid of ids) {
+          await runtime.deleteObject(oid);
+        }
+        setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+        setCurrentId((prev) => (prev && ids.includes(prev) ? null : prev));
+        await refresh(null);
+      } finally {
+        setBusy(false);
       }
-      setSelectedIds([]);
-      setCurrentId(null);
-      await refresh(null);
-    } finally {
-      setBusy(false);
-    }
-  }, [runtime, selectedIds, refresh]);
+    },
+    [runtime, refresh],
+  );
+
+  const handleDelete = useCallback(async () => {
+    await deleteObjects(selectedIds);
+  }, [deleteObjects, selectedIds]);
 
   const handleNewGroup = useCallback(async () => {
     if (!runtime) return;
@@ -2154,6 +2161,7 @@ export default function App() {
                 onRenameObject={handleRenameObject}
                 onRenameGroup={handleRenameGroup}
                 onDeleteGroup={handleDeleteGroup}
+                onDeleteObjects={deleteObjects}
                 onMoveObject={handleMoveObject}
               />
             )}
