@@ -9,11 +9,97 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
+  verify:
+    name: Verify versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches package.json and SDK versions
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          SDK_VERSION=$(node -p "require('./packages/sdk/package.json').version")
+          echo "app=$APP_VERSION sdk=$SDK_VERSION"
+          if [ "$APP_VERSION" != "$SDK_VERSION" ]; then
+            echo "::error::package.json ($APP_VERSION) and packages/sdk/package.json ($SDK_VERSION) versions disagree."
+            exit 1
+          fi
+          # On a tag push, additionally enforce that the tag matches the
+          # package version. Skipped on workflow_dispatch (manual re-run).
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [ "$APP_VERSION" != "$TAG_VERSION" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${APP_VERSION}."
+              exit 1
+            fi
+            echo "Tag ${GITHUB_REF_NAME} matches package version ${APP_VERSION}."
+          fi
+
+  python-tests:
+    name: Python ${{ matrix.python-version }} (pytest)
+    runs-on: ubuntu-latest
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: python -m pytest tests/python
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
   pack:
     name: Build & pack (app + SDK)
     runs-on: ubuntu-latest
+    needs: [verify, python-tests, e2e]
+    outputs:
+      app-version: ${{ steps.versions.outputs.app }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,15 +111,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify SDK and app versions agree
-        run: |
-          APP_VERSION=$(node -p "require('./package.json').version")
-          SDK_VERSION=$(node -p "require('./packages/sdk/package.json').version")
-          echo "app=$APP_VERSION sdk=$SDK_VERSION"
-          if [ "$APP_VERSION" != "$SDK_VERSION" ]; then
-            echo "::error::package.json ($APP_VERSION) and packages/sdk/package.json ($SDK_VERSION) versions disagree."
-            exit 1
-          fi
+      - name: Read app version
+        id: versions
+        run: echo "app=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Lint
         run: npm run lint
@@ -61,6 +141,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload built bundle for Pages deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: datalab-web-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Attach tarballs to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -68,3 +156,31 @@ jobs:
           files: release/*.tgz
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: pack
+    # Only deploy on actual tag pushes; skip on workflow_dispatch re-runs.
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Download built bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: datalab-web-dist
+          path: dist
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

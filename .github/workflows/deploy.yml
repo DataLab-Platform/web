@@ -1,10 +1,9 @@
-name: Deploy to GitHub Pages
+name: Deploy to GitHub Pages (manual)
 
+# Automatic deployment on tag push is handled by `release.yml`. This
+# workflow is kept for ad-hoc manual deploys (hotfix preview, branch
+# preview, etc.) and is only triggered via the GitHub Actions UI.
 on:
-  # Temporarily disabled: automatic deployment on push to main is turned off.
-  # Re-enable by uncommenting the `push` trigger below.
-  # push:
-  #   branches: [main]
   workflow_dispatch:
 
 permissions:

@@ -144,6 +144,8 @@ The next `npm run dev` or `npm run build` automatically picks up the new value �
 
 > **Keep `packages/sdk/package.json` in sync** — bump its `version` to the same value before tagging. The release CI fails if the two `package.json` files disagree.
 
+> **What `git push --tags` triggers** — the [`Release tarballs`](.github/workflows/release.yml) workflow runs, in order: version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
+
 ### Distribution: app bundle + SDK tarballs
 
 DataLab-Web is shipped to integrators as **two `.tgz` artefacts** produced by the release pipeline:
