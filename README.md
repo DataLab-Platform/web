@@ -4,6 +4,14 @@ Full-Web reimplementation of the [DataLab](https://datalab-platform.com/) scient
 
 DataLab Web embeds the [Sigima](https://github.com/DataLab-Platform/Sigima) computation engine in [Pyodide](https://pyodide.org/) (CPython compiled to WebAssembly, JupyterLite-style) and pairs it with a dedicated React / TypeScript user interface modelled on the desktop Qt DataLab application. Plotting is delegated to [Plotly.js](https://plotly.com/javascript/) since Qt-based PlotPy is not available in the browser.
 
+## 🚀 Try it now — no install required
+
+**👉 <https://datalab-platform.com/web/>**
+
+The latest release is deployed automatically to GitHub Pages. Open the link in any modern browser (Chrome, Edge, Firefox, Safari) and the full DataLab application — Sigima, NumPy, SciPy, scikit-image, h5py — runs locally inside the browser tab. No server, no account, no upload: your data never leaves your machine.
+
+> First load downloads Pyodide and installs Sigima via `micropip` (~30–60 s). Subsequent loads are cached by the browser.
+
 ![DataLab Web — 2D sinc image with statistics and contrast tools](doc/images/screenshot-image-sinc2d.png)
 
 ## Features
