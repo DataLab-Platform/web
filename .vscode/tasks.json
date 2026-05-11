@@ -403,6 +403,23 @@
         "clear": true
       },
       "problemMatcher": []
+    },
+    {
+      "label": "🚀 Release (bump + commit + tag)",
+      "detail": "Atomically bump app + SDK versions, create the release commit and the vX.Y.Z tag. Push remains manual.",
+      "type": "shell",
+      "command": "node",
+      "args": ["scripts/release.mjs", "${input:newVersion}"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always",
+        "focus": true,
+        "clear": true
+      },
+      "problemMatcher": []
     }
   ],
   "inputs": [
@@ -417,6 +434,12 @@
       "type": "command",
       "command": "simpleBrowser.show",
       "args": "http://localhost:5173/"
+    },
+    {
+      "id": "newVersion",
+      "type": "promptString",
+      "description": "New version (SemVer like 0.2.0, or keyword: patch | minor | major | prerelease)",
+      "default": "minor"
     }
   ]
 }
