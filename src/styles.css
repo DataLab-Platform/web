@@ -3096,6 +3096,16 @@ input {
   font-size: 13px;
 }
 
+.macro-editor-host .cm-gutters {
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  border-right: 1px solid var(--border);
+}
+
+.macro-editor-host .cm-activeLineGutter {
+  background: var(--hover-bg);
+}
+
 /* Output console */
 .macro-console {
   display: flex;
