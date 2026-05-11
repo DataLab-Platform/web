@@ -34,6 +34,9 @@ import {
   buildViewActions,
 } from "./actions/registry";
 import { ObjectTree } from "./components/ObjectTree";
+import type { ObjectTreeHandle } from "./components/ObjectTree";
+import { ContextMenu } from "./components/ContextMenu";
+import { buildObjectContextMenu } from "./actions/buildMenu";
 import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
@@ -1171,6 +1174,53 @@ export default function App() {
     [runtime, refresh],
   );
 
+  const objectTreeRef = useRef<ObjectTreeHandle | null>(null);
+
+  const handleRenameCurrent = useCallback(() => {
+    if (!currentId) return;
+    objectTreeRef.current?.startRenameObject(currentId);
+  }, [currentId]);
+
+  const handleDuplicateSelection = useCallback(async () => {
+    if (!runtime || selectedIds.length === 0) return;
+    setBusy(true);
+    try {
+      const newIds: string[] = [];
+      for (const oid of selectedIds) {
+        newIds.push(await runtime.duplicateObject(oid));
+      }
+      await refresh(newIds[newIds.length - 1] ?? null);
+      setSelectedIds(newIds);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, refresh, selectedIds]);
+
+  const handleMoveSelectionUp = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    await runtime.moveObjectInGroup(currentId, -1);
+    await refresh(currentId);
+  }, [runtime, refresh, currentId]);
+
+  const handleMoveSelectionDown = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    await runtime.moveObjectInGroup(currentId, 1);
+    await refresh(currentId);
+  }, [runtime, refresh, currentId]);
+
+  // Object-tree context menu state.
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const handleObjectContextMenu = useCallback(
+    (_oid: string, x: number, y: number) => {
+      setContextMenu({ x, y });
+    },
+    [],
+  );
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
   const handleEditProperties = useCallback(async () => {
     if (!runtime || !currentId) return;
     const meta = await runtime.getObjectMeta(currentId);
@@ -2019,6 +2069,10 @@ export default function App() {
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onImportHdf5: handleImportHdf5,
         onImportTextWizard: handleImportTextWizard,
+        onRenameCurrent: handleRenameCurrent,
+        onDuplicateSelection: handleDuplicateSelection,
+        onMoveSelectionUp: handleMoveSelectionUp,
+        onMoveSelectionDown: handleMoveSelectionDown,
         panel: objectPanel,
       }),
       ...buildHelpActions({
@@ -2200,6 +2254,7 @@ export default function App() {
               </div>
             ) : (
               <ObjectTree
+                ref={objectTreeRef}
                 tree={tree}
                 selectedIds={selectedIds}
                 currentId={currentId}
@@ -2209,6 +2264,7 @@ export default function App() {
                 onDeleteGroup={handleDeleteGroup}
                 onDeleteObjects={deleteObjects}
                 onMoveObject={handleMoveObject}
+                onObjectContextMenu={handleObjectContextMenu}
               />
             )}
           </div>
@@ -2654,6 +2710,14 @@ export default function App() {
           );
         })()}
       <DialogBridge />
+      {contextMenu && (
+        <ContextMenu
+          nodes={buildObjectContextMenu(actions, objectPanel)}
+          state={actionState}
+          position={contextMenu}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   );
 }

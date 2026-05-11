@@ -53,3 +53,96 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
 
   return root.children ?? [];
 }
+
+/**
+ * Build the curated context menu for an object in the signal/image
+ * tree.
+ *
+ * The list mirrors DataLab Qt's right-click menu (see desktop
+ * screenshots): the most common per-object operations grouped with
+ * separators. Action ids referenced here that are not registered are
+ * silently skipped, so this helper stays robust as the registry
+ * evolves.
+ *
+ * @param actions Full registry of action descriptors.
+ * @param panel Active panel kind, used to expose panel-specific entries
+ *  (e.g. image profiles).
+ */
+export function buildObjectContextMenu(
+  actions: ActionDescriptor[],
+  panel: "signal" | "image",
+): MenuNode[] {
+  const byId = new Map(actions.map((a) => [a.id, a] as const));
+
+  // Per-section ids — order is preserved; ``null`` introduces a separator
+  // between sections. Items absent from the registry are skipped.
+  const sections: (string | null)[] = [
+    "view.open_separate_view",
+    null,
+    "file.save",
+    "file.save_to_directory",
+    null,
+    "edit.rename",
+    "edit.new_group",
+    "edit.move_up",
+    "edit.move_down",
+    null,
+    "edit.duplicate",
+    "edit.delete",
+    null,
+    "roi.edit_graphical",
+    null,
+    "edit.properties",
+  ];
+
+  // Panel-specific entries appended at the end. Each id is silently
+  // skipped if not registered (typically because the underlying Sigima
+  // catalogue entry is missing).
+  if (panel === "signal") {
+    sections.push(
+      null,
+      "analysis.signal.stats",
+      "feature.histogram",
+      "analysis.signal.dynamic_parameters",
+      "analysis.signal.bandwidth_3db",
+    );
+  } else {
+    sections.push(
+      null,
+      "feature.image:fliph",
+      "feature.image:transpose",
+      "feature.image:flipv",
+      "feature.image:rotate90",
+      "feature.image:rotate270",
+      null,
+      "analysis.image.stats",
+      "feature.image:histogram",
+      null,
+      "feature.image:line_profile",
+      "feature.image:segment_profile",
+      "feature.image:average_profile",
+    );
+  }
+
+  const nodes: MenuNode[] = [];
+  let pendingSeparator = false;
+  for (const id of sections) {
+    if (id === null) {
+      // Defer separator emission to the next leaf to avoid trailing/
+      // leading separators when a whole section is missing.
+      pendingSeparator = nodes.length > 0;
+      continue;
+    }
+    const action = byId.get(id);
+    if (!action) continue;
+    const node: MenuNode = {
+      label: action.label,
+      path: action.menuPath,
+      action: pendingSeparator ? { ...action, beginGroup: true } : action,
+      iconUrl: action.iconUrl,
+    };
+    nodes.push(node);
+    pendingSeparator = false;
+  }
+  return nodes;
+}

@@ -1397,6 +1397,14 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("move_object", { oid, target_group_id: targetGroupId });
   }
 
+  async moveObjectInGroup(oid: string, delta: number): Promise<void> {
+    await this.callPy("move_object_in_group", { oid, delta });
+  }
+
+  async duplicateObject(oid: string): Promise<string> {
+    return (await this.callPy("duplicate_object", { oid })) as string;
+  }
+
   async deleteObject(oid: string): Promise<void> {
     await this.callPy("delete_object", { oid });
   }

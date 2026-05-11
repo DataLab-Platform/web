@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
-import type { ActionDescriptor, ActionState, MenuNode } from "../actions/types";
+import type { ActionDescriptor, ActionState } from "../actions/types";
 import { buildMenuTree } from "../actions/buildMenu";
+import { MenuDropdown } from "./MenuDropdown";
 import { useTheme } from "../utils/theme";
 
 interface Props {
@@ -12,98 +13,6 @@ interface Props {
   /** Callback invoked when the user clicks the "Beta" badge
    *  (typically opens the About dialog). */
   onShowExperimentalInfo?: () => void;
-}
-
-/** Recursive submenu rendering. */
-function SubmenuList({
-  nodes,
-  state,
-  onClose,
-}: {
-  nodes: MenuNode[];
-  state: ActionState;
-  onClose: () => void;
-}) {
-  const [openChild, setOpenChild] = useState<string | null>(null);
-  return (
-    <ul className="menu-dropdown" role="menu">
-      {nodes.map((node, idx) => {
-        const sep =
-          node.action?.beginGroup && idx > 0 ? (
-            <li
-              key={node.path + ":sep"}
-              className="menu-separator"
-              role="separator"
-              aria-hidden="true"
-            />
-          ) : null;
-        if (node.children && node.children.length > 0) {
-          const isOpen = openChild === node.path;
-          return (
-            <Fragment key={node.path}>
-              {sep}
-              <li
-                className="menu-item menu-item-submenu"
-                role="menuitem"
-                aria-haspopup="true"
-                aria-expanded={isOpen}
-                onMouseEnter={() => setOpenChild(node.path)}
-                onMouseLeave={() =>
-                  setOpenChild((c) => (c === node.path ? null : c))
-                }
-              >
-                <span className="menu-icon-slot" aria-hidden="true">
-                  {node.iconUrl && (
-                    <img src={node.iconUrl} alt="" className="menu-icon-img" />
-                  )}
-                </span>
-                <span className="menu-label">{node.label}</span>
-                <span className="menu-arrow">›</span>
-                {isOpen && (
-                  <SubmenuList
-                    nodes={node.children}
-                    state={state}
-                    onClose={onClose}
-                  />
-                )}
-              </li>
-            </Fragment>
-          );
-        }
-        const action = node.action!;
-        const enabled = action.enabled(state);
-        return (
-          <Fragment key={node.path}>
-            {sep}
-            <li
-              className={
-                "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
-              }
-              role="menuitem"
-              aria-disabled={!enabled}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!enabled) return;
-                onClose();
-                void action.run();
-              }}
-              title={action.menuPath}
-            >
-              <span className="menu-icon-slot" aria-hidden="true">
-                {action.iconUrl && (
-                  <img src={action.iconUrl} alt="" className="menu-icon-img" />
-                )}
-              </span>
-              <span className="menu-label">{node.label}</span>
-              {action.shortcut && (
-                <span className="menu-shortcut">{action.shortcut}</span>
-              )}
-            </li>
-          </Fragment>
-        );
-      })}
-    </ul>
-  );
 }
 
 export function MenuBar(props: Props) {
@@ -166,7 +75,7 @@ export function MenuBar(props: Props) {
             >
               <span className="menubar-top-label">{node.label}</span>
               {isOpen && node.children && node.children.length > 0 && (
-                <SubmenuList
+                <MenuDropdown
                   nodes={node.children}
                   state={state}
                   onClose={() => setOpenTop(null)}

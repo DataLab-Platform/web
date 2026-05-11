@@ -267,6 +267,12 @@ input {
   left: 100%;
 }
 
+/* Context menu wrapper — neutralises the ``top: 100%`` anchor used
+   by the menu-bar so the dropdown sits exactly at the click point. */
+.context-menu > .menu-dropdown {
+  position: static;
+}
+
 .menu-item {
   position: relative;
   display: flex;

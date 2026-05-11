@@ -105,3 +105,35 @@ def test_rename_unknown_group_raises(fresh_bootstrap):
     bs.get_panel_tree("signal")  # ensure default group exists
     with pytest.raises(KeyError):
         bs.rename_group("not-a-real-gid", "x", kind="signal")
+
+
+def test_duplicate_object_inserts_copy_after_source(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src_id = bs.add_signal_from_arrays("Src", [0.0, 1.0, 2.0], [3.0, 4.0, 5.0])
+    bs.add_signal_from_arrays("Sibling", [0.0, 1.0], [0.0, 0.0])
+    new_id = bs.duplicate_object(src_id)
+    objs = bs.get_panel_tree("signal")["groups"][0]["objects"]
+    ids = [o["id"] for o in objs]
+    # Duplicate is inserted right after the source.
+    assert ids.index(new_id) == ids.index(src_id) + 1
+    # Title is preserved by Sigima's ``copy()``.
+    titles = {o["id"]: o["title"] for o in objs}
+    assert titles[new_id] == titles[src_id]
+
+
+def test_move_object_in_group_reorders(fresh_bootstrap):
+    bs = fresh_bootstrap
+    a = bs.add_signal_from_arrays("A", [0.0, 1.0], [0.0, 0.0])
+    b = bs.add_signal_from_arrays("B", [0.0, 1.0], [0.0, 0.0])
+    c = bs.add_signal_from_arrays("C", [0.0, 1.0], [0.0, 0.0])
+    bs.move_object_in_group(c, -1)  # C: 2 -> 1
+    ids = [o["id"] for o in bs.get_panel_tree("signal")["groups"][0]["objects"]]
+    assert ids == [a, c, b]
+    bs.move_object_in_group(a, 1)  # A: 0 -> 1
+    ids = [o["id"] for o in bs.get_panel_tree("signal")["groups"][0]["objects"]]
+    assert ids == [c, a, b]
+    # Boundary moves are clamped silently.
+    bs.move_object_in_group(c, -1)  # already first
+    bs.move_object_in_group(b, 1)  # already last
+    ids = [o["id"] for o in bs.get_panel_tree("signal")["groups"][0]["objects"]]
+    assert ids == [c, a, b]

@@ -35,6 +35,10 @@ function makeStaticCallbacks() {
     onSaveWorkspaceHdf5: vi.fn(),
     onImportHdf5: vi.fn(),
     onImportTextWizard: vi.fn(),
+    onRenameCurrent: vi.fn(),
+    onDuplicateSelection: vi.fn(),
+    onMoveSelectionUp: vi.fn(),
+    onMoveSelectionDown: vi.fn(),
     panel: "signal" as const,
   };
 }

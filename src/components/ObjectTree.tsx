@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from "react";
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 import { getEditIconUrl } from "../assets/editIcons";
 import { useConfirm } from "./ConfirmDialog";
@@ -15,6 +21,14 @@ interface Props {
   onDeleteGroup: (gid: string) => void;
   onDeleteObjects: (ids: string[]) => void;
   onMoveObject: (oid: string, targetGroupId: string) => void;
+  /** Open a context menu for object *oid* at viewport coordinates. */
+  onObjectContextMenu?: (oid: string, x: number, y: number) => void;
+}
+
+/** Imperative API exposed by ``ObjectTree`` to parent components. */
+export interface ObjectTreeHandle {
+  /** Trigger inline rename on the object with id *oid*. */
+  startRenameObject: (oid: string) => void;
 }
 
 type EditTarget =
@@ -32,7 +46,10 @@ type EditTarget =
  *   the flat list of all visible objects)
  * - clicking a group header: replace selection with all objects of the group
  */
-export function ObjectTree(props: Props) {
+export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(function ObjectTree(
+  props,
+  ref,
+) {
   const {
     tree,
     selectedIds,
@@ -43,11 +60,31 @@ export function ObjectTree(props: Props) {
     onDeleteGroup,
     onDeleteObjects,
     onMoveObject,
+    onObjectContextMenu,
   } = props;
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditTarget>(null);
   const [editValue, setEditValue] = useState("");
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      startRenameObject: (oid: string) => {
+        // Locate the object in the tree to fetch its current title.
+        if (!tree) return;
+        for (const g of tree.groups) {
+          const obj = g.objects.find((o) => o.id === oid);
+          if (obj) {
+            setEditing({ kind: "object", id: oid });
+            setEditValue(obj.title);
+            return;
+          }
+        }
+      },
+    }),
+    [tree],
+  );
   const confirm = useConfirm();
 
   // Flat ordered list of all visible objects (for Shift-click range select).
@@ -230,6 +267,18 @@ export function ObjectTree(props: Props) {
                       onDoubleClick={() =>
                         startEdit({ kind: "object", id: o.id }, o.title)
                       }
+                      onContextMenu={(e) => {
+                        if (!onObjectContextMenu) return;
+                        e.preventDefault();
+                        // Right-click on a non-selected object replaces
+                        // the selection with that single object.
+                        if (!selectedSet.has(o.id)) {
+                          onSelectionChange([o.id], o.id);
+                        } else if (currentId !== o.id) {
+                          onSelectionChange(selectedIds, o.id);
+                        }
+                        onObjectContextMenu(o.id, e.clientX, e.clientY);
+                      }}
                     >
                       {editing?.kind === "object" && editing.id === o.id ? (
                         <input
@@ -295,4 +344,4 @@ export function ObjectTree(props: Props) {
       })}
     </div>
   );
-}
+});

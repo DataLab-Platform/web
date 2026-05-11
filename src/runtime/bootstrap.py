@@ -199,6 +199,37 @@ class ObjectModel:
         src.object_ids.remove(oid)
         target.object_ids.append(oid)
 
+    def move_object_in_group(self, oid: str, delta: int) -> None:
+        """Reorder object *oid* within its current group by *delta*.
+
+        ``delta = -1`` moves the object one slot up, ``+1`` moves it one slot
+        down. The operation is clamped so the object never falls outside the
+        group bounds (silent no-op when already at the boundary).
+        """
+        if delta == 0:
+            return
+        kind = self._objects[oid].kind
+        panel = self.panel(kind)
+        group = panel.find_group_of(oid)
+        idx = group.object_ids.index(oid)
+        new_idx = max(0, min(len(group.object_ids) - 1, idx + delta))
+        if new_idx == idx:
+            return
+        group.object_ids.remove(oid)
+        group.object_ids.insert(new_idx, oid)
+
+    def duplicate_object(self, oid: str) -> str:
+        """Insert a deep copy of object *oid* right after it in its group."""
+        entry = self._objects[oid]
+        new_obj = entry.obj.copy()
+        new_oid = _new_id()
+        self._objects[new_oid] = _ObjectEntry(oid=new_oid, kind=entry.kind, obj=new_obj)
+        panel = self.panel(entry.kind)
+        group = panel.find_group_of(oid)
+        idx = group.object_ids.index(oid)
+        group.object_ids.insert(idx + 1, new_oid)
+        return new_oid
+
     def rename_object(self, oid: str, name: str) -> None:
         """Rename object *oid* in place."""
         obj = self._objects[oid].obj
@@ -663,9 +694,7 @@ async def _async_show_message(
     bridge = _require_bridge("show_message_async")
     await bridge(
         "message",
-        _to_js_payload(
-            {"kind": kind, "message": message, "title": title or ""}
-        ),
+        _to_js_payload({"kind": kind, "message": message, "title": title or ""}),
     )
 
 
@@ -1658,6 +1687,16 @@ def rename_object(oid: str, name: str) -> None:
 def move_object(oid: str, target_group_id: str) -> None:
     """Move object *oid* to *target_group_id*."""
     _MODEL.move_object(oid, target_group_id)
+
+
+def move_object_in_group(oid: str, delta: int) -> None:
+    """Reorder object *oid* within its current group by *delta* slots."""
+    _MODEL.move_object_in_group(oid, delta)
+
+
+def duplicate_object(oid: str) -> str:
+    """Insert a deep copy of object *oid* and return the new oid."""
+    return _MODEL.duplicate_object(oid)
 
 
 def delete_object(oid: str) -> None:

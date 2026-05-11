@@ -30,6 +30,14 @@ export interface StaticActionCallbacks {
   onSaveWorkspaceHdf5: () => void;
   onImportHdf5: () => void;
   onImportTextWizard: () => void;
+  /** Trigger inline rename on the current object in the object tree. */
+  onRenameCurrent: () => void;
+  /** Duplicate every selected object (each becomes a new sibling). */
+  onDuplicateSelection: () => void;
+  /** Move the current object one slot up in its group. */
+  onMoveSelectionUp: () => void;
+  /** Move the current object one slot down in its group. */
+  onMoveSelectionDown: () => void;
   /** Active object kind — drives the wording of File menu entries
    *  ("Open signal…" vs "Open image…", etc.). */
   panel: "signal" | "image";
@@ -122,6 +130,41 @@ export function buildStaticActions(
       beginGroup: true,
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
       run: cb.onDeleteSelection,
+    },
+    {
+      id: "edit.rename",
+      label: "Rename",
+      menuPath: "Edit/Rename",
+      shortcut: "F2",
+      iconUrl: getEditIconUrl("rename.svg"),
+      beginGroup: true,
+      enabled: (s) => ready(s) && s.currentId !== null,
+      run: cb.onRenameCurrent,
+    },
+    {
+      id: "edit.duplicate",
+      label: "Duplicate",
+      menuPath: "Edit/Duplicate",
+      shortcut: "Ctrl+D",
+      iconUrl: getEditIconUrl("duplicate.svg"),
+      enabled: (s) => ready(s) && s.selectedIds.length > 0,
+      run: cb.onDuplicateSelection,
+    },
+    {
+      id: "edit.move_up",
+      label: "Move up",
+      menuPath: "Edit/Move up",
+      iconUrl: getEditIconUrl("move_up.svg"),
+      enabled: (s) => ready(s) && s.currentId !== null,
+      run: cb.onMoveSelectionUp,
+    },
+    {
+      id: "edit.move_down",
+      label: "Move down",
+      menuPath: "Edit/Move down",
+      iconUrl: getEditIconUrl("move_down.svg"),
+      enabled: (s) => ready(s) && s.currentId !== null,
+      run: cb.onMoveSelectionDown,
     },
     {
       id: "edit.properties",
