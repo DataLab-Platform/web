@@ -57,6 +57,7 @@ import {
   type RecentEntry,
 } from "../../storage/recentStore";
 import { Cell } from "./Cell";
+import { useConfirm, useMessage } from "../ConfirmDialog";
 
 interface NotebookPanelProps {
   runtime: DataLabRuntime;
@@ -139,6 +140,8 @@ export const NotebookPanel = forwardRef<
   },
   ref,
 ) {
+  const confirm = useConfirm();
+  const notify = useMessage();
   // -- Open notebooks (in-memory) --------------------------------------
   const [notebooks, setNotebooks] = useState<NotebookModel[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -551,11 +554,15 @@ export const NotebookPanel = forwardRef<
   }, [activeId, runCell]);
 
   const restartKernel = useCallback(async () => {
-    const ok = window.confirm(
-      "Restart the notebook kernel?\n\nThe user namespace (variables defined " +
+    const ok = await confirm({
+      title: "Restart kernel?",
+      message:
+        "Restart the notebook kernel?\n\nThe user namespace (variables defined " +
         "in previous cells) will be lost. Workspace objects in the Signals " +
         "and Images panels are unaffected.",
-    );
+      confirmLabel: "Restart",
+      destructive: true,
+    });
     if (!ok) return;
     const r = getNbRuntime();
     await r.restart();
@@ -570,7 +577,7 @@ export const NotebookPanel = forwardRef<
       })),
     );
     setKernelStatus(r.getStatus());
-  }, [getNbRuntime]);
+  }, [getNbRuntime, confirm]);
 
   // --------------------------------------------------------------------
   // Notebook tabs (open / new / close / rename) + open from disk / store
@@ -652,13 +659,15 @@ export const NotebookPanel = forwardRef<
    * semantics.
    */
   const handleCloseTab = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const nb = notebooksRef.current.find((n) => n.id === id);
       const label = nb?.name ?? "this notebook";
       if (
-        !window.confirm(
-          `Close notebook "${label}"? It will stay in the workspace and the recent cache.`,
-        )
+        !(await confirm({
+          title: "Close notebook",
+          message: `Close notebook "${label}"? It will stay in the workspace and the recent cache.`,
+          confirmLabel: "Close",
+        }))
       ) {
         return;
       }
@@ -681,7 +690,7 @@ export const NotebookPanel = forwardRef<
         });
       }
     },
-    [activeId, persistAndOpen],
+    [activeId, persistAndOpen, confirm],
   );
 
   const handleRenameActive = useCallback(() => {
@@ -749,9 +758,11 @@ export const NotebookPanel = forwardRef<
         text = await file.text();
       } catch (err) {
         console.error("Failed to read .ipynb file:", err);
-        window.alert(
-          `Failed to read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        await notify({
+          kind: "error",
+          title: "Open notebook",
+          message: `Failed to read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+        });
         input.value = "";
         return;
       }
@@ -761,15 +772,17 @@ export const NotebookPanel = forwardRef<
         await persistAndOpen(nb);
       } catch (err) {
         console.error("Failed to parse .ipynb file:", err);
-        window.alert(
-          `Failed to open ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        await notify({
+          kind: "error",
+          title: "Open notebook",
+          message: `Failed to open ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+        });
       } finally {
         // Always reset so the user can pick the same file again later.
         input.value = "";
       }
     },
-    [persistAndOpen],
+    [persistAndOpen, notify],
   );
 
   // -- Open menu (browser-stored) ------------------------------------
@@ -848,14 +861,19 @@ export const NotebookPanel = forwardRef<
       const meta = storedList.find((m) => m.id === id);
       if (!meta) return;
       if (
-        !window.confirm(`Remove notebook "${meta.title}" from recent cache?`)
+        !(await confirm({
+          title: "Remove from recent",
+          message: `Remove notebook "${meta.title}" from recent cache?`,
+          confirmLabel: "Remove",
+          destructive: true,
+        }))
       ) {
         return;
       }
       await removeRecent("notebook", id).catch(() => undefined);
       setStoredList(await listRecent("notebook").catch(() => []));
     },
-    [storedList],
+    [storedList, confirm],
   );
 
   // --------------------------------------------------------------------

@@ -1178,6 +1178,17 @@ input {
   margin-top: 14px;
 }
 
+.overlay .actions button.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.overlay .actions button.danger:hover:not(:disabled) {
+  background: #a82822;
+  border-color: #a82822;
+}
+
 .overlay .error {
   color: #f48771;
   font-size: 12px;

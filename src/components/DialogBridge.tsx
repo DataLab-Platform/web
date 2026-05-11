@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from "react";
 import { DataSetDialog } from "./DataSetDialog";
+import { MessageDialog, type MessageKind } from "./ConfirmDialog";
 import { useRuntime } from "../runtime/RuntimeContext";
 import type { SchemaWithValues } from "../runtime/runtime";
 
@@ -70,11 +71,16 @@ export function DialogBridge() {
   }
 
   if (current.kind === "message") {
+    const rawKind = String(current.payload.kind ?? "info");
+    const kind: MessageKind =
+      rawKind === "warning" || rawKind === "error" ? rawKind : "info";
     return (
       <MessageDialog
-        kind={String(current.payload.kind ?? "info")}
-        message={String(current.payload.message ?? "")}
-        title={String(current.payload.title ?? "")}
+        options={{
+          kind,
+          message: String(current.payload.message ?? ""),
+          title: String(current.payload.title ?? "") || undefined,
+        }}
         onClose={() => finish(null)}
       />
     );
@@ -91,40 +97,6 @@ export function DialogBridge() {
     );
   }
   return null;
-}
-
-function MessageDialog(props: {
-  kind: string;
-  message: string;
-  title: string;
-  onClose: () => void;
-}) {
-  const { kind, message, title, onClose } = props;
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Enter") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-  const heading =
-    title ||
-    (kind === "error"
-      ? "Error"
-      : kind === "warning"
-        ? "Warning"
-        : "Information");
-  return (
-    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="card" onClick={(e) => e.stopPropagation()}>
-        <h2>{heading}</h2>
-        <p style={{ whiteSpace: "pre-wrap" }}>{message}</p>
-        <div className="actions">
-          <button onClick={onClose}>OK</button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function ConfirmDialog(props: {

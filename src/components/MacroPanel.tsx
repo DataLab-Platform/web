@@ -34,6 +34,7 @@ import {
 } from "./MacroEditorTabs";
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
+import { useConfirm } from "./ConfirmDialog";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
@@ -160,6 +161,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     }: Props,
     ref,
   ) {
+    const confirm = useConfirm();
     const [macros, setMacros] = useState<MacroState[]>([]);
     const [openIds, setOpenIds] = useState<string[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -386,13 +388,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
      * the notebook close-tab semantics.
      */
     const closeTab = useCallback(
-      (id: string) => {
+      async (id: string) => {
         const macro = macros.find((m) => m.id === id);
         const label = macro?.title ?? "this macro";
         if (
-          !window.confirm(
-            `Close macro "${label}"? It will stay in the workspace and the recent cache.`,
-          )
+          !(await confirm({
+            title: "Close macro",
+            message: `Close macro "${label}"? It will stay in the workspace and the recent cache.`,
+            confirmLabel: "Close",
+          }))
         ) {
           return;
         }
@@ -409,7 +413,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           return next;
         });
       },
-      [macros],
+      [macros, confirm],
     );
 
     // ---------------------------------------------------------------------
@@ -599,14 +603,19 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         const meta = recentList.find((m) => m.id === id);
         if (!meta) return;
         if (
-          !window.confirm(`Remove macro "${meta.title}" from recent cache?`)
+          !(await confirm({
+            title: "Remove from recent",
+            message: `Remove macro "${meta.title}" from recent cache?`,
+            confirmLabel: "Remove",
+            destructive: true,
+          }))
         ) {
           return;
         }
         await removeRecent("macro", id).catch(() => undefined);
         setRecentList(await listRecent("macro").catch(() => []));
       },
-      [recentList],
+      [recentList, confirm],
     );
 
     // ---------------------------------------------------------------------

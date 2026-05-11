@@ -51,6 +51,11 @@ import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { DialogBridge } from "./components/DialogBridge";
 import {
+  useConfirm,
+  useMessage,
+  usePrompt,
+} from "./components/ConfirmDialog";
+import {
   SeparateViewDialog,
   type SeparateViewContent,
 } from "./components/SeparateViewDialog";
@@ -181,6 +186,9 @@ function usePersistedBool(
 export default function App() {
   const { runtime, status, message, error } = useRuntime();
   const workspace = useWorkspace();
+  const confirm = useConfirm();
+  const notify = useMessage();
+  const prompt = usePrompt();
   const {
     dirty: workspaceDirty,
     filename: workspaceFilename,
@@ -999,10 +1007,12 @@ export default function App() {
             ? await runtime.runImageAnalysis(oid, funcId, params)
             : await runtime.runSignalAnalysis(oid, funcId, params);
         if (result === null) {
-          window.alert(
-            "The analysis function returned no result " +
+          await notify({
+            kind: "info",
+            message:
+              "The analysis function returned no result " +
               "(e.g. FWHM on a flat curve, or no peak detected).",
-          );
+          });
         }
         await refreshResults(oid);
         setPreferredSideTab("results");
@@ -1484,15 +1494,18 @@ export default function App() {
     if (!runtime || !currentId) return;
     if (
       imageRoi.length > 0 &&
-      !window.confirm(
-        "Creating a ROI grid will overwrite any existing ROI.\n\nDo you want to continue?",
-      )
+      !(await confirm({
+        title: "Overwrite ROI?",
+        message:
+          "Creating a ROI grid will overwrite any existing ROI.\n\nDo you want to continue?",
+        confirmLabel: "Continue",
+      }))
     ) {
       return;
     }
     const schema = await runtime.getRoiGridParamSchema();
     setPendingRoiGrid({ oid: currentId, schema });
-  }, [runtime, currentId, imageRoi]);
+  }, [runtime, currentId, imageRoi, confirm]);
 
   const handleSubmitRoiGrid = useCallback(
     async (values: Record<string, unknown>) => {
@@ -1505,7 +1518,11 @@ export default function App() {
         setImageRoi(segments);
         await refresh(oid);
         if (
-          window.confirm("Do you want to extract images from the defined ROI?")
+          await confirm({
+            title: "Extract ROI",
+            message: "Do you want to extract images from the defined ROI?",
+            confirmLabel: "Extract",
+          })
         ) {
           const ids = await runtime.extractImageRois(oid, false);
           await refresh();
@@ -1575,15 +1592,21 @@ export default function App() {
               const opened = await runtime.openH5Browser(file.name, bytes);
               setH5BrowserFiles([opened]);
             } catch (err2) {
-              window.alert(
-                `Failed to open HDF5 file:\n${
+              await notify({
+                kind: "error",
+                title: "Open HDF5",
+                message: `Failed to open HDF5 file:\n${
                   err2 instanceof Error ? err2.message : String(err2)
                 }`,
-              );
+              });
             }
             return;
           }
-          window.alert(`Failed to open HDF5 workspace:\n${msg}`);
+          await notify({
+            kind: "error",
+            title: "Open workspace",
+            message: `Failed to open HDF5 workspace:\n${msg}`,
+          });
           return;
         }
         setSelectedIds([]);
@@ -1627,9 +1650,11 @@ export default function App() {
     async (oids: string[], uint32Clipped: boolean) => {
       setH5BrowserFiles(null);
       if (uint32Clipped) {
-        window.alert(
-          "Some uint32 image data was clipped to int32 range during import.",
-        );
+        await notify({
+          kind: "warning",
+          message:
+            "Some uint32 image data was clipped to int32 range during import.",
+        });
       }
       setSelectedIds([]);
       setCurrentId(oids[oids.length - 1] ?? null);
@@ -1656,16 +1681,19 @@ export default function App() {
     // Browsers can't really show an extension picker on a synthetic <a>
     // download; we offer a one-line prompt with the catalog of supported
     // extensions for parity with DataLab's "Save signal…" dialog.
-    const ext = window.prompt(
-      `File extension (one of: ${writeExts.join(", ")})`,
-      fallbackExt,
-    );
+    const ext = await prompt({
+      title: "Save file",
+      message: `File extension (one of: ${writeExts.join(", ")})`,
+      defaultValue: fallbackExt,
+    });
     if (!ext) return;
     const cleanExt = ext.replace(/^\./, "").trim();
     if (!writeExts.includes(cleanExt)) {
-      window.alert(
-        `Unsupported extension ".${cleanExt}".\nSupported: ${writeExts.join(", ")}`,
-      );
+      await notify({
+        kind: "error",
+        title: "Save file",
+        message: `Unsupported extension ".${cleanExt}".\nSupported: ${writeExts.join(", ")}`,
+      });
       return;
     }
     const filename = `${stem}.${cleanExt}`;
@@ -1811,7 +1839,14 @@ export default function App() {
                 "content.\n\nClick OK to download each file individually " +
                 "instead, or Cancel to abort and pick a different " +
                 "folder.";
-              if (!window.confirm(explanation)) return;
+              if (
+                !(await confirm({
+                  title: "Write blocked",
+                  message: explanation,
+                  confirmLabel: "Download instead",
+                }))
+              )
+                return;
               // Fall through to the download fallback below.
             } else {
               try {
@@ -1859,7 +1894,14 @@ export default function App() {
                     "or Cancel to abort."
                   : `Write failed:\n${msg}\n\nClick OK to download each ` +
                     `file individually instead.`;
-                if (!window.confirm(explanation)) return;
+                if (
+                  !(await confirm({
+                    title: "Write failed",
+                    message: explanation,
+                    confirmLabel: "Download instead",
+                  }))
+                )
+                  return;
                 // Fall through to download-fallback below.
               }
             }
@@ -1884,7 +1926,11 @@ export default function App() {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        window.alert(`Save to directory failed:\n${msg}`);
+        await notify({
+          kind: "error",
+          title: "Save to directory",
+          message: `Save to directory failed:\n${msg}`,
+        });
       } finally {
         setBusy(false);
       }

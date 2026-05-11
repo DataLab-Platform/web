@@ -22,6 +22,7 @@ import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
+import { useMessage } from "./ConfirmDialog";
 
 type TabId = "creation" | "properties" | "processing" | "results";
 
@@ -90,6 +91,7 @@ export function SidePanel(props: Props) {
   } = props;
   const [active, setActive] = useState<TabId>(preferredTab);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  const notify = useMessage();
   // Cached "last processing" payload for the current object.  Fetched
   // here (not just inside the Processing tab) so the tab header can be
   // shown / hidden without mounting the panel first.
@@ -144,10 +146,13 @@ export function SidePanel(props: Props) {
 
   const handlePopOut = useCallback(async () => {
     if (!pipApiSupported()) {
-      window.alert(
-        "Pop-out requires the Document Picture-in-Picture API " +
+      await notify({
+        kind: "warning",
+        title: "Pop-out unavailable",
+        message:
+          "Pop-out requires the Document Picture-in-Picture API " +
           "(Chrome / Edge 116+).",
-      );
+      });
       return;
     }
     try {
@@ -174,7 +179,7 @@ export function SidePanel(props: Props) {
       // User dismissed the picker, or browser denied — silently ignore.
       console.warn("Pop-out failed:", err);
     }
-  }, [width]);
+  }, [width, notify]);
 
   const handleDock = useCallback(() => {
     if (pipWindow && !pipWindow.closed) pipWindow.close();

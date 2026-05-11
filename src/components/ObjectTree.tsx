@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 import { getEditIconUrl } from "../assets/editIcons";
+import { useConfirm } from "./ConfirmDialog";
 
 const DELETE_ICON_URL = getEditIconUrl("delete.svg");
 
@@ -47,6 +48,7 @@ export function ObjectTree(props: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditTarget>(null);
   const [editValue, setEditValue] = useState("");
+  const confirm = useConfirm();
 
   // Flat ordered list of all visible objects (for Shift-click range select).
   const flatIds = useMemo(() => {
@@ -166,14 +168,20 @@ export function ObjectTree(props: Props) {
                 type="button"
                 className="object-tree-group-delete"
                 title="Delete group"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
                   const n = group.objects.length;
-                  const msg =
+                  const message =
                     n > 0
                       ? `Delete group "${group.name}" and its ${n} object(s)?`
                       : `Delete group "${group.name}"?`;
-                  if (!window.confirm(msg)) return;
+                  const ok = await confirm({
+                    title: "Delete group",
+                    message,
+                    confirmLabel: "Delete",
+                    destructive: true,
+                  });
+                  if (!ok) return;
                   onDeleteGroup(group.gid);
                 }}
               >
@@ -246,16 +254,22 @@ export function ObjectTree(props: Props) {
                             type="button"
                             className="object-tree-item-delete"
                             title="Delete"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
                               const ids = selectedSet.has(o.id)
                                 ? selectedIds
                                 : [o.id];
-                              const msg =
+                              const message =
                                 ids.length > 1
                                   ? `Delete ${ids.length} selected object(s)?`
                                   : `Delete "${o.title}"?`;
-                              if (!window.confirm(msg)) return;
+                              const ok = await confirm({
+                                title: "Delete",
+                                message,
+                                confirmLabel: "Delete",
+                                destructive: true,
+                              });
+                              if (!ok) return;
                               onDeleteObjects(ids);
                             }}
                           >

@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { DialogProvider } from "./components/ConfirmDialog";
 import { RuntimeProvider } from "./runtime/RuntimeContext";
 import { WorkspaceProvider } from "./runtime/WorkspaceContext";
 import { installConsoleCapture } from "./utils/consoleLog";
@@ -19,7 +20,9 @@ createRoot(container).render(
   <StrictMode>
     <RuntimeProvider>
       <WorkspaceProvider>
-        <App />
+        <DialogProvider>
+          <App />
+        </DialogProvider>
       </WorkspaceProvider>
     </RuntimeProvider>
   </StrictMode>,
