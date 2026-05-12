@@ -41,13 +41,44 @@ export default defineConfig({
       // invariant; it lives under the ``perf`` project to keep the
       // default CI run cheap. ``_repro_*`` throwaway specs are also
       // excluded so a forgotten reproduction probe never lands in CI.
-      testIgnore: [/image_perf\.spec\.ts/, /_repro_.*\.spec\.ts/],
+      testIgnore: [
+        /image_perf\.spec\.ts/,
+        /_repro_.*\.spec\.ts/,
+        /tests[\\/]benchmark[\\/]/,
+      ],
     },
     {
       name: "perf",
       use: { ...devices["Desktop Chrome"] },
       testMatch: [/image_perf\.spec\.ts/],
       timeout: 600_000,
+    },
+    {
+      // Comparative benchmark suite (DataLab Web vs DataLab Qt). Opt-in
+      // only — these specs run for tens of minutes and produce JSON
+      // result files under ``tests/benchmark/results/``. Run with
+      // ``npx playwright test --project=benchmark`` or via
+      // ``npm run bench:run`` (orchestrator script).
+      name: "benchmark",
+      // Headless Chromium with explicit flags to defeat background-tab
+      // throttling. By default a non-focused window (or any headless
+      // window) gets throttled timers and de-prioritised V8 JIT, which
+      // inflates Pyodide-Browser timings ×2 vs CPython. Disabling the
+      // throttling brings the ratio down to ~×1.25 (in line with
+      // Pyodide-Node) and is reproducible regardless of focus.
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: [
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+            "--disable-features=CalculateNativeWinOcclusion",
+          ],
+        },
+      },
+      testDir: "./tests/benchmark",
+      timeout: 120 * 60_000,
     },
   ],
   webServer: {

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DataLab benchmark — Pyodide host</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  </head>
+  <body>
+    <h1>DataLab benchmark — Pyodide host</h1>
+    <p id="status">Idle.</p>
+    <pre id="log" style="white-space: pre-wrap; font-family: monospace"></pre>
+    <script>
+      const $status = document.getElementById("status");
+      const $log = document.getElementById("log");
+      const log = (msg) => {
+        $log.textContent += msg + "\n";
+        console.log(msg);
+      };
+
+      // Globals exposed to the Playwright spec so it can drive the page.
+      window.bench = {
+        ready: false,
+        coldStartMs: 0,
+        pyodideVersion: null,
+        sigimaVersion: null,
+        runtime: null, // pyodide instance, set after boot
+      };
+
+      window.benchBoot = async function () {
+        const t0 = performance.now();
+        $status.textContent = "Loading Pyodide…";
+        const py = await window.loadPyodide({
+          indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
+        });
+        await py.runPythonAsync(`
+import os
+os.environ["LANG"] = "C"
+os.environ["LANGUAGE"] = "C"
+`);
+        $status.textContent = "Loading scientific stack…";
+        await py.loadPackage([
+          "numpy",
+          "scipy",
+          "scikit-image",
+          "pandas",
+          "pywavelets",
+          "h5py",
+          "micropip",
+        ]);
+        const wheelB64 = window.__sigimaWheelB64;
+        const wheelName = window.__sigimaWheelName || "sigima.whl";
+        if (wheelB64) {
+          $status.textContent = "Installing local Sigima wheel…";
+          const bin = atob(wheelB64);
+          const u8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) u8[i] = bin.charCodeAt(i);
+          py.FS.writeFile(`/tmp/${wheelName}`, u8);
+          py.globals.set("__bench_wheel", `/tmp/${wheelName}`);
+          await py.runPythonAsync(`
+import micropip
+await micropip.install(["guidata", "makefun"])
+import sys
+if __bench_wheel not in sys.path:
+    sys.path.insert(0, __bench_wheel)
+import sigima
+`);
+          log(`Using local Sigima wheel: ${wheelName}`);
+        } else {
+          $status.textContent = "Installing Sigima (PyPI)…";
+          await py.runPythonAsync(`
+import micropip
+await micropip.install(["sigima", "guidata"])
+`);
+          log("Using PyPI Sigima (no local wheel injected).");
+        }
+        // Inject the chain runner module from the JS side.
+        py.FS.writeFile("/home/pyodide/chain_runner.py", window.__chainRunner);
+        await py.runPythonAsync(`
+import sys
+if "/home/pyodide" not in sys.path:
+    sys.path.insert(0, "/home/pyodide")
+import chain_runner
+`);
+        const sigver = await py.runPythonAsync(
+          "import sigima; sigima.__version__",
+        );
+        window.bench.runtime = py;
+        window.bench.coldStartMs = performance.now() - t0;
+        window.bench.pyodideVersion = py.version;
+        window.bench.sigimaVersion = sigver;
+        window.bench.ready = true;
+        $status.textContent = `Ready (sigima=${sigver}, cold-start=${window.bench.coldStartMs.toFixed(0)} ms).`;
+        log($status.textContent);
+      };
+
+      window.benchRun = async function (chainJsonStr) {
+        if (!window.bench.ready) throw new Error("Pyodide not booted yet");
+        const py = window.bench.runtime;
+        py.globals.set("__bench_chain_json", chainJsonStr);
+        const t0 = performance.now();
+        const resultJson = await py.runPythonAsync(`
+from chain_runner import run_chain_from_json_str
+run_chain_from_json_str(__bench_chain_json)
+`);
+        const wallMs = performance.now() - t0;
+        const parsed = JSON.parse(resultJson);
+        log(
+          `run: total=${parsed.total_ms.toFixed(0)} ms (wall=${wallMs.toFixed(0)} ms) blobs=${parsed.blob_checksum}`,
+        );
+        return { wallMs, ...parsed };
+      };
+    </script>
+  </body>
+</html>

@@ -74,7 +74,7 @@ export default [
   },
   {
     // Node-side build/release scripts — pure Node ESM, no TS, no DOM.
-    files: ["scripts/**/*.{mjs,cjs,js}"],
+    files: ["scripts/**/*.{mjs,cjs,js}", "tests/benchmark/**/*.{mjs,cjs,js}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

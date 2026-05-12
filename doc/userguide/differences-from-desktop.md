@@ -63,3 +63,37 @@ as the desktop app. See [Plugins](plugins.md) for the practical guide.
 See [Notebooks](notebooks.md) for the architecture and behaviour of the
 notebook subsystem. Macros follow the same model: a dedicated Pyodide
 worker, a proxy bridge to the main runtime, structured cell results.
+
+## Performance
+
+Running Python in WebAssembly is not free, but the cost is moderate:
+on a typical processing chain (`gaussian_filter` → `moving_median` →
+`magnitude_spectrum` → `opening` → `threshold` → `blob_log`, applied to
+five 1024×1024 images), DataLab-Web is **~25% slower** than the same
+Sigima pipeline on native CPython.
+
+| Backend | Pure processing time | vs CPython |
+| --- | --- | --- |
+| CPython 3.12 (native) | 7.8 s | ×1.00 |
+| Pyodide in Node.js | 9.7 s | ×1.24 |
+| Pyodide in Chromium | 9.8 s | ×1.27 |
+
+**Key takeaways:**
+
+- The browser and Node.js backends perform almost identically — the
+  WebAssembly engine is the dominant factor, not the host.
+- Cold-start is the main visible difference: ~10 s for the Pyodide
+  bootstrap + Sigima install on a cold cache, vs ~2 s for native
+  Python startup. Subsequent operations run at full WASM speed.
+- Visualization (Plotly.js) adds an overhead per displayed object
+  comparable to the desktop PlotPy renderer for typical signals and
+  images.
+
+In practice, for the interactive workflows DataLab-Web targets
+(load 1–3 objects, apply 1–2 processings, observe), the runtime cost
+is dominated by Pyodide cold-start and is invisible once the
+application is loaded.
+
+The benchmark suite that produced these numbers lives under
+[`tests/benchmark/`](https://github.com/DataLab-Platform/web/tree/main/tests/benchmark)
+and can be reproduced with `npm run bench:run`.
