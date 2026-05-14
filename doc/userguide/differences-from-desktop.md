@@ -29,9 +29,10 @@ from the browser cache.
 - **No Qt-only widgets**. PlotPy interactive tools (rotation, polygon
   picker…) are not available; equivalent flows are reimplemented with
   Plotly + React when applicable.
-- **Plugins are JavaScript or Python**. JavaScript plugins live alongside
-  the React app; Python plugins are installed into Pyodide at runtime.
-  See [Plugins](#plugins).
+- **Plugins are Python only**. The Qt-compatible `PluginBase` API is
+  shared with the desktop DataLab — the same plugin source runs in
+  both, provided dialogs use `await param.edit_async(...)`. See
+  [Plugins](#plugins).
 - **Macros and notebooks run in Web Workers**. They have their own Pyodide
   instance and communicate with the main runtime through a structured
   proxy (`MacroRuntime`, `proxyBridge`). Long-running computations no
@@ -54,9 +55,11 @@ from the browser cache.
 
 ## Plugins
 
-JavaScript plugins are loaded from `plugins/` at startup; Python plugins
-are installed via `micropip` and registered through the same hook system
-as the desktop app. See [Plugins](plugins.md) for the practical guide.
+Built-in Python plugins live under `src/runtime/builtin_plugins/` and
+are discovered automatically at startup; user plugins are loaded from a
+local `.py` file via *Plugins → Manage plugins…*. Both are registered
+through the same hook system as the desktop app. See
+[Plugins](plugins.md) for the practical guide.
 
 ## Macros and notebooks
 

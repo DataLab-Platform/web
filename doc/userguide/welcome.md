@@ -17,7 +17,8 @@ WebAssembly). No data leaves your browser.
   panels, persist your workspace as an HDF5 file.
 - Automate workflows with **macros** and **notebooks** running in dedicated
   Web Workers so the UI stays responsive.
-- Extend the application with **plugins** (Python or JavaScript) and a
+- Extend the application with **Python plugins** (Qt-compatible
+  `PluginBase` API, shared with the desktop DataLab) and a
   **TypeScript SDK** for embedding DataLab-Web in third-party apps.
 
 ## Where to find help
