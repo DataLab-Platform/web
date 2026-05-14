@@ -1,0 +1,39 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`conversationToMarkdown > renders a multi-turn conversation including tool calls and results 1`] = `
+"# Test conversation
+
+_Created: 2025-01-01T12:00:00.000Z • Updated: 2025-01-01T12:05:00.000Z • Tokens: 50_
+
+## You
+
+list signals please
+
+## Assistant
+
+**Tool calls:**
+
+\`\`\`json
+[
+  {
+    "id": "c1",
+    "name": "list_signals",
+    "arguments": {}
+  }
+]
+\`\`\`
+
+## Tool result (list_signals)
+
+\`\`\`json
+{
+  "ok": true,
+  "result": []
+}
+\`\`\`
+
+## Assistant
+
+There are no signals yet.
+"
+`;

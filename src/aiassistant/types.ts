@@ -53,11 +53,23 @@ export interface ToolCall {
   };
 }
 
+/** Token-usage breakdown reported by the LLM provider. All fields are
+ *  optional because not every provider returns every counter — sum
+ *  whichever ones are populated. */
+export interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 /** Provider response decoded from one ``/chat/completions`` round-trip. */
 export interface ProviderResponse {
   /** ``null`` when the LLM only emits tool calls and no prose. */
   content: string | null;
   toolCalls: ToolCall[];
+  /** Token usage for this single round-trip; absent when the provider
+   *  did not include a ``usage`` block. */
+  usage?: TokenUsage;
 }
 
 /** Outcome of a tool invocation, serialised as the ``content`` of the
@@ -134,6 +146,10 @@ export interface ControllerListener {
   onToolStarted?: (toolCall: ToolCall) => void;
   onToolFinished?: (toolCall: ToolCall, result: ToolResult) => void;
   onError?: (error: Error) => void;
+  /** Fired after each provider round-trip that reports usage. *turn*
+   *  is the count for that round-trip; *cumulative* is the running
+   *  total across the conversation. */
+  onUsage?: (turn: TokenUsage, cumulative: TokenUsage) => void;
 }
 
 /** Type guard: is this handler return value already a structured result? */

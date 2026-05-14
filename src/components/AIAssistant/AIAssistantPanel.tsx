@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DataLabRuntime } from "../../runtime/runtime";
-import { AIController } from "../../aiassistant/controller";
+import { AIController, isAbortError } from "../../aiassistant/controller";
 import {
   fetchDevOpenAIKey,
   isConfigured,
@@ -21,6 +21,7 @@ import { BUILTIN_TOOLS } from "../../aiassistant/tools";
 import type {
   ChatMessage,
   ProviderSettings,
+  TokenUsage,
   Tool,
   ToolCall,
   ToolResult,
@@ -71,6 +72,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  /** Cumulative token usage for the active conversation. Hydrated from
+   *  the persisted record on load and updated by ``onUsage``. */
+  const [usage, setUsage] = useState<TokenUsage>({});
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   // Active persisted conversation. ``null`` means the controller is empty
   // (post-mount, before the first user message of a fresh conversation).
@@ -154,6 +158,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             void call;
             void result;
           },
+          onUsage: (_turn, cumulative) => {
+            setUsage(cumulative);
+          },
         },
       }),
     [runtime, confirmTool],
@@ -178,8 +185,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         if (list.length === 0) return;
         const conv = await loadConversation(list[0].id);
         if (!conv) return;
-        controller.setMessages(conv.messages);
+        controller.setMessages(conv.messages, conv.usage);
         setTranscript(conv.messages.map((message) => ({ message })));
+        setUsage(conv.usage ?? {});
         conversationRef.current = conv;
         setConversationId(conv.id);
       } catch (err) {
@@ -212,6 +220,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
       }
     }
     conv.messages = messages;
+    conv.usage = controller.getUsage();
     try {
       await saveConversation(conv);
     } catch (err) {
@@ -235,17 +244,37 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     try {
       await controller.sendUserMessage(text);
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : String(err));
+      // Stop button: swallow silently — the partial transcript is the
+      // only feedback the user needs.
+      if (!isAbortError(err)) {
+        setErrorMessage(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setBusy(false);
       void persistConversation();
     }
   }, [busy, controller, input, persistConversation, settings]);
 
+  /** Cancel the in-flight assistant turn. Also rejects an open
+   *  tool-confirmation dialog so the controller can wind down cleanly. */
+  const handleStop = useCallback(() => {
+    if (pendingConfirm) {
+      pendingConfirm.resolve({ approve: false, remember: false });
+    }
+    controller.abort();
+  }, [controller, pendingConfirm]);
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void handleSend();
+      return;
+    }
+    // Stop the in-flight turn with Escape (textarea is disabled while
+    // busy, but Escape still reaches the keydown handler).
+    if (event.key === "Escape" && busy) {
+      event.preventDefault();
+      handleStop();
       return;
     }
     // Bash-style history navigation: Ctrl+Up / Ctrl+Down.
@@ -282,6 +311,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     controller.reset();
     autoApprovedRef.current.clear();
     setTranscript([]);
+    setUsage({});
     setErrorMessage(null);
     conversationRef.current = null;
     setConversationId(null);
@@ -295,8 +325,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
       try {
         const conv = await loadConversation(selectedId);
         if (!conv) return;
-        controller.setMessages(conv.messages);
+        controller.setMessages(conv.messages, conv.usage);
         setTranscript(conv.messages.map((message) => ({ message })));
+        setUsage(conv.usage ?? {});
         conversationRef.current = conv;
         setConversationId(conv.id);
         autoApprovedRef.current.clear();
@@ -326,6 +357,21 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         }}
       >
         <span style={{ flex: 1 }}>AI Assistant</span>
+        {(usage.totalTokens ?? 0) > 0 && (
+          <span
+            className="ai-usage-badge"
+            title={formatUsageTooltip(usage)}
+            style={{
+              fontSize: 11,
+              opacity: 0.65,
+              fontVariantNumeric: "tabular-nums",
+              padding: "0 4px",
+            }}
+            data-testid="ai-usage-badge"
+          >
+            {formatUsageBadge(usage)}
+          </span>
+        )}
         <button
           type="button"
           className="ai-panel-button"
@@ -448,8 +494,11 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
-          disabled={busy}
-          placeholder="Ask the assistant… (Enter to send, Shift+Enter newline, Ctrl+Up/Down: history)"
+          // Keep the textarea enabled while busy so the user can both
+          // (a) press Esc to stop and (b) start drafting the next prompt.
+          // ``handleSend`` early-returns while ``busy`` so an accidental
+          // Enter doesn't queue a second turn.
+          placeholder="Ask the assistant… (Enter to send, Shift+Enter newline, Ctrl+Up/Down: history, Esc to stop)"
           aria-label="AI Assistant input"
           style={{
             width: "100%",
@@ -461,13 +510,24 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         />
         <div style={{ display: "flex", gap: 6 }}>
           <span style={{ flex: 1 }} />
-          <button
-            type="button"
-            onClick={() => void handleSend()}
-            disabled={busy || !input.trim()}
-          >
-            Send
-          </button>
+          {busy ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              title="Stop the assistant (Esc)"
+              style={{ background: "var(--danger, #c0392b)", color: "white" }}
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleSend()}
+              disabled={!input.trim()}
+            >
+              Send
+            </button>
+          )}
         </div>
       </div>
       {showSettings && (
@@ -485,6 +545,39 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
       {pendingConfirm && <ToolConfirmDialog request={pendingConfirm} />}
     </aside>
   );
+}
+
+/** Compact "1.2k" style number for the header badge. */
+function formatTokenCount(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return k >= 100 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
+}
+
+/** Header badge: ``promptTokens / completionTokens`` (when available),
+ *  falling back to ``totalTokens`` alone. */
+function formatUsageBadge(usage: TokenUsage): string {
+  const p = usage.promptTokens;
+  const c = usage.completionTokens;
+  if (typeof p === "number" && typeof c === "number") {
+    return `${formatTokenCount(p)} / ${formatTokenCount(c)}`;
+  }
+  return formatTokenCount(usage.totalTokens ?? 0);
+}
+
+/** Verbose tooltip with raw counts. */
+function formatUsageTooltip(usage: TokenUsage): string {
+  const parts: string[] = [];
+  if (typeof usage.promptTokens === "number") {
+    parts.push(`Prompt: ${usage.promptTokens}`);
+  }
+  if (typeof usage.completionTokens === "number") {
+    parts.push(`Completion: ${usage.completionTokens}`);
+  }
+  if (typeof usage.totalTokens === "number") {
+    parts.push(`Total: ${usage.totalTokens}`);
+  }
+  return parts.length ? parts.join(" \u2022 ") : "No usage reported";
 }
 
 function TranscriptItem({

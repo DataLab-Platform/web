@@ -32,6 +32,15 @@ function makeFetch(responses: ProviderResponse[]) {
           finish_reason: next.toolCalls.length ? "tool_calls" : "stop",
         },
       ],
+      ...(next.usage
+        ? {
+            usage: {
+              prompt_tokens: next.usage.promptTokens,
+              completion_tokens: next.usage.completionTokens,
+              total_tokens: next.usage.totalTokens,
+            },
+          }
+        : {}),
     };
     return new Response(JSON.stringify(payload), {
       status: 200,
@@ -199,5 +208,185 @@ describe("AIController", () => {
     expect(ctrl.getHistory().length).toBeGreaterThan(1);
     ctrl.reset();
     expect(ctrl.getHistory()).toEqual([{ role: "system", content: "stay" }]);
+  });
+
+  it("abort() interrupts an in-flight provider call with AbortError", async () => {
+    // ``fetch`` mock that resolves only when the abort signal fires, so
+    // we deterministically exercise the Stop button path.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            const sig = init?.signal as AbortSignal | undefined;
+            if (sig?.aborted) {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              reject(err);
+              return;
+            }
+            sig?.addEventListener("abort", () => {
+              const err = new Error("Aborted");
+              err.name = "AbortError";
+              reject(err);
+            });
+          }),
+      ),
+    );
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    const pending = ctrl.sendUserMessage("hang");
+    // Yield once so the provider call is in flight before we abort.
+    await Promise.resolve();
+    expect(ctrl.isRunning).toBe(true);
+    ctrl.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(ctrl.isRunning).toBe(false);
+    // The user message must remain in the transcript so the next send
+    // doesn't drop context.
+    const user = ctrl.getHistory().find((m) => m.role === "user");
+    expect(user).toEqual({ role: "user", content: "hang" });
+  });
+
+  it("abort() between tool calls leaves a valid transcript", async () => {
+    // Two tool calls in one assistant turn; the second one is aborted
+    // before its handler runs. We must still emit a tool result for it
+    // so the transcript stays balanced.
+    let firstCallStarted = false;
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [
+        makeReadonlyTool("first", () => {
+          firstCallStarted = true;
+          // Abort right when the first tool runs; the loop check before
+          // dispatching the second call should skip it.
+          ctrl.abort();
+          return "ok";
+        }),
+        makeReadonlyTool("second", () => "should-not-run"),
+      ],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    vi.stubGlobal(
+      "fetch",
+      makeFetch([
+        {
+          content: null,
+          toolCalls: [
+            {
+              id: "a",
+              type: "function",
+              function: { name: "first", arguments: "{}" },
+            },
+            {
+              id: "b",
+              type: "function",
+              function: { name: "second", arguments: "{}" },
+            },
+          ],
+        },
+      ]),
+    );
+    await expect(ctrl.sendUserMessage("go")).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(firstCallStarted).toBe(true);
+    const toolMsgs = ctrl
+      .getHistory()
+      .filter(
+        (m): m is Extract<ChatMessage, { role: "tool" }> => m.role === "tool",
+      );
+    // One result per assistant tool_call, even the aborted one.
+    expect(toolMsgs).toHaveLength(2);
+    expect(JSON.parse(toolMsgs[1]!.content)).toEqual({
+      ok: false,
+      error: "Aborted by user.",
+    });
+  });
+
+  it("accumulates token usage across turns and notifies the listener", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch([
+        {
+          content: null,
+          toolCalls: [
+            {
+              id: "c1",
+              type: "function",
+              function: { name: "ping", arguments: "{}" },
+            },
+          ],
+          usage: {
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+          },
+        },
+        {
+          content: "done",
+          toolCalls: [],
+          usage: {
+            promptTokens: 30,
+            completionTokens: 7,
+            totalTokens: 37,
+          },
+        },
+      ]),
+    );
+    const usageEvents: Array<{ turn: number; cum: number }> = [];
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [makeReadonlyTool("ping", () => "pong")],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+      listener: {
+        onUsage: (turn, cumulative) => {
+          usageEvents.push({
+            turn: turn.totalTokens ?? 0,
+            cum: cumulative.totalTokens ?? 0,
+          });
+        },
+      },
+    });
+    await ctrl.sendUserMessage("hi");
+    expect(usageEvents).toEqual([
+      { turn: 15, cum: 15 },
+      { turn: 37, cum: 52 },
+    ]);
+    expect(ctrl.getUsage()).toEqual({
+      promptTokens: 40,
+      completionTokens: 12,
+      totalTokens: 52,
+    });
+  });
+
+  it("setMessages seeds the cumulative usage from a restored conversation", async () => {
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    ctrl.setMessages(
+      [{ role: "user", content: "old" }],
+      { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+    );
+    expect(ctrl.getUsage()).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    });
+    ctrl.reset();
+    expect(ctrl.getUsage()).toEqual({});
   });
 });

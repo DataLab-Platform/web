@@ -12,7 +12,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { ChatMessage } from "./types";
+import type { ChatMessage, TokenUsage } from "./types";
 
 /** Lightweight metadata for the History dialog (no message payload). */
 export interface ConversationInfo {
@@ -30,6 +30,9 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   messages: ChatMessage[];
+  /** Cumulative token usage across the conversation. Optional for
+   *  backward-compatibility with conversations saved before Phase 3. */
+  usage?: TokenUsage;
 }
 
 const DB_NAME = "datalab-web.aiassistant";
@@ -156,6 +159,21 @@ export async function loadConversation(
 export async function deleteConversation(id: string): Promise<void> {
   const db = await getDb();
   await db.delete(STORE, id);
+}
+
+/** Rename a conversation in-place. Does NOT bump ``updatedAt`` so the
+ *  history listing keeps its chronological order \u2014 a rename is metadata
+ *  housekeeping, not new content. Silently no-ops when the conversation
+ *  no longer exists. */
+export async function renameConversation(
+  id: string,
+  title: string,
+): Promise<void> {
+  const db = await getDb();
+  const rec = await db.get(STORE, id);
+  if (!rec) return;
+  rec.title = title;
+  await db.put(STORE, rec);
 }
 
 export async function clearConversations(): Promise<void> {

@@ -22,6 +22,7 @@ import type {
   ConfirmToolCallback,
   ControllerListener,
   ProviderSettings,
+  TokenUsage,
   Tool,
   ToolCall,
   ToolResult,
@@ -30,6 +31,28 @@ import type {
 /** Hard cap on the tool-call loop to avoid runaway iterations when a
  *  badly-tuned model keeps requesting tools. */
 const MAX_ITERATIONS = 10;
+
+/** Thrown when :meth:`AIController.abort` interrupts the running loop.
+ *  Mirrors the browser's ``DOMException("...", "AbortError")`` (also
+ *  raised by ``fetch`` when the abort signal fires) so callers can use
+ *  a single ``error.name === "AbortError"`` discriminator. */
+export class AbortError extends Error {
+  constructor(message = "Aborted by user.") {
+    super(message);
+    this.name = "AbortError";
+  }
+}
+
+/** True when *err* is an abort (our :class:`AbortError` or the browser's
+ *  built-in fetch ``AbortError``). */
+export function isAbortError(err: unknown): boolean {
+  return (
+    !!err &&
+    typeof err === "object" &&
+    "name" in err &&
+    (err as { name: unknown }).name === "AbortError"
+  );
+}
 
 export interface ControllerOptions {
   runtime: DataLabRuntime;
@@ -50,6 +73,11 @@ export class AIController {
   private readonly confirmTool: ConfirmToolCallback;
   private readonly listener: ControllerListener;
   private readonly history: ChatMessage[];
+  /** Set while :meth:`runLoop` is in flight; ``null`` otherwise. */
+  private abortController: AbortController | null = null;
+  /** Running token-usage total across the conversation. Reset on
+   *  :meth:`reset` and :meth:`setMessages`. */
+  private cumulativeUsage: TokenUsage = {};
 
   constructor(opts: ControllerOptions) {
     this.runtime = opts.runtime;
@@ -74,18 +102,39 @@ export class AIController {
   }
 
   /** Replace the current history with *messages* (system prompt kept).
-   *  Used when restoring a persisted conversation. */
-  setMessages(messages: ChatMessage[]): void {
+   *  Used when restoring a persisted conversation. *initialUsage* seeds
+   *  the cumulative counter so a restored conversation displays the
+   *  same total it had when it was last saved. */
+  setMessages(messages: ChatMessage[], initialUsage?: TokenUsage): void {
     this.history.splice(1);
     for (const msg of messages) {
       if (msg.role === "system") continue;
       this.history.push(msg);
     }
+    this.cumulativeUsage = initialUsage ? { ...initialUsage } : {};
   }
 
   /** Drop every message except the system prompt. */
   reset(): void {
     this.history.splice(1);
+    this.cumulativeUsage = {};
+  }
+
+  /** Cancel the in-flight ``sendUserMessage`` call (if any). The pending
+   *  promise rejects with :class:`AbortError`. Idempotent — a no-op when
+   *  the controller is idle. */
+  abort(): void {
+    this.abortController?.abort();
+  }
+
+  /** True while a ``sendUserMessage`` call is in flight. */
+  get isRunning(): boolean {
+    return this.abortController !== null;
+  }
+
+  /** Snapshot of the cumulative token usage across the conversation. */
+  getUsage(): TokenUsage {
+    return { ...this.cumulativeUsage };
   }
 
   /** Push the user message, drive the tool-call loop, return the final
@@ -107,36 +156,63 @@ export class AIController {
   }
 
   private async runLoop(): Promise<string | null> {
-    for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
-      const settings = this.getSettings();
-      const response = await chatCompletions(
-        settings,
-        this.history,
-        this.tools,
+    this.abortController = new AbortController();
+    const signal = this.abortController.signal;
+    try {
+      for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
+        if (signal.aborted) throw new AbortError();
+        const settings = this.getSettings();
+        const response = await chatCompletions(
+          settings,
+          this.history,
+          this.tools,
+          signal,
+        );
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: response.content,
+          ...(response.toolCalls.length > 0
+            ? { tool_calls: response.toolCalls }
+            : {}),
+        };
+        this.appendMessage(assistantMessage);
+
+        if (response.usage) {
+          this.cumulativeUsage = sumUsage(
+            this.cumulativeUsage,
+            response.usage,
+          );
+          this.listener.onUsage?.(response.usage, this.getUsage());
+        }
+
+        if (response.toolCalls.length === 0) {
+          return response.content;
+        }
+
+        for (const call of response.toolCalls) {
+          if (signal.aborted) {
+            // Keep the transcript valid — every assistant ``tool_calls``
+            // entry must have a matching ``role:"tool"`` response, even
+            // when the user aborted before we could run the tool.
+            this.appendToolResultMessage(call, {
+              ok: false,
+              error: "Aborted by user.",
+            });
+            continue;
+          }
+          await this.handleToolCall(call);
+        }
+        if (signal.aborted) throw new AbortError();
+      }
+      const error = new Error(
+        `Aborted: more than ${MAX_ITERATIONS} tool-call iterations without ` +
+          `a final answer.`,
       );
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: response.content,
-        ...(response.toolCalls.length > 0
-          ? { tool_calls: response.toolCalls }
-          : {}),
-      };
-      this.appendMessage(assistantMessage);
-
-      if (response.toolCalls.length === 0) {
-        return response.content;
-      }
-
-      for (const call of response.toolCalls) {
-        await this.handleToolCall(call);
-      }
+      this.listener.onError?.(error);
+      throw error;
+    } finally {
+      this.abortController = null;
     }
-    const error = new Error(
-      `Aborted: more than ${MAX_ITERATIONS} tool-call iterations without ` +
-        `a final answer.`,
-    );
-    this.listener.onError?.(error);
-    throw error;
   }
 
   private async handleToolCall(call: ToolCall): Promise<void> {
@@ -230,4 +306,25 @@ export class AIController {
       content,
     });
   }
+}
+
+/** Field-wise sum of two :type:`TokenUsage` records. ``undefined`` +
+ *  ``undefined`` stays ``undefined`` so we don't fabricate zeros for
+ *  counters the provider never reported. */
+function sumUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  const add = (
+    x: number | undefined,
+    y: number | undefined,
+  ): number | undefined => {
+    if (x === undefined && y === undefined) return undefined;
+    return (x ?? 0) + (y ?? 0);
+  };
+  const out: TokenUsage = {};
+  const p = add(a.promptTokens, b.promptTokens);
+  const c = add(a.completionTokens, b.completionTokens);
+  const t = add(a.totalTokens, b.totalTokens);
+  if (p !== undefined) out.promptTokens = p;
+  if (c !== undefined) out.completionTokens = c;
+  if (t !== undefined) out.totalTokens = t;
+  return out;
 }

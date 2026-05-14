@@ -4,12 +4,19 @@
  * :mod:`DataLab/datalab/aiassistant/widgets/conversationsdialog.py`.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteConversation,
   listConversations,
+  loadConversation,
+  renameConversation,
   type ConversationInfo,
 } from "../../aiassistant/conversationStore";
+import {
+  conversationToMarkdown,
+  downloadMarkdown,
+  sanitizeFilename,
+} from "../../aiassistant/conversationExport";
 
 interface Props {
   /** Called with the selected conversation id (or ``null`` to dismiss). */
@@ -31,6 +38,11 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
   const [items, setItems] = useState<ConversationInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(activeId);
   const [busy, setBusy] = useState(false);
+  /** ID of the row currently in inline-rename mode (``null`` = none). */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  /** Current draft of the row being renamed. */
+  const [editingDraft, setEditingDraft] = useState("");
+  const editingInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -49,14 +61,52 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
     void refresh();
   }, [refresh]);
 
-  // Escape closes the dialog.
+  // Escape closes the dialog — unless we're editing a row, in which
+  // case Escape just cancels the inline rename.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose(null);
+      if (event.key === "Escape" && editingId === null) onClose(null);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, editingId]);
+
+  /** Enter inline-rename mode for *info*. Auto-selects the text so the
+   *  user can either overwrite or fine-tune. */
+  const startRename = useCallback((info: ConversationInfo) => {
+    setEditingId(info.id);
+    setEditingDraft(info.title || "");
+  }, []);
+
+  // Focus + select the input when editing starts.
+  useEffect(() => {
+    if (!editingId) return;
+    const el = editingInputRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, [editingId]);
+
+  const cancelRename = useCallback(() => {
+    setEditingId(null);
+    setEditingDraft("");
+  }, []);
+
+  const commitRename = useCallback(async () => {
+    if (!editingId) return;
+    const trimmed = editingDraft.trim();
+    const original = items.find((i) => i.id === editingId)?.title ?? "";
+    if (trimmed && trimmed !== original) {
+      await renameConversation(editingId, trimmed);
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === editingId ? { ...i, title: trimmed } : i,
+        ),
+      );
+    }
+    cancelRename();
+  }, [cancelRename, editingDraft, editingId, items]);
 
   const handleLoad = () => {
     if (!selectedId) return;
@@ -75,6 +125,19 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
     }
     await deleteConversation(selectedId);
     await refresh();
+  };
+
+  /** Export the selected conversation as a Markdown file download. */
+  const handleExport = async () => {
+    if (!selectedId) return;
+    const conv = await loadConversation(selectedId);
+    if (!conv) return;
+    const content = conversationToMarkdown(conv);
+    const stamp = new Date(conv.updatedAt || Date.now())
+      .toISOString()
+      .slice(0, 10);
+    const base = sanitizeFilename(conv.title || "conversation");
+    downloadMarkdown(`${stamp}-${base}.md`, content);
   };
 
   return (
@@ -120,15 +183,25 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
           {items.map((info) => {
             const isActive = info.id === activeId;
             const isSelected = info.id === selectedId;
+            const isEditing = info.id === editingId;
             return (
               <div
                 key={info.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelectedId(info.id)}
-                onDoubleClick={() => onClose(info.id)}
+                onClick={() => {
+                  if (!isEditing) setSelectedId(info.id);
+                }}
+                onDoubleClick={() => {
+                  if (!isEditing) onClose(info.id);
+                }}
                 onKeyDown={(e) => {
+                  if (isEditing) return;
                   if (e.key === "Enter") onClose(info.id);
+                  else if (e.key === "F2") {
+                    e.preventDefault();
+                    startRename(info);
+                  }
                 }}
                 title={`Created: ${formatDate(info.createdAt)}\nUpdated: ${formatDate(info.updatedAt)}\nMessages: ${info.messageCount}`}
                 style={{
@@ -145,8 +218,36 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                 }}
               >
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  <strong>{info.title || "(untitled)"}</strong>
-                  {isActive && (
+                  {isEditing ? (
+                    <input
+                      ref={editingInputRef}
+                      type="text"
+                      value={editingDraft}
+                      onChange={(e) => setEditingDraft(e.target.value)}
+                      onBlur={() => void commitRename()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void commitRename();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelRename();
+                        }
+                        // Stop propagation so the row's keydown (which
+                        // would treat Enter as "load") doesn't fire.
+                        e.stopPropagation();
+                      }}
+                      style={{
+                        width: "100%",
+                        font: "inherit",
+                        boxSizing: "border-box",
+                      }}
+                      data-testid="ai-history-rename-input"
+                    />
+                  ) : (
+                    <strong>{info.title || "(untitled)"}</strong>
+                  )}
+                  {!isEditing && isActive && (
                     <span
                       style={{
                         marginLeft: 6,
@@ -175,6 +276,25 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
             disabled={!selectedId}
           >
             Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const info = items.find((i) => i.id === selectedId);
+              if (info) startRename(info);
+            }}
+            disabled={!selectedId || editingId !== null}
+            title="Rename the selected conversation (F2)"
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExport()}
+            disabled={!selectedId || editingId !== null}
+            title="Download the selected conversation as Markdown"
+          >
+            Export…
           </button>
           <button type="button" onClick={() => void refresh()} disabled={busy}>
             Refresh

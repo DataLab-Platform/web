@@ -13,6 +13,7 @@ import {
   listConversations,
   loadConversation,
   newConversation,
+  renameConversation,
   saveConversation,
   setMaxConversations,
 } from "../../../src/aiassistant/conversationStore";
@@ -103,5 +104,40 @@ describe("conversationStore", () => {
     const t = deriveTitle(long, 20);
     expect(t.length).toBe(20);
     expect(t.endsWith("…")).toBe(true);
+  });
+
+  it("renameConversation updates the title without bumping updatedAt", async () => {
+    const conv = newConversation();
+    conv.title = "Original";
+    conv.messages = [{ role: "user", content: "hi" }];
+    await saveConversation(conv);
+    const before = (await loadConversation(conv.id))!.updatedAt;
+    // Wait one ms so a save-style bump would be detectable.
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await renameConversation(conv.id, "Renamed");
+    const after = await loadConversation(conv.id);
+    expect(after?.title).toBe("Renamed");
+    expect(after?.updatedAt).toBe(before);
+    // Persists the body untouched.
+    expect(after?.messages).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("renameConversation no-ops on unknown ids", async () => {
+    await renameConversation("nope-does-not-exist", "x");
+    expect(await listConversations()).toEqual([]);
+  });
+
+  it("conversation usage round-trips through save/load", async () => {
+    const conv = newConversation();
+    conv.title = "U";
+    conv.messages = [{ role: "user", content: "hi" }];
+    conv.usage = { promptTokens: 11, completionTokens: 22, totalTokens: 33 };
+    await saveConversation(conv);
+    const reloaded = await loadConversation(conv.id);
+    expect(reloaded?.usage).toEqual({
+      promptTokens: 11,
+      completionTokens: 22,
+      totalTokens: 33,
+    });
   });
 });

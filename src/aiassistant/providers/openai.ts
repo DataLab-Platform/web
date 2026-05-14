@@ -18,6 +18,7 @@ import type {
   LLMProvider,
   ProviderResponse,
   ProviderSettings,
+  TokenUsage,
   Tool,
   ToolCall,
 } from "../types";
@@ -28,11 +29,18 @@ interface RawChoiceMessage {
   tool_calls?: ToolCall[];
 }
 
+interface RawUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 interface RawChatCompletion {
   choices: Array<{
     message: RawChoiceMessage;
     finish_reason: string;
   }>;
+  usage?: RawUsage;
   error?: { message?: string };
 }
 
@@ -105,10 +113,30 @@ export async function openAiChatCompletions(
     throw new Error("LLM response contains no choices.");
   }
   const message = choice.message;
+  const usage = mapUsage(payload.usage);
   return {
     content: typeof message.content === "string" ? message.content : null,
     toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
+    ...(usage ? { usage } : {}),
   };
+}
+
+/** Translate an OpenAI ``usage`` block (snake_case) to our camelCase
+ *  :type:`TokenUsage`. Returns ``undefined`` when the block is missing
+ *  or empty. */
+function mapUsage(raw: RawUsage | undefined): TokenUsage | undefined {
+  if (!raw) return undefined;
+  const out: TokenUsage = {};
+  if (typeof raw.prompt_tokens === "number") {
+    out.promptTokens = raw.prompt_tokens;
+  }
+  if (typeof raw.completion_tokens === "number") {
+    out.completionTokens = raw.completion_tokens;
+  }
+  if (typeof raw.total_tokens === "number") {
+    out.totalTokens = raw.total_tokens;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Concrete :type:`LLMProvider` for OpenAI / OpenAI-compatible endpoints. */
