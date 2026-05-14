@@ -18,13 +18,14 @@ describe("aiassistant/tools", () => {
     expect(idx.size).toBe(BUILTIN_TOOLS.length);
   });
 
-  it("flags create_synthetic_signal/_image and apply_processing as the only mutating tools", () => {
+  it("flags create_synthetic_signal/_image, apply_processing and create_and_run_macro as the only mutating tools", () => {
     const mutating = BUILTIN_TOOLS.filter((t) => !t.readonly).map(
       (t) => t.name,
     );
     expect(mutating.sort()).toEqual(
       [
         "apply_processing",
+        "create_and_run_macro",
         "create_synthetic_image",
         "create_synthetic_signal",
       ].sort(),

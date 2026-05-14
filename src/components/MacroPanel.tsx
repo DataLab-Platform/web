@@ -329,6 +329,44 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       }
     }, []);
 
+    // ---------------------------------------------------------------------
+    // External macro events: re-load when something outside the panel
+    // (currently the AI Assistant's ``create_and_run_macro`` tool)
+    // creates a macro behind our back. We refresh the full list rather
+    // than blindly appending to keep title/code in sync if Python
+    // mutated existing entries too.
+    // ---------------------------------------------------------------------
+    useEffect(() => {
+      if (!loaded) return;
+      const handler = async (event: Event) => {
+        try {
+          const metas = await runtime.listMacros();
+          const full = await Promise.all(
+            metas.map((m) => runtime.getMacro(m.id)),
+          );
+          setMacros(
+            full.map((m) => ({ id: m.id, title: m.title, code: m.code })),
+          );
+          // Open and focus the freshly created macro if the event
+          // carries an id; otherwise leave the active tab alone.
+          const detail = (event as CustomEvent).detail as
+            | { id?: string }
+            | undefined;
+          const newId = detail?.id;
+          if (newId && full.some((m) => m.id === newId)) {
+            setOpenIds((prev) =>
+              prev.includes(newId) ? prev : [...prev, newId],
+            );
+            setActiveId(newId);
+          }
+        } catch (err) {
+          console.error("Failed to refresh macros after external change:", err);
+        }
+      };
+      window.addEventListener("dlw:macros-changed", handler);
+      return () => window.removeEventListener("dlw:macros-changed", handler);
+    }, [loaded, runtime]);
+
     useEffect(() => {
       if (!loaded) return;
       if (activeId) window.localStorage.setItem(LS_LAST_ACTIVE, activeId);

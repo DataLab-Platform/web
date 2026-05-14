@@ -8,16 +8,21 @@
  * same origin. The settings dialog must say so explicitly.
  */
 
-import type { ProviderSettings } from "./types";
+import type { ProviderKind, ProviderSettings } from "./types";
 
 const STORAGE_KEY = "datalab-web.aiassistant.settings";
 
 export const DEFAULT_SETTINGS: ProviderSettings = {
+  provider: "openai",
   baseUrl: "https://api.openai.com/v1",
   apiKey: "",
   model: "gpt-4o-mini",
   temperature: 0.2,
 };
+
+function normaliseProvider(value: unknown): ProviderKind {
+  return value === "mock" ? "mock" : "openai";
+}
 
 /** Read settings from ``localStorage`` (falls back to defaults). */
 export function loadSettings(): ProviderSettings {
@@ -26,6 +31,7 @@ export function loadSettings(): ProviderSettings {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<ProviderSettings>;
     return {
+      provider: normaliseProvider(parsed.provider),
       baseUrl: parsed.baseUrl ?? DEFAULT_SETTINGS.baseUrl,
       apiKey: parsed.apiKey ?? DEFAULT_SETTINGS.apiKey,
       model: parsed.model ?? DEFAULT_SETTINGS.model,
@@ -50,8 +56,10 @@ export function saveSettings(settings: ProviderSettings): void {
 
 /** True when the provider is configured well enough to issue a request.
  *  Local endpoints (Ollama / vLLM) typically don't require an API key,
- *  so we only enforce ``baseUrl`` + ``model`` here. */
+ *  so we only enforce ``baseUrl`` + ``model`` here. The mock provider
+ *  is always considered configured (no network call). */
 export function isConfigured(settings: ProviderSettings): boolean {
+  if (settings.provider === "mock") return true;
   return Boolean(settings.baseUrl.trim() && settings.model.trim());
 }
 

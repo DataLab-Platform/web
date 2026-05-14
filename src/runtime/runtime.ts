@@ -2092,6 +2092,88 @@ await micropip.install(["sigima", "guidata"])
     })) as PluginRecord[];
   }
 
+  // ---------------------------------------------------------------------
+  // Macro execution (used by the AI Assistant ``create_and_run_macro``
+  // tool — keeps a single shared :class:`MacroRuntime` instance to
+  // amortise the Pyodide worker cold-start across calls).
+  // ---------------------------------------------------------------------
+
+  /** Last buffered output from :meth:`runMacroCode` (or ``null`` if no
+   *  macro has run yet through this runtime). Surfaced to the LLM via
+   *  the ``get_macro_console_output`` tool — useful when the previous
+   *  call truncated its output. */
+  lastMacroOutput: {
+    stdout: string;
+    stderr: string;
+    status: "ok" | "error" | "stopped";
+    error?: string;
+  } | null = null;
+
+  private _macroRuntime: import("./MacroRuntime").MacroRuntime | null = null;
+
+  private async ensureMacroRuntime(): Promise<
+    import("./MacroRuntime").MacroRuntime
+  > {
+    if (this._macroRuntime) return this._macroRuntime;
+    const { MacroRuntime } = await import("./MacroRuntime");
+    this._macroRuntime = new MacroRuntime(this);
+    return this._macroRuntime;
+  }
+
+  /** Run *code* as a transient macro and resolve once it completes
+   *  with the captured stdout/stderr.  The macro is NOT persisted in
+   *  the workspace's macro panel — use :meth:`saveMacro` to register
+   *  it on user demand. Output is also stashed in
+   *  :prop:`lastMacroOutput` for the ``get_macro_console_output`` tool. */
+  async runMacroCode(
+    code: string,
+    name = "AI Assistant macro",
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    status: "ok" | "error" | "stopped";
+    error?: string;
+  }> {
+    const macro = await this.ensureMacroRuntime();
+    return new Promise((resolve, reject) => {
+      let stdout = "";
+      let stderr = "";
+      macro
+        .run(code, name, {
+          onStream: (kind, text) => {
+            if (kind === "stdout") stdout += text;
+            else if (kind === "stderr") stderr += text;
+          },
+          onFinished: (status, error) => {
+            const out = { stdout, stderr, status, error };
+            this.lastMacroOutput = out;
+            resolve(out);
+          },
+        })
+        .catch(reject);
+    });
+  }
+
+  /** Persist *code* in the workspace's macro panel under *name* and
+   *  notify open MacroPanel instances so the new entry shows up
+   *  immediately. Used by the AI Assistant's "Save to Macros" button
+   *  (the user explicitly opts in — macros run via
+   *  :meth:`runMacroCode` are otherwise transient). */
+  async saveMacro(
+    name: string,
+    code: string,
+  ): Promise<{ id: string; title: string }> {
+    const rec = await this.createMacro(name, code);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("dlw:macros-changed", {
+          detail: { id: rec.id, title: rec.title },
+        }),
+      );
+    }
+    return { id: rec.id, title: rec.title };
+  }
+
   async listPlugins(): Promise<PluginRecord[]> {
     return (await this.callPy("list_plugins")) as PluginRecord[];
   }

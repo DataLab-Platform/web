@@ -9,6 +9,7 @@ import type {
 } from "../../../src/aiassistant/types";
 
 const settings: ProviderSettings = {
+  provider: "openai",
   baseUrl: "http://localhost:11434/v1",
   apiKey: "",
   model: "fake",

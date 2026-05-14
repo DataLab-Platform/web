@@ -21,6 +21,19 @@
  */
 
 import macroProxySource from "./macro_proxy.py?raw";
+// Same JSON Schema / backends shims as the main runtime — required so
+// ``guidata.dataset`` (transitively imported by ``sigima``) loads
+// cleanly under Pyodide. See runtime.ts for the rationale.
+import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
+const guidataBackendsSource = (() => {
+  const candidates = import.meta.glob("./_guidata_backends_shim.py", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+  const first = Object.values(candidates)[0];
+  return first ?? null;
+})();
 
 declare const self: DedicatedWorkerGlobalScope & {
   _dlw_bridge_call?: (method: string, payload: unknown) => Promise<unknown>;
@@ -79,7 +92,20 @@ os.environ["LANG"] = "C"
 os.environ["LANGUAGE"] = "C"
 `);
 
-    await py.loadPackage(["numpy"]);
+    await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
+
+    // Install Sigima + guidata so macros can ``import sigima`` and
+    // ``import guidata.dataset`` exactly as they do in DataLab desktop.
+    // This adds ~10-20s to the first macro run; subsequent runs reuse
+    // the same worker.
+    await py.runPythonAsync(`
+import micropip
+await micropip.install(["sigima", "guidata"])
+`);
+    await py.runPythonAsync(guidataJsonSchemaShim);
+    if (guidataBackendsSource) {
+      await py.runPythonAsync(guidataBackendsSource);
+    }
 
     // Stream stdout/stderr to the main thread, line by line.
     // ``setStdout``/``setStderr`` work for raw C-level writes but

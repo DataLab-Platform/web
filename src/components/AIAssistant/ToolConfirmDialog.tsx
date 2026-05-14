@@ -7,8 +7,18 @@
  * default — the user must opt in per turn.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { EditorState } from "@codemirror/state";
+import { EditorView, lineNumbers } from "@codemirror/view";
+import { python } from "@codemirror/lang-python";
+import { oneDark } from "@codemirror/theme-one-dark";
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  syntaxHighlighting,
+} from "@codemirror/language";
 import type { Tool } from "../../aiassistant/types";
+import { useTheme } from "../../utils/theme";
 
 export interface ToolConfirmRequest {
   tool: Tool;
@@ -33,7 +43,22 @@ export function ToolConfirmDialog({ request }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [request]);
 
-  const argsText = JSON.stringify(request.args, null, 2);
+  // Multi-line string arguments (e.g. ``code`` for ``create_and_run_macro``)
+  // are unreadable when JSON-encoded — newlines collapse to a literal
+  // ``\n`` and the whole script ends up on a single line. Surface every
+  // such argument as its own pre-formatted block, and render the rest
+  // as a compact JSON object so the user actually sees what will run.
+  const longStringArgs: Array<[string, string]> = [];
+  const compactArgs: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(request.args)) {
+    if (typeof value === "string" && (value.includes("\n") || value.length > 80)) {
+      longStringArgs.push([key, value]);
+    } else {
+      compactArgs[key] = value;
+    }
+  }
+  const hasCompactArgs = Object.keys(compactArgs).length > 0;
+  const compactArgsText = JSON.stringify(compactArgs, null, 2);
   const handleApprove = () => request.resolve({ approve: true, remember });
   const handleReject = () =>
     request.resolve({ approve: false, remember: false });
@@ -85,10 +110,45 @@ export function ToolConfirmDialog({ request }: Props) {
               background: "var(--bg)",
               padding: 8,
               borderRadius: 4,
+              whiteSpace: "pre",
+              display: hasCompactArgs ? "block" : "none",
             }}
           >
-            {argsText}
+            {compactArgsText}
           </pre>
+          {longStringArgs.map(([name, value]) => (
+            <div key={name} style={{ marginTop: 8 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-dim)",
+                  marginBottom: 2,
+                }}
+              >
+                <code>{name}</code>:
+              </div>
+              {name === "code" ? (
+                <PythonCodeViewer code={value} />
+              ) : (
+                <pre
+                  style={{
+                    margin: 0,
+                    fontSize: 12,
+                    maxHeight: 320,
+                    overflow: "auto",
+                    background: "var(--bg)",
+                    padding: 8,
+                    borderRadius: 4,
+                    whiteSpace: "pre",
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  }}
+                >
+                  {value}
+                </pre>
+              )}
+            </div>
+          ))}
         </div>
         <label
           style={{
@@ -116,5 +176,45 @@ export function ToolConfirmDialog({ request }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Read-only CodeMirror viewer with Python syntax highlighting. */
+function PythonCodeViewer({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const state = EditorState.create({
+      doc: code,
+      extensions: [
+        lineNumbers(),
+        bracketMatching(),
+        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        python(),
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+        EditorView.theme({
+          "&": { fontSize: "12px", maxHeight: "320px" },
+          ".cm-scroller": { overflow: "auto" },
+        }),
+        ...(theme === "dark" ? [oneDark] : []),
+      ],
+    });
+    const view = new EditorView({ state, parent: container });
+    return () => view.destroy();
+  }, [code, theme]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: 4,
+        overflow: "hidden",
+      }}
+    />
   );
 }

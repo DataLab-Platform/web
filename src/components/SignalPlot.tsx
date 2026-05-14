@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
+import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import {
   buildCurveTrace,
@@ -376,6 +377,9 @@ export function SignalPlot({
         } as never
       }
       onRelayout={handleRelayout}
+      onInitialized={(_fig, gd) => registerActivePlot("signal", gd)}
+      onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
+      onPurge={() => registerActivePlot("signal", null)}
     />
   );
 }

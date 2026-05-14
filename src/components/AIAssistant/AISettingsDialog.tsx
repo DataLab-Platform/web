@@ -84,6 +84,22 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
         <h2 id="ai-settings-title">AI Assistant — Settings</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span>Provider</span>
+            <select
+              value={settings.provider}
+              onChange={(e) =>
+                update("provider", e.target.value as ProviderSettings["provider"])
+              }
+            >
+              <option value="openai">OpenAI-compatible (network)</option>
+              <option value="mock">Mock provider (deterministic, no network)</option>
+            </select>
+            <small style={{ color: "var(--text-dim)" }}>
+              The mock provider replays a scripted set of responses — used by
+              tests and demos, never reaches out to the network.
+            </small>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span>Base URL</span>
             <input
               type="text"

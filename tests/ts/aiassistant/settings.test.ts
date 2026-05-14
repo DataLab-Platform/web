@@ -20,6 +20,7 @@ describe("aiassistant/settings", () => {
   it("round-trips a complete settings object", () => {
     window.localStorage.clear();
     const settings = {
+      provider: "openai" as const,
       baseUrl: "http://localhost:11434/v1",
       apiKey: "ollama",
       model: "llama3",

@@ -13,7 +13,12 @@ import type {
   ImageCreationParams,
   SignalCreationParams,
 } from "../runtime/runtime";
-import type { Tool, ToolResult } from "./types";
+import {
+  capturePlotPng,
+  getMostRecentPanel,
+  type PanelKind,
+} from "./plotCapture";
+import { isToolResult, type Tool, type ToolResult } from "./types";
 
 /** Compact statistics for a 1D signal — sent to the LLM instead of the
  *  full ``y`` array, which would blow the context window for any
@@ -357,6 +362,135 @@ const APPLY_PROCESSING_TOOL: Tool = {
   },
 };
 
+const GET_CURRENT_PANEL_TOOL: Tool = {
+  name: "get_current_panel",
+  description:
+    "Return which panel ('signal' or 'image') is currently active in " +
+    "the UI \u2014 i.e. the one whose plot was rendered most recently. " +
+    "Returns null when no plot has been rendered yet.",
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+  readonly: true,
+  handler: async () => getMostRecentPanel(),
+};
+
+const CAPTURE_VIEW_TOOL: Tool = {
+  name: "capture_view",
+  description:
+    "Capture a PNG screenshot of the currently displayed plot (signal " +
+    "or image) and feed it back to the model as an inline image. Use " +
+    "this whenever you need to *visually* inspect what the user sees \u2014 " +
+    "e.g. to comment on the shape of a peak, the orientation of a " +
+    "feature in an image, or to verify a processing result. Defaults " +
+    "to the most recently rendered panel; pass 'panel' to force one.",
+  parameters: {
+    type: "object",
+    properties: {
+      panel: {
+        type: "string",
+        enum: ["signal", "image"],
+        description:
+          "Which panel to capture. Omit to capture the most recently " +
+          "rendered one (recommended).",
+      },
+    },
+    additionalProperties: false,
+  },
+  // Read-only: capturing the view does not mutate the workspace.
+  readonly: true,
+  handler: async (_runtime, args): Promise<ToolResult> => {
+    const panel = (args.panel as PanelKind | undefined) ?? undefined;
+    const shot = await capturePlotPng({ panel });
+    return {
+      ok: true,
+      data: {
+        panel: shot.panel,
+        width: shot.width,
+        height: shot.height,
+        note:
+          "PNG attached to the next user message so the vision model " +
+          "can see it.",
+      },
+      followupMessages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Captured view of the ${shot.panel} panel (${shot.width}\u00d7${shot.height}px):`,
+            },
+            {
+              type: "image_url",
+              image_url: { url: shot.dataUrl, detail: "high" },
+            },
+          ],
+        },
+      ],
+    };
+  },
+};
+
+const CREATE_AND_RUN_MACRO_TOOL: Tool = {
+  name: "create_and_run_macro",
+  description:
+    "Run an arbitrary Python script (a 'macro') against the workspace. " +
+    "The script executes in a sandboxed Pyodide worker and has access " +
+    "to the same `proxy` object exposed to user macros (see the " +
+    "DataLab-Web macro documentation). The run is transient by default; " +
+    "the user can choose to save the macro to the Macros panel via a " +
+    "'Save to Macros' button on the result \u2014 always pick a short, " +
+    "descriptive title (passed via the 'name' field, e.g. 'Generate " +
+    "super-Gaussian') so the saved macro is easy to recognise. " +
+    "Returns the captured stdout/stderr. Use this only when the " +
+    "existing tools cannot express the required operation \u2014 e.g. " +
+    "complex multi-step workflows, custom NumPy code, or features not " +
+    "yet exposed as a dedicated tool.",
+  parameters: {
+    type: "object",
+    properties: {
+      code: {
+        type: "string",
+        description: "Python source to execute.",
+      },
+      name: {
+        type: "string",
+        description:
+          "Short, descriptive title for the macro (e.g. 'Generate " +
+          "super-Gaussian'). Shown in the run banner and used as the " +
+          "saved title if the user clicks 'Save to Macros'. Defaults " +
+          "to 'AI Assistant macro' but you should always provide a " +
+          "specific name.",
+      },
+    },
+    required: ["code"],
+    additionalProperties: false,
+  },
+  readonly: false,
+  handler: async (runtime, args) => {
+    const code = String(args.code);
+    const name =
+      typeof args.name === "string" && args.name.trim()
+        ? args.name.trim()
+        : "AI Assistant macro";
+    const out = await runtime.runMacroCode(code, name);
+    // Echo the source under ``_macro`` so the AI Assistant transcript
+    // can offer a "Save to Macros" button on user demand. The leading
+    // underscore is a hint that the field is UI-only — the LLM should
+    // ignore it (it's not part of the macro's actual stdout/stderr).
+    return { ...out, _macro: { name, code } };
+  },
+};
+
+const GET_MACRO_CONSOLE_OUTPUT_TOOL: Tool = {
+  name: "get_macro_console_output",
+  description:
+    "Return the buffered stdout/stderr from the most recent macro " +
+    "executed via 'create_and_run_macro' (or null when no macro has " +
+    "run yet). Useful when the previous tool result was truncated.",
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+  readonly: true,
+  handler: async (runtime) => runtime.lastMacroOutput,
+};
+
 /** Default tool registry shipped in v1. */
 export const BUILTIN_TOOLS: Tool[] = [
   LIST_PANELS_TOOL,
@@ -368,6 +502,10 @@ export const BUILTIN_TOOLS: Tool[] = [
   CREATE_SIGNAL_TOOL,
   CREATE_IMAGE_TOOL,
   APPLY_PROCESSING_TOOL,
+  GET_CURRENT_PANEL_TOOL,
+  CAPTURE_VIEW_TOOL,
+  CREATE_AND_RUN_MACRO_TOOL,
+  GET_MACRO_CONSOLE_OUTPUT_TOOL,
 ];
 
 /** Build a name-keyed lookup table for fast dispatch. */
@@ -379,15 +517,21 @@ export function indexTools(tools: Tool[]): Map<string, Tool> {
   return out;
 }
 
-/** Run a tool and wrap any thrown error as a structured ToolResult. */
+/** Run a tool and wrap any thrown error as a structured ToolResult.
+ *
+ *  Handlers may either return a plain JSON-friendly value (wrapped
+ *  into ``ToolResult.data``) or a fully-built :type:`ToolResult` \u2014 the
+ *  latter is required for multimodal tools that need to attach
+ *  ``followupMessages`` (e.g. ``capture_view``). */
 export async function callTool(
   tool: Tool,
   runtime: DataLabRuntime,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   try {
-    const data = await tool.handler(runtime, args);
-    return { ok: true, data };
+    const value = await tool.handler(runtime, args);
+    if (isToolResult(value)) return value;
+    return { ok: true, data: value };
   } catch (err) {
     return {
       ok: false,

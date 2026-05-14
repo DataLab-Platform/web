@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
+import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
 import { buildRoiOverlays } from "./imageRoi";
@@ -546,6 +547,9 @@ export function ImagePlot({
       }
       onRelayout={handleRelayout}
       onHover={handleHover}
+      onInitialized={(_fig, gd) => registerActivePlot("image", gd)}
+      onUpdate={(_fig, gd) => registerActivePlot("image", gd)}
+      onPurge={() => registerActivePlot("image", null)}
     />
   );
 

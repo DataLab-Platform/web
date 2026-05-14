@@ -267,7 +267,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           </div>
         )}
         {transcript.map((entry, idx) => (
-          <TranscriptItem key={idx} entry={entry} />
+          <TranscriptItem key={idx} entry={entry} runtime={runtime} />
         ))}
         {busy && (
           <div
@@ -345,9 +345,22 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   );
 }
 
-function TranscriptItem({ entry }: { entry: TranscriptEntry }) {
+function TranscriptItem({
+  entry,
+  runtime,
+}: {
+  entry: TranscriptEntry;
+  runtime: DataLabRuntime;
+}) {
   const { message } = entry;
   if (message.role === "user") {
+    // ``content`` may be a plain string (the historical OpenAI contract)
+    // or an array of multimodal parts (text + image_url) — the latter
+    // is produced by tools like ``capture_view`` that feed an inline
+    // PNG back to the vision model. Render both shapes here.
+    const parts = Array.isArray(message.content)
+      ? message.content
+      : [{ type: "text" as const, text: message.content }];
     return (
       <div
         className="ai-bubble ai-bubble-user"
@@ -360,9 +373,27 @@ function TranscriptItem({ entry }: { entry: TranscriptEntry }) {
           maxWidth: "85%",
           whiteSpace: "pre-wrap",
           fontSize: 13,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
         }}
       >
-        {message.content}
+        {parts.map((part, i) =>
+          part.type === "text" ? (
+            <span key={i}>{part.text}</span>
+          ) : (
+            <img
+              key={i}
+              src={part.image_url.url}
+              alt="Captured view"
+              style={{
+                maxWidth: "100%",
+                borderRadius: 4,
+                background: "white",
+              }}
+            />
+          ),
+        )}
       </div>
     );
   }
@@ -400,6 +431,8 @@ function TranscriptItem({ entry }: { entry: TranscriptEntry }) {
   }
   if (message.role === "tool") {
     let preview = message.content;
+    let fullText = message.content;
+    let macroToSave: { name: string; code: string } | null = null;
     try {
       const parsed = JSON.parse(message.content) as {
         ok?: boolean;
@@ -408,32 +441,163 @@ function TranscriptItem({ entry }: { entry: TranscriptEntry }) {
       };
       if (parsed.ok === false) {
         preview = `error: ${parsed.error ?? "unknown"}`;
+        fullText = parsed.error ?? message.content;
       } else if (parsed.result !== undefined) {
         const compact = JSON.stringify(parsed.result);
         preview = compact.length > 160 ? compact.slice(0, 157) + "…" : compact;
+        // Pretty-print the full payload so multi-line strings inside
+        // (stdout/stderr from a macro, long arrays…) become readable
+        // when the user expands the disclosure.
+        fullText = JSON.stringify(parsed.result, null, 2);
+        // Macros echo their source under ``_macro`` so the UI can
+        // surface a "Save to Macros" button on user demand.
+        if (
+          message.name === "create_and_run_macro" &&
+          parsed.result &&
+          typeof parsed.result === "object"
+        ) {
+          const macro = (parsed.result as { _macro?: unknown })._macro;
+          if (
+            macro &&
+            typeof macro === "object" &&
+            typeof (macro as { name?: unknown }).name === "string" &&
+            typeof (macro as { code?: unknown }).code === "string"
+          ) {
+            macroToSave = {
+              name: (macro as { name: string }).name,
+              code: (macro as { code: string }).code,
+            };
+          }
+        }
       }
     } catch {
       // leave as-is
     }
     return (
-      <div
-        className="ai-bubble ai-bubble-tool"
-        style={{
-          alignSelf: "flex-start",
-          background: "var(--bg)",
-          border: "1px dashed var(--border)",
-          padding: "4px 8px",
-          borderRadius: 6,
-          maxWidth: "95%",
-          fontSize: 11,
-          fontFamily: "monospace",
-          color: "var(--text-dim)",
-          wordBreak: "break-all",
-        }}
-      >
-        <strong>{message.name}</strong> → {preview}
-      </div>
+      <ToolTranscriptBubble
+        name={message.name ?? ""}
+        preview={preview}
+        fullText={fullText}
+        macroToSave={macroToSave}
+        runtime={runtime}
+      />
     );
   }
   return null;
+}
+
+function ToolTranscriptBubble({
+  name,
+  preview,
+  fullText,
+  macroToSave,
+  runtime,
+}: {
+  name: string;
+  preview: string;
+  fullText: string;
+  macroToSave: { name: string; code: string } | null;
+  runtime: DataLabRuntime;
+}) {
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
+  const handleSave = useCallback(async () => {
+    if (!macroToSave || saveState === "saving" || saveState === "saved") return;
+    setSaveState("saving");
+    try {
+      const rec = await runtime.saveMacro(macroToSave.name, macroToSave.code);
+      setSavedTitle(rec.title);
+      setSaveState("saved");
+    } catch (err) {
+      console.error("Failed to save macro:", err);
+      setSaveState("error");
+    }
+  }, [macroToSave, runtime, saveState]);
+  return (
+    <div
+      className="ai-bubble ai-bubble-tool"
+      style={{
+        alignSelf: "flex-start",
+        background: "var(--bg)",
+        border: "1px dashed var(--border)",
+        padding: "4px 8px",
+        borderRadius: 6,
+        maxWidth: "95%",
+        fontSize: 11,
+        fontFamily: "monospace",
+        color: "var(--text-dim)",
+      }}
+    >
+      <details>
+        <summary
+          style={{
+            cursor: "pointer",
+            wordBreak: "break-all",
+            listStyle: "revert",
+          }}
+        >
+          <strong>{name}</strong> → {preview}
+        </summary>
+        <pre
+          style={{
+            margin: "6px 0 0 0",
+            padding: 6,
+            background: "var(--panel)",
+            borderRadius: 4,
+            maxHeight: 320,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {fullText}
+        </pre>
+      </details>
+      {macroToSave && (
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveState === "saving" || saveState === "saved"}
+            style={{
+              fontSize: 11,
+              fontFamily: "inherit",
+              padding: "2px 8px",
+              cursor:
+                saveState === "saving" || saveState === "saved"
+                  ? "default"
+                  : "pointer",
+            }}
+          >
+            {saveState === "saved"
+              ? "Saved ✓"
+              : saveState === "saving"
+                ? "Saving…"
+                : saveState === "error"
+                  ? "Retry save"
+                  : "💾 Save to Macros"}
+          </button>
+          {saveState === "saved" && savedTitle && (
+            <span style={{ color: "var(--text-dim)" }}>
+              as “{savedTitle}”
+            </span>
+          )}
+          {saveState === "error" && (
+            <span style={{ color: "var(--error, #c33)" }}>
+              save failed (see console)
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }

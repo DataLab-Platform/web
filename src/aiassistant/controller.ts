@@ -179,6 +179,15 @@ export class AIController {
       }
     }
     this.appendToolResultMessage(call, result);
+    // Multimodal tools (e.g. ``capture_view``) attach extra messages
+    // that must be appended *after* the tool-result message — typically
+    // a synthetic ``role:"user"`` message carrying an inline image so
+    // vision models can see the captured plot in their next turn.
+    if (result.followupMessages) {
+      for (const msg of result.followupMessages) {
+        this.appendMessage(msg);
+      }
+    }
     this.listener.onToolFinished?.(call, result);
   }
 
