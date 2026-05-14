@@ -590,7 +590,6 @@ interface ProcessingPanelProps extends SubProps {
 function ProcessingPanel({
   runtime,
   oid,
-  refreshNonce,
   info,
   onApplied,
 }: ProcessingPanelProps) {
@@ -627,11 +626,22 @@ function ProcessingPanel({
       </div>
     );
   }
+  // Key on the canonical applied values (not ``refreshNonce``) so the
+  // form is only re-initialised when the Python-side baseline actually
+  // changes.  ``refreshNonce`` bumps *before* the parent's async
+  // ``getLastProcessing`` re-fetch resolves, so keying on it would
+  // remount the form with the stale ``info.values`` snapshot — making
+  // freshly-typed values appear to revert to the previous baseline
+  // after Apply.
+  const valuesKey = useMemo(
+    () => JSON.stringify(info.values ?? {}),
+    [info.values],
+  );
   return (
     <div className="processing-panel">
       <ProcessingHeader info={info} />
       <EditableForm
-        key={`processing:${oid}:${refreshNonce}`}
+        key={`processing:${oid}:${valuesKey}`}
         schema={info.schema}
         values={info.values ?? {}}
         onApply={apply}
