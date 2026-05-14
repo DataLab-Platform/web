@@ -314,13 +314,6 @@ input {
   display: block;
 }
 
-.menu-shortcut {
-  color: var(--text-dim);
-  font-size: 11px;
-  margin-left: auto;
-  padding-left: 16px;
-}
-
 .menu-separator {
   list-style: none;
   height: 1px;

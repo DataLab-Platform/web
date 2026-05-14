@@ -87,9 +87,6 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
                 )}
               </span>
               <span className="menu-label">{node.label}</span>
-              {action.shortcut && (
-                <span className="menu-shortcut">{action.shortcut}</span>
-              )}
             </li>
           </Fragment>
         );
