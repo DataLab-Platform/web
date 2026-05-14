@@ -32,10 +32,12 @@ const WRAP_KEY_ID = "wrap-key";
 const API_KEY_ID = "api-key";
 
 /** Encrypted payload shape. ``iv`` is the 12-byte AES-GCM nonce, regen
- *  on every write. */
+ *  on every write. The explicit ``ArrayBuffer`` backing is required by
+ *  TypeScript ≥ 5.7's narrower ``BufferSource`` definition (which now
+ *  excludes ``SharedArrayBuffer``-backed views). */
 interface EncryptedPayload {
-  iv: Uint8Array;
-  ciphertext: Uint8Array;
+  iv: Uint8Array<ArrayBuffer>;
+  ciphertext: Uint8Array<ArrayBuffer>;
 }
 
 interface SecretsRecord {
