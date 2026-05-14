@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
+import "fake-indexeddb/auto";
 import { AIAssistantPanel } from "../../../src/components/AIAssistant/AIAssistantPanel";
 import type { DataLabRuntime } from "../../../src/runtime/runtime";
 import { saveSettings } from "../../../src/aiassistant/settings";

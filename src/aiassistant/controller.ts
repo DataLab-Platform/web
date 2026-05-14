@@ -66,6 +66,23 @@ export class AIController {
     return [...this.history];
   }
 
+  /** Conversation messages, excluding the system prompt — suitable for
+   *  persistence (the system prompt is recomputed at load time so any
+   *  prompt change between sessions is picked up). */
+  getMessages(): ChatMessage[] {
+    return this.history.slice(1);
+  }
+
+  /** Replace the current history with *messages* (system prompt kept).
+   *  Used when restoring a persisted conversation. */
+  setMessages(messages: ChatMessage[]): void {
+    this.history.splice(1);
+    for (const msg of messages) {
+      if (msg.role === "system") continue;
+      this.history.push(msg);
+    }
+  }
+
   /** Drop every message except the system prompt. */
   reset(): void {
     this.history.splice(1);

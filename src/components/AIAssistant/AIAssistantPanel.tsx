@@ -26,11 +26,21 @@ import type {
   ToolResult,
 } from "../../aiassistant/types";
 import { AISettingsDialog } from "./AISettingsDialog";
+import { ConversationsDialog } from "./ConversationsDialog";
 import { MarkdownView } from "./MarkdownView";
 import {
   ToolConfirmDialog,
   type ToolConfirmRequest,
 } from "./ToolConfirmDialog";
+import {
+  deriveTitle,
+  listConversations,
+  loadConversation,
+  newConversation,
+  saveConversation,
+  type Conversation,
+} from "../../aiassistant/conversationStore";
+import { InputHistory } from "../../aiassistant/inputHistory";
 
 interface Props {
   runtime: DataLabRuntime;
@@ -54,6 +64,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     loadSettings(),
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [pendingConfirm, setPendingConfirm] =
     useState<ToolConfirmRequest | null>(null);
@@ -61,6 +72,14 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  // Active persisted conversation. ``null`` means the controller is empty
+  // (post-mount, before the first user message of a fresh conversation).
+  const conversationRef = useRef<Conversation | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const inputHistoryRef = useRef<InputHistory | null>(null);
+  if (inputHistoryRef.current === null) {
+    inputHistoryRef.current = new InputHistory();
+  }
 
   // Per-conversation auto-approve memory keyed by tool name.
   const autoApprovedRef = useRef<Set<string>>(new Set());
@@ -147,6 +166,59 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     el.scrollTop = el.scrollHeight;
   }, [transcript, busy, pendingConfirm]);
 
+  // On mount: try to restore the most-recent conversation. Runs at most
+  // once even under React 18 strict-mode double invocation.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    void (async () => {
+      try {
+        const list = await listConversations();
+        if (list.length === 0) return;
+        const conv = await loadConversation(list[0].id);
+        if (!conv) return;
+        controller.setMessages(conv.messages);
+        setTranscript(conv.messages.map((message) => ({ message })));
+        conversationRef.current = conv;
+        setConversationId(conv.id);
+      } catch (err) {
+        // Storage unavailable / quota / corruption: silently start fresh.
+        console.warn("Failed to restore AI conversation:", err);
+      }
+    })();
+  }, [controller]);
+
+  /** Persist the current controller messages to IndexedDB. */
+  const persistConversation = useCallback(async () => {
+    const messages = controller.getMessages();
+    if (messages.length === 0) return;
+    let conv = conversationRef.current;
+    if (!conv) {
+      conv = newConversation();
+      conversationRef.current = conv;
+      setConversationId(conv.id);
+    }
+    if (!conv.title) {
+      const firstUser = messages.find((m) => m.role === "user");
+      if (firstUser) {
+        const txt =
+          typeof firstUser.content === "string"
+            ? firstUser.content
+            : firstUser.content
+                .map((p) => (p.type === "text" ? p.text : ""))
+                .join(" ");
+        conv.title = deriveTitle(txt);
+      }
+    }
+    conv.messages = messages;
+    try {
+      await saveConversation(conv);
+    } catch (err) {
+      console.warn("Failed to persist AI conversation:", err);
+    }
+  }, [controller]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || busy) return;
@@ -159,19 +231,49 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     setErrorMessage(null);
     setInput("");
     setBusy(true);
+    inputHistoryRef.current?.add(text);
     try {
       await controller.sendUserMessage(text);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      void persistConversation();
     }
-  }, [busy, controller, input, settings]);
+  }, [busy, controller, input, persistConversation, settings]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       void handleSend();
+      return;
+    }
+    // Bash-style history navigation: Ctrl+Up / Ctrl+Down.
+    if (event.ctrlKey && event.key === "ArrowUp") {
+      const prev = inputHistoryRef.current?.previous(input);
+      if (prev !== null && prev !== undefined) {
+        event.preventDefault();
+        setInput(prev);
+      }
+      return;
+    }
+    if (event.ctrlKey && event.key === "ArrowDown") {
+      const next = inputHistoryRef.current?.next();
+      if (next !== null && next !== undefined) {
+        event.preventDefault();
+        setInput(next);
+      }
+      return;
+    }
+    // Any other key invalidates the navigation cursor so the next
+    // Ctrl+Up captures the freshly edited draft.
+    if (
+      event.key.length === 1 ||
+      event.key === "Backspace" ||
+      event.key === "Delete" ||
+      event.key === "Enter"
+    ) {
+      inputHistoryRef.current?.resetNavigation();
     }
   };
 
@@ -181,7 +283,32 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     autoApprovedRef.current.clear();
     setTranscript([]);
     setErrorMessage(null);
+    conversationRef.current = null;
+    setConversationId(null);
+    inputHistoryRef.current?.resetNavigation();
   };
+
+  const handleHistoryClose = useCallback(
+    async (selectedId: string | null) => {
+      setShowHistory(false);
+      if (!selectedId || busy) return;
+      try {
+        const conv = await loadConversation(selectedId);
+        if (!conv) return;
+        controller.setMessages(conv.messages);
+        setTranscript(conv.messages.map((message) => ({ message })));
+        conversationRef.current = conv;
+        setConversationId(conv.id);
+        autoApprovedRef.current.clear();
+        setErrorMessage(null);
+      } catch (err) {
+        setErrorMessage(
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    },
+    [busy, controller],
+  );
 
   return (
     <aside
@@ -207,6 +334,15 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           title="Start a new conversation"
         >
           New
+        </button>
+        <button
+          type="button"
+          className="ai-panel-button"
+          onClick={() => setShowHistory(true)}
+          disabled={busy}
+          title="Browse, load or delete past conversations"
+        >
+          History…
         </button>
         <button
           type="button"
@@ -313,7 +449,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           onKeyDown={handleKeyDown}
           rows={3}
           disabled={busy}
-          placeholder="Ask the assistant… (Enter to send, Shift+Enter for newline)"
+          placeholder="Ask the assistant… (Enter to send, Shift+Enter newline, Ctrl+Up/Down: history)"
           aria-label="AI Assistant input"
           style={{
             width: "100%",
@@ -338,6 +474,12 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         <AISettingsDialog
           onClose={() => setShowSettings(false)}
           onSaved={(s) => setSettings(s)}
+        />
+      )}
+      {showHistory && (
+        <ConversationsDialog
+          activeId={conversationId}
+          onClose={(id) => void handleHistoryClose(id)}
         />
       )}
       {pendingConfirm && <ToolConfirmDialog request={pendingConfirm} />}
