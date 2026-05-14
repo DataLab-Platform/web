@@ -114,6 +114,7 @@ export function conversationToMarkdown(conv: Conversation): string {
  *  result is a valid filename on Windows / macOS / Linux. */
 export function sanitizeFilename(name: string, maxLen = 80): string {
   const cleaned = name
+    // eslint-disable-next-line no-control-regex -- intentional: strip ASCII control chars from filenames
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

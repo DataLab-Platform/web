@@ -1059,7 +1059,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refreshResults, activePanel],
+    [runtime, refreshResults, activePanel, notify],
   );
 
   const handleAnalysis = useCallback(
@@ -1638,7 +1638,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, pendingRoiGrid, refresh],
+    [runtime, pendingRoiGrid, refresh, confirm],
   );
 
   const handleSaveWorkspaceHdf5 = useCallback(async () => {
@@ -1729,7 +1729,7 @@ export default function App() {
       }
     };
     input.click();
-  }, [runtime, refresh, setWorkspaceFilename, markClean]);
+  }, [runtime, refresh, setWorkspaceFilename, markClean, notify]);
 
   const handleImportHdf5 = useCallback(() => {
     // Open the H5 browser dialog with no preloaded file; the user picks
@@ -1766,7 +1766,7 @@ export default function App() {
       setCurrentId(oids[oids.length - 1] ?? null);
       await refresh(oids[oids.length - 1] ?? null);
     },
-    [refresh],
+    [refresh, notify],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -1817,7 +1817,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runtime, currentId, data, imageData, activePanel]);
+  }, [runtime, currentId, data, imageData, activePanel, notify, prompt]);
 
   /** Open the "Save to directory…" dialog with the current selection
    *  (falls back to the whole panel when nothing is explicitly selected,
@@ -2041,7 +2041,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, pendingSaveToDir, activePanel],
+    [runtime, pendingSaveToDir, activePanel, confirm, notify],
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -2256,6 +2256,10 @@ export default function App() {
       toggleAIPanel,
       selectedIds.length,
       currentId,
+      handleDuplicateSelection,
+      handleMoveSelectionDown,
+      handleMoveSelectionUp,
+      handleRenameCurrent,
     ],
   );
 

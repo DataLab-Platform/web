@@ -601,6 +601,20 @@ function ProcessingPanel({
     [runtime, oid, onApplied],
   );
 
+  // Key on the canonical applied values (not ``refreshNonce``) so the
+  // form is only re-initialised when the Python-side baseline actually
+  // changes.  ``refreshNonce`` bumps *before* the parent's async
+  // ``getLastProcessing`` re-fetch resolves, so keying on it would
+  // remount the form with the stale ``info.values`` snapshot — making
+  // freshly-typed values appear to revert to the previous baseline
+  // after Apply.
+  // Computed unconditionally to satisfy the rules-of-hooks even when the
+  // early-return branch below is taken.
+  const valuesKey = useMemo(
+    () => JSON.stringify(info.values ?? {}),
+    [info.values],
+  );
+
   // Parameterless features: nothing to edit, just expose a "Re-apply"
   // button so the user can still trigger the recomputation.
   if (!info.has_params || !info.schema) {
@@ -626,17 +640,6 @@ function ProcessingPanel({
       </div>
     );
   }
-  // Key on the canonical applied values (not ``refreshNonce``) so the
-  // form is only re-initialised when the Python-side baseline actually
-  // changes.  ``refreshNonce`` bumps *before* the parent's async
-  // ``getLastProcessing`` re-fetch resolves, so keying on it would
-  // remount the form with the stale ``info.values`` snapshot — making
-  // freshly-typed values appear to revert to the previous baseline
-  // after Apply.
-  const valuesKey = useMemo(
-    () => JSON.stringify(info.values ?? {}),
-    [info.values],
-  );
   return (
     <div className="processing-panel">
       <ProcessingHeader info={info} />
