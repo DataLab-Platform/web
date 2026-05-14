@@ -7,8 +7,20 @@
  *   - "system": follow `prefers-color-scheme` and react to changes
  *   - "light":  force light palette
  *   - "dark":   force dark palette
+ *
+ * Theme state is shared via a React Context so that all consumers (toolbar
+ * toggle, plot widgets, ...) re-render together when the theme changes.
+ * Wrap the app in `<ThemeProvider>` at the top level.
  */
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -44,13 +56,18 @@ function applyTheme(theme: ResolvedTheme): void {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
-/** React hook returning the current theme mode + resolved theme + setter. */
-export function useTheme(): {
+interface ThemeContextValue {
   mode: ThemeMode;
   theme: ResolvedTheme;
   setMode: (mode: ThemeMode) => void;
   toggle: () => void;
-} {
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+/** Provider that owns the single source of truth for the active theme.
+ *  Must wrap the entire app so all `useTheme()` consumers share state. */
+export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(() => readStoredMode());
   const [theme, setTheme] = useState<ResolvedTheme>(() =>
     resolve(readStoredMode()),
@@ -90,7 +107,24 @@ export function useTheme(): {
     setMode(current === "dark" ? "light" : "dark");
   }, [mode, setMode]);
 
-  return { mode, theme, setMode, toggle };
+  const value = useMemo<ThemeContextValue>(
+    () => ({ mode, theme, setMode, toggle }),
+    [mode, theme, setMode, toggle],
+  );
+
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
+}
+
+/** React hook returning the current theme mode + resolved theme + setter.
+ *  Must be used inside a `<ThemeProvider>`. */
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (ctx === null) {
+    throw new Error("useTheme() must be used inside a <ThemeProvider>");
+  }
+  return ctx;
 }
 
 /** Apply the persisted (or system-default) theme as early as possible. Call

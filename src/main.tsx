@@ -5,7 +5,7 @@ import { DialogProvider } from "./components/ConfirmDialog";
 import { RuntimeProvider } from "./runtime/RuntimeContext";
 import { WorkspaceProvider } from "./runtime/WorkspaceContext";
 import { installConsoleCapture } from "./utils/consoleLog";
-import { initThemeEarly } from "./utils/theme";
+import { initThemeEarly, ThemeProvider } from "./utils/theme";
 import "./styles.css";
 
 installConsoleCapture();
@@ -18,12 +18,14 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <RuntimeProvider>
-      <WorkspaceProvider>
-        <DialogProvider>
-          <App />
-        </DialogProvider>
-      </WorkspaceProvider>
-    </RuntimeProvider>
+    <ThemeProvider>
+      <RuntimeProvider>
+        <WorkspaceProvider>
+          <DialogProvider>
+            <App />
+          </DialogProvider>
+        </WorkspaceProvider>
+      </RuntimeProvider>
+    </ThemeProvider>
   </StrictMode>,
 );
