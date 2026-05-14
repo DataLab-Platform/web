@@ -1,6 +1,6 @@
 {
   "name": "@datalab-platform/web-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Host-side TypeScript SDK to embed and control DataLab-Web (Pyodide-based scientific data processing) from any web app via postMessage.",
   "license": "BSD-3-Clause",
   "author": "DataLab Platform Developers",
