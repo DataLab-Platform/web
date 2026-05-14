@@ -62,6 +62,69 @@ interface TranscriptEntry {
   rev?: number;
 }
 
+// Inline SVG icons used in the panel header. Kept tiny (16px, current
+// colour, 1.6px stroke) and dependency-free to avoid pulling in an icon
+// library.
+const ICON_PROPS = {
+  width: 16,
+  height: 16,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.6,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+  focusable: false,
+};
+
+function NewConversationIcon() {
+  // Speech bubble with a "+" inside.
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.5A8 8 0 1 1 21 12z" />
+      <path d="M12 9v6M9 12h6" />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  // Counter-clockwise arrow + clock hands.
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+      <path d="M12 8v5l3 2" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  // Gear (simplified 8-tooth).
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function MinimiseIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   const [settings, setSettings] = useState<ProviderSettings>(() =>
     loadSettings(),
@@ -387,50 +450,53 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         )}
         <button
           type="button"
-          className="ai-panel-button"
+          className="ai-panel-button ai-panel-icon-button"
           onClick={handleNewConversation}
           disabled={busy || transcript.length === 0}
           title="Start a new conversation"
+          aria-label="New conversation"
         >
-          New
+          <NewConversationIcon />
         </button>
         <button
           type="button"
-          className="ai-panel-button"
+          className="ai-panel-button ai-panel-icon-button"
           onClick={() => setShowHistory(true)}
           disabled={busy}
           title="Browse, load or delete past conversations"
+          aria-label="Conversation history"
         >
-          History…
+          <HistoryIcon />
         </button>
         <button
           type="button"
-          className="ai-panel-button"
+          className="ai-panel-button ai-panel-icon-button"
           onClick={() => setShowSettings(true)}
           title="Provider settings"
+          aria-label="Settings"
         >
-          Settings
+          <SettingsIcon />
         </button>
         {onMinimize && (
           <button
             type="button"
-            className="ai-panel-button"
+            className="ai-panel-button ai-panel-icon-button"
             onClick={onMinimize}
             title="Minimise to floating button"
             aria-label="Minimise AI Assistant"
           >
-            {"\u2013"}
+            <MinimiseIcon />
           </button>
         )}
         {onClose && (
           <button
             type="button"
-            className="ai-panel-button"
+            className="ai-panel-button ai-panel-icon-button"
             onClick={onClose}
             title="Hide AI Assistant"
             aria-label="Hide AI Assistant"
           >
-            {"\u00d7"}
+            <CloseIcon />
           </button>
         )}
       </div>

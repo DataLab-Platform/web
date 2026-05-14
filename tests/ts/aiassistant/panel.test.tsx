@@ -22,7 +22,22 @@ function mockOpenAI(
   responses: Array<{ content: string | null; toolCalls?: unknown[] }>,
 ) {
   let i = 0;
-  return vi.fn(async () => {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    // The panel may hit ``/__dev__/openai-key`` on mount as a dev-mode
+    // fallback. Return an empty key so the canned chat responses are
+    // not accidentally consumed by that probe.
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : (input as Request).url;
+    if (url.includes("/__dev__/openai-key")) {
+      return new Response(JSON.stringify({ apiKey: "" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const next = responses[i++];
     if (!next) throw new Error("ran out of canned responses");
     return new Response(
