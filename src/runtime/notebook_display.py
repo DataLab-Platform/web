@@ -56,6 +56,7 @@ def _get_user_ns() -> dict[str, Any]:
         proxy = sys.modules["__main__"].__dict__.get("proxy")
         if proxy is None:  # pragma: no cover — defensive
             try:
+                # pylint: disable=import-outside-toplevel
                 from macro_proxy import proxy as _p  # type: ignore[import-not-found]
 
                 proxy = _p
@@ -171,7 +172,7 @@ def _to_mime_bundle(obj: Any) -> dict[str, Any] | None:
         meth = getattr(obj, attr, None)
         if callable(meth):
             try:
-                value = meth()
+                value = meth()  # pylint: disable=not-callable
             except Exception:  # pylint: disable=broad-exception-caught
                 continue
             if value is None:
@@ -369,7 +370,7 @@ _VENDORED_TABLE_STYLE = """
 """
 
 
-class _VendoredTableDisplay:
+class _VendoredTableDisplay:  # pylint: disable=too-few-public-methods
     """Minimal HTML wrapper for ``sigima.objects.TableResult``."""
 
     def __init__(self, result: Any, title: str | None = None) -> None:
@@ -394,7 +395,7 @@ class _VendoredTableDisplay:
             return f"<div>Error rendering table: {exc}</div>"
 
 
-class _VendoredGeometryDisplay:
+class _VendoredGeometryDisplay:  # pylint: disable=too-few-public-methods
     """Minimal HTML wrapper for ``sigima.objects.GeometryResult``."""
 
     def __init__(self, result: Any, title: str | None = None) -> None:
