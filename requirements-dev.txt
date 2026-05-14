@@ -10,6 +10,10 @@
 pytest>=7.4
 pytest-cov>=4.1
 
+# Linters / formatters used by the VS Code tasks (Ruff + Pylint).
+ruff>=0.5
+pylint>=3.0
+
 # Sigima (= computation engine) and its mandatory dependencies.
 # Pinning floors only — exact versions come from each project's pyproject.
 sigima>=1.1.2
