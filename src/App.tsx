@@ -1033,6 +1033,28 @@ export default function App() {
         await refreshResults(oid);
         setPreferredSideTab("results");
         setSideRefreshNonce((n) => n + 1);
+        // Detection analyses (peak / blob / hough / contour) may have
+        // attached new ROIs to the source image when ``create_rois`` is
+        // ticked.  Re-fetch the ROI list so the plot overlay updates
+        // immediately, mirroring DataLab desktop's behaviour.
+        if (
+          activePanel === "image" &&
+          result !== null &&
+          (result as { roi_modified?: boolean }).roi_modified
+        ) {
+          try {
+            const segs = await runtime.getImageRoi(oid);
+            setImageRoi(segs);
+          } catch {
+            /* non-fatal */
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await notify({
+          kind: "error",
+          message: `Analysis failed: ${message}`,
+        });
       } finally {
         setBusy(false);
       }

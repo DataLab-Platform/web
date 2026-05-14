@@ -3607,6 +3607,11 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "func": sipi.blob_opencv,
             "paramclass": sipi.BlobOpenCVParam,
             "separator_before": False,
+            # ``cv2`` is not loaded by the bootstrap; ``_run_analysis``
+            # micropip-installs ``opencv-python`` lazily on first use so
+            # the cold-start cost (~12 MB) only hits users who actually
+            # try OpenCV-based detection.
+            "requires_pkg": "opencv-python",
         },
     ]
 
@@ -3878,7 +3883,7 @@ def _serialize_result(result: Any, key: str, obj: Any | None = None) -> dict[str
     return payload
 
 
-def run_signal_analysis(
+async def run_signal_analysis(
     oid: str, func_id: str, params: Any = None
 ) -> dict[str, Any] | None:
     """Run analysis *func_id* on signal *oid* and persist the result.
@@ -3893,18 +3898,47 @@ def run_signal_analysis(
         A JSON-friendly description of the produced result, or ``None`` if
         the function returned no result (some analyses return ``None`` —
         e.g. ``fwhm`` on a flat signal).
+
+    Note:
+        This coroutine is awaited transparently by the JS bridge
+        (``DataLabRuntime.callPy``).  It is async because some image
+        analyses (e.g. ``blob_opencv``) micropip-install heavy
+        dependencies on first use; signal analyses never await but the
+        signature matches for symmetry with :func:`run_image_analysis`.
     """
-    return _run_analysis("signal", oid, func_id, params)
+    return await _run_analysis("signal", oid, func_id, params)
 
 
-def run_image_analysis(
+async def run_image_analysis(
     oid: str, func_id: str, params: Any = None
 ) -> dict[str, Any] | None:
     """Image-side counterpart of :func:`run_signal_analysis`."""
-    return _run_analysis("image", oid, func_id, params)
+    return await _run_analysis("image", oid, func_id, params)
 
 
-def _run_analysis(
+async def _ensure_pyodide_pkg(name: str) -> None:
+    """Lazy-install a Pyodide-built package via micropip.
+
+    No-op if the package is already installed.  Used by analyses that
+    pull in heavy optional deps (currently only ``opencv-python`` for
+    :func:`sigima.proc.image.blob_opencv`) so the cold-start cost is
+    only paid by users who actually invoke them.
+    """
+    import importlib
+
+    # Map PyPI dist name → top-level import name.
+    import_name = {"opencv-python": "cv2"}.get(name, name)
+    try:
+        importlib.import_module(import_name)
+        return
+    except ImportError:
+        pass
+    import micropip  # type: ignore[import-not-found]
+
+    await micropip.install(name)
+
+
+async def _run_analysis(
     kind: str, oid: str, func_id: str, params: Any = None
 ) -> dict[str, Any] | None:
     catalog = _ANALYSIS_CATALOG.get(kind, {})
@@ -3912,6 +3946,10 @@ def _run_analysis(
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     entry = catalog[func_id]
     obj = _MODEL.get(oid)
+
+    requires_pkg = entry.get("requires_pkg")
+    if requires_pkg:
+        await _ensure_pyodide_pkg(requires_pkg)
 
     if hasattr(params, "to_py"):
         params = params.to_py()
@@ -3937,7 +3975,21 @@ def _run_analysis(
             pass
     key = _result_metadata_key(result)
     obj.metadata[key] = result.to_dict()
-    return _serialize_result(result, key, obj)
+    payload = _serialize_result(result, key, obj)
+    # For image analyses returning a GeometryResult, apply ROI creation
+    # metadata if the parameter requested it (mirrors DataLab desktop's
+    # ``ImageProcessor.handle_results`` override).  Sigima stores the
+    # ``create_rois`` flag as a geometry attribute; ``apply_detection_rois``
+    # reads it back and populates ``obj.roi`` accordingly.
+    if kind == "image":
+        from sigima.objects.scalar import GeometryResult
+
+        if isinstance(result, GeometryResult):
+            from sigima.proc.image import apply_detection_rois
+
+            if apply_detection_rois(obj, result):
+                payload["roi_modified"] = True
+    return payload
 
 
 def list_signal_results(oid: str) -> list[dict[str, Any]]:

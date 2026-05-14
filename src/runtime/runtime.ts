@@ -619,6 +619,11 @@ export interface AnalysisResultBase {
   /** Optional plot overlays (segments, vlines) supplementing the
    *  numerical result.  Currently emitted for pulse-features tables. */
   overlays?: AnalysisOverlay[];
+  /** Set by image detection analyses (peak / blob / hough / contour) when
+   *  the ``create_rois`` parameter caused fresh ROIs to be attached to
+   *  the source object.  The UI uses this flag to refresh the ROI overlay
+   *  without re-fetching everything. */
+  roi_modified?: boolean;
 }
 
 export interface GeometryAnalysisResult extends AnalysisResultBase {
@@ -1022,7 +1027,19 @@ await micropip.install(["sigima", "guidata"])
         // argument.  All our helpers in bootstrap.py are called with kwargs
         // only, so the kwargs dict is also the only argument.
         const result = fn.callKwargs(kwargs);
-        const awaited = result instanceof Promise ? await result : result;
+        // ``result`` may be: (a) a plain JS value, (b) a JS Promise, or
+        // (c) a Pyodide PyProxy of a coroutine (when the bootstrap
+        // function is ``async def``).  The latter is "thenable" but is
+        // **not** an ``instanceof Promise``, so we must detect it via
+        // duck typing on ``.then`` to await it correctly — otherwise we
+        // end up running ``toJs`` on the live coroutine proxy, which
+        // gets destroyed mid-conversion and throws "Object has already
+        // been destroyed".
+        const isThenable =
+          result != null &&
+          (result instanceof Promise ||
+            typeof (result as { then?: unknown }).then === "function");
+        const awaited = isThenable ? await result : result;
         const value = toJs(awaited) as T;
         // Notify workspace-mutation listeners *after* the Python side
         // returns successfully — failed mutations don't dirty the
