@@ -1119,8 +1119,29 @@ export default function App() {
   );
 
   const handleDelete = useCallback(async () => {
+    if (selectedIds.length === 0) return;
+    // Mirror the trash-icon workflow in ObjectTree: always ask for
+    // confirmation before deleting (whether triggered from the Edit menu,
+    // the keyboard shortcut, or any other entry point).
+    let message = `Delete ${selectedIds.length} selected object(s)?`;
+    if (selectedIds.length === 1 && tree) {
+      for (const g of tree.groups) {
+        const o = g.objects.find((o) => o.id === selectedIds[0]);
+        if (o) {
+          message = `Delete "${o.title}"?`;
+          break;
+        }
+      }
+    }
+    const ok = await confirm({
+      title: "Delete",
+      message,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     await deleteObjects(selectedIds);
-  }, [deleteObjects, selectedIds]);
+  }, [confirm, deleteObjects, selectedIds, tree]);
 
   const handleNewGroup = useCallback(async () => {
     if (!runtime) return;
