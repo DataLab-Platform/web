@@ -249,7 +249,15 @@ export function ImagePlot({
       ...plotlyTheme,
       title: { text: data.title || "" },
       autosize: true,
-      margin: { l: 60, r: 30, t: 40, b: 50 },
+      margin: {
+        l: 60,
+        // Reserve extra room on the right so the legend can sit past
+        // the colorbar without overlapping it (only needed when there
+        // are analysis results to label).
+        r: resultTraces.length > 0 ? 140 : 30,
+        t: 40,
+        b: 50,
+      },
       xaxis: {
         ...plotlyTheme.xaxis,
         title: { text: xtitle },
@@ -261,6 +269,17 @@ export function ImagePlot({
         scaleanchor: "x" as const,
         scaleratio: data.dy / data.dx,
         autorange: "reversed" as const,
+      },
+      // Legend positioned to the right of the colorbar (paper coords),
+      // outside the plot area, so it never overlaps the image or the
+      // colorbar. The right margin is widened above to make room.
+      showlegend: resultTraces.length > 0,
+      legend: {
+        ...plotlyTheme.legend,
+        x: 1.15,
+        y: 1,
+        xanchor: "left" as const,
+        yanchor: "top" as const,
       },
       shapes: [...roiShapes, ...resultShapes, ...toolShapes],
       annotations: [
@@ -290,6 +309,7 @@ export function ImagePlot({
     resultShapes,
     resultAnnotations,
     resultBoxAnnotations,
+    resultTraces.length,
     toolShapes,
     roiEditMode,
     roi.length,
