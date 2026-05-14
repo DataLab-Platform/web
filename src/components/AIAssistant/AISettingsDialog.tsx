@@ -3,16 +3,19 @@
  * (base URL, API key, model, temperature).
  *
  * Mirrors :mod:`DataLab/datalab/aiassistant/widgets/settingsdialog.py`
- * but adapted for the browser: the API key is stored in
- * ``localStorage`` and is therefore visible to any script on the same
- * origin. The dialog tells the user explicitly.
+ * but adapted for the browser: non-secret fields live in
+ * ``localStorage`` and the API key is encrypted at rest in IndexedDB
+ * via :mod:`../../aiassistant/secureStorage`. The dialog tells the
+ * user about the residual XSS risk explicitly.
  */
 
 import { useEffect, useState } from "react";
 import {
   DEFAULT_SETTINGS,
   fetchDevOpenAIKey,
+  loadApiKey,
   loadSettings,
+  saveApiKey,
   saveSettings,
 } from "../../aiassistant/settings";
 import type { ProviderSettings } from "../../aiassistant/types";
@@ -28,16 +31,23 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
   );
   const [devKeyAvailable, setDevKeyAvailable] = useState(false);
 
-  // Probe the dev-only ``/__dev__/openai-key`` endpoint on mount. When
-  // it returns a non-empty key AND the dialog field is currently empty,
-  // pre-fill the field so the user can save it in one click.
+  // Hydrate the (encrypted) API key from secure storage, then probe the
+  // dev-only ``/__dev__/openai-key`` endpoint. The dev key only wins
+  // when no key is currently stored.
   useEffect(() => {
     let cancelled = false;
-    void fetchDevOpenAIKey().then((devKey) => {
+    void (async () => {
+      const stored = await loadApiKey();
+      if (cancelled) return;
+      if (stored) {
+        setSettings((s) => ({ ...s, apiKey: stored }));
+        return;
+      }
+      const devKey = await fetchDevOpenAIKey();
       if (cancelled || !devKey) return;
       setDevKeyAvailable(true);
       setSettings((s) => (s.apiKey ? s : { ...s, apiKey: devKey }));
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -60,6 +70,7 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
 
   function handleSave() {
     saveSettings(settings);
+    void saveApiKey(settings.apiKey);
     onSaved?.(settings);
     onClose();
   }
@@ -132,9 +143,10 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               autoComplete="off"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              Stored in your browser's <code>localStorage</code> — visible to
-              any script running on this origin. Leave blank for local endpoints
-              that don't require authentication.
+              Encrypted at rest in this browser (AES-GCM, non-extractable key
+              in IndexedDB). This protects against passive disk reads but not
+              against malicious code running in this page. Leave blank for
+              local endpoints that don't require authentication.
               {devKeyAvailable && (
                 <>
                   {" "}

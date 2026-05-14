@@ -1,11 +1,22 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 import {
   DEFAULT_SETTINGS,
   fetchDevOpenAIKey,
   isConfigured,
+  loadApiKey,
   loadSettings,
   saveSettings,
 } from "../../../src/aiassistant/settings";
+import { _resetSecureStorageForTests } from "../../../src/aiassistant/secureStorage";
+
+beforeEach(() => {
+  // Fresh in-memory IDB per test so the migration test sees a clean
+  // secure store.
+  globalThis.indexedDB = new IDBFactory();
+  _resetSecureStorageForTests();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,17 +28,57 @@ describe("aiassistant/settings", () => {
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("round-trips a complete settings object", () => {
+  it("never persists the API key in localStorage", () => {
     window.localStorage.clear();
-    const settings = {
-      provider: "openai" as const,
+    saveSettings({
+      provider: "openai",
       baseUrl: "http://localhost:11434/v1",
-      apiKey: "ollama",
+      apiKey: "sk-secret",
       model: "llama3",
       temperature: 0.7,
-    };
-    saveSettings(settings);
-    expect(loadSettings()).toEqual(settings);
+    });
+    const raw = window.localStorage.getItem(
+      "datalab-web.aiassistant.settings",
+    );
+    expect(raw).not.toBeNull();
+    expect(raw!).not.toContain("sk-secret");
+    const reloaded = loadSettings();
+    expect(reloaded.apiKey).toBe("");
+    expect(reloaded.baseUrl).toBe("http://localhost:11434/v1");
+    expect(reloaded.model).toBe("llama3");
+    expect(reloaded.temperature).toBeCloseTo(0.7);
+  });
+
+  it("migrates a legacy plaintext apiKey out of localStorage", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "datalab-web.aiassistant.settings",
+      JSON.stringify({
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-legacy",
+        model: "gpt-4o-mini",
+        temperature: 0.2,
+      }),
+    );
+    // First load triggers the migration (fire-and-forget).
+    const loaded = loadSettings();
+    expect(loaded.apiKey).toBe("");
+    // Poll for the async re-encryption + localStorage rewrite.
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      const raw = window.localStorage.getItem(
+        "datalab-web.aiassistant.settings",
+      );
+      if (raw && !raw.includes("sk-legacy")) break;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const raw = window.localStorage.getItem(
+      "datalab-web.aiassistant.settings",
+    )!;
+    expect(raw).not.toContain("sk-legacy");
+    const recovered = await loadApiKey();
+    expect(recovered).toBe("sk-legacy");
   });
 
   it("merges partial stored payloads with defaults", () => {

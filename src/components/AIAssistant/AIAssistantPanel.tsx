@@ -13,7 +13,9 @@ import { AIController, isAbortError } from "../../aiassistant/controller";
 import {
   fetchDevOpenAIKey,
   isConfigured,
+  loadApiKey,
   loadSettings,
+  saveApiKey,
   saveSettings,
 } from "../../aiassistant/settings";
 import { SYSTEM_PROMPT } from "../../aiassistant/systemPrompt";
@@ -95,22 +97,33 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     settingsRef.current = settings;
   }, [settings]);
 
-  // Best-effort: when running under ``npm run dev`` and no key has been
-  // saved yet, fetch the developer's ``OPENAI_API_KEY`` exposed by the
-  // Vite dev plugin and persist it. The endpoint never ships in
-  // production builds (registered under ``apply: "serve"``).
+  // Best-effort: hydrate the encrypted API key from IndexedDB on mount.
+  // When that returns nothing AND we are running under ``npm run dev``,
+  // fall back to the developer's ``OPENAI_API_KEY`` exposed by the Vite
+  // dev plugin, then persist it (encrypted). The dev endpoint never
+  // ships in production builds (registered under ``apply: "serve"``).
   useEffect(() => {
     if (settings.apiKey.trim()) return;
     let cancelled = false;
-    void fetchDevOpenAIKey().then((devKey) => {
+    void (async () => {
+      const stored = await loadApiKey();
+      if (cancelled) return;
+      if (stored) {
+        setSettings((prev) =>
+          prev.apiKey.trim() ? prev : { ...prev, apiKey: stored },
+        );
+        return;
+      }
+      const devKey = await fetchDevOpenAIKey();
       if (cancelled || !devKey) return;
       setSettings((prev) => {
         if (prev.apiKey.trim()) return prev;
         const next = { ...prev, apiKey: devKey };
         saveSettings(next);
+        void saveApiKey(devKey);
         return next;
       });
-    });
+    })();
     return () => {
       cancelled = true;
     };

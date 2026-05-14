@@ -3,9 +3,11 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 import { AIAssistantPanel } from "../../../src/components/AIAssistant/AIAssistantPanel";
 import type { DataLabRuntime } from "../../../src/runtime/runtime";
-import { saveSettings } from "../../../src/aiassistant/settings";
+import { saveApiKey, saveSettings } from "../../../src/aiassistant/settings";
+import { _resetSecureStorageForTests } from "../../../src/aiassistant/secureStorage";
 
 function fakeRuntime(over: Partial<DataLabRuntime> = {}): DataLabRuntime {
   return {
@@ -41,14 +43,21 @@ function mockOpenAI(
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   window.localStorage.clear();
+  globalThis.indexedDB = new IDBFactory();
+  _resetSecureStorageForTests();
   saveSettings({
+    provider: "openai",
     baseUrl: "http://localhost:11434/v1",
     apiKey: "test-key",
     model: "fake",
     temperature: 0,
   });
+  // The API key is no longer persisted by ``saveSettings``; route it
+  // through secure storage so the panel hydrates it on mount and skips
+  // the dev-key probe (which would otherwise consume a canned fetch).
+  await saveApiKey("test-key");
 });
 
 afterEach(() => {
