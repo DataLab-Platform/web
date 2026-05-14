@@ -873,15 +873,28 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        await runtime.triggerPluginAction(actionId);
-        await refresh();
+        const added = await runtime.triggerPluginAction(actionId);
+        // Mirror desktop's implicit selection of newly-added objects.
+        // Image takes precedence over signal when both panels grew
+        // (rare but consistent with the desktop's last-touched panel).
+        const newImage = added.image[added.image.length - 1] ?? null;
+        const newSignal = added.signal[added.signal.length - 1] ?? null;
+        if (newImage && activePanel !== "image") {
+          await refreshPanelKind("image", newImage);
+        } else if (newSignal && activePanel !== "signal") {
+          await refreshPanelKind("signal", newSignal);
+        } else {
+          await refresh(
+            activePanel === "image" ? newImage : newSignal ?? newImage,
+          );
+        }
       } catch (err) {
         console.error("[plugins] action failed", err);
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, refreshPanelKind, activePanel],
   );
 
   const handleReloadPlugins = useCallback(async () => {

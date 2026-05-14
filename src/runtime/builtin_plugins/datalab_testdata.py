@@ -19,7 +19,6 @@ Differences from the desktop version:
 from __future__ import annotations
 
 import sigima.tests.data as test_data
-
 from datalab.config import _
 from datalab.plugins import PluginBase, PluginInfo
 
@@ -44,9 +43,10 @@ class PluginTestData(PluginBase):
 
     async def create_peak_image(self) -> None:
         """Create 2D peak image."""
-        obj = self.imagepanel.new_object(add_to_panel=False)
-        if obj is None:
-            return
+        from sigima.objects import create_image_from_param
+
+        newparam = self.imagepanel.get_newparam_from_current()
+        obj = create_image_from_param(newparam)
         param = test_data.PeakDataParam.create(size=max(obj.data.shape))
         self.imagepanel.processor.update_param_defaults(param)
         if await param.edit_async(self.main):

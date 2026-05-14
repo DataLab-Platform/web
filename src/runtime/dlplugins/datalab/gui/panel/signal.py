@@ -34,10 +34,10 @@ class SignalPanel:
         expected to ``await`` the dialog through :meth:`DataSet.edit_async`.
         """
         try:
-            from sigima.params import NewSignalParam  # type: ignore[attr-defined]
+            from sigima.objects import NewSignalParam  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - defensive
             raise BrowserNotSupportedError(
-                "sigima.params.NewSignalParam is not available in this build."
+                "sigima.objects.NewSignalParam is not available in this build."
             ) from exc
 
         cached = get_param_defaults(NewSignalParam)

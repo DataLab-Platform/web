@@ -29,10 +29,10 @@ class ImagePanel:
     def get_newparam_from_current(self, title: str | None = None) -> gds.DataSet | None:
         """Return a parameter dataset suitable for a *New image* dialog."""
         try:
-            from sigima.params import NewImageParam  # type: ignore[attr-defined]
+            from sigima.objects import NewImageParam  # type: ignore[attr-defined]
         except Exception as exc:  # pragma: no cover - defensive
             raise BrowserNotSupportedError(
-                "sigima.params.NewImageParam is not available in this build."
+                "sigima.objects.NewImageParam is not available in this build."
             ) from exc
 
         cached = get_param_defaults(NewImageParam)

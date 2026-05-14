@@ -2099,11 +2099,22 @@ from datalab.registries import EXTRA_MENU_ACTIONS
 `)) as PluginMenuAction[];
   }
 
-  /** Trigger a plugin-supplied menu action by its id. */
-  async triggerPluginAction(actionId: string): Promise<void> {
-    await this.py.runPythonAsync(`
+  /** Trigger a plugin-supplied menu action by its id.
+   *
+   * Returns the UUIDs of objects that were newly added to each panel
+   * during the action's execution. The desktop `LocalProxy.add_object`
+   * implicitly selects the freshly-created object; the browser bridge
+   * has no live selection model, so we expose the diff to let the UI
+   * select the new objects after a refresh.
+   */
+  async triggerPluginAction(
+    actionId: string,
+  ): Promise<{ signal: string[]; image: string[] }> {
+    const result = (await this.py.runPythonAsync(`
 import inspect
 from datalab.registries import EXTRA_MENU_ACTIONS
+from dlw_main import WebMainBridge as _WMB
+_bridge = _WMB()
 _target = None
 for _kind in ("signal", "image"):
     for _entry in EXTRA_MENU_ACTIONS[_kind]:
@@ -2114,10 +2125,25 @@ for _kind in ("signal", "image"):
         break
 if _target is None:
     raise KeyError("Unknown plugin action: ${actionId}")
+_before = {k: set(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
 _result = _target.triggered()
 if inspect.isawaitable(_result):
     await _result
-`);
+_after = {k: list(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
+{k: [oid for oid in _after[k] if oid not in _before[k]] for k in ("signal", "image")}
+`)) as unknown;
+    // Pyodide returns a PyProxy for dict; convert to plain object via toJs.
+    if (
+      result &&
+      typeof (result as { toJs?: () => unknown }).toJs === "function"
+    ) {
+      const obj = (result as { toJs: (opts: unknown) => unknown }).toJs({
+        dict_converter: Object.fromEntries,
+      });
+      (result as { destroy?: () => void }).destroy?.();
+      return obj as { signal: string[]; image: string[] };
+    }
+    return result as { signal: string[]; image: string[] };
   }
 
   // ---------------------------------------------------------------------
