@@ -51,7 +51,12 @@ export function DataSetDialog(props: Props) {
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card dataset-dialog">
         <h2>{title}</h2>
-        {description && <p className="dataset-dialog-desc">{description}</p>}
+        {description && (
+          <p
+            className="dataset-dialog-desc"
+            dangerouslySetInnerHTML={{ __html: description }}
+          />
+        )}
         <DataSetForm
           schema={payload.schema}
           values={values}
