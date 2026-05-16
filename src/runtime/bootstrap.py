@@ -194,16 +194,47 @@ class ObjectModel:
                 g.object_ids.remove(oid)
                 break
 
-    def move_object(self, oid: str, target_group_id: str) -> None:
-        """Move object *oid* to *target_group_id* within its panel."""
-        kind = self._objects[oid].kind
+    def move_object(
+        self, oid: str, target_group_id: str, target_index: int = -1
+    ) -> None:
+        """Move object *oid* to *target_group_id* within its panel.
+
+        *target_index* is the insertion position in the destination group,
+        computed **after** the object has been removed from its source group.
+        Use ``-1`` (default) to append at the end. The index is clamped to
+        the valid range; same-group reorders are supported.
+        """
+        self.move_objects([oid], target_group_id, target_index)
+
+    def move_objects(
+        self, oids: list[str], target_group_id: str, target_index: int = -1
+    ) -> None:
+        """Move multiple objects to *target_group_id*, preserving *oids* order.
+
+        All *oids* must belong to the same panel kind. *target_index* is
+        the insertion position in the destination group, computed **after**
+        all moved objects have been removed from their current groups
+        (use ``-1`` to append at the end). No-op when *oids* is empty.
+        """
+        if not oids:
+            return
+        kind = self._objects[oids[0]].kind
         panel = self.panel(kind)
         target = panel.find_group(target_group_id)
-        src = panel.find_group_of(oid)
-        if src is target:
-            return
-        src.object_ids.remove(oid)
-        target.object_ids.append(oid)
+        moved = set(oids)
+        # Compute insertion index relative to the target group *after* removal
+        # of moved objects (so callers can pass the visible drop position).
+        target_remaining = [x for x in target.object_ids if x not in moved]
+        if target_index < 0 or target_index > len(target_remaining):
+            insert_at = len(target_remaining)
+        else:
+            insert_at = target_index
+        # Remove moved objects from every group of the panel.
+        for g in panel.groups:
+            if any(x in moved for x in g.object_ids):
+                g.object_ids = [x for x in g.object_ids if x not in moved]
+        # Insert at the computed position, preserving caller-provided order.
+        target.object_ids[insert_at:insert_at] = list(oids)
 
     def move_object_in_group(self, oid: str, delta: int) -> None:
         """Reorder object *oid* within its current group by *delta*.
@@ -1690,9 +1721,14 @@ def rename_object(oid: str, name: str) -> None:
     _MODEL.rename_object(oid, name)
 
 
-def move_object(oid: str, target_group_id: str) -> None:
-    """Move object *oid* to *target_group_id*."""
-    _MODEL.move_object(oid, target_group_id)
+def move_object(oid: str, target_group_id: str, target_index: int = -1) -> None:
+    """Move object *oid* to *target_group_id* (optionally at *target_index*)."""
+    _MODEL.move_object(oid, target_group_id, target_index)
+
+
+def move_objects(oids: list[str], target_group_id: str, target_index: int = -1) -> None:
+    """Move multiple objects to *target_group_id* preserving *oids* order."""
+    _MODEL.move_objects(oids, target_group_id, target_index)
 
 
 def move_object_in_group(oid: str, delta: int) -> None:
@@ -4513,6 +4549,7 @@ __all__ = [
     "delete_group",
     "rename_object",
     "move_object",
+    "move_objects",
     "delete_object",
     "get_object_meta",
     "set_object_meta",

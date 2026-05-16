@@ -86,6 +86,33 @@ def test_delete_unknown_object_is_noop(fresh_bootstrap):
     bs.delete_object("does-not-exist")  # must not raise
 
 
+def test_move_object_with_target_index(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oids = [bs.add_signal_from_arrays(name, [0, 1], [0, 0]) for name in ("A", "B", "C")]
+    gid = bs.get_panel_tree("signal")["groups"][0]["gid"]
+    # Same-group reorder: move "C" to position 0
+    bs.move_object(oids[2], gid, 0)
+    order = [o["id"] for o in bs.get_panel_tree("signal")["groups"][0]["objects"]]
+    assert order == [oids[2], oids[0], oids[1]]
+
+
+def test_move_objects_preserves_order_and_index(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oids = [
+        bs.add_signal_from_arrays(name, [0, 1], [0, 0]) for name in ("A", "B", "C", "D")
+    ]
+    gid_src = bs.get_panel_tree("signal")["groups"][0]["gid"]
+    gid_dst = bs.create_group("signal", "Dst")
+    # Move B and D into the new group at position 0.
+    bs.move_objects([oids[1], oids[3]], gid_dst, 0)
+    tree = bs.get_panel_tree("signal")
+    src_ids = [o["id"] for o in tree["groups"][0]["objects"]]
+    dst_ids = [o["id"] for o in tree["groups"][1]["objects"]]
+    assert src_ids == [oids[0], oids[2]]
+    assert dst_ids == [oids[1], oids[3]]
+    assert tree["groups"][0]["gid"] == gid_src
+
+
 def test_signal_and_image_panels_are_isolated(fresh_bootstrap):
     bs = fresh_bootstrap
     bs.add_signal_from_arrays("S", [0, 1], [0, 0])

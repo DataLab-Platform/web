@@ -1068,6 +1068,37 @@ input {
   color: #cce6ff;
 }
 
+/* Drag-and-drop visual feedback. */
+.object-tree-item.dragging {
+  opacity: 0.4;
+}
+
+.object-tree-item.drop-before::before,
+.object-tree-item.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.object-tree-item.drop-before::before {
+  top: -1px;
+}
+
+.object-tree-item.drop-after::after {
+  bottom: -1px;
+}
+
+.object-tree-group-header.drop-target,
+.object-tree-empty-group.drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .object-tree-title {
   font-size: 12px;
   overflow: hidden;

@@ -21,7 +21,15 @@ interface Props {
   onRenameGroup: (gid: string, name: string) => void;
   onDeleteGroup: (gid: string) => void;
   onDeleteObjects: (ids: string[]) => void;
-  onMoveObject: (oid: string, targetGroupId: string) => void;
+  /**
+   * Move *oids* to *targetGroupId* at *targetIndex* (computed against the
+   * destination group **after** removal of moved objects, ``-1`` to append).
+   */
+  onMoveObjects: (
+    oids: string[],
+    targetGroupId: string,
+    targetIndex: number,
+  ) => void;
   /** Open a context menu for object *oid* at viewport coordinates. */
   onObjectContextMenu?: (oid: string, x: number, y: number) => void;
 }
@@ -36,6 +44,14 @@ type EditTarget =
   | { kind: "object"; id: string }
   | { kind: "group"; id: string }
   | null;
+
+/** Visual drop indicator while dragging objects in the tree. */
+type DropZone =
+  | { kind: "group"; gid: string }
+  | { kind: "before"; gid: string; oid: string }
+  | { kind: "after"; gid: string; oid: string };
+
+const DRAG_MIME = "application/x-datalab-oids";
 
 /**
  * Hierarchical object tree with multi-selection.
@@ -58,13 +74,15 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
       onRenameGroup,
       onDeleteGroup,
       onDeleteObjects,
-      onMoveObject,
+      onMoveObjects,
       onObjectContextMenu,
     } = props;
 
     const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
     const [editing, setEditing] = useState<EditTarget>(null);
     const [editValue, setEditValue] = useState("");
+    const [draggedOids, setDraggedOids] = useState<string[] | null>(null);
+    const [dropZone, setDropZone] = useState<DropZone | null>(null);
 
     useImperativeHandle(
       ref,
@@ -145,6 +163,97 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
       setEditValue(current);
     };
 
+    /** Begin a drag from object *oid*, dragging the whole selection if
+     * *oid* is part of it (mimics file-explorer behaviour). */
+    const handleDragStart = useCallback(
+      (oid: string, evt: React.DragEvent) => {
+        const oids = selectedSet.has(oid) ? selectedIds : [oid];
+        evt.dataTransfer.setData(DRAG_MIME, JSON.stringify(oids));
+        evt.dataTransfer.effectAllowed = "move";
+        setDraggedOids(oids);
+      },
+      [selectedIds, selectedSet],
+    );
+
+    const handleDragEnd = useCallback(() => {
+      setDraggedOids(null);
+      setDropZone(null);
+    }, []);
+
+    /** Compute the drop zone over an item from the cursor Y position. */
+    const computeItemDropZone = useCallback(
+      (gid: string, oid: string, evt: React.DragEvent): DropZone => {
+        const rect = evt.currentTarget.getBoundingClientRect();
+        const before = evt.clientY < rect.top + rect.height / 2;
+        return before
+          ? { kind: "before", gid, oid }
+          : { kind: "after", gid, oid };
+      },
+      [],
+    );
+
+    /** Resolve the drop into ``(targetGroupId, targetIndex)`` and apply it. */
+    const applyDrop = useCallback(
+      (zone: DropZone, oids: string[]) => {
+        if (!tree) return;
+        const moved = new Set(oids);
+        const targetGroup = tree.groups.find((g) => g.gid === zone.gid);
+        if (!targetGroup) return;
+        // Remaining ids in destination after removing the moved set.
+        const remaining = targetGroup.objects
+          .map((o) => o.id)
+          .filter((x) => !moved.has(x));
+        let index = -1;
+        if (zone.kind === "before" || zone.kind === "after") {
+          // Drop relative to a sibling that may be itself one of the moved
+          // items: in that case treat the drop as a no-op (append).
+          if (moved.has(zone.oid)) {
+            index = -1;
+          } else {
+            const pos = remaining.indexOf(zone.oid);
+            index = pos < 0 ? -1 : pos + (zone.kind === "after" ? 1 : 0);
+          }
+        }
+        onMoveObjects(oids, zone.gid, index);
+      },
+      [tree, onMoveObjects],
+    );
+
+    const handleDrop = useCallback(
+      (zone: DropZone, evt: React.DragEvent) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        let oids = draggedOids;
+        if (!oids) {
+          // Fallback: payload from dataTransfer (cross-render scenarios).
+          const raw = evt.dataTransfer.getData(DRAG_MIME);
+          if (raw) {
+            try {
+              oids = JSON.parse(raw);
+            } catch {
+              oids = null;
+            }
+          }
+        }
+        setDraggedOids(null);
+        setDropZone(null);
+        if (oids && oids.length > 0) applyDrop(zone, oids);
+      },
+      [draggedOids, applyDrop],
+    );
+
+    /** True when the active drag is over *zone*. */
+    const isZone = (zone: DropZone): boolean => {
+      if (!dropZone) return false;
+      if (dropZone.kind !== zone.kind) return false;
+      if (dropZone.gid !== zone.gid) return false;
+      if (zone.kind === "group") return true;
+      return (
+        (dropZone as Extract<DropZone, { kind: "before" | "after" }>).oid ===
+        (zone as Extract<DropZone, { kind: "before" | "after" }>).oid
+      );
+    };
+
     const commitEdit = () => {
       if (!editing) return;
       const value = editValue.trim();
@@ -163,14 +272,37 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
       <div className="object-tree">
         {tree.groups.map((group) => {
           const isCollapsed = collapsed.has(group.gid);
+          const groupZone: DropZone = { kind: "group", gid: group.gid };
+          const headerCls = [
+            "object-tree-group-header",
+            draggedOids && isZone(groupZone) ? "drop-target" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
             <div key={group.gid} className="object-tree-group">
               <div
-                className="object-tree-group-header"
+                className={headerCls}
                 onClick={() => handleGroupClick(group)}
                 onDoubleClick={() =>
                   startEdit({ kind: "group", id: group.gid }, group.name)
                 }
+                onDragOver={(e) => {
+                  if (!draggedOids) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropZone(groupZone);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear when actually leaving the header (not when
+                  // moving to a child element).
+                  const next = e.relatedTarget as Node | null;
+                  if (next && e.currentTarget.contains(next)) return;
+                  setDropZone((z) =>
+                    z && z.kind === "group" && z.gid === group.gid ? null : z,
+                  );
+                }}
+                onDrop={(e) => handleDrop(groupZone, e)}
               >
                 <button
                   type="button"
@@ -234,13 +366,17 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                 <ul className="object-tree-list">
                   {group.objects.length === 0 && (
                     <li
-                      className="object-tree-empty-group"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
+                      className={
+                        "object-tree-empty-group" +
+                        (draggedOids && isZone(groupZone) ? " drop-target" : "")
+                      }
+                      onDragOver={(e) => {
+                        if (!draggedOids) return;
                         e.preventDefault();
-                        const oid = e.dataTransfer.getData("text/oid");
-                        if (oid) onMoveObject(oid, group.gid);
+                        e.dataTransfer.dropEffect = "move";
+                        setDropZone(groupZone);
                       }}
+                      onDrop={(e) => handleDrop(groupZone, e)}
                     >
                       (empty — drop here)
                     </li>
@@ -248,10 +384,26 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                   {group.objects.map((o: ObjectNode) => {
                     const isSelected = selectedSet.has(o.id);
                     const isCurrent = currentId === o.id;
+                    const isDragged = !!draggedOids?.includes(o.id);
+                    const beforeZone: DropZone = {
+                      kind: "before",
+                      gid: group.gid,
+                      oid: o.id,
+                    };
+                    const afterZone: DropZone = {
+                      kind: "after",
+                      gid: group.gid,
+                      oid: o.id,
+                    };
+                    const dropBefore = !!draggedOids && isZone(beforeZone);
+                    const dropAfter = !!draggedOids && isZone(afterZone);
                     const cls = [
                       "object-tree-item",
                       isSelected ? "selected" : "",
                       isCurrent ? "current" : "",
+                      isDragged ? "dragging" : "",
+                      dropBefore ? "drop-before" : "",
+                      dropAfter ? "drop-after" : "",
                     ]
                       .filter(Boolean)
                       .join(" ");
@@ -260,9 +412,28 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                         key={o.id}
                         className={cls}
                         draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("text/oid", o.id);
-                          e.dataTransfer.effectAllowed = "move";
+                        onDragStart={(e) => handleDragStart(o.id, e)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={(e) => {
+                          if (!draggedOids) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          setDropZone(computeItemDropZone(group.gid, o.id, e));
+                        }}
+                        onDragLeave={(e) => {
+                          const next = e.relatedTarget as Node | null;
+                          if (next && e.currentTarget.contains(next)) return;
+                          setDropZone((z) =>
+                            z &&
+                            (z.kind === "before" || z.kind === "after") &&
+                            z.oid === o.id
+                              ? null
+                              : z,
+                          );
+                        }}
+                        onDrop={(e) => {
+                          const zone = computeItemDropZone(group.gid, o.id, e);
+                          handleDrop(zone, e);
                         }}
                         onClick={(e) => handleObjectClick(o.id, e)}
                         onDoubleClick={() =>

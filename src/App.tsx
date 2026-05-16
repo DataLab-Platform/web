@@ -1283,10 +1283,10 @@ export default function App() {
     [runtime, refresh],
   );
 
-  const handleMoveObject = useCallback(
-    async (oid: string, target: string) => {
-      if (!runtime) return;
-      await runtime.moveObject(oid, target);
+  const handleMoveObjects = useCallback(
+    async (oids: string[], target: string, index: number) => {
+      if (!runtime || oids.length === 0) return;
+      await runtime.moveObjects(oids, target, index);
       await refresh();
     },
     [runtime, refresh],
@@ -2386,7 +2386,7 @@ export default function App() {
                   onRenameGroup={handleRenameGroup}
                   onDeleteGroup={handleDeleteGroup}
                   onDeleteObjects={deleteObjects}
-                  onMoveObject={handleMoveObject}
+                  onMoveObjects={handleMoveObjects}
                   onObjectContextMenu={handleObjectContextMenu}
                 />
               )}

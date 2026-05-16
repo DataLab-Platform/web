@@ -781,6 +781,7 @@ export class DataLabRuntime {
       "delete_signal",
       "rename_object",
       "move_object",
+      "move_objects",
       "create_group",
       "rename_group",
       "delete_group",
@@ -1416,8 +1417,28 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("rename_object", { oid, name });
   }
 
-  async moveObject(oid: string, targetGroupId: string): Promise<void> {
-    await this.callPy("move_object", { oid, target_group_id: targetGroupId });
+  async moveObject(
+    oid: string,
+    targetGroupId: string,
+    targetIndex = -1,
+  ): Promise<void> {
+    await this.callPy("move_object", {
+      oid,
+      target_group_id: targetGroupId,
+      target_index: targetIndex,
+    });
+  }
+
+  async moveObjects(
+    oids: string[],
+    targetGroupId: string,
+    targetIndex = -1,
+  ): Promise<void> {
+    await this.callPy("move_objects", {
+      oids,
+      target_group_id: targetGroupId,
+      target_index: targetIndex,
+    });
   }
 
   async moveObjectInGroup(oid: string, delta: number): Promise<void> {
