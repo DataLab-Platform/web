@@ -815,12 +815,30 @@ export default function App() {
     [oidIndex, activePanel, refreshPanelKind],
   );
 
+  /** Resolve the group id hosting the currently-selected object in the
+   *  active panel, so newly-created objects land next to the user's
+   *  current focus (mirrors DataLab desktop's behaviour). Returns
+   *  ``undefined`` when no selection exists — the runtime then falls
+   *  back to the default group. */
+  const currentSelectionGroupId = useCallback((): string | undefined => {
+    if (!tree) return undefined;
+    const oid = currentId ?? selectedIds[0];
+    if (!oid) return undefined;
+    for (const g of tree.groups) {
+      if (g.objects.some((o) => o.id === oid)) return g.gid;
+    }
+    return undefined;
+  }, [tree, currentId, selectedIds]);
+
   const handleCreateTyped = useCallback(
     async (stype: string) => {
       if (!runtime) return;
       setBusy(true);
       try {
-        const id = await runtime.createSignalTyped(stype);
+        const id = await runtime.createSignalTyped(
+          stype,
+          currentSelectionGroupId(),
+        );
         setPreferredSideTab("creation");
         await refresh(id);
         setSideRefreshNonce((n) => n + 1);
@@ -828,7 +846,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, currentSelectionGroupId],
   );
 
   const handleCreateImageTyped = useCallback(
@@ -836,7 +854,10 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        const id = await runtime.createImageTyped(stype);
+        const id = await runtime.createImageTyped(
+          stype,
+          currentSelectionGroupId(),
+        );
         setPreferredSideTab("creation");
         await refresh(id);
         setSideRefreshNonce((n) => n + 1);
@@ -844,7 +865,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, currentSelectionGroupId],
   );
 
   const handleSideObjectChanged = useCallback(
