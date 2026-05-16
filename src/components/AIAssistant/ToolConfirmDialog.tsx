@@ -51,7 +51,10 @@ export function ToolConfirmDialog({ request }: Props) {
   const longStringArgs: Array<[string, string]> = [];
   const compactArgs: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(request.args)) {
-    if (typeof value === "string" && (value.includes("\n") || value.length > 80)) {
+    if (
+      typeof value === "string" &&
+      (value.includes("\n") || value.length > 80)
+    ) {
       longStringArgs.push([key, value]);
     } else {
       compactArgs[key] = value;

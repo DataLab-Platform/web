@@ -221,12 +221,12 @@ self.onmessage = async (event: MessageEvent) => {
     | { type: "init" }
     | { type: "run"; code: string; name?: string }
     | {
-      type: "bridge_reply";
-      id: string;
-      ok: boolean;
-      value?: unknown;
-      error?: string;
-    };
+        type: "bridge_reply";
+        id: string;
+        ok: boolean;
+        value?: unknown;
+        error?: string;
+      };
   try {
     if (msg.type === "init") {
       await getPyodide();

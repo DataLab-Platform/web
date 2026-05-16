@@ -406,18 +406,10 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
             Close
           </button>
           <span className="h5browser-spacer" />
-          <button
-            type="button"
-            onClick={expandAll}
-            disabled={!currentFile}
-          >
+          <button type="button" onClick={expandAll} disabled={!currentFile}>
             Expand all
           </button>
-          <button
-            type="button"
-            onClick={collapseAll}
-            disabled={!currentFile}
-          >
+          <button type="button" onClick={collapseAll} disabled={!currentFile}>
             Collapse all
           </button>
           <button

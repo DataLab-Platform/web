@@ -100,9 +100,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
     if (trimmed && trimmed !== original) {
       await renameConversation(editingId, trimmed);
       setItems((prev) =>
-        prev.map((i) =>
-          i.id === editingId ? { ...i, title: trimmed } : i,
-        ),
+        prev.map((i) => (i.id === editingId ? { ...i, title: trimmed } : i)),
       );
     }
     cancelRename();
@@ -155,8 +153,8 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
       >
         <h2 id="ai-history-title">AI Assistant — Conversation history</h2>
         <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 0 }}>
-          Double-click a conversation to load it. Loading replaces the
-          current one (it stays saved).
+          Double-click a conversation to load it. Loading replaces the current
+          one (it stays saved).
         </p>
         <div
           style={{
@@ -217,7 +215,13 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                   fontSize: 13,
                 }}
               >
-                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
                   {isEditing ? (
                     <input
                       ref={editingInputRef}
@@ -270,11 +274,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
           className="actions"
           style={{ marginTop: 12, display: "flex", gap: 6 }}
         >
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={!selectedId}
-          >
+          <button type="button" onClick={handleDelete} disabled={!selectedId}>
             Delete
           </button>
           <button
@@ -303,11 +303,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
           <button type="button" onClick={() => onClose(null)}>
             Close
           </button>
-          <button
-            type="button"
-            onClick={handleLoad}
-            disabled={!selectedId}
-          >
+          <button type="button" onClick={handleLoad} disabled={!selectedId}>
             Load
           </button>
         </div>

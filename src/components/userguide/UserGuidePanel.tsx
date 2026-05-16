@@ -12,13 +12,7 @@
  * without leaving the drawer; external links open in a new tab.
  */
 
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarkdownView } from "../AIAssistant/MarkdownView";
 import welcomeMd from "../../../doc/userguide/welcome.md?raw";
 import differencesMd from "../../../doc/userguide/differences-from-desktop.md?raw";
@@ -111,24 +105,27 @@ export function UserGuidePanel({ onClose }: Props) {
   // them to the corresponding page without leaving the drawer. External
   // links keep their default behaviour (handled by ``MarkdownView`` /
   // ``DOMPurify``, which preserves ``target`` and ``rel`` attributes).
-  const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null;
-    const anchor = target?.closest("a");
-    if (!anchor) return;
-    const href = anchor.getAttribute("href") ?? "";
-    const internal = PAGE_BY_FILENAME[href];
-    if (internal) {
-      event.preventDefault();
-      goToPage(internal);
-      return;
-    }
-    // Make outbound links open in a new tab even if the source markdown
-    // didn't specify it.
-    if (/^https?:/i.test(href) && !anchor.target) {
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-    }
-  }, [goToPage]);
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+      const anchor = target?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") ?? "";
+      const internal = PAGE_BY_FILENAME[href];
+      if (internal) {
+        event.preventDefault();
+        goToPage(internal);
+        return;
+      }
+      // Make outbound links open in a new tab even if the source markdown
+      // didn't specify it.
+      if (/^https?:/i.test(href) && !anchor.target) {
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+      }
+    },
+    [goToPage],
+  );
 
   return (
     <aside

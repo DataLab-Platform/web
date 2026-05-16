@@ -48,8 +48,14 @@ afterEach(() => {
 describe("capture_view tool (multimodal followup)", () => {
   it("appends a synthetic user message carrying an inline image", async () => {
     const gd = document.createElement("div");
-    Object.defineProperty(gd, "clientWidth", { value: 320, configurable: true });
-    Object.defineProperty(gd, "clientHeight", { value: 240, configurable: true });
+    Object.defineProperty(gd, "clientWidth", {
+      value: 320,
+      configurable: true,
+    });
+    Object.defineProperty(gd, "clientHeight", {
+      value: 240,
+      configurable: true,
+    });
     registerActivePlot("signal", gd);
     vi.stubGlobal("window", {
       ...window,

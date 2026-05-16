@@ -178,10 +178,7 @@ export class AIController {
         this.appendMessage(assistantMessage);
 
         if (response.usage) {
-          this.cumulativeUsage = sumUsage(
-            this.cumulativeUsage,
-            response.usage,
-          );
+          this.cumulativeUsage = sumUsage(this.cumulativeUsage, response.usage);
           this.listener.onUsage?.(response.usage, this.getUsage());
         }
 

@@ -40,7 +40,11 @@ export interface MockTurn {
   /** Optional explicit token usage emitted for this turn. When omitted
    *  the mock fabricates a deterministic value (1 token per word in
    *  the request + 1 token per word of the response content). */
-  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
 }
 
 /** Mutable script + read cursor exposed via the global handle. */

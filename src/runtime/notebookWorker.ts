@@ -119,8 +119,8 @@ await micropip.install(["sigima", "guidata"])
       const bundle =
         mime && typeof (mime as { toJs?: () => unknown }).toJs === "function"
           ? (mime as { toJs: (opts?: unknown) => unknown }).toJs({
-            dict_converter: Object.fromEntries,
-          })
+              dict_converter: Object.fromEntries,
+            })
           : mime;
       self.postMessage({
         type: "display_data",
@@ -132,8 +132,8 @@ await micropip.install(["sigima", "guidata"])
       const bundle =
         mime && typeof (mime as { toJs?: () => unknown }).toJs === "function"
           ? (mime as { toJs: (opts?: unknown) => unknown }).toJs({
-            dict_converter: Object.fromEntries,
-          })
+              dict_converter: Object.fromEntries,
+            })
           : mime;
       self.postMessage({
         type: "execute_result",
@@ -269,12 +269,12 @@ self.onmessage = async (event: MessageEvent) => {
     | { type: "init" }
     | { type: "exec_cell"; cellId: string; code: string }
     | {
-      type: "bridge_reply";
-      id: string;
-      ok: boolean;
-      value?: unknown;
-      error?: string;
-    };
+        type: "bridge_reply";
+        id: string;
+        ok: boolean;
+        value?: unknown;
+        error?: string;
+      };
   try {
     if (msg.type === "init") {
       await getPyodide();
@@ -308,7 +308,7 @@ self.onmessage = async (event: MessageEvent) => {
       try {
         await py.runPythonAsync(
           "from notebook_display import _exec_cell\n" +
-          "await _exec_cell(_dlw_cell_source)",
+            "await _exec_cell(_dlw_cell_source)",
         );
         await py.runPythonAsync(
           "import sys\nsys.stdout.flush()\nsys.stderr.flush()",

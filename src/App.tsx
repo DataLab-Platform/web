@@ -57,11 +57,7 @@ import {
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { DialogBridge } from "./components/DialogBridge";
-import {
-  useConfirm,
-  useMessage,
-  usePrompt,
-} from "./components/ConfirmDialog";
+import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
 import {
   SeparateViewDialog,
   type SeparateViewContent,
@@ -951,7 +947,7 @@ export default function App() {
           await refreshPanelKind("signal", newSignal);
         } else {
           await refresh(
-            activePanel === "image" ? newImage : newSignal ?? newImage,
+            activePanel === "image" ? newImage : (newSignal ?? newImage),
           );
         }
       } catch (err) {
@@ -2330,85 +2326,82 @@ export default function App() {
   );
 
   return (
-    <ObjectNavigationProvider
-      oidIndex={oidIndex}
-      navigateToOid={navigateToOid}
-    >
-    <div className="app" data-runtime-status={status}>
-      <MenuBar
-        status={status === "ready" ? "Ready" : message}
-        statusKind={status}
-        state={actionState}
-        actions={actions}
-        onShowExperimentalInfo={() => setHelpView("about")}
-      />
-      {recoveryBanner && (
-        <RecoveryBanner
-          macroCount={recoveryBanner.macros}
-          notebookCount={recoveryBanner.notebooks}
-          onSave={() => {
-            void handleSaveWorkspaceHdf5();
-          }}
-          onDismiss={() => setRecoveryBanner(null)}
-          saveDisabled={status !== "ready" || busy}
+    <ObjectNavigationProvider oidIndex={oidIndex} navigateToOid={navigateToOid}>
+      <div className="app" data-runtime-status={status}>
+        <MenuBar
+          status={status === "ready" ? "Ready" : message}
+          statusKind={status}
+          state={actionState}
+          actions={actions}
+          onShowExperimentalInfo={() => setHelpView("about")}
         />
-      )}
-      <div className="workspace">
-        <aside className="panel" style={{ width: leftPanelWidth }}>
-          <PanelSwitcher
-            active={activePanel}
-            onChange={handleSwitchPanel}
-            disabled={status !== "ready" || busy}
+        {recoveryBanner && (
+          <RecoveryBanner
+            macroCount={recoveryBanner.macros}
+            notebookCount={recoveryBanner.notebooks}
+            onSave={() => {
+              void handleSaveWorkspaceHdf5();
+            }}
+            onDismiss={() => setRecoveryBanner(null)}
+            saveDisabled={status !== "ready" || busy}
           />
-          <div className="panel-header">
-            {activePanel === "signal"
-              ? "Signals"
-              : activePanel === "image"
-                ? "Images"
-                : activePanel === "notebook"
-                  ? "Notebooks"
-                  : "Macros"}
-          </div>
-          <div className="panel-body">
-            {!isObjectPanel ? (
-              <div
-                style={{
-                  padding: 12,
-                  fontSize: 12,
-                  color: "var(--text-dim)",
-                }}
-              >
-                {activePanel === "notebook"
-                  ? "Notebook cells are shown on the right. Use the Signals or Images tabs to manage workspace objects."
-                  : "Macros are managed in the editor on the right."}
-              </div>
-            ) : (
-              <ObjectTree
-                ref={objectTreeRef}
-                tree={tree}
-                selectedIds={selectedIds}
-                currentId={currentId}
-                onSelectionChange={handleSelectionChange}
-                onRenameObject={handleRenameObject}
-                onRenameGroup={handleRenameGroup}
-                onDeleteGroup={handleDeleteGroup}
-                onDeleteObjects={deleteObjects}
-                onMoveObject={handleMoveObject}
-                onObjectContextMenu={handleObjectContextMenu}
-              />
-            )}
-          </div>
-        </aside>
-        <Splitter
-          side="left"
-          value={leftPanelWidth}
-          min={180}
-          max={500}
-          onChange={setLeftPanelWidth}
-          ariaLabel="Resize left panel"
-        />
-        <main className="plot-area">
-          {/*
+        )}
+        <div className="workspace">
+          <aside className="panel" style={{ width: leftPanelWidth }}>
+            <PanelSwitcher
+              active={activePanel}
+              onChange={handleSwitchPanel}
+              disabled={status !== "ready" || busy}
+            />
+            <div className="panel-header">
+              {activePanel === "signal"
+                ? "Signals"
+                : activePanel === "image"
+                  ? "Images"
+                  : activePanel === "notebook"
+                    ? "Notebooks"
+                    : "Macros"}
+            </div>
+            <div className="panel-body">
+              {!isObjectPanel ? (
+                <div
+                  style={{
+                    padding: 12,
+                    fontSize: 12,
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  {activePanel === "notebook"
+                    ? "Notebook cells are shown on the right. Use the Signals or Images tabs to manage workspace objects."
+                    : "Macros are managed in the editor on the right."}
+                </div>
+              ) : (
+                <ObjectTree
+                  ref={objectTreeRef}
+                  tree={tree}
+                  selectedIds={selectedIds}
+                  currentId={currentId}
+                  onSelectionChange={handleSelectionChange}
+                  onRenameObject={handleRenameObject}
+                  onRenameGroup={handleRenameGroup}
+                  onDeleteGroup={handleDeleteGroup}
+                  onDeleteObjects={deleteObjects}
+                  onMoveObject={handleMoveObject}
+                  onObjectContextMenu={handleObjectContextMenu}
+                />
+              )}
+            </div>
+          </aside>
+          <Splitter
+            side="left"
+            value={leftPanelWidth}
+            min={180}
+            max={500}
+            onChange={setLeftPanelWidth}
+            ariaLabel="Resize left panel"
+          />
+          <main className="plot-area">
+            {/*
             NotebookPanel is mounted as soon as the runtime is ready and
             kept mounted while switching panels — its in-memory cell
             state (sources, outputs, execution counters) and the kernel
@@ -2416,439 +2409,447 @@ export default function App() {
             Visibility is controlled with ``hidden`` so the layout
             collapses cleanly when another panel is active.
           */}
-          {runtime && (
-            <div
-              className="nb-panel-host"
-              hidden={activePanel !== "notebook"}
-              style={{
-                display: activePanel === "notebook" ? "flex" : "none",
-                flex: "1 1 auto",
-                minWidth: 0,
-                minHeight: 0,
-              }}
-            >
-              <NotebookPanel
-                key={`nb-${workspaceVersion}`}
-                ref={notebookPanelRef}
-                runtime={runtime}
-                theme={theme}
-                onCountChanged={setNotebookCount}
-                onSetCurrentPanel={(panel) => {
-                  if (panel === "signal" || panel === "image") {
-                    handleSwitchPanel(panel);
-                  }
+            {runtime && (
+              <div
+                className="nb-panel-host"
+                hidden={activePanel !== "notebook"}
+                style={{
+                  display: activePanel === "notebook" ? "flex" : "none",
+                  flex: "1 1 auto",
+                  minWidth: 0,
+                  minHeight: 0,
                 }}
-                getSelection={() => selectedIds}
-                getCurrentPanel={() => objectPanel}
-                selectObjects={(ids, panel) => {
-                  if (panel === "signal" || panel === "image") {
-                    handleSwitchPanel(panel);
-                  }
-                  setSelectedIds(ids);
-                  setCurrentId(ids[0] ?? null);
-                }}
-                onModelChanged={() => {
-                  // Same rationale as MacroPanel: don't yank the user away.
-                }}
-                onConvertToMacro={(title, code) => {
-                  handleSwitchPanel("macro");
-                  void macroPanelRef.current?.importMacro(title, code);
-                }}
-              />
-            </div>
-          )}
-          {runtime && (
-            <div
-              className="macro-panel-host"
-              hidden={activePanel !== "macro"}
-              style={{
-                display: activePanel === "macro" ? "flex" : "none",
-                flex: "1 1 auto",
-                minWidth: 0,
-                minHeight: 0,
-              }}
-            >
-              <MacroPanel
-                key={`macro-${workspaceVersion}`}
-                ref={macroPanelRef}
-                runtime={runtime}
-                onCountChanged={setMacroCount}
-                onSetCurrentPanel={(panel) => {
-                  if (panel === "signal" || panel === "image") {
-                    handleSwitchPanel(panel);
-                  }
-                }}
-                getSelection={() => selectedIds}
-                getCurrentPanel={() => objectPanel}
-                selectObjects={(ids, panel) => {
-                  if (panel === "signal" || panel === "image") {
-                    handleSwitchPanel(panel);
-                  }
-                  setSelectedIds(ids);
-                  setCurrentId(ids[0] ?? null);
-                }}
-                onModelChanged={() => {
-                  // The user is on the Macros panel; don't yank them away
-                  // and don't waste a network round-trip refreshing a tree
-                  // they can't see.  When they switch back to Signals /
-                  // Images, ``handleSwitchPanel`` will refresh.
-                }}
-                onConvertToNotebook={(title, code) => {
-                  handleSwitchPanel("notebook");
-                  notebookPanelRef.current?.importMacroAsNotebook(title, code);
-                }}
-                theme={theme}
-              />
-            </div>
-          )}
-          {isObjectPanel && status === "error" && (
-            <div
-              className="plot-empty"
-              style={{ color: "#c4302b", padding: 16, textAlign: "center" }}
-            >
-              <div>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                  Failed to initialise Sigima
-                </div>
-                <div style={{ fontSize: 12 }}>{error}</div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    marginTop: 10,
-                    color: "var(--text-dim)",
+              >
+                <NotebookPanel
+                  key={`nb-${workspaceVersion}`}
+                  ref={notebookPanelRef}
+                  runtime={runtime}
+                  theme={theme}
+                  onCountChanged={setNotebookCount}
+                  onSetCurrentPanel={(panel) => {
+                    if (panel === "signal" || panel === "image") {
+                      handleSwitchPanel(panel);
+                    }
                   }}
-                >
-                  See the browser console for the full traceback.
+                  getSelection={() => selectedIds}
+                  getCurrentPanel={() => objectPanel}
+                  selectObjects={(ids, panel) => {
+                    if (panel === "signal" || panel === "image") {
+                      handleSwitchPanel(panel);
+                    }
+                    setSelectedIds(ids);
+                    setCurrentId(ids[0] ?? null);
+                  }}
+                  onModelChanged={() => {
+                    // Same rationale as MacroPanel: don't yank the user away.
+                  }}
+                  onConvertToMacro={(title, code) => {
+                    handleSwitchPanel("macro");
+                    void macroPanelRef.current?.importMacro(title, code);
+                  }}
+                />
+              </div>
+            )}
+            {runtime && (
+              <div
+                className="macro-panel-host"
+                hidden={activePanel !== "macro"}
+                style={{
+                  display: activePanel === "macro" ? "flex" : "none",
+                  flex: "1 1 auto",
+                  minWidth: 0,
+                  minHeight: 0,
+                }}
+              >
+                <MacroPanel
+                  key={`macro-${workspaceVersion}`}
+                  ref={macroPanelRef}
+                  runtime={runtime}
+                  onCountChanged={setMacroCount}
+                  onSetCurrentPanel={(panel) => {
+                    if (panel === "signal" || panel === "image") {
+                      handleSwitchPanel(panel);
+                    }
+                  }}
+                  getSelection={() => selectedIds}
+                  getCurrentPanel={() => objectPanel}
+                  selectObjects={(ids, panel) => {
+                    if (panel === "signal" || panel === "image") {
+                      handleSwitchPanel(panel);
+                    }
+                    setSelectedIds(ids);
+                    setCurrentId(ids[0] ?? null);
+                  }}
+                  onModelChanged={() => {
+                    // The user is on the Macros panel; don't yank them away
+                    // and don't waste a network round-trip refreshing a tree
+                    // they can't see.  When they switch back to Signals /
+                    // Images, ``handleSwitchPanel`` will refresh.
+                  }}
+                  onConvertToNotebook={(title, code) => {
+                    handleSwitchPanel("notebook");
+                    notebookPanelRef.current?.importMacroAsNotebook(
+                      title,
+                      code,
+                    );
+                  }}
+                  theme={theme}
+                />
+              </div>
+            )}
+            {isObjectPanel && status === "error" && (
+              <div
+                className="plot-empty"
+                style={{ color: "#c4302b", padding: 16, textAlign: "center" }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                    Failed to initialise Sigima
+                  </div>
+                  <div style={{ fontSize: 12 }}>{error}</div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      marginTop: 10,
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    See the browser console for the full traceback.
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {isObjectPanel && status === "loading" && !data && !imageData && (
-            <div className="plot-empty plot-loading">
-              <img
-                src={
-                  new URL("./assets/DataLab-Splash.svg", import.meta.url).href
-                }
-                alt="DataLab"
-                className="plot-loading-logo"
+            )}
+            {isObjectPanel && status === "loading" && !data && !imageData && (
+              <div className="plot-empty plot-loading">
+                <img
+                  src={
+                    new URL("./assets/DataLab-Splash.svg", import.meta.url).href
+                  }
+                  alt="DataLab"
+                  className="plot-loading-logo"
+                />
+                <div className="plot-loading-message">{message}</div>
+              </div>
+            )}
+            {isObjectPanel && status === "ready" && !data && !imageData && (
+              <div className="plot-empty">
+                {activePanel === "signal"
+                  ? "Create a signal to get started."
+                  : "Create an image to get started."}
+              </div>
+            )}
+            {activePanel === "signal" && data && (
+              <SignalPlot
+                data={data}
+                oid={currentId}
+                annotations={annotations}
+                onAnnotationsChange={handleAnnotationsChange}
+                roi={roi}
+                roiEditMode={roiEditMode}
+                onRoiChange={handleRoiChangeFromPlot}
+                results={results}
+                showResultsOverlay={showResultsOverlay}
+                showGraphicalTitles={showGraphicalTitles}
+                extraSignals={extraSignals}
               />
-              <div className="plot-loading-message">{message}</div>
+            )}
+            {activePanel === "image" && imageData && extraImages.length > 0 && (
+              <MultiImagePlot
+                images={[imageData, ...extraImages]}
+                totalSelected={selectedIds.length}
+              />
+            )}
+            {activePanel === "image" &&
+              imageData &&
+              extraImages.length === 0 && (
+                <ImagePlot
+                  data={imageData}
+                  roi={imageRoi}
+                  roiEditMode={imageRoiEditMode}
+                  onRoiChange={handleImageRoiChangeFromPlot}
+                  results={results}
+                  showResultsOverlay={showResultsOverlay}
+                  showGraphicalTitles={showGraphicalTitles}
+                  lutRange={imageLutRange}
+                  onLutRangeChange={(r) => {
+                    setImageLutRange(r);
+                    if (runtime && currentId) {
+                      runtime
+                        .setLutRange(currentId, r)
+                        .catch((e) =>
+                          console.error("Failed to persist LUT range:", e),
+                        );
+                    }
+                  }}
+                  onColormapChange={(name, inverted) => {
+                    if (runtime && currentId) {
+                      runtime
+                        .setColormap(currentId, name, inverted)
+                        .catch((e) =>
+                          console.error("Failed to persist colormap:", e),
+                        );
+                    }
+                  }}
+                />
+              )}
+          </main>
+          {runtime && isObjectPanel && (
+            <>
+              <Splitter
+                side="right"
+                value={sidePanelWidth}
+                min={260}
+                max={900}
+                onChange={setSidePanelWidth}
+                ariaLabel="Resize results panel"
+              />
+              <SidePanel
+                runtime={runtime}
+                currentId={currentId}
+                panelKind={activePanel === "image" ? "image" : "signal"}
+                refreshNonce={sideRefreshNonce}
+                onObjectChanged={handleSideObjectChanged}
+                preferredTab={preferredSideTab}
+                results={results}
+                onClearResults={handleClearResults}
+                width={sidePanelWidth}
+              />
+            </>
+          )}
+          {runtime && aiPanelVisible && aiPanelCollapsed && (
+            <button
+              type="button"
+              className="ai-floating-pill"
+              onClick={() => setAIPanelCollapsed(false)}
+              title="Expand AI Assistant"
+              aria-label="Expand AI Assistant"
+            >
+              AI
+            </button>
+          )}
+          {runtime && aiPanelVisible && !aiPanelCollapsed && (
+            <div className="ai-floating-host">
+              <AIAssistantPanel
+                runtime={runtime}
+                onMinimize={() => setAIPanelCollapsed(true)}
+                onClose={() => setAIPanelVisible(false)}
+              />
             </div>
           )}
-          {isObjectPanel && status === "ready" && !data && !imageData && (
-            <div className="plot-empty">
-              {activePanel === "signal"
-                ? "Create a signal to get started."
-                : "Create an image to get started."}
+          {userGuideOpen && (
+            <div className="userguide-floating-host">
+              <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
             </div>
           )}
-          {activePanel === "signal" && data && (
-            <SignalPlot
-              data={data}
-              oid={currentId}
-              annotations={annotations}
-              onAnnotationsChange={handleAnnotationsChange}
-              roi={roi}
-              roiEditMode={roiEditMode}
-              onRoiChange={handleRoiChangeFromPlot}
-              results={results}
-              showResultsOverlay={showResultsOverlay}
-              showGraphicalTitles={showGraphicalTitles}
-              extraSignals={extraSignals}
-            />
-          )}
-          {activePanel === "image" && imageData && extraImages.length > 0 && (
-            <MultiImagePlot
-              images={[imageData, ...extraImages]}
-              totalSelected={selectedIds.length}
-            />
-          )}
-          {activePanel === "image" && imageData && extraImages.length === 0 && (
-            <ImagePlot
-              data={imageData}
-              roi={imageRoi}
-              roiEditMode={imageRoiEditMode}
-              onRoiChange={handleImageRoiChangeFromPlot}
-              results={results}
-              showResultsOverlay={showResultsOverlay}
-              showGraphicalTitles={showGraphicalTitles}
-              lutRange={imageLutRange}
-              onLutRangeChange={(r) => {
-                setImageLutRange(r);
-                if (runtime && currentId) {
-                  runtime
-                    .setLutRange(currentId, r)
-                    .catch((e) =>
-                      console.error("Failed to persist LUT range:", e),
-                    );
-                }
-              }}
-              onColormapChange={(name, inverted) => {
-                if (runtime && currentId) {
-                  runtime
-                    .setColormap(currentId, name, inverted)
-                    .catch((e) =>
-                      console.error("Failed to persist colormap:", e),
-                    );
-                }
-              }}
-            />
-          )}
-        </main>
-        {runtime && isObjectPanel && (
-          <>
-            <Splitter
-              side="right"
-              value={sidePanelWidth}
-              min={260}
-              max={900}
-              onChange={setSidePanelWidth}
-              ariaLabel="Resize results panel"
-            />
-            <SidePanel
-              runtime={runtime}
-              currentId={currentId}
-              panelKind={activePanel === "image" ? "image" : "signal"}
-              refreshNonce={sideRefreshNonce}
-              onObjectChanged={handleSideObjectChanged}
-              preferredTab={preferredSideTab}
-              results={results}
-              onClearResults={handleClearResults}
-              width={sidePanelWidth}
-            />
-          </>
+        </div>
+        {showAISettings && (
+          <AISettingsDialog onClose={() => setShowAISettings(false)} />
         )}
-        {runtime && aiPanelVisible && aiPanelCollapsed && (
-          <button
-            type="button"
-            className="ai-floating-pill"
-            onClick={() => setAIPanelCollapsed(false)}
-            title="Expand AI Assistant"
-            aria-label="Expand AI Assistant"
-          >
-            AI
-          </button>
+        {pendingOperand && (
+          <OperandPicker
+            title={pendingOperand.feature.label.replace(/\u2026$/, "")}
+            operandLabel={pendingOperand.feature.operand_label}
+            tree={tree}
+            excludeIds={pendingOperand.sourceIds}
+            onSubmit={handleOperandChosen}
+            onCancel={() => setPendingOperand(null)}
+          />
         )}
-        {runtime && aiPanelVisible && !aiPanelCollapsed && (
-          <div className="ai-floating-host">
-            <AIAssistantPanel
-              runtime={runtime}
-              onMinimize={() => setAIPanelCollapsed(true)}
-              onClose={() => setAIPanelVisible(false)}
-            />
-          </div>
+        {pending && runtime && (
+          <DataSetDialog
+            title={pending.feature.label.replace(/\u2026$/, "")}
+            payload={pending.schema!}
+            resolveChoices={(itemName, currentValues) =>
+              runtime.resolveFeatureChoices(
+                pending.feature.id,
+                itemName,
+                currentValues,
+              )
+            }
+            onSubmit={handleSubmitParams}
+            onCancel={() => setPending(null)}
+          />
         )}
-        {userGuideOpen && (
-          <div className="userguide-floating-host">
-            <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
-          </div>
+        {pendingProfile && runtime && (
+          <ProfileDefinitionDialog
+            title={pendingProfile.feature.label.replace(/\u2026$/, "")}
+            featureId={
+              pendingProfile.feature.id.replace(
+                /^image:/,
+                "",
+              ) as ProfileFeatureId
+            }
+            payload={pendingProfile.schema}
+            imageData={pendingProfile.imageData}
+            resolveChoices={(itemName, currentValues) =>
+              runtime.resolveFeatureChoices(
+                pendingProfile.feature.id,
+                itemName,
+                currentValues,
+              )
+            }
+            onSubmit={handleSubmitProfile}
+            onCancel={() => setPendingProfile(null)}
+          />
+        )}
+        {pendingAnalysis && (
+          <DataSetDialog
+            title={pendingAnalysis.label}
+            payload={pendingAnalysis.schema}
+            onSubmit={handleSubmitAnalysisParams}
+            onCancel={() => setPendingAnalysis(null)}
+          />
+        )}
+        {pendingImageGrid && (
+          <DataSetDialog
+            title="Distribute on a grid"
+            payload={pendingImageGrid.schema}
+            onSubmit={handleSubmitImageGrid}
+            onCancel={() => setPendingImageGrid(null)}
+          />
+        )}
+        {pendingRoiGrid && imageData && (
+          <RoiGridDialog
+            imageData={imageData}
+            payload={pendingRoiGrid.schema}
+            onSubmit={handleSubmitRoiGrid}
+            onCancel={() => setPendingRoiGrid(null)}
+          />
+        )}
+        {pendingFit && (
+          <InteractiveFitDialog
+            oid={pendingFit.oid}
+            fit={pendingFit.fit}
+            onCommit={handleInteractiveFitCommit}
+            onCancel={() => setPendingFit(null)}
+          />
+        )}
+        {editingMeta && (
+          <MetadataDialog
+            initial={editingMeta}
+            onSubmit={handleSubmitMeta}
+            onCancel={() => setEditingMeta(null)}
+          />
+        )}
+        {editingRoi !== null && data && (
+          <RoiDialog
+            initial={editingRoi}
+            xMin={data.x[0] ?? 0}
+            xMax={data.x[data.x.length - 1] ?? 1}
+            onSubmit={handleSubmitRoi}
+            onCancel={() => setEditingRoi(null)}
+          />
+        )}
+        {editingImageRoi !== null && imageData && (
+          <ImageRoiDialog
+            initial={editingImageRoi}
+            xMin={imageData.x0}
+            xMax={imageData.x0 + imageData.width * imageData.dx}
+            yMin={imageData.y0}
+            yMax={imageData.y0 + imageData.height * imageData.dy}
+            onSubmit={handleSubmitImageRoi}
+            onCancel={() => setEditingImageRoi(null)}
+          />
+        )}
+        {erasingImageRoi !== null && imageData && (
+          <ImageRoiDialog
+            initial={erasingImageRoi}
+            xMin={imageData.x0}
+            xMax={imageData.x0 + imageData.width * imageData.dx}
+            yMin={imageData.y0}
+            yMax={imageData.y0 + imageData.height * imageData.dy}
+            onSubmit={handleSubmitErase}
+            onCancel={() => setErasingImageRoi(null)}
+          />
+        )}
+        {helpView && (
+          <HelpDialog
+            view={helpView}
+            onClose={() => setHelpView(null)}
+            appVersion={import.meta.env.VITE_APP_VERSION}
+          />
+        )}
+        {h5BrowserFiles !== null && (
+          <H5BrowserDialog
+            initial={h5BrowserFiles}
+            onImport={handleH5BrowserImport}
+            onCancel={() => setH5BrowserFiles(null)}
+          />
+        )}
+        {textImportOpen && (
+          <TextImportWizard
+            onImport={handleTextImportFinished}
+            onCancel={() => setTextImportOpen(false)}
+          />
+        )}
+        {pendingSaveToDir && runtime && (
+          <SaveToDirectoryDialog
+            sources={pendingSaveToDir.sources}
+            extensions={pendingSaveToDir.extensions}
+            formatBasenames={(pattern) =>
+              runtime.formatSignalBasenames(
+                pendingSaveToDir.sources.map((s) => s.id),
+                pattern,
+              )
+            }
+            onSubmit={handleSubmitSaveToDir}
+            onCancel={() => setPendingSaveToDir(null)}
+          />
+        )}
+        {pluginManagerOpen && (
+          <PluginManagerDialog
+            onClose={() => {
+              setPluginManagerOpen(false);
+              void refreshPluginActions();
+              if (runtime) void runtime.listFeatures().then(setFeatures);
+            }}
+          />
+        )}
+        {separateViewOpen &&
+          (() => {
+            // Build the popout payload lazily so we don't allocate the
+            // (potentially large) signal/image content on every render of
+            // the main App.
+            let content: SeparateViewContent | null = null;
+            if (activePanel === "signal" && data) {
+              content = {
+                kind: "signal",
+                data,
+                oid: currentId,
+                annotations,
+                roi,
+                results,
+                extraSignals,
+              };
+            } else if (activePanel === "image" && imageData) {
+              content = {
+                kind: "image",
+                data: imageData,
+                roi: imageRoi,
+                results,
+                lutRange: imageLutRange,
+              };
+            }
+            if (!content) return null;
+            return (
+              <SeparateViewDialog
+                content={content}
+                showResultsOverlay={showResultsOverlay}
+                showGraphicalTitles={showGraphicalTitles}
+                onClose={closeSeparateView}
+              />
+            );
+          })()}
+        <DialogBridge />
+        {contextMenu && (
+          <ContextMenu
+            nodes={buildObjectContextMenu(actions, objectPanel)}
+            state={actionState}
+            position={contextMenu}
+            onClose={closeContextMenu}
+          />
         )}
       </div>
-      {showAISettings && (
-        <AISettingsDialog onClose={() => setShowAISettings(false)} />
-      )}
-      {pendingOperand && (
-        <OperandPicker
-          title={pendingOperand.feature.label.replace(/\u2026$/, "")}
-          operandLabel={pendingOperand.feature.operand_label}
-          tree={tree}
-          excludeIds={pendingOperand.sourceIds}
-          onSubmit={handleOperandChosen}
-          onCancel={() => setPendingOperand(null)}
-        />
-      )}
-      {pending && runtime && (
-        <DataSetDialog
-          title={pending.feature.label.replace(/\u2026$/, "")}
-          payload={pending.schema!}
-          resolveChoices={(itemName, currentValues) =>
-            runtime.resolveFeatureChoices(
-              pending.feature.id,
-              itemName,
-              currentValues,
-            )
-          }
-          onSubmit={handleSubmitParams}
-          onCancel={() => setPending(null)}
-        />
-      )}
-      {pendingProfile && runtime && (
-        <ProfileDefinitionDialog
-          title={pendingProfile.feature.label.replace(/\u2026$/, "")}
-          featureId={
-            pendingProfile.feature.id.replace(/^image:/, "") as ProfileFeatureId
-          }
-          payload={pendingProfile.schema}
-          imageData={pendingProfile.imageData}
-          resolveChoices={(itemName, currentValues) =>
-            runtime.resolveFeatureChoices(
-              pendingProfile.feature.id,
-              itemName,
-              currentValues,
-            )
-          }
-          onSubmit={handleSubmitProfile}
-          onCancel={() => setPendingProfile(null)}
-        />
-      )}
-      {pendingAnalysis && (
-        <DataSetDialog
-          title={pendingAnalysis.label}
-          payload={pendingAnalysis.schema}
-          onSubmit={handleSubmitAnalysisParams}
-          onCancel={() => setPendingAnalysis(null)}
-        />
-      )}
-      {pendingImageGrid && (
-        <DataSetDialog
-          title="Distribute on a grid"
-          payload={pendingImageGrid.schema}
-          onSubmit={handleSubmitImageGrid}
-          onCancel={() => setPendingImageGrid(null)}
-        />
-      )}
-      {pendingRoiGrid && imageData && (
-        <RoiGridDialog
-          imageData={imageData}
-          payload={pendingRoiGrid.schema}
-          onSubmit={handleSubmitRoiGrid}
-          onCancel={() => setPendingRoiGrid(null)}
-        />
-      )}
-      {pendingFit && (
-        <InteractiveFitDialog
-          oid={pendingFit.oid}
-          fit={pendingFit.fit}
-          onCommit={handleInteractiveFitCommit}
-          onCancel={() => setPendingFit(null)}
-        />
-      )}
-      {editingMeta && (
-        <MetadataDialog
-          initial={editingMeta}
-          onSubmit={handleSubmitMeta}
-          onCancel={() => setEditingMeta(null)}
-        />
-      )}
-      {editingRoi !== null && data && (
-        <RoiDialog
-          initial={editingRoi}
-          xMin={data.x[0] ?? 0}
-          xMax={data.x[data.x.length - 1] ?? 1}
-          onSubmit={handleSubmitRoi}
-          onCancel={() => setEditingRoi(null)}
-        />
-      )}
-      {editingImageRoi !== null && imageData && (
-        <ImageRoiDialog
-          initial={editingImageRoi}
-          xMin={imageData.x0}
-          xMax={imageData.x0 + imageData.width * imageData.dx}
-          yMin={imageData.y0}
-          yMax={imageData.y0 + imageData.height * imageData.dy}
-          onSubmit={handleSubmitImageRoi}
-          onCancel={() => setEditingImageRoi(null)}
-        />
-      )}
-      {erasingImageRoi !== null && imageData && (
-        <ImageRoiDialog
-          initial={erasingImageRoi}
-          xMin={imageData.x0}
-          xMax={imageData.x0 + imageData.width * imageData.dx}
-          yMin={imageData.y0}
-          yMax={imageData.y0 + imageData.height * imageData.dy}
-          onSubmit={handleSubmitErase}
-          onCancel={() => setErasingImageRoi(null)}
-        />
-      )}
-      {helpView && (
-        <HelpDialog
-          view={helpView}
-          onClose={() => setHelpView(null)}
-          appVersion={import.meta.env.VITE_APP_VERSION}
-        />
-      )}
-      {h5BrowserFiles !== null && (
-        <H5BrowserDialog
-          initial={h5BrowserFiles}
-          onImport={handleH5BrowserImport}
-          onCancel={() => setH5BrowserFiles(null)}
-        />
-      )}
-      {textImportOpen && (
-        <TextImportWizard
-          onImport={handleTextImportFinished}
-          onCancel={() => setTextImportOpen(false)}
-        />
-      )}
-      {pendingSaveToDir && runtime && (
-        <SaveToDirectoryDialog
-          sources={pendingSaveToDir.sources}
-          extensions={pendingSaveToDir.extensions}
-          formatBasenames={(pattern) =>
-            runtime.formatSignalBasenames(
-              pendingSaveToDir.sources.map((s) => s.id),
-              pattern,
-            )
-          }
-          onSubmit={handleSubmitSaveToDir}
-          onCancel={() => setPendingSaveToDir(null)}
-        />
-      )}
-      {pluginManagerOpen && (
-        <PluginManagerDialog
-          onClose={() => {
-            setPluginManagerOpen(false);
-            void refreshPluginActions();
-            if (runtime) void runtime.listFeatures().then(setFeatures);
-          }}
-        />
-      )}
-      {separateViewOpen &&
-        (() => {
-          // Build the popout payload lazily so we don't allocate the
-          // (potentially large) signal/image content on every render of
-          // the main App.
-          let content: SeparateViewContent | null = null;
-          if (activePanel === "signal" && data) {
-            content = {
-              kind: "signal",
-              data,
-              oid: currentId,
-              annotations,
-              roi,
-              results,
-              extraSignals,
-            };
-          } else if (activePanel === "image" && imageData) {
-            content = {
-              kind: "image",
-              data: imageData,
-              roi: imageRoi,
-              results,
-              lutRange: imageLutRange,
-            };
-          }
-          if (!content) return null;
-          return (
-            <SeparateViewDialog
-              content={content}
-              showResultsOverlay={showResultsOverlay}
-              showGraphicalTitles={showGraphicalTitles}
-              onClose={closeSeparateView}
-            />
-          );
-        })()}
-      <DialogBridge />
-      {contextMenu && (
-        <ContextMenu
-          nodes={buildObjectContextMenu(actions, objectPanel)}
-          state={actionState}
-          position={contextMenu}
-          onClose={closeContextMenu}
-        />
-      )}
-    </div>
     </ObjectNavigationProvider>
   );
 }

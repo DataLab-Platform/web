@@ -107,8 +107,8 @@ describe("downloadMarkdown", () => {
     // jsdom does not implement these by default — install no-op stubs
     // before spying so ``vi.spyOn`` can monkey-patch them.
     if (typeof URL.createObjectURL !== "function") {
-      (URL as { createObjectURL: (b: Blob) => string }).createObjectURL =
-        () => "";
+      (URL as { createObjectURL: (b: Blob) => string }).createObjectURL = () =>
+        "";
     }
     if (typeof URL.revokeObjectURL !== "function") {
       (URL as { revokeObjectURL: (s: string) => void }).revokeObjectURL =

@@ -170,7 +170,9 @@ import chain_runner  # warm import
       .replace(/\.\d+Z$/, "Z");
 
     const sigimaVersion = (await page.evaluate(async () => {
-      type Runtime = { py: { runPythonAsync: (s: string) => Promise<unknown> } };
+      type Runtime = {
+        py: { runPythonAsync: (s: string) => Promise<unknown> };
+      };
       const r = (window as unknown as { runtime: Runtime }).runtime;
       return await r.py.runPythonAsync("import sigima; sigima.__version__");
     })) as string;
@@ -290,7 +292,10 @@ _MODEL.add_object("image", __bench_images[__bench_idx])
                   await r.py.runPythonAsync(
                     "run_image_analysis(__bench_oid, __bench_fid, __bench_params)",
                   );
-                  return { newOids: [] as string[], processMs: performance.now() - t0 };
+                  return {
+                    newOids: [] as string[],
+                    processMs: performance.now() - t0,
+                  };
                 },
                 { oid: sourceOid, fid: step.name, params: step.kwargs },
               )) as { newOids: string[]; processMs: number })
@@ -317,7 +322,11 @@ _MODEL.add_object("image", __bench_images[__bench_idx])
                   const newOids = await r.applyFeature(fid, src, null, params);
                   return { newOids, processMs: performance.now() - t0 };
                 },
-                { fid: `image:${step.name}`, src: [sourceOid], params: step.kwargs },
+                {
+                  fid: `image:${step.name}`,
+                  src: [sourceOid],
+                  params: step.kwargs,
+                },
               )) as { newOids: string[]; processMs: number });
           perStepProcessMs[step.name] += processResult.processMs;
 

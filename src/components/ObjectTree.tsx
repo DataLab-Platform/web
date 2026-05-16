@@ -47,305 +47,306 @@ type EditTarget =
  *   the flat list of all visible objects)
  * - clicking a group header: replace selection with all objects of the group
  */
-export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(function ObjectTree(
-  props,
-  ref,
-) {
-  const {
-    tree,
-    selectedIds,
-    currentId,
-    onSelectionChange,
-    onRenameObject,
-    onRenameGroup,
-    onDeleteGroup,
-    onDeleteObjects,
-    onMoveObject,
-    onObjectContextMenu,
-  } = props;
+export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
+  function ObjectTree(props, ref) {
+    const {
+      tree,
+      selectedIds,
+      currentId,
+      onSelectionChange,
+      onRenameObject,
+      onRenameGroup,
+      onDeleteGroup,
+      onDeleteObjects,
+      onMoveObject,
+      onObjectContextMenu,
+    } = props;
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [editing, setEditing] = useState<EditTarget>(null);
-  const [editValue, setEditValue] = useState("");
+    const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+    const [editing, setEditing] = useState<EditTarget>(null);
+    const [editValue, setEditValue] = useState("");
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      startRenameObject: (oid: string) => {
-        // Locate the object in the tree to fetch its current title.
-        if (!tree) return;
-        for (const g of tree.groups) {
-          const obj = g.objects.find((o) => o.id === oid);
-          if (obj) {
-            setEditing({ kind: "object", id: oid });
-            setEditValue(obj.title);
+    useImperativeHandle(
+      ref,
+      () => ({
+        startRenameObject: (oid: string) => {
+          // Locate the object in the tree to fetch its current title.
+          if (!tree) return;
+          for (const g of tree.groups) {
+            const obj = g.objects.find((o) => o.id === oid);
+            if (obj) {
+              setEditing({ kind: "object", id: oid });
+              setEditValue(obj.title);
+              return;
+            }
+          }
+        },
+      }),
+      [tree],
+    );
+    const confirm = useConfirm();
+
+    // Flat ordered list of all visible objects (for Shift-click range select).
+    const flatIds = useMemo(() => {
+      if (!tree) return [] as string[];
+      const ids: string[] = [];
+      for (const g of tree.groups) {
+        if (collapsed.has(g.gid)) continue;
+        for (const o of g.objects) ids.push(o.id);
+      }
+      return ids;
+    }, [tree, collapsed]);
+
+    const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+    const handleObjectClick = useCallback(
+      (oid: string, evt: React.MouseEvent) => {
+        if (evt.shiftKey && currentId) {
+          const a = flatIds.indexOf(currentId);
+          const b = flatIds.indexOf(oid);
+          if (a >= 0 && b >= 0) {
+            const [lo, hi] = a < b ? [a, b] : [b, a];
+            const range = flatIds.slice(lo, hi + 1);
+            onSelectionChange(range, oid);
             return;
           }
         }
-      },
-    }),
-    [tree],
-  );
-  const confirm = useConfirm();
-
-  // Flat ordered list of all visible objects (for Shift-click range select).
-  const flatIds = useMemo(() => {
-    if (!tree) return [] as string[];
-    const ids: string[] = [];
-    for (const g of tree.groups) {
-      if (collapsed.has(g.gid)) continue;
-      for (const o of g.objects) ids.push(o.id);
-    }
-    return ids;
-  }, [tree, collapsed]);
-
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-
-  const handleObjectClick = useCallback(
-    (oid: string, evt: React.MouseEvent) => {
-      if (evt.shiftKey && currentId) {
-        const a = flatIds.indexOf(currentId);
-        const b = flatIds.indexOf(oid);
-        if (a >= 0 && b >= 0) {
-          const [lo, hi] = a < b ? [a, b] : [b, a];
-          const range = flatIds.slice(lo, hi + 1);
-          onSelectionChange(range, oid);
+        if (evt.ctrlKey || evt.metaKey) {
+          const next = new Set(selectedSet);
+          if (next.has(oid)) next.delete(oid);
+          else next.add(oid);
+          onSelectionChange(Array.from(next), next.has(oid) ? oid : currentId);
           return;
         }
+        onSelectionChange([oid], oid);
+      },
+      [selectedSet, currentId, flatIds, onSelectionChange],
+    );
+
+    const handleGroupClick = useCallback(
+      (group: GroupNode) => {
+        const ids = group.objects.map((o) => o.id);
+        onSelectionChange(ids, ids[0] ?? null);
+      },
+      [onSelectionChange],
+    );
+
+    const toggleCollapsed = useCallback((gid: string) => {
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(gid)) next.delete(gid);
+        else next.add(gid);
+        return next;
+      });
+    }, []);
+
+    const startEdit = (target: EditTarget, current: string) => {
+      setEditing(target);
+      setEditValue(current);
+    };
+
+    const commitEdit = () => {
+      if (!editing) return;
+      const value = editValue.trim();
+      if (value) {
+        if (editing.kind === "object") onRenameObject(editing.id, value);
+        else onRenameGroup(editing.id, value);
       }
-      if (evt.ctrlKey || evt.metaKey) {
-        const next = new Set(selectedSet);
-        if (next.has(oid)) next.delete(oid);
-        else next.add(oid);
-        onSelectionChange(Array.from(next), next.has(oid) ? oid : currentId);
-        return;
-      }
-      onSelectionChange([oid], oid);
-    },
-    [selectedSet, currentId, flatIds, onSelectionChange],
-  );
+      setEditing(null);
+    };
 
-  const handleGroupClick = useCallback(
-    (group: GroupNode) => {
-      const ids = group.objects.map((o) => o.id);
-      onSelectionChange(ids, ids[0] ?? null);
-    },
-    [onSelectionChange],
-  );
-
-  const toggleCollapsed = useCallback((gid: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(gid)) next.delete(gid);
-      else next.add(gid);
-      return next;
-    });
-  }, []);
-
-  const startEdit = (target: EditTarget, current: string) => {
-    setEditing(target);
-    setEditValue(current);
-  };
-
-  const commitEdit = () => {
-    if (!editing) return;
-    const value = editValue.trim();
-    if (value) {
-      if (editing.kind === "object") onRenameObject(editing.id, value);
-      else onRenameGroup(editing.id, value);
+    if (!tree || tree.groups.length === 0) {
+      return <div className="object-tree-empty">No signals yet.</div>;
     }
-    setEditing(null);
-  };
 
-  if (!tree || tree.groups.length === 0) {
-    return <div className="object-tree-empty">No signals yet.</div>;
-  }
-
-  return (
-    <div className="object-tree">
-      {tree.groups.map((group) => {
-        const isCollapsed = collapsed.has(group.gid);
-        return (
-          <div key={group.gid} className="object-tree-group">
-            <div
-              className="object-tree-group-header"
-              onClick={() => handleGroupClick(group)}
-              onDoubleClick={() =>
-                startEdit({ kind: "group", id: group.gid }, group.name)
-              }
-            >
-              <button
-                type="button"
-                className="object-tree-toggle"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleCollapsed(group.gid);
-                }}
-                title={isCollapsed ? "Expand" : "Collapse"}
+    return (
+      <div className="object-tree">
+        {tree.groups.map((group) => {
+          const isCollapsed = collapsed.has(group.gid);
+          return (
+            <div key={group.gid} className="object-tree-group">
+              <div
+                className="object-tree-group-header"
+                onClick={() => handleGroupClick(group)}
+                onDoubleClick={() =>
+                  startEdit({ kind: "group", id: group.gid }, group.name)
+                }
               >
-                {isCollapsed ? "▸" : "▾"}
-              </button>
-              {editing?.kind === "group" && editing.id === group.gid ? (
-                <input
-                  autoFocus
-                  className="object-tree-edit"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={commitEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitEdit();
-                    if (e.key === "Escape") setEditing(null);
+                <button
+                  type="button"
+                  className="object-tree-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleCollapsed(group.gid);
                   }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="object-tree-group-name">{group.name}</span>
-              )}
-              <span className="object-tree-count">{group.objects.length}</span>
-              <button
-                type="button"
-                className="object-tree-group-delete"
-                title="Delete group"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const n = group.objects.length;
-                  const message =
-                    n > 0
-                      ? `Delete group "${group.name}" and its ${n} object(s)?`
-                      : `Delete group "${group.name}"?`;
-                  const ok = await confirm({
-                    title: "Delete group",
-                    message,
-                    confirmLabel: "Delete",
-                    destructive: true,
-                  });
-                  if (!ok) return;
-                  onDeleteGroup(group.gid);
-                }}
-              >
-                {DELETE_ICON_URL ? (
-                  <img src={DELETE_ICON_URL} alt="" aria-hidden="true" />
-                ) : (
-                  "×"
-                )}
-              </button>
-            </div>
-            {!isCollapsed && (
-              <ul className="object-tree-list">
-                {group.objects.length === 0 && (
-                  <li
-                    className="object-tree-empty-group"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const oid = e.dataTransfer.getData("text/oid");
-                      if (oid) onMoveObject(oid, group.gid);
+                  title={isCollapsed ? "Expand" : "Collapse"}
+                >
+                  {isCollapsed ? "▸" : "▾"}
+                </button>
+                {editing?.kind === "group" && editing.id === group.gid ? (
+                  <input
+                    autoFocus
+                    className="object-tree-edit"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={commitEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitEdit();
+                      if (e.key === "Escape") setEditing(null);
                     }}
-                  >
-                    (empty — drop here)
-                  </li>
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="object-tree-group-name">{group.name}</span>
                 )}
-                {group.objects.map((o: ObjectNode) => {
-                  const isSelected = selectedSet.has(o.id);
-                  const isCurrent = currentId === o.id;
-                  const cls = [
-                    "object-tree-item",
-                    isSelected ? "selected" : "",
-                    isCurrent ? "current" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-                  return (
+                <span className="object-tree-count">
+                  {group.objects.length}
+                </span>
+                <button
+                  type="button"
+                  className="object-tree-group-delete"
+                  title="Delete group"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const n = group.objects.length;
+                    const message =
+                      n > 0
+                        ? `Delete group "${group.name}" and its ${n} object(s)?`
+                        : `Delete group "${group.name}"?`;
+                    const ok = await confirm({
+                      title: "Delete group",
+                      message,
+                      confirmLabel: "Delete",
+                      destructive: true,
+                    });
+                    if (!ok) return;
+                    onDeleteGroup(group.gid);
+                  }}
+                >
+                  {DELETE_ICON_URL ? (
+                    <img src={DELETE_ICON_URL} alt="" aria-hidden="true" />
+                  ) : (
+                    "×"
+                  )}
+                </button>
+              </div>
+              {!isCollapsed && (
+                <ul className="object-tree-list">
+                  {group.objects.length === 0 && (
                     <li
-                      key={o.id}
-                      className={cls}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("text/oid", o.id);
-                        e.dataTransfer.effectAllowed = "move";
-                      }}
-                      onClick={(e) => handleObjectClick(o.id, e)}
-                      onDoubleClick={() =>
-                        startEdit({ kind: "object", id: o.id }, o.title)
-                      }
-                      onContextMenu={(e) => {
-                        if (!onObjectContextMenu) return;
+                      className="object-tree-empty-group"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
                         e.preventDefault();
-                        // Right-click on a non-selected object replaces
-                        // the selection with that single object.
-                        if (!selectedSet.has(o.id)) {
-                          onSelectionChange([o.id], o.id);
-                        } else if (currentId !== o.id) {
-                          onSelectionChange(selectedIds, o.id);
-                        }
-                        onObjectContextMenu(o.id, e.clientX, e.clientY);
+                        const oid = e.dataTransfer.getData("text/oid");
+                        if (oid) onMoveObject(oid, group.gid);
                       }}
                     >
-                      {editing?.kind === "object" && editing.id === o.id ? (
-                        <input
-                          autoFocus
-                          className="object-tree-edit"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={commitEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEdit();
-                            if (e.key === "Escape") setEditing(null);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <>
-                          <TitleWithLinks
-                            title={o.title}
-                            className="object-tree-title"
-                          />
-                          <div className="object-tree-meta">
-                            #{o.id} · {o.size} pts
-                          </div>
-                          <button
-                            type="button"
-                            className="object-tree-item-delete"
-                            title="Delete"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const ids = selectedSet.has(o.id)
-                                ? selectedIds
-                                : [o.id];
-                              const message =
-                                ids.length > 1
-                                  ? `Delete ${ids.length} selected object(s)?`
-                                  : `Delete "${o.title}"?`;
-                              const ok = await confirm({
-                                title: "Delete",
-                                message,
-                                confirmLabel: "Delete",
-                                destructive: true,
-                              });
-                              if (!ok) return;
-                              onDeleteObjects(ids);
-                            }}
-                          >
-                            {DELETE_ICON_URL ? (
-                              <img
-                                src={DELETE_ICON_URL}
-                                alt=""
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              "×"
-                            )}
-                          </button>
-                        </>
-                      )}
+                      (empty — drop here)
                     </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-});
+                  )}
+                  {group.objects.map((o: ObjectNode) => {
+                    const isSelected = selectedSet.has(o.id);
+                    const isCurrent = currentId === o.id;
+                    const cls = [
+                      "object-tree-item",
+                      isSelected ? "selected" : "",
+                      isCurrent ? "current" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <li
+                        key={o.id}
+                        className={cls}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/oid", o.id);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onClick={(e) => handleObjectClick(o.id, e)}
+                        onDoubleClick={() =>
+                          startEdit({ kind: "object", id: o.id }, o.title)
+                        }
+                        onContextMenu={(e) => {
+                          if (!onObjectContextMenu) return;
+                          e.preventDefault();
+                          // Right-click on a non-selected object replaces
+                          // the selection with that single object.
+                          if (!selectedSet.has(o.id)) {
+                            onSelectionChange([o.id], o.id);
+                          } else if (currentId !== o.id) {
+                            onSelectionChange(selectedIds, o.id);
+                          }
+                          onObjectContextMenu(o.id, e.clientX, e.clientY);
+                        }}
+                      >
+                        {editing?.kind === "object" && editing.id === o.id ? (
+                          <input
+                            autoFocus
+                            className="object-tree-edit"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={commitEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitEdit();
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <>
+                            <TitleWithLinks
+                              title={o.title}
+                              className="object-tree-title"
+                            />
+                            <div className="object-tree-meta">
+                              #{o.id} · {o.size} pts
+                            </div>
+                            <button
+                              type="button"
+                              className="object-tree-item-delete"
+                              title="Delete"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const ids = selectedSet.has(o.id)
+                                  ? selectedIds
+                                  : [o.id];
+                                const message =
+                                  ids.length > 1
+                                    ? `Delete ${ids.length} selected object(s)?`
+                                    : `Delete "${o.title}"?`;
+                                const ok = await confirm({
+                                  title: "Delete",
+                                  message,
+                                  confirmLabel: "Delete",
+                                  destructive: true,
+                                });
+                                if (!ok) return;
+                                onDeleteObjects(ids);
+                              }}
+                            >
+                              {DELETE_ICON_URL ? (
+                                <img
+                                  src={DELETE_ICON_URL}
+                                  alt=""
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                "×"
+                              )}
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  },
+);

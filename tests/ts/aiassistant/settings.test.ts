@@ -37,9 +37,7 @@ describe("aiassistant/settings", () => {
       model: "llama3",
       temperature: 0.7,
     });
-    const raw = window.localStorage.getItem(
-      "datalab-web.aiassistant.settings",
-    );
+    const raw = window.localStorage.getItem("datalab-web.aiassistant.settings");
     expect(raw).not.toBeNull();
     expect(raw!).not.toContain("sk-secret");
     const reloaded = loadSettings();

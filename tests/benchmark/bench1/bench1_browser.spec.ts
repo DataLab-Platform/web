@@ -12,7 +12,13 @@
  *     npx playwright test tests/benchmark/bench1/bench1_browser.spec.ts \
  *         --project=benchmark
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
@@ -86,7 +92,9 @@ test.describe("bench1 — Pyodide in headless browser", () => {
         },
         { b64: wheelB64, name: wheelName },
       );
-      console.log(`[bench1/pyodide_browser] Injecting local Sigima wheel: ${wheelName}`);
+      console.log(
+        `[bench1/pyodide_browser] Injecting local Sigima wheel: ${wheelName}`,
+      );
     } else {
       console.log(
         "[bench1/pyodide_browser] No local wheel found — using PyPI Sigima.",
@@ -99,7 +107,9 @@ test.describe("bench1 — Pyodide in headless browser", () => {
     await page.goto(`file://${HTML_PATH.replace(/\\/g, "/")}`);
 
     // Boot Pyodide.
-    await page.evaluate(() => (window as unknown as { benchBoot: () => Promise<void> }).benchBoot());
+    await page.evaluate(() =>
+      (window as unknown as { benchBoot: () => Promise<void> }).benchBoot(),
+    );
     await page.waitForFunction(
       () => (window as unknown as { bench: { ready: boolean } }).bench.ready,
       undefined,
@@ -107,7 +117,11 @@ test.describe("bench1 — Pyodide in headless browser", () => {
     );
     const cold = await page.evaluate(() => {
       const w = window as unknown as {
-        bench: { coldStartMs: number; pyodideVersion: string; sigimaVersion: string };
+        bench: {
+          coldStartMs: number;
+          pyodideVersion: string;
+          sigimaVersion: string;
+        };
       };
       return {
         coldStartMs: w.bench.coldStartMs,

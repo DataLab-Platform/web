@@ -45,8 +45,14 @@ describe("plotCapture", () => {
 
   it("capturePlotPng forwards to window.Plotly.toImage and returns a data URL", async () => {
     const gd = document.createElement("div");
-    Object.defineProperty(gd, "clientWidth", { value: 640, configurable: true });
-    Object.defineProperty(gd, "clientHeight", { value: 480, configurable: true });
+    Object.defineProperty(gd, "clientWidth", {
+      value: 640,
+      configurable: true,
+    });
+    Object.defineProperty(gd, "clientHeight", {
+      value: 480,
+      configurable: true,
+    });
     registerActivePlot("signal", gd);
     const toImage = vi.fn(async () => "data:image/png;base64,AAAA");
     vi.stubGlobal("window", { ...window, Plotly: { toImage } });

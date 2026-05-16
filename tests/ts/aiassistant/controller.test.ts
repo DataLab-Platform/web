@@ -377,10 +377,11 @@ describe("AIController", () => {
       getSettings: () => settings,
       confirmTool: async () => true,
     });
-    ctrl.setMessages(
-      [{ role: "user", content: "old" }],
-      { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-    );
+    ctrl.setMessages([{ role: "user", content: "old" }], {
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+    });
     expect(ctrl.getUsage()).toEqual({
       promptTokens: 100,
       completionTokens: 50,

@@ -34,10 +34,7 @@ function renderWithProvider(
 ) {
   const oidIndex = new Map<string, OidLookupEntry>(Object.entries(entries));
   return render(
-    <ObjectNavigationProvider
-      oidIndex={oidIndex}
-      navigateToOid={navigate}
-    >
+    <ObjectNavigationProvider oidIndex={oidIndex} navigateToOid={navigate}>
       <TitleWithLinks title={title} />
     </ObjectNavigationProvider>,
   );
@@ -72,13 +69,10 @@ describe("TitleWithLinks", () => {
   });
 
   it("renders multiple hex ids in their original order", () => {
-    renderWithProvider(
-      "average(a3f5b2c1, b9e2d104)",
-      {
-        a3f5b2c1: { kind: "signal", node: makeNode("a3f5b2c1", "First") },
-        b9e2d104: { kind: "signal", node: makeNode("b9e2d104", "Second") },
-      },
-    );
+    renderWithProvider("average(a3f5b2c1, b9e2d104)", {
+      a3f5b2c1: { kind: "signal", node: makeNode("a3f5b2c1", "First") },
+      b9e2d104: { kind: "signal", node: makeNode("b9e2d104", "Second") },
+    });
     const buttons = screen.getAllByRole("button");
     expect(buttons).toHaveLength(2);
     expect(buttons[0]).toHaveTextContent("a3f5b2c1");
@@ -101,10 +95,7 @@ describe("TitleWithLinks", () => {
       ["a3f5b2c1", { kind: "signal", node: makeNode("a3f5b2c1", "Src") }],
     ]);
     render(
-      <ObjectNavigationProvider
-        oidIndex={oidIndex}
-        navigateToOid={navigate}
-      >
+      <ObjectNavigationProvider oidIndex={oidIndex} navigateToOid={navigate}>
         <div onClick={rowClick}>
           <TitleWithLinks title="normalize(a3f5b2c1)" />
         </div>

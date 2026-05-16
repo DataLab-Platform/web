@@ -409,9 +409,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         autoApprovedRef.current.clear();
         setErrorMessage(null);
       } catch (err) {
-        setErrorMessage(
-          err instanceof Error ? err.message : String(err),
-        );
+        setErrorMessage(err instanceof Error ? err.message : String(err));
       }
     },
     [busy, controller],
@@ -901,9 +899,7 @@ function ToolTranscriptBubble({
                   : "💾 Save to Macros"}
           </button>
           {saveState === "saved" && savedTitle && (
-            <span style={{ color: "var(--text-dim)" }}>
-              as “{savedTitle}”
-            </span>
+            <span style={{ color: "var(--text-dim)" }}>as “{savedTitle}”</span>
           )}
           {saveState === "error" && (
             <span style={{ color: "var(--error, #c33)" }}>

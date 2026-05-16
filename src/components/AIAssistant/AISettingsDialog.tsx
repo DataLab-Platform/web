@@ -99,11 +99,16 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
             <select
               value={settings.provider}
               onChange={(e) =>
-                update("provider", e.target.value as ProviderSettings["provider"])
+                update(
+                  "provider",
+                  e.target.value as ProviderSettings["provider"],
+                )
               }
             >
               <option value="openai">OpenAI-compatible (network)</option>
-              <option value="mock">Mock provider (deterministic, no network)</option>
+              <option value="mock">
+                Mock provider (deterministic, no network)
+              </option>
             </select>
             <small style={{ color: "var(--text-dim)" }}>
               The mock provider replays a scripted set of responses — used by
@@ -143,10 +148,10 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               autoComplete="off"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              Encrypted at rest in this browser (AES-GCM, non-extractable key
-              in IndexedDB). This protects against passive disk reads but not
-              against malicious code running in this page. Leave blank for
-              local endpoints that don't require authentication.
+              Encrypted at rest in this browser (AES-GCM, non-extractable key in
+              IndexedDB). This protects against passive disk reads but not
+              against malicious code running in this page. Leave blank for local
+              endpoints that don't require authentication.
               {devKeyAvailable && (
                 <>
                   {" "}
