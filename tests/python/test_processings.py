@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pytest
 
@@ -108,3 +110,43 @@ def test_list_processings_returns_signal_only(bootstrap_module):
     assert procs
     for p in procs:
         assert "id" in p and "label" in p
+
+
+# ---------------------------------------------------------------------------
+# Title placeholder substitution — mirrors the DataLab desktop behaviour
+# (Sigima's ``PlaceholderTitleFormatter`` + ``patch_title_with_ids``).
+# ---------------------------------------------------------------------------
+
+
+def _assert_title_resolved(title: str, *src_oids: str) -> None:
+    """All source oids must appear in *title* and no ``{n}`` placeholders left."""
+    assert not re.search(r"\{\d+\}", title), f"unresolved placeholder in: {title!r}"
+    for oid in src_oids:
+        assert oid in title, f"source oid {oid!r} missing in title: {title!r}"
+
+
+def test_apply_1_to_1_title_embeds_source_oid(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src = bs.add_signal_from_arrays(
+        "raw", np.linspace(0, 1, 32), np.linspace(0, 10, 32)
+    )
+    new_oid = bs.apply_feature("normalize", [src])[0]
+    _assert_title_resolved(bs.get_object_meta(new_oid)["title"], src)
+
+
+def test_apply_2_to_1_title_embeds_both_source_oids(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    a = bs.add_signal_from_arrays("a", x, np.ones_like(x))
+    b = bs.add_signal_from_arrays("b", x, np.zeros_like(x))
+    new_oid = bs.apply_feature("difference", [a], operand_id=b)[0]
+    _assert_title_resolved(bs.get_object_meta(new_oid)["title"], a, b)
+
+
+def test_apply_n_to_1_title_embeds_all_source_oids(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    a = bs.add_signal_from_arrays("a", x, np.zeros_like(x))
+    b = bs.add_signal_from_arrays("b", x, np.ones_like(x) * 2)
+    new_oid = bs.apply_feature("average", [a, b])[0]
+    _assert_title_resolved(bs.get_object_meta(new_oid)["title"], a, b)

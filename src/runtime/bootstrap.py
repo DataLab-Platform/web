@@ -54,6 +54,12 @@ import dlw_interactive_fit as _ifit
 # "Internationalisation" section of ``README.md`` for the long-term
 # multi-language perspective.
 import dlw_processor as _proc
+
+# ``dlw_title_format`` installs Sigima's ``PlaceholderTitleFormatter`` as
+# the default. Imported for its side-effect; the actual substitution of
+# placeholders with source-object short IDs is done by
+# :func:`patch_title_with_ids` below, invoked from :func:`apply_feature`.
+import dlw_title_format  # noqa: F401
 import numpy as np
 import sigima
 from sigima.objects import SignalObj
@@ -3049,6 +3055,30 @@ def resolve_feature_choices(
     )
 
 
+def patch_title_with_ids(dst: Any, src_oids: list[str]) -> None:
+    """Substitute placeholders in ``dst.title`` with source short IDs.
+
+    Mirrors :func:`datalab.objectmodel.patch_title_with_ids` (Qt desktop):
+    Sigima's ``PlaceholderTitleFormatter`` (installed by
+    :mod:`dlw_title_format`) leaves titles like ``"normalize({0})"`` or
+    ``"{0}+{1}"``; this helper resolves the ``{n}`` placeholders with the
+    source objects' hex ``oid`` strings.
+
+    Best-effort: a missing placeholder (``IndexError``), an unrelated
+    ``KeyError`` (custom ``{name}`` tokens in user-written Sigima
+    functions), or a non-string title is silently left untouched so a
+    formatter quirk never crashes the computation pipeline.
+    """
+    title = getattr(dst, "title", None)
+    if not isinstance(title, str):
+        return
+    try:
+        dst.title = title.format(*src_oids)
+    except (IndexError, KeyError):
+        # Leave the raw placeholder in the title rather than failing.
+        pass
+
+
 def apply_feature(
     feature_id: str,
     source_ids: list[str],
@@ -3075,12 +3105,28 @@ def apply_feature(
     src_panel = _MODEL.panel(spec.object_kind)
     cross_kind = spec.output_kind != spec.object_kind
     dst_panel = _MODEL.panel(spec.output_kind) if cross_kind else src_panel
+    # Snapshot the source ID list *before* running the computation so
+    # title patching is robust against any concurrent model mutation.
+    src_ids_snapshot = list(source_ids)
     ctx = _proc.ApplyContext(
         feature=spec, sources=sources, operand=operand, params=params
     )
     result = _PROCESSOR.apply(ctx, source_ids)
     new_ids: list[str] = []
     for source_oid, dst in result.items:
+        # Resolve the placeholder-based title produced by Sigima
+        # (``PlaceholderTitleFormatter``) using the source short IDs.
+        # Patterns expose different source sets:
+        #   * 1_to_1 → ``[source_oid]``
+        #   * 2_to_1 → ``[source_oid, operand_id]``
+        #   * n_to_1 → ``src_ids_snapshot`` (source_oid is ``None``)
+        if source_oid is None:
+            patch_oids = src_ids_snapshot
+        elif spec.pattern == "2_to_1" and operand_id is not None:
+            patch_oids = [source_oid, operand_id]
+        else:
+            patch_oids = [source_oid]
+        patch_title_with_ids(dst, patch_oids)
         if cross_kind:
             # No meaningful "source group" mapping across panels — drop
             # results into the destination panel's default (first) group.

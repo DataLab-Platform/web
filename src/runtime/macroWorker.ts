@@ -21,6 +21,7 @@
  */
 
 import macroProxySource from "./macro_proxy.py?raw";
+import dlwTitleFormatSource from "./dlw_title_format.py?raw";
 // Same JSON Schema / backends shims as the main runtime — required so
 // ``guidata.dataset`` (transitively imported by ``sigima``) loads
 // cleanly under Pyodide. See runtime.ts for the rationale.
@@ -102,6 +103,11 @@ os.environ["LANGUAGE"] = "C"
 import micropip
 await micropip.install(["sigima", "guidata"])
 `);
+    // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced
+    // inside macros use the same placeholder format as the main runtime
+    // (later resolved to source ``oid``s by the main bootstrap).
+    py.FS.writeFile("/home/pyodide/dlw_title_format.py", dlwTitleFormatSource);
+    await py.runPythonAsync(dlwTitleFormatSource);
     await py.runPythonAsync(guidataJsonSchemaShim);
     if (guidataBackendsSource) {
       await py.runPythonAsync(guidataBackendsSource);
@@ -215,12 +221,12 @@ self.onmessage = async (event: MessageEvent) => {
     | { type: "init" }
     | { type: "run"; code: string; name?: string }
     | {
-        type: "bridge_reply";
-        id: string;
-        ok: boolean;
-        value?: unknown;
-        error?: string;
-      };
+      type: "bridge_reply";
+      id: string;
+      ok: boolean;
+      value?: unknown;
+      error?: string;
+    };
   try {
     if (msg.type === "init") {
       await getPyodide();
