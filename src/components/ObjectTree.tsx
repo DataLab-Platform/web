@@ -8,6 +8,7 @@ import {
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 import { getEditIconUrl } from "../assets/editIcons";
 import { useConfirm } from "./ConfirmDialog";
+import { TitleWithLinks } from "./TitleWithLinks";
 
 const DELETE_ICON_URL = getEditIconUrl("delete.svg");
 
@@ -295,7 +296,10 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(function ObjectTre
                         />
                       ) : (
                         <>
-                          <div className="object-tree-title">{o.title}</div>
+                          <TitleWithLinks
+                            title={o.title}
+                            className="object-tree-title"
+                          />
                           <div className="object-tree-meta">
                             #{o.id} · {o.size} pts
                           </div>

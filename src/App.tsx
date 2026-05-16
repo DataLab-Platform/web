@@ -35,6 +35,10 @@ import {
 } from "./actions/registry";
 import { ObjectTree } from "./components/ObjectTree";
 import type { ObjectTreeHandle } from "./components/ObjectTree";
+import {
+  ObjectNavigationProvider,
+  type OidLookupEntry,
+} from "./components/ObjectNavigationContext";
 import { ContextMenu } from "./components/ContextMenu";
 import { buildObjectContextMenu } from "./actions/buildMenu";
 import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
@@ -268,6 +272,11 @@ export default function App() {
   const openSeparateView = useCallback(() => setSeparateViewOpen(true), []);
   const closeSeparateView = useCallback(() => setSeparateViewOpen(false), []);
   const [tree, setTree] = useState<PanelTree | null>(null);
+  /** Lightweight snapshot of the *other* panel (metadata only). Kept
+   *  in sync alongside :state:`tree` so :class:`TitleWithLinks` can
+   *  resolve hex short ids that live in the inactive panel (e.g.
+   *  signal sources of an image profile result). */
+  const [inactiveTree, setInactiveTree] = useState<PanelTree | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [data, setData] = useState<SignalData | null>(null);
@@ -751,6 +760,63 @@ export default function App() {
       setResults([]);
     },
     [activePanel],
+  );
+
+  // Keep ``inactiveTree`` in sync with the panel the user *isn't*
+  // looking at, so :class:`TitleWithLinks` can resolve cross-panel
+  // hex short ids. Re-runs whenever the active tree refreshes or the
+  // user switches panels — both are cheap metadata fetches.
+  useEffect(() => {
+    if (!runtime) {
+      setInactiveTree(null);
+      return;
+    }
+    const other: PanelKind = activePanel === "signal" ? "image" : "signal";
+    let cancelled = false;
+    runtime
+      .getPanelTree(other)
+      .then((t) => {
+        if (!cancelled) setInactiveTree(t);
+      })
+      .catch(() => {
+        if (!cancelled) setInactiveTree(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, activePanel, tree]);
+
+  /** ``oid → { kind, node }`` lookup spanning both panel trees. Used
+   *  by :class:`TitleWithLinks` to decide whether a hex token in a
+   *  computation title is a real source id (→ render a link) or an
+   *  accidental match (→ render plain text). */
+  const oidIndex = useMemo<Map<string, OidLookupEntry>>(() => {
+    const map = new Map<string, OidLookupEntry>();
+    for (const t of [tree, inactiveTree]) {
+      if (!t) continue;
+      for (const g of t.groups) {
+        for (const o of g.objects) {
+          map.set(o.id, { kind: t.kind, node: o });
+        }
+      }
+    }
+    return map;
+  }, [tree, inactiveTree]);
+
+  /** Select the source object behind a hex short id. Switches panels
+   *  (signal ↔ image) when the source lives in the inactive panel. */
+  const navigateToOid = useCallback(
+    (oid: string) => {
+      const entry = oidIndex.get(oid);
+      if (!entry) return;
+      if (entry.kind !== activePanel) {
+        void refreshPanelKind(entry.kind, oid);
+      } else {
+        setSelectedIds([oid]);
+        setCurrentId(oid);
+      }
+    },
+    [oidIndex, activePanel, refreshPanelKind],
   );
 
   const handleCreateTyped = useCallback(
@@ -2264,6 +2330,10 @@ export default function App() {
   );
 
   return (
+    <ObjectNavigationProvider
+      oidIndex={oidIndex}
+      navigateToOid={navigateToOid}
+    >
     <div className="app" data-runtime-status={status}>
       <MenuBar
         status={status === "ready" ? "Ready" : message}
@@ -2779,5 +2849,6 @@ export default function App() {
         />
       )}
     </div>
+    </ObjectNavigationProvider>
   );
 }

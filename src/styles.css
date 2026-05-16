@@ -1080,6 +1080,36 @@ input {
   color: var(--text-dim);
 }
 
+/* Hex short-ID hyperlinks rendered inside computation titles by
+   :class:`TitleWithLinks`. Stripped of all button chrome so they read
+   as inline text, then nudged towards the accent palette so users can
+   spot them at a glance. */
+.title-oid-link {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--accent);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.title-oid-link:hover,
+.title-oid-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+/* When the host row is selected (white-on-accent), restore enough
+   contrast for the hex link to remain readable. */
+.object-tree-item.current .title-oid-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .object-tree-empty-group {
   padding: 6px 10px 6px 22px;
   font-size: 11px;
