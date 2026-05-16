@@ -41,7 +41,11 @@ import {
 } from "./components/ObjectNavigationContext";
 import { ContextMenu } from "./components/ContextMenu";
 import { buildObjectContextMenu } from "./actions/buildMenu";
-import { PanelSwitcher, type PanelKind } from "./components/PanelSwitcher";
+import { TreeKindSwitcher } from "./components/TreeKindSwitcher";
+import {
+  CentralViewSwitcher,
+  type CentralView,
+} from "./components/CentralViewSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
 import {
@@ -93,6 +97,7 @@ import type {
   ImageCreationType,
   ImageRoiSegment,
   ObjectMeta,
+  PanelKind,
   PlotlyAnnotations,
   SignalAnalysisDescriptor,
   SignalCreationType,
@@ -211,7 +216,8 @@ export default function App() {
     recovered: workspaceRecovered,
   });
   useBeforeUnloadGuard(workspaceDirty);
-  const [activePanel, setActivePanel] = useState<PanelKind>("signal");
+  const [treeKind, setTreeKind] = useState<PanelKind>("signal");
+  const [centralView, setCentralView] = useState<CentralView>("plot");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = usePersistedSize(
@@ -402,27 +408,12 @@ export default function App() {
     "creation" | "properties" | "results"
   >("properties");
 
-  /** ``activePanel`` narrowed to the runtime's PanelKind ("signal" |
-   *  "image").  When the user is on the macro or notebook panel we
-   *  still need a "real" panel kind for the proxy bridge, so we fall
-   *  back to the last object panel they used (defaults to "signal"). */
-  const lastObjectPanelRef = useRef<"signal" | "image">("signal");
-  const isObjectPanel = activePanel === "signal" || activePanel === "image";
-  const objectPanel: "signal" | "image" = isObjectPanel
-    ? (activePanel as "signal" | "image")
-    : lastObjectPanelRef.current;
-  useEffect(() => {
-    if (isObjectPanel) {
-      lastObjectPanelRef.current = activePanel as "signal" | "image";
-    }
-  }, [activePanel, isObjectPanel]);
   const theme = useTheme().theme;
 
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
-      if (activePanel !== "signal" && activePanel !== "image") return;
-      const newTree = await runtime.getPanelTree(activePanel);
+      const newTree = await runtime.getPanelTree(treeKind);
       setTree(newTree);
       const allIds: string[] = [];
       for (const g of newTree.groups)
@@ -439,17 +430,18 @@ export default function App() {
         setSelectedIds([preferredCurrentId]);
       }
     },
-    [runtime, activePanel],
+    [runtime, treeKind],
   );
 
-  /** Refresh a panel that may differ from the current ``activePanel``,
-   *  switching panels in the process.  Used by cross-kind processings
-   *  whose result lands in a different panel than the source. */
+  /** Refresh a panel that may differ from the current ``treeKind``,
+   *  switching the tree (and central view back to plot) in the
+   *  process.  Used by cross-kind processings whose result lands in a
+   *  different panel than the source. */
   const refreshPanelKind = useCallback(
     async (kind: PanelKind, preferredCurrentId?: string | null) => {
       if (!runtime) return;
-      setActivePanel(kind);
-      if (kind !== "signal" && kind !== "image") return;
+      setTreeKind(kind);
+      setCentralView("plot");
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
@@ -477,12 +469,11 @@ export default function App() {
       const detail = (e as CustomEvent<{ panel: string | null }>).detail;
       const target = detail?.panel;
       if (target === "signal" || target === "image") {
-        if (target === activePanel) {
+        if (target === treeKind) {
           void refresh();
         } else {
           // The result landed in a panel the user isn't looking at.
-          // Don't yank them away — they'll see it on next switch
-          // (handled by ``handleSwitchPanel``).
+          // Don't yank them away — they'll see it on next switch.
         }
       } else {
         // Unknown / null panel: best-effort refresh of the active one.
@@ -493,7 +484,7 @@ export default function App() {
     return () => {
       window.removeEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
     };
-  }, [runtime, activePanel, refresh]);
+  }, [runtime, treeKind, refresh]);
 
   // Workspace-dirty tracking.
   //
@@ -604,7 +595,7 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    if (activePanel === "image") {
+    if (treeKind === "image") {
       // Image panel: viewer + ROI + analysis results.
       setData(null);
       setExtraSignals([]);
@@ -720,14 +711,22 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, currentId, activePanel, selectedIds]);
+  }, [runtime, currentId, treeKind, selectedIds]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null) => {
+      // If the user clicks on a signal/image in the (always visible)
+      // ObjectTree while the central view is showing a macro or
+      // notebook editor, snap the central view back to the plot so
+      // the selection is actually visible.  The editor stays mounted
+      // (display:none) so its scroll/cursor/input state survive.
+      if (centralView !== "plot" && ids.length > 0) {
+        setCentralView("plot");
+      }
       setSelectedIds(ids);
       setCurrentId(current);
     },
-    [],
+    [centralView],
   );
 
   // Publish selection / panel snapshots to non-React consumers (the
@@ -737,15 +736,15 @@ export default function App() {
     registerSelectionSource(() => ({
       ids: selectedIds,
       currentId,
-      panel: activePanel,
+      panel: centralView === "plot" ? treeKind : centralView,
     }));
     return () => registerSelectionSource(null);
-  }, [selectedIds, currentId, activePanel]);
+  }, [selectedIds, currentId, centralView, treeKind]);
 
-  const handleSwitchPanel = useCallback(
+  const handleTreeKindChange = useCallback(
     (kind: PanelKind) => {
-      if (kind === activePanel) return;
-      setActivePanel(kind);
+      if (kind === treeKind) return;
+      setTreeKind(kind);
       setSelectedIds([]);
       setCurrentId(null);
       setData(null);
@@ -755,7 +754,15 @@ export default function App() {
       setImageRoi([]);
       setResults([]);
     },
-    [activePanel],
+    [treeKind],
+  );
+
+  const handleCentralViewChange = useCallback(
+    (view: CentralView) => {
+      if (view === centralView) return;
+      setCentralView(view);
+    },
+    [centralView],
   );
 
   // Keep ``inactiveTree`` in sync with the panel the user *isn't*
@@ -767,7 +774,7 @@ export default function App() {
       setInactiveTree(null);
       return;
     }
-    const other: PanelKind = activePanel === "signal" ? "image" : "signal";
+    const other: PanelKind = treeKind === "signal" ? "image" : "signal";
     let cancelled = false;
     runtime
       .getPanelTree(other)
@@ -780,7 +787,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, activePanel, tree]);
+  }, [runtime, treeKind, tree]);
 
   /** ``oid → { kind, node }`` lookup spanning both panel trees. Used
    *  by :class:`TitleWithLinks` to decide whether a hex token in a
@@ -805,14 +812,15 @@ export default function App() {
     (oid: string) => {
       const entry = oidIndex.get(oid);
       if (!entry) return;
-      if (entry.kind !== activePanel) {
+      if (entry.kind !== treeKind) {
         void refreshPanelKind(entry.kind, oid);
       } else {
+        if (centralView !== "plot") setCentralView("plot");
         setSelectedIds([oid]);
         setCurrentId(oid);
       }
     },
-    [oidIndex, activePanel, refreshPanelKind],
+    [oidIndex, treeKind, centralView, refreshPanelKind],
   );
 
   /** Resolve the group id hosting the currently-selected object in the
@@ -874,7 +882,7 @@ export default function App() {
       // The Creation/Properties form just mutated the object — refresh
       // the plot data and the tree (title / size may have changed).
       try {
-        if (activePanel === "image") {
+        if (treeKind === "image") {
           const updated = await runtime.getImageData(oid);
           setImageData(updated);
         } else {
@@ -891,7 +899,7 @@ export default function App() {
       // selection cannot leak the previous draft.
       setSideRefreshNonce((n) => n + 1);
     },
-    [runtime, refresh, activePanel],
+    [runtime, refresh, treeKind],
   );
 
   /** Effective sources for *feature* given the current selection. */
@@ -934,7 +942,7 @@ export default function App() {
         if (feature.output_kind !== feature.object_kind) {
           // Cross-kind: result lands in a different panel — switch to it
           // and refresh that panel's tree explicitly (cannot rely on the
-          // ``refresh`` closure that reads the stale ``activePanel``).
+          // ``refresh`` closure that reads the stale ``treeKind``).
           await refreshPanelKind(feature.output_kind, lastId);
         } else {
           await refresh(lastId);
@@ -962,13 +970,13 @@ export default function App() {
         // (rare but consistent with the desktop's last-touched panel).
         const newImage = added.image[added.image.length - 1] ?? null;
         const newSignal = added.signal[added.signal.length - 1] ?? null;
-        if (newImage && activePanel !== "image") {
+        if (newImage && treeKind !== "image") {
           await refreshPanelKind("image", newImage);
-        } else if (newSignal && activePanel !== "signal") {
+        } else if (newSignal && treeKind !== "signal") {
           await refreshPanelKind("signal", newSignal);
         } else {
           await refresh(
-            activePanel === "image" ? newImage : (newSignal ?? newImage),
+            treeKind === "image" ? newImage : (newSignal ?? newImage),
           );
         }
       } catch (err) {
@@ -977,7 +985,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refresh, refreshPanelKind, activePanel],
+    [runtime, refresh, refreshPanelKind, treeKind],
   );
 
   const handleReloadPlugins = useCallback(async () => {
@@ -1084,12 +1092,12 @@ export default function App() {
     async (oid: string) => {
       if (!runtime) return;
       const rs =
-        activePanel === "image"
+        treeKind === "image"
           ? await runtime.listImageResults(oid)
           : await runtime.listSignalResults(oid);
       setResults(rs);
     },
-    [runtime, activePanel],
+    [runtime, treeKind],
   );
 
   const runAnalysis = useCallback(
@@ -1102,7 +1110,7 @@ export default function App() {
       setBusy(true);
       try {
         const result =
-          activePanel === "image"
+          treeKind === "image"
             ? await runtime.runImageAnalysis(oid, funcId, params)
             : await runtime.runSignalAnalysis(oid, funcId, params);
         if (result === null) {
@@ -1121,7 +1129,7 @@ export default function App() {
         // ticked.  Re-fetch the ROI list so the plot overlay updates
         // immediately, mirroring DataLab desktop's behaviour.
         if (
-          activePanel === "image" &&
+          treeKind === "image" &&
           result !== null &&
           (result as { roi_modified?: boolean }).roi_modified
         ) {
@@ -1142,7 +1150,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refreshResults, activePanel, notify],
+    [runtime, refreshResults, treeKind, notify],
   );
 
   const handleAnalysis = useCallback(
@@ -1153,7 +1161,7 @@ export default function App() {
         return;
       }
       const schema =
-        activePanel === "image"
+        treeKind === "image"
           ? await runtime.getImageAnalysisParamSchema(currentId, funcId)
           : await runtime.getSignalAnalysisParamSchema(currentId, funcId);
       if (!schema) {
@@ -1161,7 +1169,7 @@ export default function App() {
         return;
       }
       const catalog =
-        activePanel === "image" ? imageAnalysisEntries : analysisEntries;
+        treeKind === "image" ? imageAnalysisEntries : analysisEntries;
       const entry = catalog.find((e) => e.id === funcId);
       setPendingAnalysis({
         funcId,
@@ -1174,7 +1182,7 @@ export default function App() {
       currentId,
       analysisEntries,
       imageAnalysisEntries,
-      activePanel,
+      treeKind,
       runAnalysis,
     ],
   );
@@ -1208,14 +1216,14 @@ export default function App() {
   const handleClearResults = useCallback(
     async (key: string | null) => {
       if (!runtime || !currentId) return;
-      if (activePanel === "image") {
+      if (treeKind === "image") {
         await runtime.clearImageResults(currentId, key ?? undefined);
       } else {
         await runtime.clearSignalResults(currentId, key ?? undefined);
       }
       await refreshResults(currentId);
     },
-    [runtime, currentId, refreshResults, activePanel],
+    [runtime, currentId, refreshResults, treeKind],
   );
 
   const deleteObjects = useCallback(
@@ -1265,12 +1273,12 @@ export default function App() {
     if (!runtime) return;
     setBusy(true);
     try {
-      await runtime.createGroup(objectPanel);
+      await runtime.createGroup(treeKind);
       await refresh();
     } finally {
       setBusy(false);
     }
-  }, [runtime, refresh, objectPanel]);
+  }, [runtime, refresh, treeKind]);
 
   const handleRenameObject = useCallback(
     async (oid: string, name: string) => {
@@ -1626,14 +1634,14 @@ export default function App() {
   /** Refresh the displayed image of *oid* after an in-place layout
    *  change (distribute on a grid / reset positions). */
   const reloadCurrentImage = useCallback(async () => {
-    if (!runtime || !currentId || activePanel !== "image") return;
+    if (!runtime || !currentId || treeKind !== "image") return;
     try {
       const updated = await runtime.getImageData(currentId);
       setImageData(updated);
     } catch {
       /* ignore — object may have been deleted */
     }
-  }, [runtime, currentId, activePanel]);
+  }, [runtime, currentId, treeKind]);
 
   const imageLayoutSourceIds = useCallback((): string[] => {
     if (selectedIds.length > 0) return selectedIds;
@@ -1856,7 +1864,7 @@ export default function App() {
     if (!runtime || !currentId) return;
     // Default to CSV (signals) or TIFF (images); users can pick another
     // extension by editing the filename in the prompt dialog.
-    const isImage = activePanel === "image";
+    const isImage = treeKind === "image";
     const formats = isImage
       ? await runtime.listImageIoFormats()
       : await runtime.listSignalIoFormats();
@@ -1900,7 +1908,7 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runtime, currentId, data, imageData, activePanel, notify, prompt]);
+  }, [runtime, currentId, data, imageData, treeKind, notify, prompt]);
 
   /** Open the "Save to directory…" dialog with the current selection
    *  (falls back to the whole panel when nothing is explicitly selected,
@@ -1922,14 +1930,14 @@ export default function App() {
       .map((id) => ({ id, displayLabel: labelById.get(id)! }));
     if (sources.length === 0) return;
     const formats =
-      activePanel === "image"
+      treeKind === "image"
         ? await runtime.listImageIoFormats()
         : await runtime.listSignalIoFormats();
     setPendingSaveToDir({
       sources,
       extensions: formats.all_write_extensions,
     });
-  }, [runtime, tree, selectedIds, currentId, activePanel]);
+  }, [runtime, tree, selectedIds, currentId, treeKind]);
 
   /** Persist the dialog payload, then write every object to disk using
    *  the File System Access API when available (Chromium-based browsers)
@@ -1953,7 +1961,7 @@ export default function App() {
         for (let i = 0; i < sources.length; i++) {
           const name = basenames[i];
           const raw =
-            activePanel === "image"
+            treeKind === "image"
               ? await runtime.saveImageToBytes(sources[i].id, name)
               : await runtime.saveSignalToBytes(sources[i].id, name);
           // ``slice()`` allocates a fresh, independent ``Uint8Array``
@@ -2124,12 +2132,12 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, pendingSaveToDir, activePanel, confirm, notify],
+    [runtime, pendingSaveToDir, treeKind, confirm, notify],
   );
 
   const handleOpenFile = useCallback(async () => {
     if (!runtime) return;
-    const isImage = activePanel === "image";
+    const isImage = treeKind === "image";
     const formats = isImage
       ? await runtime.listImageIoFormats()
       : await runtime.listSignalIoFormats();
@@ -2157,7 +2165,7 @@ export default function App() {
       }
     };
     input.click();
-  }, [runtime, refresh, activePanel]);
+  }, [runtime, refresh, treeKind]);
 
   const hasObjects = useMemo(() => {
     if (!tree) return false;
@@ -2191,8 +2199,8 @@ export default function App() {
   // Restrict feature actions, creation menu and signal-only menus
   // (Analysis / ROI) to the currently active panel.
   const visibleFeatures = useMemo(
-    () => features.filter((f) => f.object_kind === activePanel),
-    [features, activePanel],
+    () => features.filter((f) => f.object_kind === treeKind),
+    [features, treeKind],
   );
 
   const actions = useMemo(
@@ -2212,7 +2220,7 @@ export default function App() {
         onDuplicateSelection: handleDuplicateSelection,
         onMoveSelectionUp: handleMoveSelectionUp,
         onMoveSelectionDown: handleMoveSelectionDown,
-        panel: objectPanel,
+        panel: treeKind,
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -2233,29 +2241,29 @@ export default function App() {
         onTogglePanel: toggleAIPanel,
         onOpenSettings: () => setShowAISettings(true),
       }),
-      ...(activePanel === "signal"
+      ...(treeKind === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
-      ...(activePanel === "image"
+      ...(treeKind === "image"
         ? buildImageGridActions({
             onDistributeOnGrid: handleDistributeOnGrid,
             onResetPositions: handleResetImagePositions,
           })
         : []),
-      ...(activePanel === "image"
+      ...(treeKind === "image"
         ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
         : []),
-      ...(activePanel === "signal"
+      ...(treeKind === "signal"
         ? buildInteractiveFitActions(
             interactiveFits,
             handleLaunchInteractiveFit,
           )
         : []),
-      ...(activePanel === "signal"
+      ...(treeKind === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
-      ...(activePanel === "signal"
+      ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, {
             onToggleEditMode: handleToggleRoiEditMode,
             onEditNumerically: handleEditRoi,
@@ -2275,15 +2283,14 @@ export default function App() {
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
-      ...buildPluginActions(pluginActions, objectPanel, {
+      ...buildPluginActions(pluginActions, treeKind, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),
         onReloadAll: handleReloadPlugins,
       }),
     ],
     [
-      activePanel,
-      objectPanel,
+      treeKind,
       visibleFeatures,
       signalTypes,
       imageTypes,
@@ -2369,48 +2376,25 @@ export default function App() {
         )}
         <div className="workspace">
           <aside className="panel" style={{ width: leftPanelWidth }}>
-            <PanelSwitcher
-              active={activePanel}
-              onChange={handleSwitchPanel}
+            <TreeKindSwitcher
+              active={treeKind}
+              onChange={handleTreeKindChange}
               disabled={status !== "ready" || busy}
             />
-            <div className="panel-header">
-              {activePanel === "signal"
-                ? "Signals"
-                : activePanel === "image"
-                  ? "Images"
-                  : activePanel === "notebook"
-                    ? "Notebooks"
-                    : "Macros"}
-            </div>
             <div className="panel-body">
-              {!isObjectPanel ? (
-                <div
-                  style={{
-                    padding: 12,
-                    fontSize: 12,
-                    color: "var(--text-dim)",
-                  }}
-                >
-                  {activePanel === "notebook"
-                    ? "Notebook cells are shown on the right. Use the Signals or Images tabs to manage workspace objects."
-                    : "Macros are managed in the editor on the right."}
-                </div>
-              ) : (
-                <ObjectTree
-                  ref={objectTreeRef}
-                  tree={tree}
-                  selectedIds={selectedIds}
-                  currentId={currentId}
-                  onSelectionChange={handleSelectionChange}
-                  onRenameObject={handleRenameObject}
-                  onRenameGroup={handleRenameGroup}
-                  onDeleteGroup={handleDeleteGroup}
-                  onDeleteObjects={deleteObjects}
-                  onMoveObjects={handleMoveObjects}
-                  onObjectContextMenu={handleObjectContextMenu}
-                />
-              )}
+              <ObjectTree
+                ref={objectTreeRef}
+                tree={tree}
+                selectedIds={selectedIds}
+                currentId={currentId}
+                onSelectionChange={handleSelectionChange}
+                onRenameObject={handleRenameObject}
+                onRenameGroup={handleRenameGroup}
+                onDeleteGroup={handleDeleteGroup}
+                onDeleteObjects={deleteObjects}
+                onMoveObjects={handleMoveObjects}
+                onObjectContextMenu={handleObjectContextMenu}
+              />
             </div>
           </aside>
           <Splitter
@@ -2422,6 +2406,11 @@ export default function App() {
             ariaLabel="Resize left panel"
           />
           <main className="plot-area">
+            <CentralViewSwitcher
+              active={centralView}
+              onChange={handleCentralViewChange}
+              disabled={status !== "ready" || busy}
+            />
             {/*
             NotebookPanel is mounted as soon as the runtime is ready and
             kept mounted while switching panels — its in-memory cell
@@ -2433,9 +2422,9 @@ export default function App() {
             {runtime && (
               <div
                 className="nb-panel-host"
-                hidden={activePanel !== "notebook"}
+                hidden={centralView !== "notebook"}
                 style={{
-                  display: activePanel === "notebook" ? "flex" : "none",
+                  display: centralView === "notebook" ? "flex" : "none",
                   flex: "1 1 auto",
                   minWidth: 0,
                   minHeight: 0,
@@ -2449,23 +2438,30 @@ export default function App() {
                   onCountChanged={setNotebookCount}
                   onSetCurrentPanel={(panel) => {
                     if (panel === "signal" || panel === "image") {
-                      handleSwitchPanel(panel);
+                      handleTreeKindChange(panel);
+                      setCentralView("plot");
                     }
                   }}
                   getSelection={() => selectedIds}
-                  getCurrentPanel={() => objectPanel}
+                  getCurrentPanel={() => treeKind}
                   selectObjects={(ids, panel) => {
                     if (panel === "signal" || panel === "image") {
-                      handleSwitchPanel(panel);
+                      handleTreeKindChange(panel);
+                      setCentralView("plot");
                     }
                     setSelectedIds(ids);
                     setCurrentId(ids[0] ?? null);
                   }}
-                  onModelChanged={() => {
-                    // Same rationale as MacroPanel: don't yank the user away.
+                  onModelChanged={(panel) => {
+                    // Refresh the left-panel tree if the kind currently
+                    // shown was mutated.  ``panel`` is
+                    // ``"signal"`` / ``"image"`` / ``null`` (null = any).
+                    if (!runtime) return;
+                    if (panel && panel !== treeKind) return;
+                    void refresh();
                   }}
                   onConvertToMacro={(title, code) => {
-                    handleSwitchPanel("macro");
+                    setCentralView("macro");
                     void macroPanelRef.current?.importMacro(title, code);
                   }}
                 />
@@ -2474,9 +2470,9 @@ export default function App() {
             {runtime && (
               <div
                 className="macro-panel-host"
-                hidden={activePanel !== "macro"}
+                hidden={centralView !== "macro"}
                 style={{
-                  display: activePanel === "macro" ? "flex" : "none",
+                  display: centralView === "macro" ? "flex" : "none",
                   flex: "1 1 auto",
                   minWidth: 0,
                   minHeight: 0,
@@ -2489,26 +2485,30 @@ export default function App() {
                   onCountChanged={setMacroCount}
                   onSetCurrentPanel={(panel) => {
                     if (panel === "signal" || panel === "image") {
-                      handleSwitchPanel(panel);
+                      handleTreeKindChange(panel);
+                      setCentralView("plot");
                     }
                   }}
                   getSelection={() => selectedIds}
-                  getCurrentPanel={() => objectPanel}
+                  getCurrentPanel={() => treeKind}
                   selectObjects={(ids, panel) => {
                     if (panel === "signal" || panel === "image") {
-                      handleSwitchPanel(panel);
+                      handleTreeKindChange(panel);
+                      setCentralView("plot");
                     }
                     setSelectedIds(ids);
                     setCurrentId(ids[0] ?? null);
                   }}
-                  onModelChanged={() => {
-                    // The user is on the Macros panel; don't yank them away
-                    // and don't waste a network round-trip refreshing a tree
-                    // they can't see.  When they switch back to Signals /
-                    // Images, ``handleSwitchPanel`` will refresh.
+                  onModelChanged={(panel) => {
+                    // The left-panel tree is always visible — refresh
+                    // it so newly created / deleted objects show up
+                    // immediately.
+                    if (!runtime) return;
+                    if (panel && panel !== treeKind) return;
+                    void refresh();
                   }}
                   onConvertToNotebook={(title, code) => {
-                    handleSwitchPanel("notebook");
+                    setCentralView("notebook");
                     notebookPanelRef.current?.importMacroAsNotebook(
                       title,
                       code,
@@ -2518,7 +2518,7 @@ export default function App() {
                 />
               </div>
             )}
-            {isObjectPanel && status === "error" && (
+            {centralView === "plot" && status === "error" && (
               <div
                 className="plot-empty"
                 style={{ color: "#c4302b", padding: 16, textAlign: "center" }}
@@ -2540,26 +2540,33 @@ export default function App() {
                 </div>
               </div>
             )}
-            {isObjectPanel && status === "loading" && !data && !imageData && (
-              <div className="plot-empty plot-loading">
-                <img
-                  src={
-                    new URL("./assets/DataLab-Splash.svg", import.meta.url).href
-                  }
-                  alt="DataLab"
-                  className="plot-loading-logo"
-                />
-                <div className="plot-loading-message">{message}</div>
-              </div>
-            )}
-            {isObjectPanel && status === "ready" && !data && !imageData && (
-              <div className="plot-empty">
-                {activePanel === "signal"
-                  ? "Create a signal to get started."
-                  : "Create an image to get started."}
-              </div>
-            )}
-            {activePanel === "signal" && data && (
+            {centralView === "plot" &&
+              status === "loading" &&
+              !data &&
+              !imageData && (
+                <div className="plot-empty plot-loading">
+                  <img
+                    src={
+                      new URL("./assets/DataLab-Splash.svg", import.meta.url)
+                        .href
+                    }
+                    alt="DataLab"
+                    className="plot-loading-logo"
+                  />
+                  <div className="plot-loading-message">{message}</div>
+                </div>
+              )}
+            {centralView === "plot" &&
+              status === "ready" &&
+              !data &&
+              !imageData && (
+                <div className="plot-empty">
+                  {treeKind === "signal"
+                    ? "Create a signal to get started."
+                    : "Create an image to get started."}
+                </div>
+              )}
+            {centralView === "plot" && treeKind === "signal" && data && (
               <SignalPlot
                 data={data}
                 oid={currentId}
@@ -2574,13 +2581,17 @@ export default function App() {
                 extraSignals={extraSignals}
               />
             )}
-            {activePanel === "image" && imageData && extraImages.length > 0 && (
-              <MultiImagePlot
-                images={[imageData, ...extraImages]}
-                totalSelected={selectedIds.length}
-              />
-            )}
-            {activePanel === "image" &&
+            {centralView === "plot" &&
+              treeKind === "image" &&
+              imageData &&
+              extraImages.length > 0 && (
+                <MultiImagePlot
+                  images={[imageData, ...extraImages]}
+                  totalSelected={selectedIds.length}
+                />
+              )}
+            {centralView === "plot" &&
+              treeKind === "image" &&
               imageData &&
               extraImages.length === 0 && (
                 <ImagePlot
@@ -2614,7 +2625,7 @@ export default function App() {
                 />
               )}
           </main>
-          {runtime && isObjectPanel && (
+          {runtime && centralView === "plot" && (
             <>
               <Splitter
                 side="right"
@@ -2627,7 +2638,7 @@ export default function App() {
               <SidePanel
                 runtime={runtime}
                 currentId={currentId}
-                panelKind={activePanel === "image" ? "image" : "signal"}
+                panelKind={treeKind === "image" ? "image" : "signal"}
                 refreshNonce={sideRefreshNonce}
                 onObjectChanged={handleSideObjectChanged}
                 preferredTab={preferredSideTab}
@@ -2832,7 +2843,7 @@ export default function App() {
             // (potentially large) signal/image content on every render of
             // the main App.
             let content: SeparateViewContent | null = null;
-            if (activePanel === "signal" && data) {
+            if (treeKind === "signal" && data) {
               content = {
                 kind: "signal",
                 data,
@@ -2842,7 +2853,7 @@ export default function App() {
                 results,
                 extraSignals,
               };
-            } else if (activePanel === "image" && imageData) {
+            } else if (treeKind === "image" && imageData) {
               content = {
                 kind: "image",
                 data: imageData,
@@ -2864,7 +2875,7 @@ export default function App() {
         <DialogBridge />
         {contextMenu && (
           <ContextMenu
-            nodes={buildObjectContextMenu(actions, objectPanel)}
+            nodes={buildObjectContextMenu(actions, treeKind)}
             state={actionState}
             position={contextMenu}
             onClose={closeContextMenu}

@@ -71,8 +71,8 @@ export function buildStaticActions(
     },
     {
       id: "file.save_to_directory",
-      label: "Save to directory…",
-      menuPath: "File/Save to directory…",
+      label: "Save to directory\u2026",
+      menuPath: "File/Save to directory\u2026",
       iconUrl: getIoIconUrl("save_to_directory.svg"),
       enabled: (s) =>
         ready(s) && (s.selectedIds.length > 0 || s.currentId !== null),
@@ -119,7 +119,7 @@ export function buildStaticActions(
       label: "New group",
       menuPath: "Edit/New group",
       iconUrl: getEditIconUrl("new_group.svg"),
-      enabled: ready,
+      enabled: (s) => ready(s),
       run: cb.onNewGroup,
     },
     {

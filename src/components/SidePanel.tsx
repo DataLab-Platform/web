@@ -23,6 +23,12 @@ import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
 import { useMessage } from "./ConfirmDialog";
+import { getRootIconUrl } from "../assets/rootIcons";
+
+const CREATION_ICON = getRootIconUrl("libre-gui-add.svg");
+const PROPERTIES_ICON = getRootIconUrl("properties.svg");
+const PROCESSING_ICON = getRootIconUrl("libre-gui-cogs.svg");
+const RESULTS_ICON = getRootIconUrl("analysis.svg");
 
 type TabId = "creation" | "properties" | "processing" | "results";
 
@@ -199,6 +205,9 @@ export function SidePanel(props: Props) {
           }
           onClick={() => setActive("creation")}
         >
+          {CREATION_ICON && (
+            <img src={CREATION_ICON} alt="" className="switcher-tab-icon" />
+          )}
           Creation
         </button>
         <button
@@ -209,6 +218,9 @@ export function SidePanel(props: Props) {
           }
           onClick={() => setActive("properties")}
         >
+          {PROPERTIES_ICON && (
+            <img src={PROPERTIES_ICON} alt="" className="switcher-tab-icon" />
+          )}
           Properties
         </button>
         {hasProcessing && (
@@ -225,6 +237,9 @@ export function SidePanel(props: Props) {
                 : undefined
             }
           >
+            {PROCESSING_ICON && (
+              <img src={PROCESSING_ICON} alt="" className="switcher-tab-icon" />
+            )}
             Processing
           </button>
         )}
@@ -234,6 +249,9 @@ export function SidePanel(props: Props) {
           className={"side-panel-tab" + (active === "results" ? " active" : "")}
           onClick={() => setActive("results")}
         >
+          {RESULTS_ICON && (
+            <img src={RESULTS_ICON} alt="" className="switcher-tab-icon" />
+          )}
           Results{results.length > 0 ? ` (${results.length})` : ""}
         </button>
         <button

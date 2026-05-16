@@ -82,7 +82,10 @@ test.describe("Notebook UI", () => {
     // ``proxy.set_current_panel`` does). The signal must however be
     // visible in the tree.
     await page.getByRole("tab", { name: "Signals" }).click();
-    await expect(page.locator(".panel-header")).toContainText("Signals");
+    await expect(page.getByRole("tab", { name: "Signals" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     await expect(
       page.locator(".object-tree-item").filter({ hasText: "sinc" }),
     ).toBeVisible({ timeout: 10_000 });
@@ -90,7 +93,10 @@ test.describe("Notebook UI", () => {
     // Switch back to the Notebooks tab — this is THE regression test:
     // the cell content, execution counter and stdout must all survive.
     await page.getByRole("tab", { name: "Notebooks" }).click();
-    await expect(page.locator(".panel-header")).toContainText("Notebooks");
+    await expect(page.getByRole("tab", { name: "Notebooks" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
 
     // The cell editor must still hold the source we typed.
     const restored = await page

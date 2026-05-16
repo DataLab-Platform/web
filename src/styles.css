@@ -616,11 +616,16 @@ input {
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
-  padding: 8px 10px;
+  padding: 4px 8px;
   font: inherit;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .side-panel-tab:hover:not(:disabled):not(.active) {
@@ -837,41 +842,48 @@ input {
   background: var(--panel-alt);
 }
 
-.panel-switcher {
+.central-view-switcher {
   display: flex;
+  justify-content: flex-start;
   border-bottom: 1px solid var(--border);
   background: var(--panel-alt);
 }
 
-.panel-switcher-tab {
-  flex: 1;
-  padding: 8px 10px;
+.central-view-switcher-tab {
+  flex: 0 0 auto;
+  min-width: 160px;
+  padding: 4px 8px;
   background: transparent;
   border: none;
   border-right: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
   font: inherit;
+  font-size: 11px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.panel-switcher-tab:last-child {
+.central-view-switcher-tab:last-child {
   border-right: none;
 }
 
-.panel-switcher-tab:hover:not(:disabled) {
+.central-view-switcher-tab:hover:not(:disabled) {
   background: var(--panel);
   color: var(--text);
 }
 
-.panel-switcher-tab.active {
+.central-view-switcher-tab.active {
   background: var(--panel);
   color: var(--text);
   border-bottom: 2px solid var(--accent, #4a8cff);
   margin-bottom: -1px;
 }
 
-.panel-switcher-tab:disabled {
+.central-view-switcher-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -879,6 +891,77 @@ input {
 .panel-body {
   flex: 1;
   overflow: auto;
+  /* Allow nested flex children (mini tree-kind switch + scrollable
+     ObjectTree) to size correctly when this body is itself a flex
+     container.  ``min-height: 0`` works around the well-known flex
+     overflow gotcha. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-body > .panel-tree-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* "Signals | Images" switch shown at the top of the left object-tree
+   panel.  Always visible — it selects which kind of objects the tree
+   browses, independently of the central view (Plot / Macros /
+   Notebooks). */
+.tree-kind-switcher {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.tree-kind-switcher-tab {
+  flex: 1;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Shared icon styling for the three top selector rows
+   (tree-kind, central-view, side-panel tabs). */
+.switcher-tab-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  pointer-events: none;
+  display: block;
+}
+
+.tree-kind-switcher-tab:last-child {
+  border-right: none;
+}
+
+.tree-kind-switcher-tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.tree-kind-switcher-tab.active {
+  color: var(--text);
+  background: var(--panel-alt);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent, #4a8cff);
+  margin-bottom: -1px;
+}
+
+.tree-kind-switcher-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .panel-footer {
