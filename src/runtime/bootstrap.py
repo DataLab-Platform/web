@@ -59,7 +59,7 @@ import dlw_processor as _proc
 # the default. Imported for its side-effect; the actual substitution of
 # placeholders with source-object short IDs is done by
 # :func:`patch_title_with_ids` below, invoked from :func:`apply_feature`.
-import dlw_title_format  # noqa: F401
+import dlw_title_format  # noqa: F401  # pylint: disable=unused-import
 import numpy as np
 import sigima
 from sigima.objects import SignalObj
