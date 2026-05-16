@@ -229,16 +229,22 @@ describe("buildViewActions", () => {
       onToggleGraphicalTitles: vi.fn(),
       onOpenSeparateView: vi.fn(),
       hasSelection: true,
+      notebookFloating: false,
+      onToggleNotebookFloating: vi.fn(),
+      macroFloating: false,
+      onToggleMacroFloating: vi.fn(),
       ...over,
     };
   }
 
-  it("exposes one popout entry and two checkable toggles", () => {
+  it("exposes one popout entry and four checkable toggles", () => {
     const actions = buildViewActions(makeViewCallbacks());
     expect(actions.map((a) => a.id)).toEqual([
       "view.open_separate_view",
       "view.results_overlay",
       "view.show_graphical_titles",
+      "view.notebook_floating",
+      "view.macro_floating",
     ]);
   });
 

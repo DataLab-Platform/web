@@ -129,6 +129,13 @@ interface Props {
   onCountChanged?: (count: number) => void;
   /** "light"|"dark" — pulled from the host theme. */
   theme: "light" | "dark";
+  /** Current placement of this panel (``"tab"`` ⇒ central tab,
+   *  ``"floating"`` ⇒ right-side overlay).  Optional; when omitted
+   *  the placement toggle button is hidden. */
+  placement?: "tab" | "floating";
+  /** Toggle the placement.  When omitted, no toggle button is
+   *  rendered. */
+  onTogglePlacement?: () => void;
 }
 
 interface MacroState extends MacroMeta {
@@ -158,6 +165,8 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       onConvertToNotebook,
       onCountChanged,
       theme,
+      placement,
+      onTogglePlacement,
     }: Props,
     ref,
   ) {
@@ -796,9 +805,8 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                   return (
                     <div
                       key={m.id}
-                      className={`macro-recent-menu-item${
-                        alreadyOpen ? " macro-recent-menu-item-open" : ""
-                      }`}
+                      className={`macro-recent-menu-item${alreadyOpen ? " macro-recent-menu-item-open" : ""
+                        }`}
                     >
                       <button
                         type="button"
@@ -862,6 +870,23 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           />
           <span className="macro-toolbar-spacer" />
           <span className="macro-toolbar-status">{runStatusLabel}</span>
+          {onTogglePlacement && (
+            <button
+              type="button"
+              className="macro-btn panel-placement-toggle"
+              onClick={onTogglePlacement}
+              title={
+                placement === "floating"
+                  ? "Dock this panel as a central tab"
+                  : "Detach this panel as a floating overlay"
+              }
+              aria-label={
+                placement === "floating" ? "Dock Macros" : "Detach Macros"
+              }
+            >
+              {placement === "floating" ? "↙ Dock" : "↗ Detach"}
+            </button>
+          )}
         </div>
         <div className="macro-body">
           <div className="macro-editor-wrap" style={{ height: editorHeight }}>

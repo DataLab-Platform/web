@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
@@ -85,6 +93,7 @@ import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
 import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
 import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
+import { FloatingDockStack } from "./components/FloatingDock";
 import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
 import {
   NotebookPanel,
@@ -243,6 +252,136 @@ export default function App() {
     // panel had been minimised before the previous hide.
     if (!aiPanelVisible) setAIPanelCollapsed(false);
   }, [aiPanelVisible, setAIPanelVisible, setAIPanelCollapsed]);
+  // Notebook / Macro placement.  Each can independently be docked as
+  // the central tab (default) or detached as a floating overlay in
+  // the right-hand :class:`FloatingDockStack`.  The panels stay
+  // mounted across placement changes — see the portal/stable-host
+  // pattern in the JSX below.
+  const [notebookFloating, setNotebookFloating] = usePersistedBool(
+    "datalab-web.notebookFloating",
+    false,
+  );
+  const [macroFloating, setMacroFloating] = usePersistedBool(
+    "datalab-web.macroFloating",
+    false,
+  );
+  const toggleNotebookFloating = useCallback(() => {
+    const next = !notebookFloating;
+    setNotebookFloating(next);
+    // When detaching, free the central area so the user keeps seeing
+    // the plot rather than a blank tab slot.
+    if (next) {
+      setCentralView((cv) => (cv === "notebook" ? "plot" : cv));
+    } else {
+      // When docking back, give focus to the freshly-restored tab.
+      setCentralView("notebook");
+    }
+  }, [notebookFloating, setNotebookFloating]);
+  const toggleMacroFloating = useCallback(() => {
+    const next = !macroFloating;
+    setMacroFloating(next);
+    if (next) {
+      setCentralView((cv) => (cv === "macro" ? "plot" : cv));
+    } else {
+      setCentralView("macro");
+    }
+  }, [macroFloating, setMacroFloating]);
+  // Stable DOM containers for the Notebook / Macro panels.  They are
+  // moved between the central area and the FloatingDockStack via
+  // ``appendChild`` rather than being unmounted / remounted, so the
+  // panels' React state (cell outputs, kernel worker, editor
+  // selection) survives every placement toggle.  ``createPortal``
+  // always targets the same element, so React itself never tears
+  // down the panel subtree.
+  // Stable DOM containers for the Notebook / Macro panels.  They are
+  // moved between the central area and the FloatingDockStack via
+  // ``appendChild`` rather than being unmounted / remounted, so the
+  // panels' React state (cell outputs, kernel worker, editor
+  // selection) survives every placement toggle.  ``createPortal``
+  // always targets the same element, so React itself never tears
+  // down the panel subtree.  We use ``useRef`` (not ``useMemo``) so
+  // the element is *guaranteed* stable for the lifetime of the App
+  // — ``useMemo`` may legitimately recompute and would silently
+  // orphan the previous portal element.
+  const notebookPortalElRef = useRef<HTMLDivElement | null>(null);
+  if (notebookPortalElRef.current === null && typeof document !== "undefined") {
+    const el = document.createElement("div");
+    el.className = "nb-panel-portal";
+    el.style.display = "flex";
+    el.style.flexDirection = "column";
+    el.style.flex = "1 1 auto";
+    el.style.minWidth = "0";
+    el.style.minHeight = "0";
+    el.style.width = "100%";
+    el.style.height = "100%";
+    notebookPortalElRef.current = el;
+  }
+  const notebookPortalEl = notebookPortalElRef.current;
+  const macroPortalElRef = useRef<HTMLDivElement | null>(null);
+  if (macroPortalElRef.current === null && typeof document !== "undefined") {
+    const el = document.createElement("div");
+    el.className = "macro-panel-portal";
+    el.style.display = "flex";
+    el.style.flexDirection = "column";
+    el.style.flex = "1 1 auto";
+    el.style.minWidth = "0";
+    el.style.minHeight = "0";
+    el.style.width = "100%";
+    el.style.height = "100%";
+    macroPortalElRef.current = el;
+  }
+  const macroPortalEl = macroPortalElRef.current;
+  // DOM-side hosts: where each panel's portal element should live
+  // *right now*.  We track both the "central" host (a div inside the
+  // plot area, visible only when the panel owns the central tab) and
+  // the "floating" host (a div inside the FloatingDockStack, visible
+  // only when the panel is detached).  The effect below moves the
+  // portal element between the two.
+  const [notebookCentralHost, setNotebookCentralHost] =
+    useState<HTMLDivElement | null>(null);
+  const [notebookFloatingHost, setNotebookFloatingHost] =
+    useState<HTMLDivElement | null>(null);
+  const [macroCentralHost, setMacroCentralHost] =
+    useState<HTMLDivElement | null>(null);
+  const [macroFloatingHost, setMacroFloatingHost] =
+    useState<HTMLDivElement | null>(null);
+  // ``useLayoutEffect`` (not ``useEffect``) so the DOM reparenting
+  // happens *synchronously* after React has committed its own DOM
+  // mutations and *before* the browser paints — avoiding any flash
+  // of the portal element in its old location.  When no valid target
+  // exists yet (e.g. the floating wrapper hasn't been ref'd by React
+  // at this exact commit pass), we still detach the portal from any
+  // stale parent so it can't keep visually lingering in a wrapper
+  // React has already unmounted.
+  useLayoutEffect(() => {
+    if (!notebookPortalEl) return;
+    const target = notebookFloating
+      ? notebookFloatingHost
+      : notebookCentralHost;
+    if (target) {
+      if (notebookPortalEl.parentNode !== target) {
+        target.appendChild(notebookPortalEl);
+      }
+    } else if (notebookPortalEl.parentNode) {
+      notebookPortalEl.parentNode.removeChild(notebookPortalEl);
+    }
+  }, [
+    notebookPortalEl,
+    notebookFloating,
+    notebookCentralHost,
+    notebookFloatingHost,
+  ]);
+  useLayoutEffect(() => {
+    if (!macroPortalEl) return;
+    const target = macroFloating ? macroFloatingHost : macroCentralHost;
+    if (target) {
+      if (macroPortalEl.parentNode !== target) {
+        target.appendChild(macroPortalEl);
+      }
+    } else if (macroPortalEl.parentNode) {
+      macroPortalEl.parentNode.removeChild(macroPortalEl);
+    }
+  }, [macroPortalEl, macroFloating, macroCentralHost, macroFloatingHost]);
   const [showAISettings, setShowAISettings] = useState(false);
   // View > "Show results overlay on plot" toggle.  Off by default
   // because the right-hand Results panel already renders the same
@@ -759,10 +898,29 @@ export default function App() {
 
   const handleCentralViewChange = useCallback(
     (view: CentralView) => {
+      // Clicking a detached tab re-docks it as the central view, so
+      // users always have a discoverable way back to the tab layout
+      // (in addition to the panel's own "↙ Dock" toolbar button).
+      if (view === "notebook" && notebookFloating) {
+        setNotebookFloating(false);
+        setCentralView(view);
+        return;
+      }
+      if (view === "macro" && macroFloating) {
+        setMacroFloating(false);
+        setCentralView(view);
+        return;
+      }
       if (view === centralView) return;
       setCentralView(view);
     },
-    [centralView],
+    [
+      centralView,
+      notebookFloating,
+      macroFloating,
+      setNotebookFloating,
+      setMacroFloating,
+    ],
   );
 
   // Keep ``inactiveTree`` in sync with the panel the user *isn't*
@@ -1792,9 +1950,8 @@ export default function App() {
               await notify({
                 kind: "error",
                 title: "Open HDF5",
-                message: `Failed to open HDF5 file:\n${
-                  err2 instanceof Error ? err2.message : String(err2)
-                }`,
+                message: `Failed to open HDF5 file:\n${err2 instanceof Error ? err2.message : String(err2)
+                  }`,
               });
             }
             return;
@@ -2085,12 +2242,12 @@ export default function App() {
                     err.name === "SecurityError");
                 const explanation = isBlocked
                   ? "The browser refused to write into this directory " +
-                    "(system folders such as Desktop, Documents, " +
-                    "Downloads or OneDrive-synced paths are blocked).\n\n" +
-                    "Click OK to download each file individually instead, " +
-                    "or Cancel to abort."
+                  "(system folders such as Desktop, Documents, " +
+                  "Downloads or OneDrive-synced paths are blocked).\n\n" +
+                  "Click OK to download each file individually instead, " +
+                  "or Cancel to abort."
                   : `Write failed:\n${msg}\n\nClick OK to download each ` +
-                    `file individually instead.`;
+                  `file individually instead.`;
                 if (
                   !(await confirm({
                     title: "Write failed",
@@ -2235,6 +2392,10 @@ export default function App() {
         onToggleGraphicalTitles: toggleGraphicalTitles,
         onOpenSeparateView: openSeparateView,
         hasSelection: selectedIds.length > 0 || currentId !== null,
+        notebookFloating,
+        onToggleNotebookFloating: toggleNotebookFloating,
+        macroFloating,
+        onToggleMacroFloating: toggleMacroFloating,
       }),
       ...buildAIAssistantActions({
         visible: aiPanelVisible,
@@ -2247,42 +2408,42 @@ export default function App() {
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
       ...(treeKind === "image"
         ? buildImageGridActions({
-            onDistributeOnGrid: handleDistributeOnGrid,
-            onResetPositions: handleResetImagePositions,
-          })
+          onDistributeOnGrid: handleDistributeOnGrid,
+          onResetPositions: handleResetImagePositions,
+        })
         : []),
       ...(treeKind === "image"
         ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
         : []),
       ...(treeKind === "signal"
         ? buildInteractiveFitActions(
-            interactiveFits,
-            handleLaunchInteractiveFit,
-          )
+          interactiveFits,
+          handleLaunchInteractiveFit,
+        )
         : []),
       ...(treeKind === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, {
-            onToggleEditMode: handleToggleRoiEditMode,
-            onEditNumerically: handleEditRoi,
-            onExtractEach: handleRoiExtractEach,
-            onExtractMerged: handleRoiExtractMerged,
-            onRemoveAt: handleRoiRemoveAt,
-            onRemoveAll: handleRoiRemoveAll,
-          })
+          onToggleEditMode: handleToggleRoiEditMode,
+          onEditNumerically: handleEditRoi,
+          onExtractEach: handleRoiExtractEach,
+          onExtractMerged: handleRoiExtractMerged,
+          onRemoveAt: handleRoiRemoveAt,
+          onRemoveAll: handleRoiRemoveAll,
+        })
         : buildImageRoiActions(imageRoi, imageRoiEditMode, {
-            onToggleEditMode: handleToggleImageRoiEditMode,
-            onAddRectangle: handleImageAddRectangle,
-            onAddCircle: handleImageAddCircle,
-            onCreateGrid: handleCreateRoiGrid,
-            onEditNumerically: handleImageEditRoi,
-            onExtractEach: handleImageRoiExtractEach,
-            onExtractMerged: handleImageRoiExtractMerged,
-            onRemoveAt: handleImageRoiRemoveAt,
-            onRemoveAll: handleImageRoiRemoveAll,
-          })),
+          onToggleEditMode: handleToggleImageRoiEditMode,
+          onAddRectangle: handleImageAddRectangle,
+          onAddCircle: handleImageAddCircle,
+          onCreateGrid: handleCreateRoiGrid,
+          onEditNumerically: handleImageEditRoi,
+          onExtractEach: handleImageRoiExtractEach,
+          onExtractMerged: handleImageRoiExtractMerged,
+          onRemoveAt: handleImageRoiRemoveAt,
+          onRemoveAll: handleImageRoiRemoveAll,
+        })),
       ...buildPluginActions(pluginActions, treeKind, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),
@@ -2350,12 +2511,109 @@ export default function App() {
       handleMoveSelectionDown,
       handleMoveSelectionUp,
       handleRenameCurrent,
+      notebookFloating,
+      toggleNotebookFloating,
+      macroFloating,
+      toggleMacroFloating,
     ],
   );
 
   return (
     <ObjectNavigationProvider oidIndex={oidIndex} navigateToOid={navigateToOid}>
       <div className="app" data-runtime-status={status}>
+        {/*
+          Notebook and Macro panels are mounted exactly once (when the
+          runtime becomes available) and rendered into a stable
+          ``div`` via ``createPortal``.  The host divs that actually
+          *display* them — central tab slot or floating overlay slot —
+          appendChild the stable element imperatively in the
+          placement effect.  That keeps the panels' React state and
+          (critically) their Pyodide worker alive across every
+          tab/floating toggle, where a naive conditional render would
+          remount and lose everything.
+        */}
+        {runtime &&
+          notebookPortalEl &&
+          createPortal(
+            <NotebookPanel
+              key={`nb-${workspaceVersion}`}
+              ref={notebookPanelRef}
+              runtime={runtime}
+              theme={theme}
+              onCountChanged={setNotebookCount}
+              placement={notebookFloating ? "floating" : "tab"}
+              onTogglePlacement={toggleNotebookFloating}
+              onSetCurrentPanel={(panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleTreeKindChange(panel);
+                  setCentralView("plot");
+                }
+              }}
+              getSelection={() => selectedIds}
+              getCurrentPanel={() => treeKind}
+              selectObjects={(ids, panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleTreeKindChange(panel);
+                  setCentralView("plot");
+                }
+                setSelectedIds(ids);
+                setCurrentId(ids[0] ?? null);
+              }}
+              onModelChanged={(panel) => {
+                if (!runtime) return;
+                if (panel && panel !== treeKind) return;
+                void refresh();
+              }}
+              onConvertToMacro={(title, code) => {
+                // Make sure the macro panel is visible (re-dock it if
+                // it was floating, then focus the central tab).
+                if (macroFloating) setMacroFloating(false);
+                setCentralView("macro");
+                void macroPanelRef.current?.importMacro(title, code);
+              }}
+            />,
+            notebookPortalEl,
+          )}
+        {runtime &&
+          macroPortalEl &&
+          createPortal(
+            <MacroPanel
+              key={`macro-${workspaceVersion}`}
+              ref={macroPanelRef}
+              runtime={runtime}
+              onCountChanged={setMacroCount}
+              placement={macroFloating ? "floating" : "tab"}
+              onTogglePlacement={toggleMacroFloating}
+              onSetCurrentPanel={(panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleTreeKindChange(panel);
+                  setCentralView("plot");
+                }
+              }}
+              getSelection={() => selectedIds}
+              getCurrentPanel={() => treeKind}
+              selectObjects={(ids, panel) => {
+                if (panel === "signal" || panel === "image") {
+                  handleTreeKindChange(panel);
+                  setCentralView("plot");
+                }
+                setSelectedIds(ids);
+                setCurrentId(ids[0] ?? null);
+              }}
+              onModelChanged={(panel) => {
+                if (!runtime) return;
+                if (panel && panel !== treeKind) return;
+                void refresh();
+              }}
+              onConvertToNotebook={(title, code) => {
+                if (notebookFloating) setNotebookFloating(false);
+                setCentralView("notebook");
+                notebookPanelRef.current?.importMacroAsNotebook(title, code);
+              }}
+              theme={theme}
+            />,
+            macroPortalEl,
+          )}
         <MenuBar
           status={status === "ready" ? "Ready" : message}
           statusKind={status}
@@ -2410,113 +2668,48 @@ export default function App() {
               active={centralView}
               onChange={handleCentralViewChange}
               disabled={status !== "ready" || busy}
+              detached={{
+                notebook: notebookFloating,
+                macro: macroFloating,
+              }}
             />
             {/*
-            NotebookPanel is mounted as soon as the runtime is ready and
-            kept mounted while switching panels — its in-memory cell
-            state (sources, outputs, execution counters) and the kernel
-            worker would otherwise be discarded on every tab switch.
-            Visibility is controlled with ``hidden`` so the layout
-            collapses cleanly when another panel is active.
-          */}
+              Stable host divs for the Notebook / Macro panels.  They
+              are *targets* for the panels' portal element (managed
+              imperatively in the placement effect above), not direct
+              parents in the React tree — that's how we preserve cell
+              state, kernel workers and editor selection across
+              tab/floating placement toggles.  The hosts are always
+              mounted; visibility is controlled with ``display`` so
+              the layout collapses cleanly.
+            */}
             {runtime && (
               <div
+                ref={setNotebookCentralHost}
                 className="nb-panel-host"
-                hidden={centralView !== "notebook"}
                 style={{
-                  display: centralView === "notebook" ? "flex" : "none",
+                  display:
+                    !notebookFloating && centralView === "notebook"
+                      ? "flex"
+                      : "none",
                   flex: "1 1 auto",
                   minWidth: 0,
                   minHeight: 0,
                 }}
-              >
-                <NotebookPanel
-                  key={`nb-${workspaceVersion}`}
-                  ref={notebookPanelRef}
-                  runtime={runtime}
-                  theme={theme}
-                  onCountChanged={setNotebookCount}
-                  onSetCurrentPanel={(panel) => {
-                    if (panel === "signal" || panel === "image") {
-                      handleTreeKindChange(panel);
-                      setCentralView("plot");
-                    }
-                  }}
-                  getSelection={() => selectedIds}
-                  getCurrentPanel={() => treeKind}
-                  selectObjects={(ids, panel) => {
-                    if (panel === "signal" || panel === "image") {
-                      handleTreeKindChange(panel);
-                      setCentralView("plot");
-                    }
-                    setSelectedIds(ids);
-                    setCurrentId(ids[0] ?? null);
-                  }}
-                  onModelChanged={(panel) => {
-                    // Refresh the left-panel tree if the kind currently
-                    // shown was mutated.  ``panel`` is
-                    // ``"signal"`` / ``"image"`` / ``null`` (null = any).
-                    if (!runtime) return;
-                    if (panel && panel !== treeKind) return;
-                    void refresh();
-                  }}
-                  onConvertToMacro={(title, code) => {
-                    setCentralView("macro");
-                    void macroPanelRef.current?.importMacro(title, code);
-                  }}
-                />
-              </div>
+              />
             )}
             {runtime && (
               <div
+                ref={setMacroCentralHost}
                 className="macro-panel-host"
-                hidden={centralView !== "macro"}
                 style={{
-                  display: centralView === "macro" ? "flex" : "none",
+                  display:
+                    !macroFloating && centralView === "macro" ? "flex" : "none",
                   flex: "1 1 auto",
                   minWidth: 0,
                   minHeight: 0,
                 }}
-              >
-                <MacroPanel
-                  key={`macro-${workspaceVersion}`}
-                  ref={macroPanelRef}
-                  runtime={runtime}
-                  onCountChanged={setMacroCount}
-                  onSetCurrentPanel={(panel) => {
-                    if (panel === "signal" || panel === "image") {
-                      handleTreeKindChange(panel);
-                      setCentralView("plot");
-                    }
-                  }}
-                  getSelection={() => selectedIds}
-                  getCurrentPanel={() => treeKind}
-                  selectObjects={(ids, panel) => {
-                    if (panel === "signal" || panel === "image") {
-                      handleTreeKindChange(panel);
-                      setCentralView("plot");
-                    }
-                    setSelectedIds(ids);
-                    setCurrentId(ids[0] ?? null);
-                  }}
-                  onModelChanged={(panel) => {
-                    // The left-panel tree is always visible — refresh
-                    // it so newly created / deleted objects show up
-                    // immediately.
-                    if (!runtime) return;
-                    if (panel && panel !== treeKind) return;
-                    void refresh();
-                  }}
-                  onConvertToNotebook={(title, code) => {
-                    setCentralView("notebook");
-                    notebookPanelRef.current?.importMacroAsNotebook(
-                      title,
-                      code,
-                    );
-                  }}
-                  theme={theme}
-                />
-              </div>
+              />
             )}
             {centralView === "plot" && status === "error" && (
               <div
@@ -2659,15 +2852,34 @@ export default function App() {
               AI
             </button>
           )}
-          {runtime && aiPanelVisible && !aiPanelCollapsed && (
-            <div className="ai-floating-host">
-              <AIAssistantPanel
-                runtime={runtime}
-                onMinimize={() => setAIPanelCollapsed(true)}
-                onClose={() => setAIPanelVisible(false)}
-              />
-            </div>
-          )}
+          {runtime &&
+            ((aiPanelVisible && !aiPanelCollapsed) ||
+              notebookFloating ||
+              macroFloating) && (
+              <FloatingDockStack>
+                {aiPanelVisible && !aiPanelCollapsed && (
+                  <div className="floating-dock-host">
+                    <AIAssistantPanel
+                      runtime={runtime}
+                      onMinimize={() => setAIPanelCollapsed(true)}
+                      onClose={() => setAIPanelVisible(false)}
+                    />
+                  </div>
+                )}
+                {notebookFloating && (
+                  <div
+                    ref={setNotebookFloatingHost}
+                    className="floating-dock-host floating-dock-host--notebook"
+                  />
+                )}
+                {macroFloating && (
+                  <div
+                    ref={setMacroFloatingHost}
+                    className="floating-dock-host floating-dock-host--macro"
+                  />
+                )}
+              </FloatingDockStack>
+            )}
           {userGuideOpen && (
             <div className="userguide-floating-host">
               <UserGuidePanel onClose={() => setUserGuideOpen(false)} />

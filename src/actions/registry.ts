@@ -252,6 +252,16 @@ export interface ViewActionCallbacks {
   /** True when the active panel has at least one object selected
    *  (drives the enabled state of "View in a new window…"). */
   hasSelection: boolean;
+  /** True when the Notebook panel is currently detached as a
+   *  floating overlay. */
+  notebookFloating: boolean;
+  /** Toggle the Notebook panel placement (tab ⇄ floating). */
+  onToggleNotebookFloating: () => void;
+  /** True when the Macro panel is currently detached as a floating
+   *  overlay. */
+  macroFloating: boolean;
+  /** Toggle the Macro panel placement (tab ⇄ floating). */
+  onToggleMacroFloating: () => void;
 }
 
 /** Wire View menu actions (UI preferences only). */
@@ -263,6 +273,8 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   const checkPrefix = (on: boolean) => (on ? "\u2713 " : "    ");
   const overlayPrefix = checkPrefix(cb.showResultsOverlay);
   const titlesPrefix = checkPrefix(cb.showGraphicalTitles);
+  const notebookPrefix = checkPrefix(cb.notebookFloating);
+  const macroPrefix = checkPrefix(cb.macroFloating);
   return [
     {
       id: "view.open_separate_view",
@@ -289,6 +301,21 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       menuPath: `View/${titlesPrefix}Show graphical object titles`,
       enabled: always,
       run: cb.onToggleGraphicalTitles,
+    },
+    {
+      id: "view.notebook_floating",
+      label: `${notebookPrefix}Detach Notebooks panel`,
+      menuPath: `View/${notebookPrefix}Detach Notebooks panel`,
+      beginGroup: true,
+      enabled: always,
+      run: cb.onToggleNotebookFloating,
+    },
+    {
+      id: "view.macro_floating",
+      label: `${macroPrefix}Detach Macros panel`,
+      menuPath: `View/${macroPrefix}Detach Macros panel`,
+      enabled: always,
+      run: cb.onToggleMacroFloating,
     },
   ];
 }

@@ -79,6 +79,13 @@ interface NotebookPanelProps {
    * predicate) can react. Fires once on mount with the initial count.
    */
   onCountChanged?: (count: number) => void;
+  /** Current placement of this panel (``"tab"`` ⇒ central tab,
+   *  ``"floating"`` ⇒ right-side overlay).  Optional; when omitted
+   *  the placement toggle button is hidden. */
+  placement?: "tab" | "floating";
+  /** Toggle the placement.  When omitted, no toggle button is
+   *  rendered. */
+  onTogglePlacement?: () => void;
 }
 
 /**
@@ -137,6 +144,8 @@ export const NotebookPanel = forwardRef<
     onModelChanged,
     onConvertToMacro,
     onCountChanged,
+    placement,
+    onTogglePlacement,
   },
   ref,
 ) {
@@ -267,8 +276,8 @@ export const NotebookPanel = forwardRef<
       const ordered =
         openIds.length > 0
           ? openIds
-              .map((id) => restoredNbs.find((n) => n.id === id))
-              .filter((n): n is NotebookModel => Boolean(n))
+            .map((id) => restoredNbs.find((n) => n.id === id))
+            .filter((n): n is NotebookModel => Boolean(n))
           : restoredNbs;
 
       if (ordered.length === 0) {
@@ -472,12 +481,12 @@ export const NotebookPanel = forwardRef<
         cells: nb.cells.map((c) =>
           c.id === id
             ? {
-                ...c,
-                type: c.type === "code" ? "markdown" : "code",
-                outputs: [],
-                execCount: null,
-                status: "idle" as const,
-              }
+              ...c,
+              type: c.type === "code" ? "markdown" : "code",
+              outputs: [],
+              execCount: null,
+              status: "idle" as const,
+            }
             : c,
         ),
       }));
@@ -1139,9 +1148,8 @@ export const NotebookPanel = forwardRef<
                 return (
                   <div
                     key={m.id}
-                    className={`nb-open-menu-item${
-                      alreadyOpen ? " nb-open-menu-item-open" : ""
-                    }`}
+                    className={`nb-open-menu-item${alreadyOpen ? " nb-open-menu-item-open" : ""
+                      }`}
                   >
                     <button
                       type="button"
@@ -1194,6 +1202,23 @@ export const NotebookPanel = forwardRef<
         )}
         <span className="nb-toolbar-spacer" />
         <span className="nb-toolbar-status">{kernelLabel}</span>
+        {onTogglePlacement && (
+          <button
+            type="button"
+            className="panel-placement-toggle"
+            onClick={onTogglePlacement}
+            title={
+              placement === "floating"
+                ? "Dock this panel as a central tab"
+                : "Detach this panel as a floating overlay"
+            }
+            aria-label={
+              placement === "floating" ? "Dock Notebooks" : "Detach Notebooks"
+            }
+          >
+            {placement === "floating" ? "↙ Dock" : "↗ Detach"}
+          </button>
+        )}
       </div>
       <div className="nb-cells">
         {activeNotebook ? (

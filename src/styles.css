@@ -334,16 +334,28 @@ input {
   position: relative;
 }
 
-/* AI Assistant — floating overlay variant. The host is anchored to the
-   bottom-right of the workspace so it never compresses the plot or the
-   results panel. */
-.ai-floating-host {
+/* Floating overlay container.  Hosts every detachable panel (AI
+   Assistant, detached Notebook / Macro).  Anchored to the right edge
+   of the workspace; ``row-reverse`` makes the first child sit
+   rightmost so additional children naturally stack leftward.  The
+   stack itself doesn't intercept pointer events — only the individual
+   :class:`.floating-dock-host` slots do — so clicks in the gap pass
+   through to the plot beneath. */
+.floating-dock-stack {
   position: absolute;
   top: 8px;
   right: 8px;
   bottom: 8px;
-  width: 400px;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 20;
   max-width: calc(100% - 16px);
+}
+
+.floating-dock-host {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--panel, #1e1e1e);
@@ -351,7 +363,19 @@ input {
   border-radius: 6px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   overflow: hidden;
-  z-index: 20;
+  pointer-events: auto;
+  min-width: 0;
+  max-width: 100%;
+  width: 400px;
+}
+
+/* Wider default for content-heavy detached panels. */
+.floating-dock-host.floating-dock-host--notebook {
+  width: 560px;
+}
+
+.floating-dock-host.floating-dock-host--macro {
+  width: 480px;
 }
 
 .ai-floating-pill {
@@ -616,9 +640,9 @@ input {
   background: transparent;
   border: 0;
   border-bottom: 2px solid transparent;
-  padding: 4px 8px;
+  padding: 5px 10px;
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
   cursor: pointer;
@@ -852,15 +876,15 @@ input {
 .central-view-switcher-tab {
   flex: 0 0 auto;
   min-width: 160px;
-  padding: 4px 8px;
+  padding: 5px 10px;
   background: transparent;
   border: none;
   border-right: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -886,6 +910,23 @@ input {
 .central-view-switcher-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Small "detached" arrow glyph appended to a tab label when its panel
+   is currently rendered as a floating overlay rather than occupying
+   the central area. */
+.central-view-switcher-tab-detached {
+  margin-left: 4px;
+  opacity: 0.75;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Placement toggle button used by the Notebook and Macro toolbars to
+   detach/dock the panel.  Visually identical to other toolbar buttons
+   in the same panel; we only need a stable hook for tests. */
+.panel-placement-toggle {
+  margin-left: auto;
 }
 
 .panel-body {
@@ -918,15 +959,15 @@ input {
 
 .tree-kind-switcher-tab {
   flex: 1;
-  padding: 4px 8px;
+  padding: 5px 10px;
   background: transparent;
   border: none;
   border-right: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -936,8 +977,8 @@ input {
 /* Shared icon styling for the three top selector rows
    (tree-kind, central-view, side-panel tabs). */
 .switcher-tab-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   pointer-events: none;
   display: block;
@@ -3434,6 +3475,7 @@ input {
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 
 .nb-toolbar button {
