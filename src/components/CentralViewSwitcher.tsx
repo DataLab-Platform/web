@@ -5,14 +5,14 @@ import { getRootIconUrl } from "../assets/rootIcons";
 export type CentralView = "plot" | "macro" | "notebook";
 
 export interface CentralViewSwitcherProps {
-    active: CentralView;
-    onChange: (view: CentralView) => void;
-    disabled?: boolean;
-    /** Map of views currently rendered as floating overlays.  Detached
-     *  tabs render a small "↗" glyph and call ``onChange`` even when
-     *  clicked while active — the host uses this to focus / un-collapse
-     *  the overlay. */
-    detached?: Partial<Record<CentralView, boolean>>;
+  active: CentralView;
+  onChange: (view: CentralView) => void;
+  disabled?: boolean;
+  /** Map of views currently rendered as floating overlays.  Detached
+   *  tabs render a small "↗" glyph and call ``onChange`` even when
+   *  clicked while active — the host uses this to focus / un-collapse
+   *  the overlay. */
+  detached?: Partial<Record<CentralView, boolean>>;
 }
 
 const PLOT_ICON = getRootIconUrl("visualization.svg");
@@ -20,15 +20,15 @@ const MACRO_ICON = getRootIconUrl("script.svg");
 const NOTEBOOK_ICON = getRootIconUrl("notebook.svg");
 
 interface TabConfig {
-    view: CentralView;
-    label: string;
-    iconUrl: string | null;
+  view: CentralView;
+  label: string;
+  iconUrl: string | undefined;
 }
 
 const TABS: TabConfig[] = [
-    { view: "plot", label: "Plot", iconUrl: PLOT_ICON },
-    { view: "macro", label: "Macros", iconUrl: MACRO_ICON },
-    { view: "notebook", label: "Notebooks", iconUrl: NOTEBOOK_ICON },
+  { view: "plot", label: "Plot", iconUrl: PLOT_ICON },
+  { view: "macro", label: "Macros", iconUrl: MACRO_ICON },
+  { view: "notebook", label: "Notebooks", iconUrl: NOTEBOOK_ICON },
 ];
 
 /**
@@ -43,46 +43,46 @@ const TABS: TabConfig[] = [
  * host so it can focus the corresponding overlay.
  */
 export function CentralViewSwitcher({
-    active,
-    onChange,
-    disabled,
-    detached,
+  active,
+  onChange,
+  disabled,
+  detached,
 }: CentralViewSwitcherProps): ReactElement {
-    return (
-        <div
-            className="central-view-switcher"
-            role="tablist"
-            aria-label="Central view"
-        >
-            {TABS.map(({ view, label, iconUrl }) => {
-                const isDetached = !!detached?.[view];
-                const isActive = active === view;
-                return (
-                    <button
-                        key={view}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        aria-label={isDetached ? `${label} (detached)` : label}
-                        disabled={disabled}
-                        className={`central-view-switcher-tab${isActive ? " active" : ""}`}
-                        onClick={() => onChange(view)}
-                    >
-                        {iconUrl && (
-                            <img src={iconUrl} alt="" className="switcher-tab-icon" />
-                        )}
-                        {label}
-                        {isDetached && (
-                            <span
-                                className="central-view-switcher-tab-detached"
-                                aria-hidden="true"
-                            >
-                                ↗
-                            </span>
-                        )}
-                    </button>
-                );
-            })}
-        </div>
-    );
+  return (
+    <div
+      className="central-view-switcher"
+      role="tablist"
+      aria-label="Central view"
+    >
+      {TABS.map(({ view, label, iconUrl }) => {
+        const isDetached = !!detached?.[view];
+        const isActive = active === view;
+        return (
+          <button
+            key={view}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-label={isDetached ? `${label} (detached)` : label}
+            disabled={disabled}
+            className={`central-view-switcher-tab${isActive ? " active" : ""}`}
+            onClick={() => onChange(view)}
+          >
+            {iconUrl && (
+              <img src={iconUrl} alt="" className="switcher-tab-icon" />
+            )}
+            {label}
+            {isDetached && (
+              <span
+                className="central-view-switcher-tab-detached"
+                aria-hidden="true"
+              >
+                ↗
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
