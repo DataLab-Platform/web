@@ -11,7 +11,7 @@
 import type { ReactNode } from "react";
 
 export interface FloatingDockStackProps {
-    children?: ReactNode;
+  children?: ReactNode;
 }
 
 /**
@@ -23,17 +23,17 @@ export interface FloatingDockStackProps {
  * beneath them.
  */
 export function FloatingDockStack({
-    children,
+  children,
 }: FloatingDockStackProps): JSX.Element {
-    return <div className="floating-dock-stack">{children}</div>;
+  return <div className="floating-dock-stack">{children}</div>;
 }
 
 export interface FloatingDockSlotProps {
-    /** Logical width hint applied as the slot's CSS width. */
-    width?: number;
-    /** Extra class appended to the slot wrapper (visual variants). */
-    className?: string;
-    children?: ReactNode;
+  /** Logical width hint applied as the slot's CSS width. */
+  width?: number;
+  /** Extra class appended to the slot wrapper (visual variants). */
+  className?: string;
+  children?: ReactNode;
 }
 
 /**
@@ -43,14 +43,14 @@ export interface FloatingDockSlotProps {
  * overlay.
  */
 export function FloatingDockSlot({
-    width,
-    className,
-    children,
+  width,
+  className,
+  children,
 }: FloatingDockSlotProps): JSX.Element {
-    const cls = ["floating-dock-host", className].filter(Boolean).join(" ");
-    return (
-        <div className={cls} style={width ? { width } : undefined}>
-            {children}
-        </div>
-    );
+  const cls = ["floating-dock-host", className].filter(Boolean).join(" ");
+  return (
+    <div className={cls} style={width ? { width } : undefined}>
+      {children}
+    </div>
+  );
 }

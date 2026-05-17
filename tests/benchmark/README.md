@@ -3,10 +3,10 @@
 Two image-processing benchmarks comparing the **same** processing chain across
 runtimes:
 
-* **Bench #1 — Pure processing (no UI):** Sigima as CPython vs Sigima inside
+- **Bench #1 — Pure processing (no UI):** Sigima as CPython vs Sigima inside
   Pyodide running under Node.js vs Sigima inside Pyodide running in a headless
   browser (raw Pyodide page, no React UI).
-* **Bench #2 — Processing + visualization:** the same chain executed inside the
+- **Bench #2 — Processing + visualization:** the same chain executed inside the
   full DataLab Qt GUI (in-process, `datalab_test_app_context`) vs the full
   DataLab-Web stack driven by Playwright.
 
@@ -66,25 +66,25 @@ npm run bench:report
 
 ## Methodology
 
-* **1 warm-up run discarded + 1 measured run.** A single post-warm-up
+- **1 warm-up run discarded + 1 measured run.** A single post-warm-up
   iteration is closer to the steady-state cost a user actually experiences;
   longer multi-iteration loops accumulate Pyodide-GC / DOM / React state
   that is **not representative of interactive use**.
-* **Cold-start costs are reported separately** (Pyodide load, micropip install,
+- **Cold-start costs are reported separately** (Pyodide load, micropip install,
   Qt boot, Vite boot) and never folded into processing time.
-* **Determinism:** the chain uses a fixed RNG seed; every backend computes the
+- **Determinism:** the chain uses a fixed RNG seed; every backend computes the
   same checksum (sum of detected blob counts) so cross-runtime numerical drift
   is detected immediately.
-* **Sigima version:** every backend uses the Sigima version pinned in
+- **Sigima version:** every backend uses the Sigima version pinned in
   [`shared/chain.json`](shared/chain.json) (`sigima_version`). For local
   development with the in-tree checkout, leave it `null` — CPython will pick up
   the local `.env`, the browser/Node Pyodide backends will resolve via micropip
   to the latest release.
-* **Calibration:** `n_images` in `chain.json` is set to 5 so the CPython
+- **Calibration:** `n_images` in `chain.json` is set to 5 so the CPython
   baseline total runs in ~10 s on a reference machine; tune it for your
   hardware (note that Bench #2 Web scales roughly linearly and dominates
   the wall-clock time of the full suite).
-* **Headless Chromium throttling:** the `benchmark` Playwright project sets
+- **Headless Chromium throttling:** the `benchmark` Playwright project sets
   `--disable-background-timer-throttling`,
   `--disable-backgrounding-occluded-windows`,
   `--disable-renderer-backgrounding` and
@@ -94,10 +94,10 @@ npm run bench:report
 
 ## Notes & limitations
 
-* Bench #2 visualization timing on the Qt side measures the time between
+- Bench #2 visualization timing on the Qt side measures the time between
   `panel.add_object()` and the next `QCoreApplication.processEvents()` cycle
   that completes the plot's `replot()` — there is no direct equivalent of
   Plotly's `afterplot` event in PlotPy.
-* The Pyodide-in-Node backend (`run_pyodide_node.mjs`) requires the `pyodide`
+- The Pyodide-in-Node backend (`run_pyodide_node.mjs`) requires the `pyodide`
   npm package (added as devDep, version-pinned to match
   `src/runtime/runtime.ts`'s `PYODIDE_VERSION`).

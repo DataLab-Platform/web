@@ -20,19 +20,19 @@ import {
   Component,
   inject,
   signal,
-} from '@angular/core';
+} from "@angular/core";
 
-import { DataLabWebFrameComponent } from './datalab-web-frame.component';
-import { DataLabWebService } from './datalab-web.service';
+import { DataLabWebFrameComponent } from "./datalab-web-frame.component";
+import { DataLabWebService } from "./datalab-web.service";
 
 interface LogLine {
   ts: string;
-  kind: '→' | '←' | '✗' | '!';
+  kind: "→" | "←" | "✗" | "!";
   text: string;
 }
 
 @Component({
-  selector: 'datalab-web-demo',
+  selector: "datalab-web-demo",
   standalone: true,
   imports: [DataLabWebFrameComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -176,18 +176,18 @@ export class DataLabWebDemoComponent {
   protected readonly logText = () =>
     this.lines()
       .map((l) => `[${l.ts}] ${l.kind} ${l.text}`)
-      .join('\n');
+      .join("\n");
 
   // -----------------------------------------------------------------
   // Frame lifecycle
   // -----------------------------------------------------------------
 
   onFrameReady(version: string): void {
-    this.append('←', `frame ready, v${version}`);
+    this.append("←", `frame ready, v${version}`);
   }
 
   onFrameFailed(err: Error): void {
-    this.append('✗', `frame failed: ${err.message}`);
+    this.append("✗", `frame failed: ${err.message}`);
   }
 
   // -----------------------------------------------------------------
@@ -195,11 +195,11 @@ export class DataLabWebDemoComponent {
   // -----------------------------------------------------------------
 
   onVersion(): void {
-    void this.wrap('get_version', () => this.dlw.getVersion());
+    void this.wrap("get_version", () => this.dlw.getVersion());
   }
 
   onList(): void {
-    void this.wrap('list_signals', () => this.dlw.listSignals());
+    void this.wrap("list_signals", () => this.dlw.listSignals());
   }
 
   async onAddSignal(): Promise<void> {
@@ -212,8 +212,8 @@ export class DataLabWebDemoComponent {
       xs[i] = i / N;
       ys[i] = Math.sin(2 * Math.PI * 5 * xs[i]);
     }
-    await this.wrap('add_signal', () =>
-      this.dlw.addSignal('Sine 5 Hz', xs, ys),
+    await this.wrap("add_signal", () =>
+      this.dlw.addSignal("Sine 5 Hz", xs, ys),
     );
   }
 
@@ -225,8 +225,8 @@ export class DataLabWebDemoComponent {
         data[i * N + j] = i + j;
       }
     }
-    await this.wrap('add_image', () =>
-      this.dlw.addImage('Gradient', { width: N, height: N, data }),
+    await this.wrap("add_image", () =>
+      this.dlw.addImage("Gradient", { width: N, height: N, data }),
     );
   }
 
@@ -235,48 +235,51 @@ export class DataLabWebDemoComponent {
   // current selection on the DataLab-Web side; the other handlers
   // ask the bridge for the focused id explicitly.
   onFft(): void {
-    void this.wrap('calc(fft)', () => this.dlw.calc('fft'));
+    void this.wrap("calc(fft)", () => this.dlw.calc("fft"));
   }
 
   async onGet(): Promise<void> {
     const sel = await this.dlw.getSelection();
-    if (sel.length === 0) return this.note('no current selection');
-    void this.wrap('get_signal_xy', () => this.dlw.getSignalXY(sel[0]));
+    if (sel.length === 0) return this.note("no current selection");
+    void this.wrap("get_signal_xy", () => this.dlw.getSignalXY(sel[0]));
   }
 
   async onRemove(): Promise<void> {
     const sel = await this.dlw.getSelection();
-    if (sel.length === 0) return this.note('no current selection');
-    await this.wrap('delete_object', () => this.dlw.deleteObject(sel[0]));
+    if (sel.length === 0) return this.note("no current selection");
+    await this.wrap("delete_object", () => this.dlw.deleteObject(sel[0]));
   }
 
   onReset(): void {
-    void this.wrap('reset_all', () => this.dlw.resetAll());
+    void this.wrap("reset_all", () => this.dlw.resetAll());
   }
 
   // -----------------------------------------------------------------
   // Logging helpers
   // -----------------------------------------------------------------
 
-  private append(kind: LogLine['kind'], text: string): void {
+  private append(kind: LogLine["kind"], text: string): void {
     const ts = new Date().toISOString().slice(11, 23);
     this.lines.update((cur) => [...cur, { ts, kind, text }].slice(-200));
   }
 
   private note(text: string): void {
-    this.append('!', text);
+    this.append("!", text);
   }
 
-  private async wrap<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
-    this.append('→', label);
+  private async wrap<T>(
+    label: string,
+    fn: () => Promise<T>,
+  ): Promise<T | null> {
+    this.append("→", label);
     try {
       const result = await fn();
       const preview = JSON.stringify(result)?.slice(0, 200) ?? String(result);
-      this.append('←', `${label} → ${preview}`);
+      this.append("←", `${label} → ${preview}`);
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.append('✗', `${label} → ${message}`);
+      this.append("✗", `${label} → ${message}`);
       return null;
     }
   }

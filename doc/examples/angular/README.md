@@ -63,7 +63,7 @@ fine, e.g. `src/app/datalab-web/`).
 The service imports the SDK from the npm package name:
 
 ```ts
-import { DataLabWebClient } from '@datalab-platform/web-sdk';
+import { DataLabWebClient } from "@datalab-platform/web-sdk";
 ```
 
 If you previously vendored the SDK source file, replace the relative
@@ -79,12 +79,12 @@ config) to point at the deployed DataLab-Web. Typical values:
 ```ts
 // Same origin (Angular dev server proxies /datalab-web to the bundle):
 const DATALAB_WEB_URL =
-  '/datalab-web/index.html?allowedOrigins=' +
+  "/datalab-web/index.html?allowedOrigins=" +
   encodeURIComponent(window.location.origin);
 
 // Cross-origin deployment:
 const DATALAB_WEB_URL =
-  'https://datalab.example.com/?allowedOrigins=' +
+  "https://datalab.example.com/?allowedOrigins=" +
   encodeURIComponent(window.location.origin);
 ```
 
@@ -101,11 +101,11 @@ DataLab-Web in third-party shells.
 
 ```ts
 // app.component.ts
-import { Component } from '@angular/core';
-import { DataLabWebDemoComponent } from './datalab-web/datalab-web-demo.component';
+import { Component } from "@angular/core";
+import { DataLabWebDemoComponent } from "./datalab-web/datalab-web-demo.component";
 
 @Component({
-  selector: 'app-root',
+  selector: "app-root",
   standalone: true,
   imports: [DataLabWebDemoComponent],
   template: `<datalab-web-demo />`,

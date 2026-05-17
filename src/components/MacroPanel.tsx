@@ -821,8 +821,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                   return (
                     <div
                       key={m.id}
-                      className={`macro-recent-menu-item${alreadyOpen ? " macro-recent-menu-item-open" : ""
-                        }`}
+                      className={`macro-recent-menu-item${
+                        alreadyOpen ? " macro-recent-menu-item-open" : ""
+                      }`}
                     >
                       <button
                         type="button"

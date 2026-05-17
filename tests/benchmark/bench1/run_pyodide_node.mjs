@@ -56,7 +56,8 @@ async function main() {
     console.error(
       "[bench1/pyodide_node] The `pyodide` npm package is not installed.\n" +
         "Install it first:  npm install --save-dev pyodide@0.26.4\n" +
-        "Original error:    " + err.message,
+        "Original error:    " +
+        err.message,
     );
     process.exit(2);
   }
@@ -128,9 +129,7 @@ if "/home/pyodide" not in sys.path:
 import chain_runner  # warm import (parse + first-touch caches)
 `);
   const coldStartMs = performance.now() - tColdStart;
-  const sigmaVer = await py.runPythonAsync(
-    "import sigima; sigima.__version__",
-  );
+  const sigmaVer = await py.runPythonAsync("import sigima; sigima.__version__");
   console.log(
     `[bench1/pyodide_node] Pyodide ready (sigima=${sigmaVer}, cold-start=${coldStartMs.toFixed(0)} ms).`,
   );

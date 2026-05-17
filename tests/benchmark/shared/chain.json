@@ -9,11 +9,23 @@
   "measured_runs": 1,
   "sigima_version": null,
   "steps": [
-    { "name": "gaussian_filter", "kwargs": { "sigma": 2.0 }, "renders_image": true },
+    {
+      "name": "gaussian_filter",
+      "kwargs": { "sigma": 2.0 },
+      "renders_image": true
+    },
     { "name": "moving_median", "kwargs": { "n": 5 }, "renders_image": true },
     { "name": "magnitude_spectrum", "kwargs": {}, "renders_image": true },
     { "name": "opening", "kwargs": { "radius": 5 }, "renders_image": true },
-    { "name": "threshold", "kwargs": { "method": "otsu" }, "renders_image": true },
-    { "name": "blob_log", "kwargs": { "min_sigma": 10.0, "max_sigma": 15.0, "threshold_rel": 0.5 }, "renders_image": false }
+    {
+      "name": "threshold",
+      "kwargs": { "method": "otsu" },
+      "renders_image": true
+    },
+    {
+      "name": "blob_log",
+      "kwargs": { "min_sigma": 10.0, "max_sigma": 15.0, "threshold_rel": 0.5 },
+      "renders_image": false
+    }
   ]
 }

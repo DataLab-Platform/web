@@ -92,14 +92,14 @@ flowchart LR
 
 ### Inter-layer contracts
 
-| Boundary    | Contract                                                                            |
-|-------------|-------------------------------------------------------------------------------------|
-| L1 → L2     | `useAction(id)` / event handlers; no direct runtime calls from components.          |
-| L2 → L3     | Typed methods on `DataLabRuntime` (`useRuntime()`).                                 |
-| L3 → L4     | `pyodide.runPython()` / `pyodide.runPythonAsync()` calling `bootstrap.py` helpers.  |
-| L3 ↔ Worker | `postMessage` (`bridge_call` / `bridge_reply` / `stdout` / `stderr` / …).           |
-| L3 ↔ Host   | `postMessage` JSON-RPC (`request` / `response` / `event`) via `remoteBridge`.       |
-| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). Catalog is auto-discovered.    |
+| Boundary    | Contract                                                                           |
+| ----------- | ---------------------------------------------------------------------------------- |
+| L1 → L2     | `useAction(id)` / event handlers; no direct runtime calls from components.         |
+| L2 → L3     | Typed methods on `DataLabRuntime` (`useRuntime()`).                                |
+| L3 → L4     | `pyodide.runPython()` / `pyodide.runPythonAsync()` calling `bootstrap.py` helpers. |
+| L3 ↔ Worker | `postMessage` (`bridge_call` / `bridge_reply` / `stdout` / `stderr` / …).          |
+| L3 ↔ Host   | `postMessage` JSON-RPC (`request` / `response` / `event`) via `remoteBridge`.      |
+| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). Catalog is auto-discovered.   |
 
 ### Hard invariants
 
@@ -243,10 +243,10 @@ flowchart LR
 
 Wire shape (same for both worker kinds):
 
-| Direction       | Message types                                                          |
-|-----------------|------------------------------------------------------------------------|
-| main → worker   | `init` · `run` · `bridge_reply`                                        |
-| worker → main   | `ready` · `started` · `finished` · `stdout` · `stderr` · `bridge_call` |
+| Direction     | Message types                                                          |
+| ------------- | ---------------------------------------------------------------------- |
+| main → worker | `init` · `run` · `bridge_reply`                                        |
+| worker → main | `ready` · `started` · `finished` · `stdout` · `stderr` · `bridge_call` |
 
 `proxyBridge.ts` is a **whitelisted command router**: it maps the
 `method` string in a `bridge_call` to a specific main-thread runtime
@@ -302,7 +302,7 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
 - **`dlw_main.py`** — exposes a `datalab.*` namespace inside Pyodide
   (panels, current panel, etc.) so that **DataLab desktop plugins run
   unchanged** in the browser, provided they use `await
-  param.edit_async(...)` for parameter dialogs.
+param.edit_async(...)` for parameter dialogs.
 
 - **`dlw_plugins.py`** — host for the Qt-compatible plugin API:
   discovery, registration, hot-reload, consent dialog, menu wiring.
@@ -429,18 +429,18 @@ The architecture is mirrored by three test layers — see
 [doc/testing-strategy.md](testing-strategy.md) for the full decision
 tree.
 
-| Layer       | Tool                | Scope                                          |
-|-------------|---------------------|------------------------------------------------|
-| Python      | pytest (in Pyodide) | `bootstrap.py`, `processor.py`, dlw_*.py logic |
-| TS unit     | Vitest + RTL        | runtime types, action registry, components     |
-| End-to-end  | Playwright          | full UI through real Pyodide round-trips       |
+| Layer      | Tool                | Scope                                            |
+| ---------- | ------------------- | ------------------------------------------------ |
+| Python     | pytest (in Pyodide) | `bootstrap.py`, `processor.py`, dlw\_\*.py logic |
+| TS unit    | Vitest + RTL        | runtime types, action registry, components       |
+| End-to-end | Playwright          | full UI through real Pyodide round-trips         |
 
 ---
 
 ## 7. Conventions recap
 
 - **Type-safety end-to-end**: never widen a Pyodide return value beyond
-  its declared TS type. Add new fields in the Python helper *and* the TS
+  its declared TS type. Add new fields in the Python helper _and_ the TS
   interface in the same commit.
 - **No business logic in components**: orchestration lives in
   `src/actions/` and the runtime.

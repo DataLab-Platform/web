@@ -42,9 +42,7 @@ export function openAiKeyDevEndpoint(): Plugin {
         }
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
-        res.end(
-          JSON.stringify({ apiKey: process.env.OPENAI_API_KEY ?? "" }),
-        );
+        res.end(JSON.stringify({ apiKey: process.env.OPENAI_API_KEY ?? "" }));
       });
     },
   };

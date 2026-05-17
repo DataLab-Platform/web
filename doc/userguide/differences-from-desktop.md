@@ -7,15 +7,15 @@ environment** and a few UI surfaces, not about the science.
 
 ## Runtime
 
-| Topic | Desktop DataLab | DataLab-Web |
-| --- | --- | --- |
-| Python | System CPython | Pyodide (CPython compiled to WebAssembly) |
-| GUI toolkit | Qt + PlotPy | React + TypeScript + Plotly.js |
-| Plotting | PlotPy (Qt) | Plotly.js |
-| Multi-threading | Native threads / processes | Web Workers (one per macro / notebook) |
-| File system | Native I/O | Browser file picker, drag-and-drop, OPFS |
-| Persistence | HDF5 on disk | HDF5 download / upload, IndexedDB workspace cache |
-| Remote control | XML-RPC, FastAPI Web API | In-browser proxy, optional postMessage SDK |
+| Topic           | Desktop DataLab            | DataLab-Web                                       |
+| --------------- | -------------------------- | ------------------------------------------------- |
+| Python          | System CPython             | Pyodide (CPython compiled to WebAssembly)         |
+| GUI toolkit     | Qt + PlotPy                | React + TypeScript + Plotly.js                    |
+| Plotting        | PlotPy (Qt)                | Plotly.js                                         |
+| Multi-threading | Native threads / processes | Web Workers (one per macro / notebook)            |
+| File system     | Native I/O                 | Browser file picker, drag-and-drop, OPFS          |
+| Persistence     | HDF5 on disk               | HDF5 download / upload, IndexedDB workspace cache |
+| Remote control  | XML-RPC, FastAPI Web API   | In-browser proxy, optional postMessage SDK        |
 
 The first load downloads Pyodide (~10 MB) and installs Sigima via
 `micropip`; expect 30–60 s on a cold cache. Subsequent loads are served
@@ -57,7 +57,7 @@ from the browser cache.
 
 Built-in Python plugins live under `src/runtime/builtin_plugins/` and
 are discovered automatically at startup; user plugins are loaded from a
-local `.py` file via *Plugins → Manage plugins…*. Both are registered
+local `.py` file via _Plugins → Manage plugins…_. Both are registered
 through the same hook system as the desktop app. See
 [Plugins](plugins.md) for the practical guide.
 
@@ -75,11 +75,11 @@ on a typical processing chain (`gaussian_filter` → `moving_median` →
 five 1024×1024 images), DataLab-Web is **~25% slower** than the same
 Sigima pipeline on native CPython.
 
-| Backend | Pure processing time | vs CPython |
-| --- | --- | --- |
-| CPython 3.12 (native) | 7.8 s | ×1.00 |
-| Pyodide in Node.js | 9.7 s | ×1.24 |
-| Pyodide in Chromium | 9.8 s | ×1.27 |
+| Backend               | Pure processing time | vs CPython |
+| --------------------- | -------------------- | ---------- |
+| CPython 3.12 (native) | 7.8 s                | ×1.00      |
+| Pyodide in Node.js    | 9.7 s                | ×1.24      |
+| Pyodide in Chromium   | 9.8 s                | ×1.27      |
 
 **Key takeaways:**
 

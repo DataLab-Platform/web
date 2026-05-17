@@ -47,7 +47,9 @@ function readVersion(pkgPath) {
 
 const version = process.argv[2];
 if (!version) {
-  fail("Usage: node scripts/release.mjs <version|patch|minor|major|prerelease>");
+  fail(
+    "Usage: node scripts/release.mjs <version|patch|minor|major|prerelease>",
+  );
 }
 
 // 1. Working tree must be clean.

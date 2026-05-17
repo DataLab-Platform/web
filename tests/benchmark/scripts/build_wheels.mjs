@@ -35,7 +35,9 @@ function pythonExe() {
 
 function buildSigimaWheel() {
   if (!existsSync(SIGIMA_SRC)) {
-    console.warn(`[wheels] Local Sigima checkout not found at ${SIGIMA_SRC}; skipping.`);
+    console.warn(
+      `[wheels] Local Sigima checkout not found at ${SIGIMA_SRC}; skipping.`,
+    );
     return null;
   }
   mkdirSync(WHEELS, { recursive: true });
@@ -51,7 +53,9 @@ function buildSigimaWheel() {
       (f) => f.startsWith("sigima-") && f.endsWith(".whl"),
     );
     if (existing) {
-      console.log(`[wheels] Reusing existing ${existing} (use --force to rebuild).`);
+      console.log(
+        `[wheels] Reusing existing ${existing} (use --force to rebuild).`,
+      );
       return resolve(WHEELS, existing);
     }
   }
@@ -69,7 +73,8 @@ function buildSigimaWheel() {
   const built = readdirSync(WHEELS).find(
     (f) => f.startsWith("sigima-") && f.endsWith(".whl"),
   );
-  if (!built) throw new Error("Wheel build reported success but no wheel file found.");
+  if (!built)
+    throw new Error("Wheel build reported success but no wheel file found.");
   console.log(`[wheels] OK → ${built}`);
   return resolve(WHEELS, built);
 }

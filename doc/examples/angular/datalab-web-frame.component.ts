@@ -37,20 +37,20 @@ import {
   OnDestroy,
   Output,
   ViewChild,
-} from '@angular/core';
+} from "@angular/core";
 
-import { DataLabWebService } from './datalab-web.service';
+import { DataLabWebService } from "./datalab-web.service";
 
 /** Default URL — override via the ``[src]`` input or by editing this
  *  module-level constant if your deployment is fixed. */
 export const DATALAB_WEB_URL =
-  '/datalab-web/index.html?allowedOrigins=' +
+  "/datalab-web/index.html?allowedOrigins=" +
   encodeURIComponent(
-    typeof window === 'undefined' ? '' : window.location.origin,
+    typeof window === "undefined" ? "" : window.location.origin,
   );
 
 @Component({
-  selector: 'datalab-web-frame',
+  selector: "datalab-web-frame",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -85,7 +85,7 @@ export class DataLabWebFrameComponent implements AfterViewInit, OnDestroy {
    *  error, etc.). */
   @Output() failed = new EventEmitter<Error>();
 
-  @ViewChild('frame', { static: true })
+  @ViewChild("frame", { static: true })
   private frameRef!: ElementRef<HTMLIFrameElement>;
 
   private readonly dlw = inject(DataLabWebService);
@@ -99,7 +99,7 @@ export class DataLabWebFrameComponent implements AfterViewInit, OnDestroy {
     try {
       await this.dlw.attach(iframe, targetOrigin);
       const v = this.dlw.version();
-      this.ready.emit(v ?? '');
+      this.ready.emit(v ?? "");
     } catch (err) {
       this.failed.emit(err as Error);
     }

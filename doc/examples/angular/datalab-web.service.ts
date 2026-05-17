@@ -26,15 +26,15 @@
  * SDK with ``npm install ./datalab-platform-web-sdk-<version>.tgz``.
  */
 
-import { Injectable, OnDestroy, signal } from '@angular/core';
+import { Injectable, OnDestroy, signal } from "@angular/core";
 
 import {
   DataLabWebClient,
   type SignalXY,
   type ImageData2D,
-} from '@datalab-platform/web-sdk';
+} from "@datalab-platform/web-sdk";
 
-@Injectable({ providedIn: 'root' })
+@Injectable({ providedIn: "root" })
 export class DataLabWebService implements OnDestroy {
   /** ``true`` once the embedded DataLab-Web has booted Pyodide and
    *  responded to the initial handshake. Bind from templates with
@@ -67,7 +67,7 @@ export class DataLabWebService implements OnDestroy {
     }
     const client = new DataLabWebClient(iframe, { targetOrigin });
     this.client = client;
-    this.offObjectChanged = client.on('object-changed', () => {
+    this.offObjectChanged = client.on("object-changed", () => {
       void this.refreshCount();
     });
     try {
@@ -190,7 +190,7 @@ export class DataLabWebService implements OnDestroy {
    *  to react to model changes. */
   on(event: string, handler: (payload: unknown) => void): () => void {
     if (!this.client) {
-      throw new Error('DataLab-Web bridge is not attached yet');
+      throw new Error("DataLab-Web bridge is not attached yet");
     }
     return this.client.on(event, handler);
   }
@@ -210,13 +210,13 @@ export class DataLabWebService implements OnDestroy {
     } catch (err) {
       // ``object-changed`` can fire while the bridge is mid-shutdown
       // — swallow rather than spam the error signal.
-      console.warn('[datalab-web] refreshCount failed', err);
+      console.warn("[datalab-web] refreshCount failed", err);
     }
   }
 
   private async guard<T>(fn: (c: DataLabWebClient) => Promise<T>): Promise<T> {
     if (!this.client) {
-      throw new Error('DataLab-Web bridge is not attached yet');
+      throw new Error("DataLab-Web bridge is not attached yet");
     }
     try {
       return await fn(this.client);

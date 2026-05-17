@@ -24,7 +24,9 @@ function parseArgs() {
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--skip") {
-      const list = String(argv[++i] || "").split(",").map((s) => s.trim());
+      const list = String(argv[++i] || "")
+        .split(",")
+        .map((s) => s.trim());
       list.filter(Boolean).forEach((s) => args.skip.add(s));
     }
   }
@@ -153,11 +155,7 @@ async function main() {
   }
 
   // Aggregate — always run, even if some backends failed.
-  await runStep(
-    "Report aggregation",
-    PY,
-    ["tests/benchmark/shared/report.py"],
-  );
+  await runStep("Report aggregation", PY, ["tests/benchmark/shared/report.py"]);
 
   console.log(`\nReport: tests/benchmark/results/report.md`);
 }

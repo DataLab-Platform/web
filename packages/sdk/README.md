@@ -38,9 +38,9 @@ The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` i
 
 `client.ready()` negotiates a wire-protocol version with the iframe (semver `MAJOR.MINOR`). It rejects if the iframe reports a MAJOR incompatible with the SDK (`SUPPORTED_PROTOCOL_MAJOR`).
 
-| Bump | Trigger |
-| ---- | ------- |
-| MAJOR | breaking change to message shape or method semantics |
+| Bump  | Trigger                                                       |
+| ----- | ------------------------------------------------------------- |
+| MAJOR | breaking change to message shape or method semantics          |
 | MINOR | backwards-compatible additions (new methods, optional fields) |
 
 If the iframe predates protocol versioning (no `get_protocol_version` method), the SDK assumes protocol `1.0`.

@@ -7,11 +7,11 @@
 DataLab-Web has three test layers, each with very different
 cost/coverage trade-offs:
 
-| Layer                     | Tool             | Typical cost  | Best for                                             |
-| ------------------------- | ---------------- | ------------- | ---------------------------------------------------- |
-| Python (in-Pyodide logic) | pytest           | ~ms           | `bootstrap.py` helpers, JSON shapes, Sigima glue     |
-| Component (TS/React)      | Vitest + RTL     | ~10–100 ms    | Form behaviour, reducers, runtime mocks              |
-| End-to-end (browser)      | Playwright       | ~10–60 s each | Multi-component interactions, runtime round-trips    |
+| Layer                     | Tool         | Typical cost  | Best for                                          |
+| ------------------------- | ------------ | ------------- | ------------------------------------------------- |
+| Python (in-Pyodide logic) | pytest       | ~ms           | `bootstrap.py` helpers, JSON shapes, Sigima glue  |
+| Component (TS/React)      | Vitest + RTL | ~10–100 ms    | Form behaviour, reducers, runtime mocks           |
+| End-to-end (browser)      | Playwright   | ~10–60 s each | Multi-component interactions, runtime round-trips |
 
 Playwright runs serially (`workers: 1`, ~3 min Pyodide boot per spec
 file in CI), so adding E2E tests has a real, compounding cost. Treat
@@ -115,7 +115,7 @@ The Playwright pass can be:
   afterwards) — sufficient for incremental progress, refactors, and
   fixes that don't meet the promotion criteria below.
 - A **permanent spec** when the criteria in
-  *Promote to a permanent test when* are met.
+  _Promote to a permanent test when_ are met.
 
 The point is not to grow the suite, it is to **never declare a UI
 change done based solely on type-checks, unit tests, or "looks fine in

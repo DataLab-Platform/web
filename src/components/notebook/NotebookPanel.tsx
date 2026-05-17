@@ -276,8 +276,8 @@ export const NotebookPanel = forwardRef<
       const ordered =
         openIds.length > 0
           ? openIds
-            .map((id) => restoredNbs.find((n) => n.id === id))
-            .filter((n): n is NotebookModel => Boolean(n))
+              .map((id) => restoredNbs.find((n) => n.id === id))
+              .filter((n): n is NotebookModel => Boolean(n))
           : restoredNbs;
 
       if (ordered.length === 0) {
@@ -481,12 +481,12 @@ export const NotebookPanel = forwardRef<
         cells: nb.cells.map((c) =>
           c.id === id
             ? {
-              ...c,
-              type: c.type === "code" ? "markdown" : "code",
-              outputs: [],
-              execCount: null,
-              status: "idle" as const,
-            }
+                ...c,
+                type: c.type === "code" ? "markdown" : "code",
+                outputs: [],
+                execCount: null,
+                status: "idle" as const,
+              }
             : c,
         ),
       }));
@@ -1148,8 +1148,9 @@ export const NotebookPanel = forwardRef<
                 return (
                   <div
                     key={m.id}
-                    className={`nb-open-menu-item${alreadyOpen ? " nb-open-menu-item-open" : ""
-                      }`}
+                    className={`nb-open-menu-item${
+                      alreadyOpen ? " nb-open-menu-item-open" : ""
+                    }`}
                   >
                     <button
                       type="button"

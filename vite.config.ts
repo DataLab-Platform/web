@@ -56,10 +56,9 @@ export default defineConfig({
         {
           name: "alias-plotly-dist",
           setup(build) {
-            build.onResolve(
-              { filter: /^plotly\.js\/dist\/plotly$/ },
-              () => ({ path: PLOTLY_DIST_MIN }),
-            );
+            build.onResolve({ filter: /^plotly\.js\/dist\/plotly$/ }, () => ({
+              path: PLOTLY_DIST_MIN,
+            }));
           },
         },
       ],

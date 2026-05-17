@@ -51,42 +51,42 @@ class MyPlugin(PluginBase):
 
 `PluginBase` exposes the same surface as the desktop counterpart:
 
-| Attribute / method | Purpose |
-| --- | --- |
-| `self.main` | Bridge to the React main window (parent for dialogs) |
-| `self.signalpanel`, `self.imagepanel` | Panels with `processor`, `acthandler`, `get_newparam_from_current` |
-| `self.proxy` | `LocalProxy`-compatible API: `add_object`, `add_group`, `calc`, `get_object*`, `call_method` |
-| `self.show_warning` / `show_error` / `show_info` | Async message popups |
-| `self.ask_yesno(msg, cancelable=False)` | Async yes/no(/cancel) prompt |
-| `self.edit_new_signal_parameters_async(...)` | Async variant of the desktop helper |
-| `self.edit_new_image_parameters_async(...)` | Async variant of the desktop helper |
+| Attribute / method                               | Purpose                                                                                      |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `self.main`                                      | Bridge to the React main window (parent for dialogs)                                         |
+| `self.signalpanel`, `self.imagepanel`            | Panels with `processor`, `acthandler`, `get_newparam_from_current`                           |
+| `self.proxy`                                     | `LocalProxy`-compatible API: `add_object`, `add_group`, `calc`, `get_object*`, `call_method` |
+| `self.show_warning` / `show_error` / `show_info` | Async message popups                                                                         |
+| `self.ask_yesno(msg, cancelable=False)`          | Async yes/no(/cancel) prompt                                                                 |
+| `self.edit_new_signal_parameters_async(...)`     | Async variant of the desktop helper                                                          |
+| `self.edit_new_image_parameters_async(...)`      | Async variant of the desktop helper                                                          |
 
 ## Browser-only differences
 
-* **Synchronous dialogs raise `BrowserNotSupportedError`.**
+- **Synchronous dialogs raise `BrowserNotSupportedError`.**
   `param.edit(self.main)`, `BaseProxy.calc(...)` blocking calls and any
   similar synchronous prompt are unavailable. Always use the `_async`
   counterparts.
-* **No filesystem access** beyond Pyodide's in-memory FS. Plugins that
+- **No filesystem access** beyond Pyodide's in-memory FS. Plugins that
   read local files on the desktop should use the file picker exposed by
   the host UI instead.
-* **No worker / process isolation.** All plugin code runs in the same
+- **No worker / process isolation.** All plugin code runs in the same
   Python interpreter as Sigima. Long-running computations will freeze
   the UI; consider chunking via `asyncio.sleep(0)` to yield.
 
 ## Loading a plugin
 
-* **From the file picker:** open *Plugins → Manage plugins…*, click
-  *Load from file…* and select a `.py` file. The first time a plugin is
+- **From the file picker:** open _Plugins → Manage plugins…_, click
+  _Load from file…_ and select a `.py` file. The first time a plugin is
   loaded you will be prompted to confirm execution. The decision is
   remembered (per source SHA-256) in `localStorage`.
-* **Bundled built-ins:** drop a file into
+- **Bundled built-ins:** drop a file into
   `src/runtime/builtin_plugins/`; it will be discovered automatically at
   startup.
 
 ## Hot reload
 
-*Plugins → Reload all plugins* re-imports every loaded plugin module
+_Plugins → Reload all plugins_ re-imports every loaded plugin module
 from disk. The plugin registry strips all features and menu entries
 contributed by previous versions before re-applying them, so live
 edits are safe.

@@ -19,7 +19,13 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -109,11 +115,9 @@ writeFileSync(join(stage, "DEPLOY.md"), deployDoc);
 // Final tarball.
 const tarball = join(RELEASE, tarballName);
 rmSync(tarball, { force: true });
-execFileSync(
-  "tar",
-  ["-czf", tarball, "-C", RELEASE, folderName],
-  { stdio: "inherit" },
-);
+execFileSync("tar", ["-czf", tarball, "-C", RELEASE, folderName], {
+  stdio: "inherit",
+});
 
 // Tidy up the staged directory; keep only the .tgz.
 rmSync(stage, { recursive: true, force: true });

@@ -57,10 +57,7 @@
     {
       "label": "🧽🔦 Ruff",
       "dependsOrder": "sequence",
-      "dependsOn": [
-        "🧽 Ruff Formatter",
-        "🔦 Ruff Linter"
-      ],
+      "dependsOn": ["🧽 Ruff Formatter", "🔦 Ruff Linter"],
       "group": "build",
       "presentation": {
         "panel": "dedicated",
@@ -93,10 +90,7 @@
       "label": "🟦 ESLint (TS)",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "lint"
-      ],
+      "args": ["run", "lint"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -111,10 +105,7 @@
       "label": "🧽 Prettier (TS)",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "format"
-      ],
+      "args": ["run", "format"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -200,9 +191,7 @@
       "detail": "Background HTTP server on http://127.0.0.1:8765/ for the coverage report. Idempotent: silently exits if the port is already taken.",
       "type": "shell",
       "command": "${command:python.interpreterPath}",
-      "args": [
-        "scripts/serve_coverage.py"
-      ],
+      "args": ["scripts/serve_coverage.py"],
       "options": {
         "cwd": "${workspaceFolder}",
         "statusbar": {
@@ -259,9 +248,7 @@
       "label": "🟢 Vitest (TS)",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "test"
-      ],
+      "args": ["test"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -272,10 +259,7 @@
       "label": "🟢 Vitest watch",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "test:watch"
-      ],
+      "args": ["run", "test:watch"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -286,10 +270,7 @@
       "label": "🟢 Vitest with coverage",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "test:cov"
-      ],
+      "args": ["run", "test:cov"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -300,10 +281,7 @@
       "label": "🎭 Playwright (E2E)",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "test:e2e"
-      ],
+      "args": ["run", "test:e2e"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -314,10 +292,7 @@
       "label": "🎭 Playwright UI",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "test:e2e:ui"
-      ],
+      "args": ["run", "test:e2e:ui"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -328,10 +303,7 @@
       "detail": "Background Vite dev server on http://localhost:5173/.",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "dev"
-      ],
+      "args": ["run", "dev"],
       "options": {
         "cwd": "${workspaceFolder}",
         "statusbar": {
@@ -379,19 +351,14 @@
       },
       "problemMatcher": [],
       "dependsOrder": "sequence",
-      "dependsOn": [
-        "🚀 Dev Server"
-      ]
+      "dependsOn": ["🚀 Dev Server"]
     },
     {
       "label": "📦 Release Package (app + SDK)",
       "detail": "Lint + Vitest + build, then produce datalab-web-<v>.tgz and datalab-platform-web-sdk-<v>.tgz under release/.",
       "type": "shell",
       "command": "npm",
-      "args": [
-        "run",
-        "release:pack"
-      ],
+      "args": ["run", "release:pack"],
       "options": {
         "cwd": "${workspaceFolder}"
       },

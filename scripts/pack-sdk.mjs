@@ -28,11 +28,11 @@ mkdirSync(RELEASE, { recursive: true });
 
 // ``npm pack`` honours ``files`` from the package.json and runs the
 // package's own ``prepack`` (which builds dist/). Stream into release/.
-execFileSync(
-  "npm",
-  ["pack", "--pack-destination", RELEASE],
-  { cwd: SDK_DIR, stdio: "inherit", shell: process.platform === "win32" },
-);
+execFileSync("npm", ["pack", "--pack-destination", RELEASE], {
+  cwd: SDK_DIR,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
 
 // Sanity check: the produced tarball name follows
 // ``<scope>-<name>-<version>.tgz`` with a leading ``@`` stripped.

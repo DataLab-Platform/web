@@ -4,19 +4,69 @@
     <meta charset="UTF-8" />
     <title>DataLab-Web — Remote control demo</title>
     <style>
-      body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-      #panel { width: 360px; padding: 12px; border-right: 1px solid #ccc; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-      #panel h1 { font-size: 16px; margin: 0 0 4px; }
-      #panel button { padding: 6px 10px; cursor: pointer; }
-      #panel button:disabled { opacity: 0.5; cursor: not-allowed; }
-      #log { flex: 1; font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #111; color: #d4d4d4; padding: 8px; overflow: auto; white-space: pre-wrap; border: 1px solid #333; }
-      #frame-host { flex: 1; }
-      iframe { width: 100%; height: 100%; border: 0; }
-      .row { display: flex; gap: 6px; }
-      .row > * { flex: 1; }
-      .status { font-size: 12px; color: #555; }
-      .status.ok { color: #2e7d32; }
-      .status.err { color: #c62828; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        display: flex;
+        height: 100vh;
+      }
+      #panel {
+        width: 360px;
+        padding: 12px;
+        border-right: 1px solid #ccc;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow-y: auto;
+      }
+      #panel h1 {
+        font-size: 16px;
+        margin: 0 0 4px;
+      }
+      #panel button {
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+      #panel button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      #log {
+        flex: 1;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 12px;
+        background: #111;
+        color: #d4d4d4;
+        padding: 8px;
+        overflow: auto;
+        white-space: pre-wrap;
+        border: 1px solid #333;
+      }
+      #frame-host {
+        flex: 1;
+      }
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      .status {
+        font-size: 12px;
+        color: #555;
+      }
+      .status.ok {
+        color: #2e7d32;
+      }
+      .status.err {
+        color: #c62828;
+      }
     </style>
   </head>
   <body>
@@ -103,8 +153,10 @@
         }
       }
 
-      buttons.version.onclick = () => wrap("get_version", () => client.getVersion());
-      buttons.list.onclick = () => wrap("list_signals", () => client.listSignals());
+      buttons.version.onclick = () =>
+        wrap("get_version", () => client.getVersion());
+      buttons.list.onclick = () =>
+        wrap("list_signals", () => client.listSignals());
       buttons.addSignal.onclick = async () => {
         const N = 256;
         const xs = Array.from({ length: N }, (_, i) => i / N);
@@ -121,8 +173,7 @@
       // Operate on whatever the user has selected inside the iframe.
       // ``client.calc(...)`` with ``sources=null`` already defaults to
       // the current selection on the DataLab-Web side.
-      buttons.fft.onclick = () =>
-        wrap("calc(fft)", () => client.calc("fft"));
+      buttons.fft.onclick = () => wrap("calc(fft)", () => client.calc("fft"));
       buttons.get.onclick = async () => {
         const sel = await client.getSelection();
         if (sel.length === 0) return logLine("!", "no current selection");

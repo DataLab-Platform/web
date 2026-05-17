@@ -1950,8 +1950,9 @@ export default function App() {
               await notify({
                 kind: "error",
                 title: "Open HDF5",
-                message: `Failed to open HDF5 file:\n${err2 instanceof Error ? err2.message : String(err2)
-                  }`,
+                message: `Failed to open HDF5 file:\n${
+                  err2 instanceof Error ? err2.message : String(err2)
+                }`,
               });
             }
             return;
@@ -2242,12 +2243,12 @@ export default function App() {
                     err.name === "SecurityError");
                 const explanation = isBlocked
                   ? "The browser refused to write into this directory " +
-                  "(system folders such as Desktop, Documents, " +
-                  "Downloads or OneDrive-synced paths are blocked).\n\n" +
-                  "Click OK to download each file individually instead, " +
-                  "or Cancel to abort."
+                    "(system folders such as Desktop, Documents, " +
+                    "Downloads or OneDrive-synced paths are blocked).\n\n" +
+                    "Click OK to download each file individually instead, " +
+                    "or Cancel to abort."
                   : `Write failed:\n${msg}\n\nClick OK to download each ` +
-                  `file individually instead.`;
+                    `file individually instead.`;
                 if (
                   !(await confirm({
                     title: "Write failed",
@@ -2408,42 +2409,42 @@ export default function App() {
       ...buildFeatureActions(visibleFeatures, handleApplyFeature),
       ...(treeKind === "image"
         ? buildImageGridActions({
-          onDistributeOnGrid: handleDistributeOnGrid,
-          onResetPositions: handleResetImagePositions,
-        })
+            onDistributeOnGrid: handleDistributeOnGrid,
+            onResetPositions: handleResetImagePositions,
+          })
         : []),
       ...(treeKind === "image"
         ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
         : []),
       ...(treeKind === "signal"
         ? buildInteractiveFitActions(
-          interactiveFits,
-          handleLaunchInteractiveFit,
-        )
+            interactiveFits,
+            handleLaunchInteractiveFit,
+          )
         : []),
       ...(treeKind === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, {
-          onToggleEditMode: handleToggleRoiEditMode,
-          onEditNumerically: handleEditRoi,
-          onExtractEach: handleRoiExtractEach,
-          onExtractMerged: handleRoiExtractMerged,
-          onRemoveAt: handleRoiRemoveAt,
-          onRemoveAll: handleRoiRemoveAll,
-        })
+            onToggleEditMode: handleToggleRoiEditMode,
+            onEditNumerically: handleEditRoi,
+            onExtractEach: handleRoiExtractEach,
+            onExtractMerged: handleRoiExtractMerged,
+            onRemoveAt: handleRoiRemoveAt,
+            onRemoveAll: handleRoiRemoveAll,
+          })
         : buildImageRoiActions(imageRoi, imageRoiEditMode, {
-          onToggleEditMode: handleToggleImageRoiEditMode,
-          onAddRectangle: handleImageAddRectangle,
-          onAddCircle: handleImageAddCircle,
-          onCreateGrid: handleCreateRoiGrid,
-          onEditNumerically: handleImageEditRoi,
-          onExtractEach: handleImageRoiExtractEach,
-          onExtractMerged: handleImageRoiExtractMerged,
-          onRemoveAt: handleImageRoiRemoveAt,
-          onRemoveAll: handleImageRoiRemoveAll,
-        })),
+            onToggleEditMode: handleToggleImageRoiEditMode,
+            onAddRectangle: handleImageAddRectangle,
+            onAddCircle: handleImageAddCircle,
+            onCreateGrid: handleCreateRoiGrid,
+            onEditNumerically: handleImageEditRoi,
+            onExtractEach: handleImageRoiExtractEach,
+            onExtractMerged: handleImageRoiExtractMerged,
+            onRemoveAt: handleImageRoiRemoveAt,
+            onRemoveAll: handleImageRoiRemoveAll,
+          })),
       ...buildPluginActions(pluginActions, treeKind, {
         onTrigger: handleTriggerPluginAction,
         onOpenManager: () => setPluginManagerOpen(true),
