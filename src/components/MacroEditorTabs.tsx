@@ -148,6 +148,16 @@ export function MacroEditorTabs({
     [theme],
   );
 
+  // Dispose all editor views when the theme changes so they are
+  // recreated with the new ``baseExtensions`` on the next mount effect
+  // pass. The mount effect alone is not enough: it reuses any view
+  // already present in ``viewsRef`` and would otherwise keep the
+  // previous theme (e.g. ``oneDark``) baked into its state.
+  useEffect(() => {
+    for (const v of viewsRef.current.values()) v.destroy();
+    viewsRef.current.clear();
+  }, [baseExtensions]);
+
   // Mount / attach editor view when the active tab changes.
   // IMPORTANT: this effect must NOT depend on ``tabs``. Each keystroke
   // updates ``tabs`` upstream; if we re-ran this effect on every tab
