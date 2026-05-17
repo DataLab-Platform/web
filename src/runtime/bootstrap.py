@@ -1288,10 +1288,28 @@ def get_object_property_schema(oid: str) -> dict[str, Any]:
 def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
     """Apply *values* to the underlying :class:`SignalObj` instance."""
     from guidata.dataset import update_dataset
+    from guidata.dataset.dataitems import FloatArrayItem
 
     if hasattr(values, "to_py"):
         values = values.to_py()
     obj = _MODEL.get(oid)
+    # The Properties side panel hides ``float_array`` fields from the
+    # generic form but still echoes their values back unchanged on
+    # Apply.  Those round-trip through JS as nested lists; assigning
+    # them raw to a :class:`FloatArrayItem` would silently demote
+    # ``obj.data`` / ``obj.x`` / ... to a Python list and break every
+    # downstream ``.shape`` access (see ``_object_meta``,
+    # ``get_image_data``).  Coerce them back to ``np.ndarray`` here so
+    # the model invariant is preserved regardless of the caller.
+    array_fields = {
+        item.get_name()
+        for item in obj.get_items()
+        if isinstance(item, FloatArrayItem)
+    }
+    for name in array_fields & values.keys():
+        value = values[name]
+        if value is not None and not isinstance(value, np.ndarray):
+            values[name] = np.asarray(value)
     update_dataset(obj, values)
 
 
