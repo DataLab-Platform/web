@@ -24,6 +24,8 @@ export default [
       "**/*.d.ts",
       "vite.config.js",
       "vite.config.d.ts",
+      // Compiled outputs of Vite plugins; the .ts sources are linted.
+      "plugins/*.js",
       // Documentation snippets — not part of the build, ship without
       // their Angular dependencies, see ``doc/examples/angular/README.md``.
       "doc/examples/**",

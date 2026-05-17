@@ -49,10 +49,20 @@ This policy covers everything in the project repository: source code, tests, con
 - Append the `Assisted-by: <Model> <Version>` trailer for AI-assisted commits (see above).
 - Group related changes in a single commit; split unrelated changes.
 
+## Code formatting
+
+TypeScript, JavaScript, JSON, CSS, HTML and Markdown files are formatted with [Prettier](https://prettier.io/) (defaults of Prettier 3, plus `endOfLine: "auto"`). The recommended workflow:
+
+- Install the workspace's recommended VS Code extensions (Prettier, ESLint, Ruff) — VS Code will prompt you on first open thanks to [.vscode/extensions.json](.vscode/extensions.json). Format-on-save is then wired per language in [.vscode/settings.json](.vscode/settings.json).
+- Reformat the whole repo at any time with `npm run format`.
+- CI runs `npm run format:check` as a blocking step (see [tests.yml](.github/workflows/tests.yml)) and `npm run release:pack` runs it before lint/test/build, so any drift is caught early.
+
+Python files keep their own formatter (`ruff format`); see the Python instructions in [.github/copilot-instructions.md](.github/copilot-instructions.md).
+
 ## Pull requests
 
 - Open a pull request against `main`.
-- Make sure the project still builds (`npm run build`), passes lint (`npm run lint`) and tests (`npm test`, plus Playwright when UI behaviour changes — see [doc/testing-strategy.md](doc/testing-strategy.md)).
+- Make sure the project still builds (`npm run build`), passes lint (`npm run lint`), formatting (`npm run format:check`) and tests (`npm test`, plus Playwright when UI behaviour changes — see [doc/testing-strategy.md](doc/testing-strategy.md)).
 - When you add or restructure a top-level subsystem (a new worker, a new bridge, a new Python helper module …), update [doc/architecture.md](doc/architecture.md) in the same commit so the layer / component diagrams stay accurate.
 - Keep commits focused; split unrelated changes.
 - Apply the GenAI commit convention above where relevant.
