@@ -54,6 +54,7 @@ export function buildProxyBridge(
         dtype: a.dtype,
       });
       ext.onModelChanged?.("signal");
+      ext.selectObjects?.([oid], "signal");
       return oid;
     },
     add_image: async (p: unknown) => {
@@ -86,6 +87,7 @@ export function buildProxyBridge(
         dtype: a.dtype,
       });
       ext.onModelChanged?.("image");
+      ext.selectObjects?.([oid], "image");
       return oid;
     },
     list_signals: async () => s.listSignals(),
@@ -221,7 +223,20 @@ _e = _MODEL._objects[${JSON.stringify(oid)}]
         a.operand,
         a.params,
       );
-      ext.onModelChanged?.(null);
+      // Mirror DataLab desktop: auto-select the (last) result object,
+      // switching panel if the feature is cross-kind.  Each desktop
+      // ``add_object`` call defaults to ``set_current=True``, so for
+      // ``1_to_n`` patterns the last result is the one selected.
+      if (ids.length > 0) {
+        const lastId = ids[ids.length - 1];
+        const kind = (await s.runPython(
+          `_MODEL.kind_of(${JSON.stringify(lastId)})`,
+        )) as string;
+        ext.onModelChanged?.(kind);
+        ext.selectObjects?.([lastId], kind);
+      } else {
+        ext.onModelChanged?.(null);
+      }
       return ids;
     },
     list_features: async () => s.listFeatures(),
