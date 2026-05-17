@@ -115,6 +115,13 @@ export function MacroEditorTabs({
   const viewsRef = useRef<Map<string, EditorView>>(new Map());
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Latest tabs array, accessed by the mount effect without making
+  // ``tabs`` an effect dependency: every keystroke causes ``tabs`` to
+  // change reference upstream, and re-attaching the editor DOM on each
+  // keystroke loses the contentEditable selection in Firefox — typed
+  // characters then end up inserted at line 1, column 1.
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
 
   // Build the shared extension array (memoised on theme).
   const baseExtensions = useMemo(
@@ -141,7 +148,13 @@ export function MacroEditorTabs({
     [theme],
   );
 
-  // Mount / unmount editor views as the active tab changes.
+  // Mount / attach editor view when the active tab changes.
+  // IMPORTANT: this effect must NOT depend on ``tabs``. Each keystroke
+  // updates ``tabs`` upstream; if we re-ran this effect on every tab
+  // change we would detach and reattach the editor's contentEditable
+  // root, which under Firefox resets the DOM selection to (0, 0) and
+  // causes subsequent keystrokes to be inserted at the start of the
+  // document. Document content sync is handled by a separate effect.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -149,7 +162,7 @@ export function MacroEditorTabs({
       container.innerHTML = "";
       return;
     }
-    const tab = tabs.find((t) => t.id === activeId);
+    const tab = tabsRef.current.find((t) => t.id === activeId);
     if (!tab) {
       container.innerHTML = "";
       return;
@@ -176,18 +189,28 @@ export function MacroEditorTabs({
       viewsRef.current.set(activeId, view);
     } else {
       container.appendChild(view.dom);
-      // If the upstream code differs from the editor, sync (e.g. after
-      // an Import .py).  Skip when content matches to preserve cursor.
-      const current = view.state.doc.toString();
-      if (current !== tab.code) {
-        view.dispatch({
-          changes: { from: 0, to: current.length, insert: tab.code },
-        });
-      }
-      view.focus();
     }
-    // Rebuild theme extensions if theme changed.
-  }, [activeId, tabs, baseExtensions]);
+    view.focus();
+  }, [activeId, baseExtensions]);
+
+  // Sync upstream code changes into the active editor (e.g. after an
+  // Import .py or a programmatic reset). Skip when content matches to
+  // preserve the cursor — this is critical: on every keystroke the
+  // updateListener pushes the new code upstream, which re-runs this
+  // effect with a matching ``tab.code``, so we must be a no-op then.
+  useEffect(() => {
+    if (!activeId) return;
+    const view = viewsRef.current.get(activeId);
+    if (!view) return;
+    const tab = tabs.find((t) => t.id === activeId);
+    if (!tab) return;
+    const current = view.state.doc.toString();
+    if (current !== tab.code) {
+      view.dispatch({
+        changes: { from: 0, to: current.length, insert: tab.code },
+      });
+    }
+  }, [activeId, tabs]);
 
   // Tear down views for closed tabs.
   useEffect(() => {
