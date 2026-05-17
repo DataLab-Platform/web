@@ -209,14 +209,37 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     // MacroRuntime lifecycle
     // ---------------------------------------------------------------------
 
+    // Keep the latest host callbacks in a ref so the MacroRuntime lifecycle
+    // effect below only depends on ``runtime``. Otherwise every render of
+    // ``App`` (e.g. after a macro mutates the model via ``onModelChanged``
+    // → ``refresh()`` → state update) would dispose the warm worker and
+    // spawn a fresh one — making the *next* macro run wait several seconds
+    // for Pyodide + Sigima to install again in the new worker.
+    const callbacksRef = useRef({
+      getSelection,
+      getCurrentPanel,
+      onSetCurrentPanel,
+      selectObjects,
+      onModelChanged,
+    });
+    callbacksRef.current = {
+      getSelection,
+      getCurrentPanel,
+      onSetCurrentPanel,
+      selectObjects,
+      onModelChanged,
+    };
+
     useEffect(() => {
       const rt = new MacroRuntime(runtime);
       rt.externalCallbacks = {
-        getSelection,
-        getCurrentPanel,
-        setCurrentPanel: (panel) => onSetCurrentPanel(panel),
-        selectObjects,
-        onModelChanged,
+        getSelection: () => callbacksRef.current.getSelection(),
+        getCurrentPanel: () => callbacksRef.current.getCurrentPanel(),
+        setCurrentPanel: (panel) =>
+          callbacksRef.current.onSetCurrentPanel(panel),
+        selectObjects: (ids, panel) =>
+          callbacksRef.current.selectObjects(ids, panel),
+        onModelChanged: (panel) => callbacksRef.current.onModelChanged(panel),
       };
       macroRtRef.current = rt;
       void rt.preload();
@@ -224,14 +247,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         rt.dispose();
         macroRtRef.current = null;
       };
-    }, [
-      runtime,
-      onSetCurrentPanel,
-      getSelection,
-      getCurrentPanel,
-      selectObjects,
-      onModelChanged,
-    ]);
+    }, [runtime]);
 
     // ---------------------------------------------------------------------
     // Initial load: ask Python for macros; if empty try localStorage mirror;

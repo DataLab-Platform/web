@@ -166,12 +166,13 @@ sys.stderr = _DLWStream(_dlw_post_stderr)
     // posts back ``{type: "bridge_reply", id, ok, value|error}``.
     self._dlw_pending_replies = new Map();
     let nextId = 0;
-    self._dlw_bridge_call = (method: string, payload: unknown) =>
-      new Promise((resolve, reject) => {
-        const id = `b${++nextId}`;
+    self._dlw_bridge_call = (method: string, payload: unknown) => {
+      const id = `b${++nextId}`;
+      return new Promise((resolve, reject) => {
         self._dlw_pending_replies!.set(id, { resolve, reject });
         self.postMessage({ type: "bridge_call", id, method, payload });
       });
+    };
 
     // Install the Python ``proxy`` global by executing macro_proxy.py.
     // Also persist it to the FS so user code can ``import macro_proxy``
