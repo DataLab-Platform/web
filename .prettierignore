@@ -1,22 +1,22 @@
 # Build / dependencies
-
 node_modules/
 **/node_modules/
 dist/
 **/dist/
 build/
 release/
-\*.tsbuildinfo
+*.tsbuildinfo
 
 # Compiled Vite config (source of truth is vite.config.ts; the .js/.d.ts
-
 # files are generated and tracked only for editor convenience)
-
 vite.config.js
 vite.config.d.ts
 
-# Coverage / test artifacts
+# Locally-compiled Vite plugins (the .ts source is authoritative; the
+# .js sibling appears as an untracked build artefact on dev machines)
+plugins/vite-plugin-openai-key-dev.js
 
+# Coverage / test artifacts
 coverage-ts/
 coverage-python.xml
 htmlcov-python/
@@ -27,22 +27,20 @@ tests/benchmark/results/
 tests/benchmark/.cache/
 
 # Python
-
-**pycache**/
-\*\*/**pycache**/
+__pycache__/
+**/__pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
 
 # npm lockfile (managed by npm — Prettier would only churn it)
-
 package-lock.json
 
 # Binaries / assets (Prettier does not format these meaningfully)
-
-**/\*.svg
-**/_.png
-\*\*/_.ico
-**/\*.jpg
-**/_.jpeg
-\*\*/_.gif \*_/_.webp
+**/*.svg
+**/*.png
+**/*.ico
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp

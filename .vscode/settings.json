@@ -32,6 +32,9 @@
   "[markdown]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+  "[ignore]": {
+    "editor.formatOnSave": false
+  },
   "[restructuredtext]": {
     "editor.wordWrap": "on"
   },
