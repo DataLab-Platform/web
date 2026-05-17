@@ -924,7 +924,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             />
           </div>
           <Splitter
-            side="bottom"
+            side="top"
             value={editorHeight}
             min={150}
             max={800}
