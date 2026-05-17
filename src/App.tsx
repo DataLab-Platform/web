@@ -68,6 +68,10 @@ import {
 } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
+import {
+  markConsoleErrorsSeen,
+  useConsoleErrorTitlePrefix,
+} from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
 import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
 import {
@@ -477,6 +481,22 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  // Persistent error indicator: prefix the tab title with "(!) " when
+  // any browser-console ``warn``/``error`` entry is still unseen.
+  useConsoleErrorTitlePrefix();
+  // Opening the Browser console log dialog acknowledges every buffered
+  // entry, so the menu-bar indicator and the title prefix both clear.
+  useEffect(() => {
+    if (helpView === "console") markConsoleErrorsSeen();
+  }, [helpView]);
+  // Persistent error indicator: prefix the tab title with "(!) " when
+  // any browser-console ``warn``/``error`` entry is still unseen.
+  useConsoleErrorTitlePrefix();
+  // Opening the Browser console log dialog acknowledges every buffered
+  // entry, so the menu-bar indicator and the title prefix both clear.
+  useEffect(() => {
+    if (helpView === "console") markConsoleErrorsSeen();
+  }, [helpView]);
   const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [h5BrowserFiles, setH5BrowserFiles] = useState<H5BrowserFile[] | null>(
     null,
@@ -2621,6 +2641,7 @@ export default function App() {
           state={actionState}
           actions={actions}
           onShowExperimentalInfo={() => setHelpView("about")}
+          onOpenConsole={() => setHelpView("console")}
         />
         {recoveryBanner && (
           <RecoveryBanner

@@ -226,6 +226,64 @@ input {
   color: var(--text);
 }
 
+/* Persistent console-status indicator — mirrors DataLab Qt's
+   ``ConsoleStatus``: shows an info glyph (ⓘ) when no warning/error has
+   been logged, and a warning glyph (⚠) with a numeric badge once one
+   appears.  Same visual weight as ``.menubar-theme-toggle``. */
+.console-status-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  margin-left: 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.console-status-indicator:hover:not(:disabled),
+.console-status-indicator:focus-visible {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+.console-status-indicator-glyph {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.console-status-indicator.alert {
+  color: #d63031;
+}
+
+.console-status-indicator.alert:hover:not(:disabled),
+.console-status-indicator.alert:focus-visible {
+  color: #d63031;
+}
+
+.console-status-indicator-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 14px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: #d63031;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* Hierarchical menu bar (Phase 3) */
 .menubar-nav {
   display: flex;

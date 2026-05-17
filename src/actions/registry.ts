@@ -221,7 +221,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       id: "help.console",
       label: "Browser console log",
       menuPath: "Help/Browser console log",
-      iconUrl: getHelpIconUrl("console.svg"),
+      iconUrl: getRootIconUrl("console.svg"),
       beginGroup: true,
       enabled: always,
       run: cb.onShowConsole,

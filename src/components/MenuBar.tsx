@@ -3,6 +3,7 @@ import logoUrl from "../assets/DataLab.svg";
 import type { ActionDescriptor, ActionState } from "../actions/types";
 import { buildMenuTree } from "../actions/buildMenu";
 import { MenuDropdown } from "./MenuDropdown";
+import { ConsoleStatusIndicator } from "./ConsoleStatusIndicator";
 import { useTheme } from "../utils/theme";
 
 interface Props {
@@ -13,10 +14,20 @@ interface Props {
   /** Callback invoked when the user clicks the "Beta" badge
    *  (typically opens the About dialog). */
   onShowExperimentalInfo?: () => void;
+  /** Callback invoked when the user clicks the console-status indicator;
+   *  typically opens the Help > Browser console log dialog. */
+  onOpenConsole?: () => void;
 }
 
 export function MenuBar(props: Props) {
-  const { status, statusKind, state, actions, onShowExperimentalInfo } = props;
+  const {
+    status,
+    statusKind,
+    state,
+    actions,
+    onShowExperimentalInfo,
+    onOpenConsole,
+  } = props;
   const tree = useMemo(() => buildMenuTree(actions), [actions]);
   const [openTop, setOpenTop] = useState<string | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +103,7 @@ export function MenuBar(props: Props) {
       >
         {status}
       </span>
+      {onOpenConsole && <ConsoleStatusIndicator onOpen={onOpenConsole} />}
       <ThemeToggleButton />
     </div>
   );
