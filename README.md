@@ -32,6 +32,9 @@ DataLab Web mirrors a large portion of the desktop application surface:
 
 ## Architecture overview
 
+> For the full picture — layer view, component view, worker protocols and
+> end-to-end flows with diagrams — see [doc/architecture.md](doc/architecture.md).
+
 ```text
  ┌─────────────────────────── Browser ───────────────────────────┐
  │  React / TypeScript UI   ──►   Pyodide (CPython + WASM)        │
@@ -43,25 +46,21 @@ DataLab Web mirrors a large portion of the desktop application surface:
  └────────────────────────────────────────────────────────────────┘
 ```
 
-Code organisation:
+Top-level source layout:
 
-- `src/runtime/` — Pyodide loader and Python ↔ JS bridge.
-  - `bootstrap.py` — Python module loaded into Pyodide; owns the hierarchical in-memory object model (panels, groups, objects) and exposes the helper functions the UI calls.
-  - `processor.py` — Sigima catalog introspection: discovers processings, applies overrides and exposes them to the UI (written into Pyodide as `dlw_processor.py`).
-  - `runtime.ts` — typed wrapper around the Pyodide instance.
-  - `RuntimeContext.tsx`, `WorkspaceContext.tsx` — React contexts that load the runtime once and track workspace dirty / filename state.
-  - `macroWorker.ts`, `notebookWorker.ts` — dedicated Web Workers hosting secondary Pyodide instances for macro and notebook cell execution, isolated from the main UI thread.
-  - `MacroRuntime.ts`, `proxyBridge.ts`, `remoteBridge.ts` — proxy / remote-control surfaces shared by macros, notebooks and the SDK.
-  - `dlplugins/datalab/` — portable plugin shim providing the `PluginBase` API so DataLab desktop plugins run unchanged.
-  - `dlw_h5browser.py`, `dlw_interactive_fit.py`, `dlw_main.py`, `dlw_plugins.py`, `notebook_display.py`, `macro_proxy.py`, `_guidata_*_shim.py` — focused Python helpers backing specific dialogs and the plugin / notebook / macro hosts.
-- `src/components/` — UI building blocks (menu bar, object tree, plots, dialogs, macro panel, side panels…), including `DialogBridge.tsx` which routes Python dialog requests to React components and `DataSetDialog.tsx` / `DataSetForm/` which auto-generate parameter dialogs from guidata DataSet schemas.
-- `src/actions/` — action registry that maps Sigima features to menu items.
-- `src/plugins/` — host-side support for the Qt-compatible plugin API.
-- `src/macros/`, `src/notebook/` — macro and notebook editor / state logic.
-- `src/aiassistant/` — in-app AI assistant panel and tool wiring.
-- `src/storage/`, `src/utils/` — IndexedDB-backed recovery caches, recent-files store and shared utilities.
-- `src/App.tsx` — top-level layout (menu bar at the top, object tree on the left, central plot area, results panel on the right) with persisted splitter sizes.
-- `packages/sdk/` — host-side TypeScript SDK (`@datalab-platform/web-sdk`) shipped as a separate tarball; its `package.json` version must stay in sync with the app.
+- `src/runtime/` — Pyodide loader, typed TS runtime, React contexts,
+  Python kernel modules (`bootstrap.py`, `processor.py`, `dlw_*.py`),
+  macro / notebook Web Workers and the proxy / remote bridges.
+- `src/components/` — UI building blocks (menu bar, object tree, plots,
+  dialogs, macro / notebook panels…). Parameter dialogs are auto-generated
+  from guidata DataSet schemas by `DataSetDialog.tsx`.
+- `src/actions/` — action registry mapping Sigima features to menu items.
+- `src/macros/`, `src/notebook/`, `src/plugins/`, `src/aiassistant/`,
+  `src/preferences/`, `src/storage/`, `src/utils/` — focused subsystems.
+- `src/App.tsx` — top-level layout with persisted splitters.
+- `packages/sdk/` — host-side TypeScript SDK
+  (`@datalab-platform/web-sdk`) shipped as a separate tarball; its
+  `package.json` version must stay in sync with the app.
 
 ## Persistence model
 

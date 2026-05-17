@@ -22,6 +22,11 @@ any commit; structural decisions stay under human responsibility. See
 React/TS UI  ──►  src/runtime/runtime.ts  ──►  Pyodide  ──►  bootstrap.py + helpers  ──►  Sigima
 ```
 
+The full architecture (layer view, component view, worker / remote
+bridge protocols, end-to-end flows) is documented in
+[`doc/architecture.md`](../doc/architecture.md) — keep it in sync when
+you add or restructure a top-level subsystem.
+
 * **`src/runtime/bootstrap.py`** is loaded once into the main Pyodide instance.
   It owns the hierarchical in-memory object model — panels (signal/image),
   groups, objects — mirroring DataLab desktop's `ObjectModel`, and exposes

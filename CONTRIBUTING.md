@@ -53,5 +53,6 @@ This policy covers everything in the project repository: source code, tests, con
 
 - Open a pull request against `main`.
 - Make sure the project still builds (`npm run build`), passes lint (`npm run lint`) and tests (`npm test`, plus Playwright when UI behaviour changes — see [doc/testing-strategy.md](doc/testing-strategy.md)).
+- When you add or restructure a top-level subsystem (a new worker, a new bridge, a new Python helper module …), update [doc/architecture.md](doc/architecture.md) in the same commit so the layer / component diagrams stay accurate.
 - Keep commits focused; split unrelated changes.
 - Apply the GenAI commit convention above where relevant.
