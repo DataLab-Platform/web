@@ -35,15 +35,11 @@ DataLab Web mirrors a large portion of the desktop application surface:
 > For the full picture — layer view, component view, worker protocols and
 > end-to-end flows with diagrams — see [doc/architecture.md](doc/architecture.md).
 
-```text
- ┌─────────────────────────── Browser ───────────────────────────┐
- │  React / TypeScript UI   ──►   Pyodide (CPython + WASM)        │
- │   • Signal & image panels    • numpy / scipy / scikit-image    │
- │   • Plotly.js plots          • h5py                            │
- │   • Menus / dialogs          • sigima (computation engine)     │
- │   • Macro editor             • bootstrap.py (object store +    │
- │   • Plugin manager             JS-friendly helper functions)   │
- └────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    UI["<b>React / TypeScript UI</b><div style='text-align:left;min-width:260px'>• Signal &amp; image panels<br/>• Plotly.js plots<br/>• Menus / dialogs<br/>• Macro editor<br/>• Plugin manager</div>"]
+    Py["<b>Pyodide (CPython + WASM)</b><div style='text-align:left;min-width:420px;white-space:nowrap'>• numpy / scipy / scikit-image<br/>• h5py<br/>• sigima (computation engine)<br/>• bootstrap.py (object store + JS-friendly helpers)</div>"]
+    UI -->|"runtime.ts bridge"| Py
 ```
 
 Top-level source layout:
