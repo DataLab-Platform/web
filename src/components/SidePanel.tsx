@@ -550,15 +550,19 @@ function PropertiesPanel({
   // Hide the raw array / dict fields from the generic DataSet form:
   // dedicated rich widgets (StatsCard, MetadataEditor) cover them
   // outside the form, and the CSV-string fallback is unusable for
-  // 1000-point arrays.
-  const filteredSchema = useMemo(
-    () => (payload ? hideArrayAndDictFields(payload.schema) : null),
+  // 1000-point arrays.  Also strip the corresponding *values* from the
+  // form payload — keeping ``obj.data`` (1000×1000 floats serialised as
+  // nested lists) in the form's draft makes every keystroke pay a
+  // ``JSON.stringify`` over millions of numbers in :func:`valuesEqual`,
+  // which freezes the UI for hundreds of milliseconds per character.
+  const filtered = useMemo(
+    () => (payload ? stripArrayAndDictFields(payload) : null),
     [payload],
   );
 
   if (loading) return <div className="side-panel-info">Loading…</div>;
   if (error && !payload) return <div className="error">{error}</div>;
-  if (!payload || !filteredSchema) return null;
+  if (!payload || !filtered) return null;
   return (
     <div className="properties-panel">
       <ObjectStatsCard stats={stats} error={statsError} />
@@ -572,8 +576,8 @@ function PropertiesPanel({
       )}
       <EditableForm
         key={`properties:${oid}:${refreshNonce}`}
-        schema={filteredSchema}
-        values={payload.values}
+        schema={filtered.schema}
+        values={filtered.values}
         onApply={apply}
         initialError={error}
       />
@@ -683,28 +687,45 @@ function ProcessingHeader({ info }: { info: LastProcessingInfo }) {
 }
 
 /**
- * Return a shallow-cloned schema with every ``float_array`` /
- * ``dict`` property tagged ``x-guidata-hide: true`` so the generic
- * :class:`DataSetForm` skips them.  The Properties panel renders
- * dedicated rich widgets for those instead.
+ * Return a shallow-cloned ``{schema, values}`` payload where every
+ * ``float_array`` / ``dict`` property is tagged ``x-guidata-hide:
+ * true`` (so the generic :class:`DataSetForm` skips it) **and** its
+ * value is dropped from the form payload.
+ *
+ * The Properties panel renders dedicated rich widgets for those
+ * fields, so the generic form never reads them.  Dropping the values
+ * is what keeps the per-keystroke cost bounded: an :class:`ImageObj`
+ * carries its full ``data`` array (potentially millions of floats
+ * serialised as nested lists) in the schema payload, and the
+ * Apply/Reset dirty check stringifies the whole draft on every input
+ * change — leaving them in would freeze the UI for hundreds of
+ * milliseconds per character.
  */
-function hideArrayAndDictFields(
-  schema: SchemaWithValues["schema"],
-): SchemaWithValues["schema"] {
-  const props = schema.properties as
+function stripArrayAndDictFields(payload: SchemaWithValues): SchemaWithValues {
+  const props = payload.schema.properties as
     | Record<string, Record<string, unknown>>
     | undefined;
-  if (!props) return schema;
+  if (!props) return payload;
   const newProps: Record<string, Record<string, unknown>> = {};
+  const stripped = new Set<string>();
   for (const [name, prop] of Object.entries(props)) {
     const kind = prop["x-guidata-kind"];
     if (kind === "float_array" || kind === "dict") {
       newProps[name] = { ...prop, "x-guidata-hide": true };
+      stripped.add(name);
     } else {
       newProps[name] = prop;
     }
   }
-  return { ...schema, properties: newProps };
+  if (stripped.size === 0) return payload;
+  const newValues: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(payload.values)) {
+    if (!stripped.has(name)) newValues[name] = value;
+  }
+  return {
+    schema: { ...payload.schema, properties: newProps },
+    values: newValues,
+  };
 }
 
 // ---------------------------------------------------------------------------
