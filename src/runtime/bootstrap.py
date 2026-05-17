@@ -1302,15 +1302,166 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
     # ``get_image_data``).  Coerce them back to ``np.ndarray`` here so
     # the model invariant is preserved regardless of the caller.
     array_fields = {
-        item.get_name()
-        for item in obj.get_items()
-        if isinstance(item, FloatArrayItem)
+        item.get_name() for item in obj.get_items() if isinstance(item, FloatArrayItem)
     }
     for name in array_fields & values.keys():
         value = values[name]
         if value is not None and not isinstance(value, np.ndarray):
             values[name] = np.asarray(value)
+    # ``ImageObj.is_uniform_coords`` is a *store* property that gates
+    # the active set of fields (uniform x0/y0/dx/dy vs non-uniform
+    # xcoords/ycoords).  Toggling it from the Properties panel must
+    # regenerate the now-active fields from the previously-active ones
+    # (see ``ImageObj.switch_coords_to``).  Without this, the toggle
+    # would only flip the boolean while leaving stale values in the
+    # newly-active fields.
+    if (
+        _MODEL.kind_of(oid) == "image"
+        and "is_uniform_coords" in values
+        and bool(values["is_uniform_coords"]) != bool(obj.is_uniform_coords)
+    ):
+        target = "uniform" if values["is_uniform_coords"] else "non-uniform"
+        obj.switch_coords_to(target)
+        # Discard caller-supplied values for the fields that
+        # ``switch_coords_to`` just (re)computed so ``update_dataset``
+        # does not overwrite them with stale form data echoed back
+        # from inactive widgets.
+        for name in ("x0", "y0", "dx", "dy", "xcoords", "ycoords"):
+            values.pop(name, None)
     update_dataset(obj, values)
+
+
+def get_image_coords(oid: str) -> dict[str, Any]:
+    """Return the X / Y pixel coordinates of image *oid*.
+
+    Always materialises both arrays — uniform images have their
+    coordinates expanded from ``x0``/``y0``/``dx``/``dy`` so the front
+    end can present a single tabular view regardless of representation.
+    """
+    obj = _MODEL.get(oid)
+    shape = obj.data.shape  # (height, width)
+    if obj.is_uniform_coords:
+        x = np.arange(shape[1], dtype=float) * float(obj.dx) + float(obj.x0)
+        y = np.arange(shape[0], dtype=float) * float(obj.dy) + float(obj.y0)
+    else:
+        x = np.asarray(obj.xcoords, dtype=float)
+        y = np.asarray(obj.ycoords, dtype=float)
+    return {
+        "is_uniform": bool(obj.is_uniform_coords),
+        "shape": [int(shape[0]), int(shape[1])],
+        "x": x.tolist(),
+        "y": y.tolist(),
+    }
+
+
+def set_image_coords(oid: str, xcoords: Any, ycoords: Any) -> None:
+    """Replace image *oid* coordinates with the supplied 1-D arrays.
+
+    Always forces the image into the non-uniform representation
+    (caller can use :func:`switch_image_coords_type` to convert back).
+    Lengths must match ``data.shape[1]`` (X) and ``data.shape[0]`` (Y).
+    """
+    if hasattr(xcoords, "to_py"):
+        xcoords = xcoords.to_py()
+    if hasattr(ycoords, "to_py"):
+        ycoords = ycoords.to_py()
+    obj = _MODEL.get(oid)
+    xa = np.asarray(xcoords, dtype=float).ravel()
+    ya = np.asarray(ycoords, dtype=float).ravel()
+    h, w = obj.data.shape[:2]
+    if xa.size != w or ya.size != h:
+        raise ValueError(
+            f"Coords length mismatch: x={xa.size} (expected {w}), "
+            f"y={ya.size} (expected {h})"
+        )
+    obj.set_coords(xa, ya)
+
+
+def switch_image_coords_type(oid: str, target: str) -> dict[str, bool]:
+    """Switch image *oid* between uniform and non-uniform coordinates.
+
+    Wraps :meth:`ImageObj.switch_coords_to`.  Returns the new
+    ``is_uniform`` flag for the caller's convenience.
+    """
+    if target not in ("uniform", "non-uniform"):
+        raise ValueError(f"target must be 'uniform' or 'non-uniform', got {target!r}")
+    obj = _MODEL.get(oid)
+    obj.switch_coords_to(target)
+    return {"is_uniform": bool(obj.is_uniform_coords)}
+
+
+def set_signal_xy(oid: str, x: Any, y: Any) -> None:
+    """Replace signal *oid* xy data with the supplied 1-D arrays.
+
+    Validates equal length and strictly increasing X (Sigima requires
+    monotonic X for most processing functions).
+    """
+    if hasattr(x, "to_py"):
+        x = x.to_py()
+    if hasattr(y, "to_py"):
+        y = y.to_py()
+    obj = _MODEL.get(oid)
+    xa = np.asarray(x, dtype=float).ravel()
+    ya = np.asarray(y, dtype=float).ravel()
+    if xa.size != ya.size:
+        raise ValueError(f"Length mismatch: x={xa.size}, y={ya.size}")
+    if xa.size < 2:
+        raise ValueError("At least 2 points are required")
+    if not np.all(np.diff(xa) > 0):
+        raise ValueError("X coordinates must be strictly increasing")
+    obj.set_xydata(xa, ya)
+
+
+def resolve_object_property_active(
+    oid: str, values: dict[str, Any] | None = None
+) -> dict[str, bool]:
+    """Evaluate ``display.active`` for every named item of *oid*.
+
+    Mirrors :func:`resolve_feature_choices` but for the Properties side
+    panel.  Callers pass the *current* form values so callable / store
+    ``active`` props (e.g. ``ImageObj.is_uniform_coords`` driving
+    ``x0``/``y0``/``dx``/``dy`` and ``xcoords``/``ycoords``) reflect
+    the unsaved edits and not just the persisted object state.
+    """
+    from guidata.dataset import resolve_dataset_active, update_dataset
+    from guidata.dataset.dataitems import FloatArrayItem
+
+    obj = _MODEL.get(oid)
+    if values:
+        if hasattr(values, "to_py"):
+            values = values.to_py()
+        # Build a scratch instance carrying the persisted state + the
+        # pending edits.  Mutating ``obj`` would leak partial state into
+        # the rendered plot.
+        scratch = type(obj)()
+        # Seed scratch with the persisted state field-by-field; ``ImageObj``
+        # does not expose ``update_dataset`` as a method and
+        # ``guidata.dataset.update_dataset(scratch, obj)`` would walk
+        # ``obj``'s ``__dict__`` (including computed-prop guards).
+        for item in obj.get_items():
+            name = item.get_name()
+            if not name:
+                continue
+            if item.get_prop("data", "computed", None) is not None:
+                continue
+            try:
+                setattr(scratch, name, getattr(obj, name))
+            except (AttributeError, ValueError):
+                continue
+        array_fields = {
+            item.get_name()
+            for item in scratch.get_items()
+            if isinstance(item, FloatArrayItem)
+        }
+        for name in array_fields & values.keys():
+            value = values[name]
+            if value is not None and not isinstance(value, np.ndarray):
+                values[name] = np.asarray(value)
+        update_dataset(scratch, values)
+        target = scratch
+    else:
+        target = obj
+    return resolve_dataset_active(target)
 
 
 # ---------------------------------------------------------------------------
@@ -4534,6 +4685,11 @@ __all__ = [
     "update_signal_creation_params",
     "get_object_property_schema",
     "set_object_property_values",
+    "resolve_object_property_active",
+    "get_image_coords",
+    "set_image_coords",
+    "switch_image_coords_type",
+    "set_signal_xy",
     "get_object_stats",
     "list_object_metadata",
     "set_object_metadata_value",

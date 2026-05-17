@@ -33,6 +33,11 @@ export interface DataSetFormProps {
     itemName: string,
     currentValues: Values,
   ) => Promise<DynamicChoice[]>;
+  /** Resolver for dynamic ``display.active`` evaluation (when a
+   *  property carries ``x-guidata-active-dynamic``).  Called with the
+   *  current form values (debounced) and must return a map
+   *  ``{item_name: bool}``.  Inactive items are rendered disabled. */
+  resolveActive?: (currentValues: Values) => Promise<Record<string, boolean>>;
 }
 
 // Layout node as emitted by the Python side. Either a property name
@@ -50,7 +55,7 @@ type LayoutNode = LayoutLeaf | LayoutContainer;
 // ---------------------------------------------------------------------------
 
 export function DataSetForm(props: DataSetFormProps) {
-  const { schema, values, onChange, resolveChoices } = props;
+  const { schema, values, onChange, resolveChoices, resolveActive } = props;
   const properties = (schema.properties as Record<string, JsonSchema>) ?? {};
   const layout =
     (schema["x-guidata-layout"] as LayoutNode[] | undefined) ??
@@ -64,6 +69,44 @@ export function DataSetForm(props: DataSetFormProps) {
     [onChange, values],
   );
 
+  // Dynamic ``display.active`` resolution.  Debounce so we do not call
+  // back into Pyodide on every keystroke.  Only items flagged with
+  // ``x-guidata-active-dynamic`` need resolution; if there are none we
+  // skip the call entirely.
+  const hasDynamicActive = useMemo(
+    () =>
+      Object.values(properties).some(
+        (p) => p["x-guidata-active-dynamic"] === true,
+      ),
+    [properties],
+  );
+  const [activeMap, setActiveMap] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (!resolveActive || !hasDynamicActive) return;
+    const handle = window.setTimeout(() => {
+      let cancelled = false;
+      resolveActive(values)
+        .then((next) => {
+          if (!cancelled) setActiveMap(next ?? {});
+        })
+        .catch(() => {
+          // Resolution failure must not blank the form — keep the
+          // previous activeMap so disabled state stays stable.
+        });
+      // ``setTimeout`` callback cannot return a cleanup; we mark via
+      // the outer ref pattern.
+      (handle as unknown as { _cancelled?: () => void })._cancelled = () => {
+        cancelled = true;
+      };
+    }, 150);
+    return () => {
+      window.clearTimeout(handle);
+      const cancel = (handle as unknown as { _cancelled?: () => void })
+        ._cancelled;
+      if (cancel) cancel();
+    };
+  }, [resolveActive, hasDynamicActive, values]);
+
   return (
     <div className="dataset-form">
       {layout.map((node, idx) => (
@@ -74,6 +117,7 @@ export function DataSetForm(props: DataSetFormProps) {
           values={values}
           setValue={setValue}
           resolveChoices={resolveChoices}
+          activeMap={activeMap}
         />
       ))}
     </div>
@@ -86,6 +130,7 @@ interface NodeProps {
   values: Values;
   setValue: (name: string, value: unknown) => void;
   resolveChoices?: DataSetFormProps["resolveChoices"];
+  activeMap: Record<string, boolean>;
 }
 
 function LayoutNodeView({
@@ -94,11 +139,18 @@ function LayoutNodeView({
   values,
   setValue,
   resolveChoices,
+  activeMap,
 }: NodeProps) {
   if (typeof node === "string") {
     const prop = properties[node];
     if (!prop) return null;
     if (prop["x-guidata-hide"] === true) return null;
+    // ``x-guidata-active: false`` (static) — render disabled.  For
+    // dynamic active props, ``activeMap`` carries the latest resolved
+    // state (default true when unresolved).
+    const staticInactive = prop["x-guidata-active"] === false;
+    const dynamicInactive = activeMap[node] === false;
+    const inactive = staticInactive || dynamicInactive;
     return (
       <FieldRow
         name={node}
@@ -107,6 +159,7 @@ function LayoutNodeView({
         onChange={(v) => setValue(node, v)}
         currentValues={values}
         resolveChoices={resolveChoices}
+        inactive={inactive}
       />
     );
   }
@@ -121,6 +174,7 @@ function LayoutNodeView({
         values={values}
         setValue={setValue}
         resolveChoices={resolveChoices}
+        activeMap={activeMap}
       />
     );
   }
@@ -139,6 +193,7 @@ function LayoutNodeView({
           values={values}
           setValue={setValue}
           resolveChoices={resolveChoices}
+          activeMap={activeMap}
         />
       ))}
     </fieldset>
@@ -151,12 +206,14 @@ function TabGroup({
   values,
   setValue,
   resolveChoices,
+  activeMap,
 }: {
   node: LayoutContainer;
   properties: Record<string, JsonSchema>;
   values: Values;
   setValue: (name: string, value: unknown) => void;
   resolveChoices?: DataSetFormProps["resolveChoices"];
+  activeMap: Record<string, boolean>;
 }) {
   const tabs = (node.items ?? []).filter(
     (n): n is LayoutContainer => typeof n !== "string" && n.kind === "tab",
@@ -187,6 +244,7 @@ function TabGroup({
             values={values}
             setValue={setValue}
             resolveChoices={resolveChoices}
+            activeMap={activeMap}
           />
         ))}
       </div>
@@ -205,23 +263,33 @@ interface FieldRowProps {
   onChange: (v: unknown) => void;
   currentValues: Values;
   resolveChoices?: DataSetFormProps["resolveChoices"];
+  /** When true, the row is rendered disabled and dimmed (driven by
+   *  ``display.active`` evaluation). */
+  inactive?: boolean;
 }
 
 function FieldRow(props: FieldRowProps) {
-  const { name, prop } = props;
+  const { name, prop, inactive } = props;
   const label = (prop["x-guidata-label"] as string | undefined) ?? name;
   const help = prop.description as string | undefined;
   const unit = prop["x-guidata-unit"] as string | undefined;
   const readOnly = prop.readOnly === true;
+  const computed = prop["x-guidata-computed"] === true;
+  const classes = ["dataset-form-row"];
+  if (computed) classes.push("dataset-form-row-computed");
+  if (inactive) classes.push("dataset-form-row-inactive");
+  const computedHint = "Computed from other fields — read-only";
+  const inactiveHint = "Inactive in the current configuration";
+  const title = computed ? computedHint : inactive ? inactiveHint : help;
   return (
-    <div className="dataset-form-row">
+    <div className={classes.join(" ")}>
       <label
         className="dataset-form-label"
-        title={help}
+        title={title}
         dangerouslySetInnerHTML={{ __html: label }}
       />
       <div className="dataset-form-control">
-        <FieldWidget {...props} disabled={readOnly} />
+        <FieldWidget {...props} disabled={readOnly || inactive === true} />
         {unit && <span className="dataset-form-unit">{unit}</span>}
       </div>
     </div>

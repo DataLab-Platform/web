@@ -9,7 +9,7 @@
  * as CSV).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ObjectStats, DataLabRuntime } from "../runtime/runtime";
 
 interface Props {
@@ -17,12 +17,21 @@ interface Props {
   oid: string;
   stats: ObjectStats;
   refreshNonce: number;
+  /** Notify the parent when a signal X/Y import succeeds so the plot
+   *  and the rest of the properties panel re-fetch. */
+  onChanged?: () => void;
 }
 
 const HEAD_ROWS = 5;
 const TAIL_ROWS = 5;
 
-export function ArrayPreview({ runtime, oid, stats, refreshNonce }: Props) {
+export function ArrayPreview({
+  runtime,
+  oid,
+  stats,
+  refreshNonce,
+  onChanged,
+}: Props) {
   if (stats.kind === "image") {
     return <ImageArrayPreview stats={stats} />;
   }
@@ -31,6 +40,7 @@ export function ArrayPreview({ runtime, oid, stats, refreshNonce }: Props) {
       runtime={runtime}
       oid={oid}
       refreshNonce={refreshNonce}
+      onChanged={onChanged}
     />
   );
 }
@@ -39,13 +49,17 @@ function SignalArrayPreview({
   runtime,
   oid,
   refreshNonce,
+  onChanged,
 }: {
   runtime: DataLabRuntime;
   oid: string;
   refreshNonce: number;
+  onChanged?: () => void;
 }) {
   const [data, setData] = useState<{ x: number[]; y: number[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +104,35 @@ function SignalArrayPreview({
     URL.revokeObjectURL(url);
   }, [data, oid]);
 
-  if (error) return <div className="array-preview-error">{error}</div>;
+  const handleImportPick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const text = await file.text();
+        const { x, y } = parseSignalCsv(text);
+        if (x.length === 0) throw new Error("No numeric values found in file");
+        if (x.length !== y.length)
+          throw new Error(`Length mismatch: x=${x.length}, y=${y.length}`);
+        await runtime.setSignalXY(oid, x, y);
+        onChanged?.();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, oid, onChanged],
+  );
+
+  if (error && !data) return <div className="array-preview-error">{error}</div>;
   if (!data) return <div className="array-preview-loading">Loading data…</div>;
 
   // Compute head + tail (with an ellipsis row when the array is long
@@ -121,8 +163,20 @@ function SignalArrayPreview({
           <button type="button" onClick={handleDownload}>
             Download
           </button>
+          <button type="button" onClick={handleImportPick} disabled={busy}>
+            Import CSV…
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            style={{ display: "none" }}
+            onChange={handleImportFile}
+            data-testid="signal-import-csv"
+          />
         </div>
       </header>
+      {error && <div className="array-preview-error">{error}</div>}
       <div className="array-preview-table-wrap">
         <table className="array-preview-table">
           <thead>
@@ -184,4 +238,40 @@ function fmt(v: number): string {
     return v.toExponential(4);
   }
   return Number(v.toPrecision(6)).toString();
+}
+
+/** Parse a 2-column CSV / whitespace-delimited blob into ``{x, y}``.
+ *
+ *  - Header rows whose first token is non-numeric are skipped.
+ *  - Empty / non-numeric tokens are ignored.
+ *  - Lines starting with ``#`` are treated as comments.
+ *  - Falls back to "single column → consecutive (i, value) pairs" only
+ *    if every non-empty line has exactly one numeric token (treated as
+ *    Y with implicit ``x = arange(len)``).
+ */
+export function parseSignalCsv(text: string): { x: number[]; y: number[] } {
+  const rows: number[][] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const tokens = line.split(/[\s,;]+/).filter((t) => t.length > 0);
+    const nums = tokens.map(Number).filter((n) => Number.isFinite(n));
+    if (nums.length === 0) continue; // header row
+    rows.push(nums);
+  }
+  if (rows.length === 0) return { x: [], y: [] };
+  const allSingle = rows.every((r) => r.length === 1);
+  if (allSingle) {
+    const y = rows.map((r) => r[0]);
+    return { x: y.map((_, i) => i), y };
+  }
+  const x: number[] = [];
+  const y: number[] = [];
+  for (const r of rows) {
+    if (r.length >= 2) {
+      x.push(r[0]);
+      y.push(r[1]);
+    }
+  }
+  return { x, y };
 }

@@ -22,6 +22,7 @@ import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
+import { CoordsEditor } from "./CoordsEditor";
 import { useMessage } from "./ConfirmDialog";
 import { getRootIconUrl } from "../assets/rootIcons";
 
@@ -547,6 +548,15 @@ function PropertiesPanel({
     [runtime, oid, onApplied],
   );
 
+  // Resolver for ``display.active`` props (e.g. ``ImageObj`` toggles
+  // ``x0/y0/dx/dy`` vs ``xcoords/ycoords`` based on
+  // ``is_uniform_coords``).  ``DataSetForm`` debounces the call.
+  const resolveActive = useCallback(
+    (currentValues: Record<string, unknown>) =>
+      runtime.resolveObjectPropertyActive(oid, currentValues),
+    [runtime, oid],
+  );
+
   // Hide the raw array / dict fields from the generic DataSet form:
   // dedicated rich widgets (StatsCard, MetadataEditor) cover them
   // outside the form, and the CSV-string fallback is unusable for
@@ -572,6 +582,7 @@ function PropertiesPanel({
           oid={oid}
           stats={stats}
           refreshNonce={refreshNonce}
+          onChanged={onApplied}
         />
       )}
       <EditableForm
@@ -580,6 +591,7 @@ function PropertiesPanel({
         values={filtered.values}
         onApply={apply}
         initialError={error}
+        resolveActive={resolveActive}
       />
       {panelKind === "signal" && (
         <CurveStyleEditor
@@ -587,6 +599,14 @@ function PropertiesPanel({
           oid={oid}
           refreshNonce={refreshNonce}
           onApplied={onApplied}
+        />
+      )}
+      {panelKind === "image" && (
+        <CoordsEditor
+          runtime={runtime}
+          oid={oid}
+          refreshNonce={refreshNonce}
+          onChanged={onApplied}
         />
       )}
       <MetadataEditor
@@ -739,6 +759,8 @@ interface EditableFormProps {
   values: Record<string, unknown>;
   onApply: (values: Record<string, unknown>) => Promise<void>;
   initialError?: string | null;
+  resolveChoices?: React.ComponentProps<typeof DataSetForm>["resolveChoices"];
+  resolveActive?: React.ComponentProps<typeof DataSetForm>["resolveActive"];
 }
 
 function EditableForm({
@@ -746,6 +768,8 @@ function EditableForm({
   values,
   onApply,
   initialError = null,
+  resolveChoices,
+  resolveActive,
 }: EditableFormProps) {
   // Snapshot of the values that are currently committed in Python.
   // Anything different from this counts as "unsaved".
@@ -793,7 +817,13 @@ function EditableForm({
   return (
     <div className="side-panel-form" ref={formRef} onKeyDown={handleKeyDown}>
       {error && <div className="error">{error}</div>}
-      <DataSetForm schema={schema} values={draft} onChange={setDraft} />
+      <DataSetForm
+        schema={schema}
+        values={draft}
+        onChange={setDraft}
+        resolveChoices={resolveChoices}
+        resolveActive={resolveActive}
+      />
       <div
         className={
           "editable-form-footer" + (dirty ? " editable-form-dirty" : "")

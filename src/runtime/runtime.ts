@@ -1176,6 +1176,69 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("set_object_property_values", { oid: id, values });
   }
 
+  /** Evaluate ``display.active`` for every named item of *id*.
+   *
+   *  ``values`` carries the pending (unsaved) form edits so toggling a
+   *  store property like ``ImageObj.is_uniform_coords`` reflects in the
+   *  active set even before the user clicks Apply. */
+  async resolveObjectPropertyActive(
+    id: string,
+    values: Record<string, unknown> | null = null,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_object_property_active", {
+      oid: id,
+      values,
+    })) as Record<string, boolean>;
+  }
+
+  /** Return the X / Y pixel coordinates of image *id*.
+   *
+   *  Uniform images have their coordinates expanded so the caller can
+   *  always render a single tabular view. */
+  async getImageCoords(id: string): Promise<{
+    is_uniform: boolean;
+    shape: [number, number];
+    x: number[];
+    y: number[];
+  }> {
+    return (await this.callPy("get_image_coords", { oid: id })) as {
+      is_uniform: boolean;
+      shape: [number, number];
+      x: number[];
+      y: number[];
+    };
+  }
+
+  /** Replace image *id* coordinates with the supplied 1-D arrays.
+   *  Always switches the image to non-uniform representation. */
+  async setImageCoords(
+    id: string,
+    xcoords: number[],
+    ycoords: number[],
+  ): Promise<void> {
+    await this.callPy("set_image_coords", {
+      oid: id,
+      xcoords,
+      ycoords,
+    });
+  }
+
+  /** Switch image *id* between uniform and non-uniform coordinates. */
+  async switchImageCoordsType(
+    id: string,
+    target: "uniform" | "non-uniform",
+  ): Promise<{ is_uniform: boolean }> {
+    return (await this.callPy("switch_image_coords_type", {
+      oid: id,
+      target,
+    })) as { is_uniform: boolean };
+  }
+
+  /** Replace signal *id* xy data with the supplied 1-D arrays. */
+  async setSignalXY(id: string, x: number[], y: number[]): Promise<void> {
+    await this.callPy("set_signal_xy", { oid: id, x, y });
+  }
+
   /** Read-only stats summary (dtype / shape / min / max / mean / std)
    *  of the underlying object array.  Used by the Properties panel. */
   async getObjectStats(id: string): Promise<ObjectStats> {

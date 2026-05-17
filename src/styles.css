@@ -1789,6 +1789,24 @@ input {
   color: var(--text);
 }
 
+.dataset-form-row-computed .dataset-form-label {
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+.dataset-form-row-computed .dataset-form-label::after {
+  content: " ƒ";
+  opacity: 0.6;
+}
+
+.dataset-form-row-inactive {
+  opacity: 0.55;
+}
+
+.dataset-form-row-inactive .dataset-form-label {
+  color: var(--text-dim);
+}
+
 .dataset-form-control {
   display: flex;
   align-items: center;
@@ -2100,6 +2118,34 @@ input {
   color: var(--text-dim);
   font-size: 11px;
   font-style: italic;
+}
+
+/* --- Coords editor (image) --------------------------------- */
+
+.coords-editor-axes {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.coords-editor-axis {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coords-editor-axis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.coords-editor-axis-header button {
+  font-size: 11px;
+  padding: 2px 8px;
 }
 
 /* --- Metadata editor --------------------------------------- */
