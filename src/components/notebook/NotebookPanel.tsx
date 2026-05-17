@@ -46,7 +46,11 @@ import {
   jsonStringToNotebook,
   notebookToJsonString,
 } from "../../notebook/nbformat";
-import { buildQuickstartNotebook } from "../../notebook/templates/quickstart";
+import {
+  buildQuickstartNotebook,
+  buildNotebookFromTemplate,
+  NOTEBOOK_TEMPLATES,
+} from "../../notebook/templates";
 import { notebookToMacro } from "../../notebook/notebookToMacro";
 import { macroToNotebook } from "../../macros/macroToNotebook";
 import {
@@ -96,6 +100,12 @@ interface NotebookPanelProps {
 export interface NotebookPanelHandle {
   newNotebook: () => void;
   newFromQuickstart: () => void;
+  /**
+   * Open a fresh notebook built from a bundled template, looked up
+   * by its id in :const:`NOTEBOOK_TEMPLATES`. Unknown ids are
+   * ignored (the call becomes a no-op).
+   */
+  newFromTemplate: (id: string) => void;
   openFromDisk: () => void;
   saveActiveAsIpynb: () => void;
   renameActive: () => void;
@@ -645,6 +655,18 @@ export const NotebookPanel = forwardRef<
     void persistAndOpen(buildQuickstartNotebook());
   }, [persistAndOpen]);
 
+  const handleNewFromTemplate = useCallback(
+    (id: string) => {
+      const nb = buildNotebookFromTemplate(id);
+      if (nb == null) {
+        console.warn(`Unknown notebook template id: ${id}`);
+        return;
+      }
+      void persistAndOpen(nb);
+    },
+    [persistAndOpen],
+  );
+
   const importMacroAsNotebook = useCallback(
     (title: string, source: string) => {
       void persistAndOpen(macroToNotebook(title, source));
@@ -894,6 +916,7 @@ export const NotebookPanel = forwardRef<
     () => ({
       newNotebook: handleNew,
       newFromQuickstart: handleNewFromQuickstart,
+      newFromTemplate: handleNewFromTemplate,
       openFromDisk: handleOpenFromDisk,
       saveActiveAsIpynb: handleSaveAs,
       renameActive: handleRenameActive,
@@ -903,6 +926,7 @@ export const NotebookPanel = forwardRef<
     [
       handleNew,
       handleNewFromQuickstart,
+      handleNewFromTemplate,
       handleOpenFromDisk,
       handleSaveAs,
       handleRenameActive,
@@ -1035,24 +1059,24 @@ export const NotebookPanel = forwardRef<
                   </span>
                 </button>
               </div>
-              <div className="nb-open-menu-item">
-                <button
-                  type="button"
-                  className="nb-open-menu-name"
-                  role="menuitem"
-                  onClick={() => {
-                    setOpenMenuFor(null);
-                    handleNewFromQuickstart();
-                  }}
-                >
-                  <span className="nb-open-menu-name-text">
-                    Quickstart template
-                  </span>
-                  <span className="nb-open-menu-name-when">
-                    Demo: signal + moving average
-                  </span>
-                </button>
-              </div>
+              {NOTEBOOK_TEMPLATES.map((tpl) => (
+                <div key={tpl.id} className="nb-open-menu-item">
+                  <button
+                    type="button"
+                    className="nb-open-menu-name"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpenMenuFor(null);
+                      handleNewFromTemplate(tpl.id);
+                    }}
+                  >
+                    <span className="nb-open-menu-name-text">{tpl.label}</span>
+                    <span className="nb-open-menu-name-when">
+                      {tpl.description}
+                    </span>
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

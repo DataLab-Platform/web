@@ -374,6 +374,18 @@ test.describe("Notebook UI", () => {
       itemsBefore + 1,
     );
   });
+
+  test("+ menu lists Empty + bundled templates", async ({ warmPage: page }) => {
+    await page.locator(".nb-tab-new").click();
+    const menu = page.locator(".nb-new-menu");
+    await expect(menu).toBeVisible();
+    // Empty + Quickstart + Signal & image processing + Proxy methods.
+    await expect(menu.locator(".nb-open-menu-item")).toHaveCount(4);
+    await expect(menu).toContainText("Empty notebook");
+    await expect(menu).toContainText("Quickstart template");
+    await expect(menu).toContainText("Signal & image processing");
+    await expect(menu).toContainText("Proxy methods");
+  });
 });
 
 test.describe("Quickstart notebook template", () => {
@@ -395,13 +407,21 @@ test.describe("Quickstart notebook template", () => {
       await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
         "Quickstart",
       );
-      // The template ships with 5 cells (3 markdown + 2 code).
-      await expect(page.locator(".nb-cell")).toHaveCount(5);
+      // The template ships with 9 cells (5 markdown + 4 code):
+      // intro + create signal + moving average + publish signal +
+      // publish image.
+      await expect(page.locator(".nb-cell")).toHaveCount(9);
       // First markdown cell renders the H1 "Welcome to DataLab Web Notebooks".
       const firstRendered = page.locator(".nb-cell-markdown-rendered").first();
       await expect(firstRendered.locator("h1")).toContainText(
         "Welcome to DataLab Web Notebooks",
       );
+      // A later markdown cell introduces the workspace-publish step.
+      await expect(
+        page.locator(".nb-cell-markdown-rendered", {
+          hasText: "Publish the signal to the DataLab workspace",
+        }),
+      ).toHaveCount(1);
     },
   );
 });

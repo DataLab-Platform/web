@@ -15,17 +15,21 @@ moving-average filter.
 
 ### Creating new notebooks
 
-Three entry points create a fresh notebook:
+Notebooks are created from the **+** button at the right of the
+notebook tab strip. The dropdown lists:
 
-- The **+** button at the right of the notebook tab strip opens a
-  small dropdown with two choices:
-  - **Empty notebook** — a single empty code cell.
-  - **Quickstart template** — the same bundled tutorial as the
-    first-launch notebook (`SignalObj` creation, `display(…)` and
-    `sps.moving_average`).
-- **File → Notebook → New notebook** mirrors the first option.
-- **File → Notebook → New notebook from template → Quickstart**
-  mirrors the second.
+- **Empty notebook** — a single empty code cell.
+- **Quickstart template** — the bundled first-launch tutorial:
+  `create_signal`, `display(…)`, `sps.moving_average`, then publish
+  the signal and a 2D Gaussian image to the workspace via
+  `await proxy.add_signal(...)` / `await proxy.add_image(...)`.
+- **Signal & image processing** — end-to-end tour of the `proxy`
+  workspace API on both panels (publish a sinc signal, run
+  `signal:moving_average`, publish a noisy Gaussian image, run
+  `image:fft`).
+- **Proxy methods** — introspection-focused: `list_signals`,
+  `list_images`, panel switching, and feature discovery through
+  `proxy.list_features()`.
 
 New notebooks are not persisted until you make the first edit
 (autosave then kicks in — see _Multi-tab + persistence_ below).

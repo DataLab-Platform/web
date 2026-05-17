@@ -26,14 +26,17 @@ const INTRO_MD = [
   "* Use **File → Notebook → Save notebook as…** to download a `.ipynb`.",
   "",
   "The notebook namespace already exposes `np` (NumPy), `proxy`",
-  "(the Sigima runtime proxy) and `display(...)` so you can start",
-  "right away.",
+  "(the async DataLab workspace proxy) and `display(...)` so you can",
+  "start right away. Calls on `proxy` are coroutines — always",
+  "prefix them with `await`.",
 ].join("\n");
 
 const CREATE_MD = [
   "## Create a synthetic signal",
   "",
-  "Let's generate a noisy sine wave and plot it.",
+  "Let's generate a noisy sine wave and plot it inline with",
+  "`display(...)`. At this point the signal lives only in the",
+  "notebook namespace.",
 ].join("\n");
 
 const CREATE_CODE = [
@@ -45,7 +48,12 @@ const CREATE_CODE = [
   "display(sig)",
 ].join("\n");
 
-const PROCESS_MD = "## Apply a moving-average filter";
+const PROCESS_MD = [
+  "## Apply a moving-average filter",
+  "",
+  "Sigima processings are plain functions that take an object plus a",
+  "parameter `DataSet` and return a new object.",
+].join("\n");
 
 const PROCESS_CODE = [
   "import sigima.proc.signal as sps",
@@ -53,6 +61,45 @@ const PROCESS_CODE = [
   "",
   "smoothed = sps.moving_average(sig, sp.MovingAverageParam.create(n=15))",
   "display(smoothed)",
+].join("\n");
+
+const PUBLISH_SIGNAL_MD = [
+  "## Publish the signal to the DataLab workspace",
+  "",
+  "So far the signal only exists inside the notebook. Use `proxy`",
+  "to push it to the **Signals** panel, where it can be selected,",
+  "annotated and processed from the GUI alongside notebook-driven",
+  "computations.",
+  "",
+  "`proxy.add_signal(...)` returns the new object's UUID. Switch the",
+  "active panel with `proxy.set_current_panel(...)` so the new signal",
+  "is visible right after the cell runs.",
+].join("\n");
+
+const PUBLISH_SIGNAL_CODE = [
+  'sig_oid = await proxy.add_signal("Noisy sine (from notebook)", x, y)',
+  'await proxy.set_current_panel("signal")',
+  'print(f"Signal added to workspace: {sig_oid}")',
+].join("\n");
+
+const PUBLISH_IMAGE_MD = [
+  "## Publish an image to the workspace",
+  "",
+  "The same pattern works for 2D data: build a NumPy array, then call",
+  "`proxy.add_image(...)`. Below we generate a noisy 2D Gaussian and",
+  "switch to the **Images** panel.",
+].join("\n");
+
+const PUBLISH_IMAGE_CODE = [
+  "size = 256",
+  "yy, xx = np.mgrid[0:size, 0:size]",
+  "cx, cy = size / 2, size / 2",
+  "img = np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (2 * 30 ** 2))",
+  "img += 0.05 * np.random.default_rng(0).random((size, size))",
+  "",
+  'img_oid = await proxy.add_image("Noisy Gaussian", img)',
+  'await proxy.set_current_panel("image")',
+  'print(f"Image added to workspace: {img_oid}")',
 ].join("\n");
 
 /**
@@ -68,6 +115,10 @@ export function buildQuickstartNotebook(): NotebookModel {
     emptyCodeCell(CREATE_CODE),
     emptyMarkdownCell(PROCESS_MD),
     emptyCodeCell(PROCESS_CODE),
+    emptyMarkdownCell(PUBLISH_SIGNAL_MD),
+    emptyCodeCell(PUBLISH_SIGNAL_CODE),
+    emptyMarkdownCell(PUBLISH_IMAGE_MD),
+    emptyCodeCell(PUBLISH_IMAGE_CODE),
   ];
   return nb;
 }
