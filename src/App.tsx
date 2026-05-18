@@ -95,6 +95,15 @@ import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
 import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
+import {
+  WelcomeView,
+  readShowWelcomeOnStartup,
+} from "./components/welcome/WelcomeView";
+import { GuidedTour } from "./components/welcome/GuidedTour";
+import {
+  buildDefaultTourSteps,
+  type TourContext,
+} from "./components/welcome/tourSteps";
 import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
 import { FloatingDockStack } from "./components/FloatingDock";
@@ -422,7 +431,28 @@ export default function App() {
    *  resolve hex short ids that live in the inactive panel (e.g.
    *  signal sources of an image profile result). */
   const [inactiveTree, setInactiveTree] = useState<PanelTree | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, _setSelectedIdsRaw] = useState<string[]>([]);
+  // Bail out on no-op updates: callers commonly pass a freshly-created
+  // array (`[id]`, `[...prev]`, `prev.filter(...)`) even when the
+  // semantic value is unchanged. Returning a new reference triggers
+  // useEffect re-fires across the App and was the root cause of an
+  // infinite render loop on the guided tour transition 12→13.
+  const setSelectedIds = useCallback(
+    (arg: string[] | ((prev: string[]) => string[])) => {
+      _setSelectedIdsRaw((prev) => {
+        const next = typeof arg === "function" ? arg(prev) : arg;
+        if (
+          next === prev ||
+          (next.length === prev.length &&
+            next.every((id, i) => id === prev[i]))
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [data, setData] = useState<SignalData | null>(null);
   /** Other signals selected alongside ``currentId`` — overlaid on top
@@ -498,6 +528,24 @@ export default function App() {
     if (helpView === "console") markConsoleErrorsSeen();
   }, [helpView]);
   const [userGuideOpen, setUserGuideOpen] = useState(false);
+  // Welcome view: shown automatically on first load (and any time the
+  // workspace is empty) unless the user has unchecked "Show welcome on
+  // startup".  Also re-openable on demand from Help > Welcome, in
+  // which case it overrides the empty/non-empty heuristic via
+  // ``welcomeForced``.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const [welcomeForced, setWelcomeForced] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  // IDs of demo objects seeded by the guided tour — cleared when the
+  // tour closes. We track them in a ref so the cleanup runs without
+  // re-triggering render-time effects.
+  const tourDemoIdsRef = useRef<string[]>([]);
+  // Snapshot of treeKind / centralView taken when the tour starts, so
+  // we can restore the user's previous context on close.
+  const tourSnapshotRef = useRef<{
+    treeKind: PanelKind;
+    centralView: CentralView;
+  } | null>(null);
   const [h5BrowserFiles, setH5BrowserFiles] = useState<H5BrowserFile[] | null>(
     null,
   );
@@ -589,7 +637,7 @@ export default function App() {
         setSelectedIds([preferredCurrentId]);
       }
     },
-    [runtime, treeKind],
+    [runtime, treeKind, setSelectedIds],
   );
 
   /** Refresh a panel that may differ from the current ``treeKind``,
@@ -601,6 +649,16 @@ export default function App() {
       if (!runtime) return;
       setTreeKind(kind);
       setCentralView("plot");
+      // Reset the per-panel selection state *synchronously* with the
+      // ``treeKind`` switch so the central viewer effect cannot fire
+      // an intermediate render where ``treeKind`` already points at
+      // the new panel while ``currentId`` still holds an OID from the
+      // previous one — that mismatch caused ``get_image_data`` /
+      // ``get_signal_xy`` to be called with the wrong kind of object
+      // (IndexError on a 1D SignalObj fed to the image fetcher;
+      // AttributeError when an ImageObj reached the signal fetcher).
+      setCurrentId(null);
+      setSelectedIds([]);
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
@@ -614,7 +672,7 @@ export default function App() {
         setSelectedIds([]);
       }
     },
-    [runtime],
+    [runtime, setSelectedIds],
   );
 
   // Refresh the UI whenever a remote-control RPC mutates the object
@@ -885,7 +943,7 @@ export default function App() {
       setSelectedIds(ids);
       setCurrentId(current);
     },
-    [centralView],
+    [centralView, setSelectedIds],
   );
 
   // Publish selection / panel snapshots to non-React consumers (the
@@ -913,7 +971,7 @@ export default function App() {
       setImageRoi([]);
       setResults([]);
     },
-    [treeKind],
+    [treeKind, setSelectedIds],
   );
 
   const handleCentralViewChange = useCallback(
@@ -998,7 +1056,7 @@ export default function App() {
         setCurrentId(oid);
       }
     },
-    [oidIndex, treeKind, centralView, refreshPanelKind],
+    [oidIndex, treeKind, centralView, refreshPanelKind, setSelectedIds],
   );
 
   /** Resolve the group id hosting the currently-selected object in the
@@ -1419,8 +1477,118 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, setSelectedIds],
   );
+
+  // ---- Guided tour helpers ---------------------------------------
+  //
+  // The tour seeds a demo signal + image so its "object tree / plot /
+  // properties" steps are not empty. We snapshot the active panel +
+  // central view when the tour opens and restore them on close, then
+  // delete the seeded objects so the user's workspace returns to its
+  // pre-tour state.
+  const seedDemoSignal = useCallback(async () => {
+    if (!runtime) return;
+    try {
+      const id = await runtime.createSignalTyped("gauss");
+      tourDemoIdsRef.current.push(id);
+      await refresh(id);
+    } catch (err) {
+      console.error("Tour: failed to seed demo signal", err);
+    }
+  }, [runtime, refresh]);
+
+  const seedDemoImage = useCallback(async () => {
+    if (!runtime) return;
+    try {
+      const id = await runtime.createImageTyped("gauss");
+      tourDemoIdsRef.current.push(id);
+      await refreshPanelKind("image", id);
+    } catch (err) {
+      console.error("Tour: failed to seed demo image", err);
+    }
+  }, [runtime, refreshPanelKind]);
+
+  const openTopMenu = useCallback((label: string) => {
+    // MenuBar's onClick toggles ``openTop`` between ``label`` and
+    // ``null``.  Setting state to ``label`` *implicitly closes* any
+    // other top-level menu (only one is open at a time), so we can
+    // skip the previous "dispatch a fake mousedown to close first"
+    // dance — that two-phase approach caused the dropdown to render
+    // one frame later than the highlight, which the user saw as the
+    // menu being "shown twice" (closed then opened).
+    const el = document.querySelector(
+      `[data-menu-top="${label}"]`,
+    ) as HTMLElement | null;
+    if (!el) return;
+    // If this exact menu is already open, leave it open — clicking it
+    // again would close it.
+    if (el.classList.contains("open")) return;
+    el.click();
+  }, []);
+
+  const closeTopMenu = useCallback(() => {
+    // Close the currently open menu (if any) by clicking it again.
+    const open = document.querySelector(
+      ".menubar-top.open",
+    ) as HTMLElement | null;
+    open?.click();
+  }, []);
+
+  const tourContext = useMemo<TourContext>(
+    () => ({
+      setTreeKind: handleTreeKindChange,
+      setCentralView: handleCentralViewChange,
+      openTopMenu,
+      closeTopMenu,
+      seedDemoSignal,
+      seedDemoImage,
+    }),
+    [
+      handleTreeKindChange,
+      handleCentralViewChange,
+      openTopMenu,
+      closeTopMenu,
+      seedDemoSignal,
+      seedDemoImage,
+    ],
+  );
+
+  const tourSteps = useMemo(
+    () => buildDefaultTourSteps(tourContext),
+    [tourContext],
+  );
+
+  const handleStartTour = useCallback(() => {
+    tourSnapshotRef.current = { treeKind, centralView };
+    tourDemoIdsRef.current = [];
+    setTourOpen(true);
+  }, [treeKind, centralView]);
+
+  const handleCloseTour = useCallback(() => {
+    setTourOpen(false);
+    // Defer cleanup so React commits the close before we mutate the
+    // runtime / restore the snapshotted UI state.
+    const ids = tourDemoIdsRef.current;
+    tourDemoIdsRef.current = [];
+    const snapshot = tourSnapshotRef.current;
+    tourSnapshotRef.current = null;
+    setTimeout(() => {
+      closeTopMenu();
+      if (ids.length > 0) {
+        void deleteObjects(ids);
+      }
+      if (snapshot) {
+        handleTreeKindChange(snapshot.treeKind);
+        handleCentralViewChange(snapshot.centralView);
+      }
+    }, 0);
+  }, [
+    closeTopMenu,
+    deleteObjects,
+    handleTreeKindChange,
+    handleCentralViewChange,
+  ]);
 
   const handleDelete = useCallback(async () => {
     if (selectedIds.length === 0) return;
@@ -1519,7 +1687,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [runtime, refresh, selectedIds]);
+  }, [runtime, refresh, selectedIds, setSelectedIds]);
 
   const handleMoveSelectionUp = useCallback(async () => {
     if (!runtime || !currentId) return;
@@ -1998,7 +2166,7 @@ export default function App() {
       }
     };
     input.click();
-  }, [runtime, refresh, setWorkspaceFilename, markClean, notify]);
+  }, [runtime, refresh, setWorkspaceFilename, markClean, notify, setSelectedIds]);
 
   const handleImportHdf5 = useCallback(() => {
     // Open the H5 browser dialog with no preloaded file; the user picks
@@ -2018,7 +2186,7 @@ export default function App() {
       setCurrentId(oids[oids.length - 1] ?? null);
       await refresh(oids[oids.length - 1] ?? null);
     },
-    [refresh],
+    [refresh, setSelectedIds],
   );
 
   const handleH5BrowserImport = useCallback(
@@ -2035,7 +2203,7 @@ export default function App() {
       setCurrentId(oids[oids.length - 1] ?? null);
       await refresh(oids[oids.length - 1] ?? null);
     },
-    [refresh, notify],
+    [refresh, notify, setSelectedIds],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -2405,6 +2573,11 @@ export default function App() {
         onShowShortcuts: () => setHelpView("shortcuts"),
         onShowConsole: () => setHelpView("console"),
         onOpenUserGuide: () => setUserGuideOpen(true),
+        onOpenWelcome: () => {
+          setWelcomeDismissed(false);
+          setWelcomeForced(true);
+        },
+        onStartTour: handleStartTour,
       }),
       ...buildViewActions({
         showResultsOverlay,
@@ -2536,6 +2709,7 @@ export default function App() {
       toggleNotebookFloating,
       macroFloating,
       toggleMacroFloating,
+      handleStartTour,
     ],
   );
 
@@ -2635,14 +2809,16 @@ export default function App() {
             />,
             macroPortalEl,
           )}
-        <MenuBar
-          status={status === "ready" ? "Ready" : message}
-          statusKind={status}
-          state={actionState}
-          actions={actions}
-          onShowExperimentalInfo={() => setHelpView("about")}
-          onOpenConsole={() => setHelpView("console")}
-        />
+        <div data-tour="menubar">
+          <MenuBar
+            status={status === "ready" ? "Ready" : message}
+            statusKind={status}
+            state={actionState}
+            actions={actions}
+            onShowExperimentalInfo={() => setHelpView("about")}
+            onOpenConsole={() => setHelpView("console")}
+          />
+        </div>
         {recoveryBanner && (
           <RecoveryBanner
             macroCount={recoveryBanner.macros}
@@ -2656,12 +2832,14 @@ export default function App() {
         )}
         <div className="workspace">
           <aside className="panel" style={{ width: leftPanelWidth }}>
-            <TreeKindSwitcher
-              active={treeKind}
-              onChange={handleTreeKindChange}
-              disabled={status !== "ready" || busy}
-            />
-            <div className="panel-body">
+            <div data-tour="tree-kind-switcher">
+              <TreeKindSwitcher
+                active={treeKind}
+                onChange={handleTreeKindChange}
+                disabled={status !== "ready" || busy}
+              />
+            </div>
+            <div className="panel-body" data-tour="object-tree">
               <ObjectTree
                 ref={objectTreeRef}
                 tree={tree}
@@ -2685,16 +2863,18 @@ export default function App() {
             onChange={setLeftPanelWidth}
             ariaLabel="Resize left panel"
           />
-          <main className="plot-area">
-            <CentralViewSwitcher
-              active={centralView}
-              onChange={handleCentralViewChange}
-              disabled={status !== "ready" || busy}
-              detached={{
-                notebook: notebookFloating,
-                macro: macroFloating,
-              }}
-            />
+          <main className="plot-area" data-tour="plot-host">
+            <div data-tour="central-view-switcher">
+              <CentralViewSwitcher
+                active={centralView}
+                onChange={handleCentralViewChange}
+                disabled={status !== "ready" || busy}
+                detached={{
+                  notebook: notebookFloating,
+                  macro: macroFloating,
+                }}
+              />
+            </div>
             {/*
               Stable host divs for the Notebook / Macro panels.  They
               are *targets* for the panels' portal element (managed
@@ -2709,6 +2889,7 @@ export default function App() {
               <div
                 ref={setNotebookCentralHost}
                 className="nb-panel-host"
+                data-tour="central-notebooks"
                 style={{
                   display:
                     !notebookFloating && centralView === "notebook"
@@ -2724,6 +2905,7 @@ export default function App() {
               <div
                 ref={setMacroCentralHost}
                 className="macro-panel-host"
+                data-tour="central-macros"
                 style={{
                   display:
                     !macroFloating && centralView === "macro" ? "flex" : "none",
@@ -2774,13 +2956,66 @@ export default function App() {
             {centralView === "plot" &&
               status === "ready" &&
               !data &&
-              !imageData && (
-                <div className="plot-empty">
-                  {treeKind === "signal"
-                    ? "Create a signal to get started."
-                    : "Create an image to get started."}
-                </div>
-              )}
+              !imageData &&
+              (() => {
+                const treeEmpty = (t: typeof tree) =>
+                  !t || t.groups.every((g) => g.objects.length === 0);
+                const workspaceEmpty =
+                  treeEmpty(tree) && treeEmpty(inactiveTree);
+                const emptyEverywhere = workspaceEmpty;
+                const showWelcome =
+                  welcomeForced ||
+                  (!welcomeDismissed &&
+                    emptyEverywhere &&
+                    readShowWelcomeOnStartup());
+                if (showWelcome) {
+                  return (
+                    <WelcomeView
+                      appVersion={
+                        (import.meta.env.VITE_APP_VERSION as string) ?? "dev"
+                      }
+                      workspaceEmpty={emptyEverywhere}
+                      onDismiss={
+                        emptyEverywhere
+                          ? undefined
+                          : () => {
+                              setWelcomeForced(false);
+                              setWelcomeDismissed(true);
+                            }
+                      }
+                      onOpenWorkspaceHdf5={handleOpenWorkspaceHdf5}
+                      onImportTextWizard={handleImportTextWizard}
+                      onBrowseHdf5={handleImportHdf5}
+                      onCreateKind={(kind) => {
+                        if (treeKind !== kind) handleTreeKindChange(kind);
+                        requestAnimationFrame(() => {
+                          const el = document.querySelector(
+                            '[data-menu-top="Create"]',
+                          ) as HTMLElement | null;
+                          el?.click();
+                        });
+                      }}
+                      onOpenFileKind={(kind) => {
+                        if (treeKind !== kind) handleTreeKindChange(kind);
+                        requestAnimationFrame(() => {
+                          void handleOpenFile();
+                        });
+                      }}
+                      onStartTour={() => {
+                        handleStartTour();
+                      }}
+                      onOpenUserGuide={() => setUserGuideOpen(true)}
+                    />
+                  );
+                }
+                return (
+                  <div className="plot-empty">
+                    {treeKind === "signal"
+                      ? "Create a signal to get started."
+                      : "Create an image to get started."}
+                  </div>
+                );
+              })()}
             {centralView === "plot" && treeKind === "signal" && data && (
               <SignalPlot
                 data={data}
@@ -2867,6 +3102,7 @@ export default function App() {
             <button
               type="button"
               className="ai-floating-pill"
+              data-tour="ai-assistant"
               onClick={() => setAIPanelCollapsed(false)}
               title="Expand AI Assistant"
               aria-label="Expand AI Assistant"
@@ -2880,7 +3116,7 @@ export default function App() {
               macroFloating) && (
               <FloatingDockStack>
                 {aiPanelVisible && !aiPanelCollapsed && (
-                  <div className="floating-dock-host">
+                  <div className="floating-dock-host" data-tour="ai-assistant">
                     <AIAssistantPanel
                       runtime={runtime}
                       onMinimize={() => setAIPanelCollapsed(true)}
@@ -2908,6 +3144,11 @@ export default function App() {
             </div>
           )}
         </div>
+        <GuidedTour
+          open={tourOpen}
+          steps={tourSteps}
+          onClose={handleCloseTour}
+        />
         {showAISettings && (
           <AISettingsDialog onClose={() => setShowAISettings(false)} />
         )}

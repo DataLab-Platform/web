@@ -16,6 +16,7 @@ import { getHelpIconUrl } from "../assets/helpIcons";
 import { getIoIconUrl } from "../assets/ioIcons";
 import { getRoiIconUrl } from "../assets/roiIcons";
 import { getRootIconUrl } from "../assets/rootIcons";
+import datalabIconUrl from "../assets/DataLab.svg?url";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -181,6 +182,8 @@ export interface HelpActionCallbacks {
   onShowShortcuts: () => void;
   onShowConsole: () => void;
   onOpenUserGuide: () => void;
+  onOpenWelcome: () => void;
+  onStartTour: () => void;
 }
 
 /** Wire Help / "?" menu actions. */
@@ -189,10 +192,27 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
   const always = () => true;
   return [
     {
+      id: "help.welcome",
+      label: "Welcome",
+      menuPath: "Help/Welcome",
+      iconUrl: datalabIconUrl,
+      enabled: always,
+      run: cb.onOpenWelcome,
+    },
+    {
+      id: "help.tour",
+      label: "Take the guided tour",
+      menuPath: "Help/Take the guided tour",
+      iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
+      enabled: always,
+      run: cb.onStartTour,
+    },
+    {
       id: "help.userguide",
       label: "User guide",
       menuPath: "Help/User guide",
       iconUrl: getHelpIconUrl("libre-gui-help.svg"),
+      beginGroup: true,
       enabled: always,
       run: cb.onOpenUserGuide,
     },

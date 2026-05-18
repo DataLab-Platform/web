@@ -74,6 +74,7 @@ export function MenuBar(props: Props) {
               key={node.label}
               className={"menubar-top" + (isOpen ? " open" : "")}
               role="menuitem"
+              data-menu-top={node.label}
               aria-haspopup="true"
               aria-expanded={isOpen}
               onClick={(event) => {
