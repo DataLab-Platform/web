@@ -302,8 +302,8 @@ input {
 
 .menubar-top:hover,
 .menubar-top.open {
-  background: var(--accent);
-  border-color: var(--accent-hover);
+  background: var(--hover-bg);
+  border-color: var(--border);
 }
 
 .menu-dropdown {
