@@ -1,0 +1,33 @@
+repos:
+  # Ruff: lint + format the Python sources (src/runtime, tests/python, scripts).
+  # Mirrors the configuration used by the sibling repos (DataLab, Sigima, …).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.2
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^(src/runtime|tests/python|scripts)/.*\.py$
+      - id: ruff-format
+        files: ^(src/runtime|tests/python|scripts)/.*\.py$
+
+  # Prettier: format TS/JS/CSS/HTML/MD/JSON files using the version pinned in
+  # package.json (invoked via the local node_modules to guarantee parity with
+  # CI's `npm run format:check`).
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npx --no-install prettier --write
+        language: system
+        # Match the same file set as `npm run format:check` in package.json:
+        #   "**/*.{ts,tsx,js,jsx,mjs,cjs,css,html,md,json}"
+        files: \.(ts|tsx|js|jsx|mjs|cjs|css|html|md|json)$
+        exclude: |
+          (?x)^(
+            dist/.*|
+            coverage/.*|
+            coverage-ts/.*|
+            node_modules/.*|
+            packages/sdk/dist/.*|
+            tests/benchmark/wheels/.*
+          )$

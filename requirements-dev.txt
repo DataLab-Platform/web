@@ -14,6 +14,10 @@ pytest-cov>=4.1
 ruff>=0.5
 pylint>=3.0
 
+# Git pre-commit hooks (Ruff + Prettier). Activated locally by running
+# ``pre-commit install`` once after cloning. See CONTRIBUTING.md.
+pre-commit>=3.7
+
 # Sigima (= computation engine) and its mandatory dependencies.
 # Pinning floors only — exact versions come from each project's pyproject.
 sigima>=1.1.2

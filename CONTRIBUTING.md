@@ -51,13 +51,22 @@ This policy covers everything in the project repository: source code, tests, con
 
 ## Code formatting
 
-TypeScript, JavaScript, JSON, CSS, HTML and Markdown files are formatted with [Prettier](https://prettier.io/) (defaults of Prettier 3, plus `endOfLine: "auto"`). The recommended workflow:
+TypeScript, JavaScript, JSON, CSS, HTML and Markdown files are formatted with [Prettier](https://prettier.io/) (defaults of Prettier 3, plus `endOfLine: "auto"`). Python files (under `src/runtime/`, `tests/python/`, `scripts/`) are formatted and linted with [Ruff](https://docs.astral.sh/ruff/), at the same version as the sibling repos (DataLab, Sigima, …).
+
+The recommended workflow:
 
 - Install the workspace's recommended VS Code extensions (Prettier, ESLint, Ruff) — VS Code will prompt you on first open thanks to [.vscode/extensions.json](.vscode/extensions.json). Format-on-save is then wired per language in [.vscode/settings.json](.vscode/settings.json).
-- Reformat the whole repo at any time with `npm run format`.
-- CI runs `npm run format:check` as a blocking step (see [tests.yml](.github/workflows/tests.yml)) and `npm run release:pack` runs it before lint/test/build, so any drift is caught early.
+- **Install the Git pre-commit hooks once** after cloning. They run Ruff (Python) and Prettier (everything else) on the staged files, matching what CI checks:
 
-Python files keep their own formatter (`ruff format`); see the Python instructions in [.github/copilot-instructions.md](.github/copilot-instructions.md).
+  ```powershell
+  pip install -r requirements-dev.txt   # provides the `pre-commit` CLI
+  pre-commit install                    # wires .pre-commit-config.yaml into .git/hooks
+  ```
+
+  The hook uses the local `node_modules/.bin/prettier`, so make sure `npm install` has been run first. Skipping the hook with `git commit --no-verify` is tolerated for emergency fixes but CI will still reject unformatted files.
+
+- Reformat the whole repo at any time with `npm run format` (TS/JS/CSS/HTML/MD/JSON) or `pre-commit run --all-files` (Python + everything else).
+- CI runs `npm run format:check` and `npm run lint` as blocking steps (see [tests.yml](.github/workflows/tests.yml)) and `npm run release:pack` runs them before lint/test/build, so any drift is caught early.
 
 ## Pull requests
 

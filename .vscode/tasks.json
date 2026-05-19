@@ -117,6 +117,24 @@
       "problemMatcher": []
     },
     {
+      "label": "🔍 Prettier check (TS)",
+      "detail": "Read-only Prettier formatting check (same as CI's 'Prettier check' step).",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "format:check"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "statusbar": {
+          "hide": true
+        }
+      },
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "🚀 Pytest (Python)",
       "type": "shell",
       "command": "${command:python.interpreterPath}",
@@ -246,13 +264,28 @@
     },
     {
       "label": "🟢 Vitest (TS)",
+      "detail": "Mirrors CI's TypeScript job: Prettier check + ESLint + Vitest.",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "🔍 Prettier check (TS)",
+        "🟦 ESLint (TS)",
+        "🟢 Vitest run (TS)"
+      ],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "🟢 Vitest run (TS)",
+      "detail": "Run Vitest only (no Prettier/ESLint). Use '🟢 Vitest (TS)' for the full CI-equivalent check.",
       "type": "shell",
       "command": "npm",
       "args": ["test"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "statusbar": {
+          "hide": true
+        }
       },
-      "group": "test",
       "problemMatcher": []
     },
     {
