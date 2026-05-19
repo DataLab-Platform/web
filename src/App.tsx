@@ -443,8 +443,7 @@ export default function App() {
         const next = typeof arg === "function" ? arg(prev) : arg;
         if (
           next === prev ||
-          (next.length === prev.length &&
-            next.every((id, i) => id === prev[i]))
+          (next.length === prev.length && next.every((id, i) => id === prev[i]))
         ) {
           return prev;
         }
@@ -2166,7 +2165,14 @@ export default function App() {
       }
     };
     input.click();
-  }, [runtime, refresh, setWorkspaceFilename, markClean, notify, setSelectedIds]);
+  }, [
+    runtime,
+    refresh,
+    setWorkspaceFilename,
+    markClean,
+    notify,
+    setSelectedIds,
+  ]);
 
   const handleImportHdf5 = useCallback(() => {
     // Open the H5 browser dialog with no preloaded file; the user picks

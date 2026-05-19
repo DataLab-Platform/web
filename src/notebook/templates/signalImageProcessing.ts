@@ -29,8 +29,8 @@ const INTRO_MD = [
   "",
   "Use `await proxy.list_features()` at any point to discover the",
   "available `feature_id` strings. Signal features use a bare id",
-  "(e.g. `\"moving_average\"`); image features are namespaced under",
-  "`\"image:...\"` (e.g. `\"image:fft\"`).",
+  '(e.g. `"moving_average"`); image features are namespaced under',
+  '`"image:..."` (e.g. `"image:fft"`).',
 ].join("\n");
 
 const SIGNAL_MD = [

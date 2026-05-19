@@ -332,7 +332,12 @@ export function GuidedTour({
               desktop "Cover" widget approach in tour.py. */}
           <div
             className="guided-tour-cover"
-            style={{ top: 0, left: 0, right: 0, height: Math.max(0, padded.top) }}
+            style={{
+              top: 0,
+              left: 0,
+              right: 0,
+              height: Math.max(0, padded.top),
+            }}
           />
           <div
             className="guided-tour-cover"

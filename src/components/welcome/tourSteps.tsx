@@ -73,8 +73,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       body: (
         <p>
           All actions live here, organised like the desktop DataLab: File,
-          Create, Edit, ROI, Operations, Processing, Analysis, View,
-          Plugins and Help.
+          Create, Edit, ROI, Operations, Processing, Analysis, View, Plugins and
+          Help.
         </p>
       ),
     },
@@ -85,8 +85,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       body: (
         <p>
           Switch between the <strong>Signal</strong> (1D curves) and{" "}
-          <strong>Image</strong> (2D arrays) workspaces. Each keeps its
-          own object tree, selection and ROI editor.
+          <strong>Image</strong> (2D arrays) workspaces. Each keeps its own
+          object tree, selection and ROI editor.
         </p>
       ),
     },
@@ -98,9 +98,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Signal panel — Object tree",
       body: (
         <p>
-          Loaded and created signals appear here, grouped just like in
-          DataLab desktop. We just dropped in a demo sine wave so the
-          following steps have something to highlight.
+          Loaded and created signals appear here, grouped just like in DataLab
+          desktop. We just dropped in a demo sine wave so the following steps
+          have something to highlight.
         </p>
       ),
       onEnter: async () => {
@@ -139,9 +139,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Signal — File menu",
       body: (
         <p>
-          Import and export signals individually (CSV, NPY, …) or save
-          and restore the whole workspace as an HDF5 file. The browser
-          stores recent workspaces in IndexedDB.
+          Import and export signals individually (CSV, NPY, …) or save and
+          restore the whole workspace as an HDF5 file. The browser stores recent
+          workspaces in IndexedDB.
         </p>
       ),
     },
@@ -150,8 +150,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Signal — Create menu",
       body: (
         <p>
-          Generate signals from models discovered in Sigima's catalog
-          (Gaussian, sine, paracetamol reference, …).
+          Generate signals from models discovered in Sigima's catalog (Gaussian,
+          sine, paracetamol reference, …).
         </p>
       ),
     },
@@ -170,9 +170,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Signal — Operations menu",
       body: (
         <p>
-          Arithmetic, basic mathematical functions and data-type
-          conversions. Binary operations interpolate the second operand
-          when X arrays differ.
+          Arithmetic, basic mathematical functions and data-type conversions.
+          Binary operations interpolate the second operand when X arrays differ.
         </p>
       ),
     },
@@ -182,8 +181,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       body: (
         <p>
           1 ↦ 1 transformations: filters, FFT, fitting, calibration, axis
-          transformations… Every entry comes from Sigima's processor
-          catalog with its auto-generated parameter dialog.
+          transformations… Every entry comes from Sigima's processor catalog
+          with its auto-generated parameter dialog.
         </p>
       ),
     },
@@ -192,9 +191,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Signal — Analysis menu",
       body: (
         <p>
-          1 ↦ 0 computations: measurements, statistics, FWHM, peak
-          detection… Results land in the right-hand panel and are
-          overlaid on the plot.
+          1 ↦ 0 computations: measurements, statistics, FWHM, peak detection…
+          Results land in the right-hand panel and are overlaid on the plot.
         </p>
       ),
     },
@@ -206,9 +204,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Image panel",
       body: (
         <p>
-          Switching to the <strong>Image</strong> workspace. The tree,
-          plot and side panel all rebind to 2D arrays — and we seeded a
-          synthetic image so the next steps have content.
+          Switching to the <strong>Image</strong> workspace. The tree, plot and
+          side panel all rebind to 2D arrays — and we seeded a synthetic image
+          so the next steps have content.
         </p>
       ),
       onEnter: async () => {
@@ -224,9 +222,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Image panel — Plot view",
       body: (
         <p>
-          Images are displayed with Plotly heatmaps. Colormap, contrast
-          and ROI overlays are configurable from the toolbar and the
-          context menu.
+          Images are displayed with Plotly heatmaps. Colormap, contrast and ROI
+          overlays are configurable from the toolbar and the context menu.
         </p>
       ),
     },
@@ -235,9 +232,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Image — Create menu",
       body: (
         <p>
-          Generate images from Sigima models (Gaussian, checkerboard,
-          parametric noise, …). The same menu structure as for signals
-          keeps muscle memory intact across panels.
+          Generate images from Sigima models (Gaussian, checkerboard, parametric
+          noise, …). The same menu structure as for signals keeps muscle memory
+          intact across panels.
         </p>
       ),
     },
@@ -246,9 +243,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Image — Operations menu",
       body: (
         <p>
-          Arithmetic, pixel binning, intensity profiles, data-type
-          conversions. <em>Edit</em>, <em>Processing</em> and{" "}
-          <em>Analysis</em> menus mirror the Signal ones for images.
+          Arithmetic, pixel binning, intensity profiles, data-type conversions.{" "}
+          <em>Edit</em>, <em>Processing</em> and <em>Analysis</em> menus mirror
+          the Signal ones for images.
         </p>
       ),
     },
@@ -260,9 +257,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Macros panel",
       body: (
         <p>
-          Macros are Python scripts that drive DataLab through its remote
-          API. They run in a dedicated Pyodide worker so the UI stays
-          responsive even during long computations.
+          Macros are Python scripts that drive DataLab through its remote API.
+          They run in a dedicated Pyodide worker so the UI stays responsive even
+          during long computations.
         </p>
       ),
       onEnter: () => ctx.setCentralView("macro"),
@@ -273,9 +270,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Notebooks panel",
       body: (
         <p>
-          A lightweight Jupyter-like notebook for ad-hoc exploration.
-          Each notebook owns its Pyodide worker and can call the same
-          remote API as macros and plugins.
+          A lightweight Jupyter-like notebook for ad-hoc exploration. Each
+          notebook owns its Pyodide worker and can call the same remote API as
+          macros and plugins.
         </p>
       ),
       onEnter: () => ctx.setCentralView("notebook"),
@@ -285,9 +282,9 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Plugins",
       body: (
         <p>
-          Third-party features live under the <strong>Plugins</strong>{" "}
-          menu. They are Python modules loaded into Pyodide at startup —
-          same plugin API as the desktop application.
+          Third-party features live under the <strong>Plugins</strong> menu.
+          They are Python modules loaded into Pyodide at startup — same plugin
+          API as the desktop application.
         </p>
       ),
     },
@@ -296,8 +293,8 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       title: "Help & user guide",
       body: (
         <p>
-          The full user guide opens in a side drawer, and you can replay
-          this tour any time from <strong>Help → Welcome</strong>.
+          The full user guide opens in a side drawer, and you can replay this
+          tour any time from <strong>Help → Welcome</strong>.
         </p>
       ),
     },
@@ -308,14 +305,13 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       body: (
         <>
           <p>
-            That's the end of the tour. The demo objects we created will
-            be cleared as soon as you close this dialog.
+            That's the end of the tour. The demo objects we created will be
+            cleared as soon as you close this dialog.
           </p>
           <p>
-            Start by creating a signal or image from the welcome page, or
-            open an existing file from the <strong>File</strong> menu.
-            Use the <strong>Restart</strong> button below to play the
-            tour again.
+            Start by creating a signal or image from the welcome page, or open
+            an existing file from the <strong>File</strong> menu. Use the{" "}
+            <strong>Restart</strong> button below to play the tour again.
           </p>
         </>
       ),

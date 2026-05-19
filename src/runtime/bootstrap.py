@@ -1302,9 +1302,7 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
     # ``get_image_data``).  Coerce them back to ``np.ndarray`` here so
     # the model invariant is preserved regardless of the caller.
     array_fields = {
-        item.get_name()
-        for item in obj.get_items()
-        if isinstance(item, FloatArrayItem)
+        item.get_name() for item in obj.get_items() if isinstance(item, FloatArrayItem)
     }
     for name in array_fields & values.keys():
         value = values[name]

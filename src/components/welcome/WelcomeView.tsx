@@ -167,7 +167,9 @@ export function WelcomeView({
       <div className="welcome-view-inner">
         <header className="welcome-header">
           <img
-            src={new URL("../../assets/DataLab-Banner2.svg", import.meta.url).href}
+            src={
+              new URL("../../assets/DataLab-Banner2.svg", import.meta.url).href
+            }
             alt="DataLab"
             className="welcome-logo"
           />
@@ -234,7 +236,9 @@ function WelcomeActionRow({
   variant?: "row" | "card";
 }) {
   const className =
-    variant === "card" ? "welcome-action welcome-action-card" : "welcome-action";
+    variant === "card"
+      ? "welcome-action welcome-action-card"
+      : "welcome-action";
   const hasChips = action.chips && action.chips.length > 0;
   const content = (
     <>
