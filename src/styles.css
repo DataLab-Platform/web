@@ -4076,51 +4076,52 @@ input {
   color: var(--text-dim);
 }
 
-.welcome-action-static {
-  cursor: default;
-}
-
-.welcome-action-static:hover {
-  background: transparent;
-  border-color: transparent;
-}
-
-.welcome-action-chips {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+.welcome-action-caret {
   margin-left: auto;
-  flex: 0 0 auto;
   align-self: center;
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1;
 }
 
-.welcome-action-chip {
+.welcome-kind-picker {
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.welcome-kind-picker-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 8px;
+  padding: 6px 10px;
   font: inherit;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
   color: var(--text);
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 4px;
+  text-align: left;
   cursor: pointer;
 }
 
-.welcome-action-chip:hover,
-.welcome-action-chip:focus-visible,
-.welcome-view button.welcome-action-chip:hover:not(:disabled) {
+.welcome-kind-picker-item:hover,
+.welcome-kind-picker-item:focus,
+.welcome-kind-picker-item:focus-visible {
   outline: none;
+  background: var(--panel-alt);
   border-color: var(--accent);
-  background: var(--panel);
 }
 
-.welcome-action-chip-icon {
-  width: 14px;
-  height: 14px;
+.welcome-kind-picker-icon {
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
 }
 

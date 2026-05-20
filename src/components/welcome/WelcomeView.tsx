@@ -10,12 +10,30 @@
  * business logic.
  */
 
-import { useCallback } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { getRootIconUrl } from "../../assets/rootIcons";
 import { getIoIconUrl } from "../../assets/ioIcons";
 import { getHelpIconUrl } from "../../assets/helpIcons";
 import { getH5IconUrl } from "../../assets/h5Icons";
+
+type Kind = "signal" | "image";
+
+const KIND_LABEL: Record<Kind, string> = {
+  signal: "Signal",
+  image: "Image",
+};
+
+const KIND_ICON: Record<Kind, string> = {
+  signal: "signal.svg",
+  image: "image.svg",
+};
 
 const SHOW_ON_STARTUP_KEY = "datalab-web.welcome.showOnStartup";
 
@@ -28,9 +46,9 @@ export interface WelcomeViewProps {
    *  Welcome view explicitly on a non-empty workspace. */
   onDismiss?: () => void;
   /** Switch to ``kind`` panel and open the Create menu. */
-  onCreateKind: (kind: "signal" | "image") => void;
+  onCreateKind: (kind: Kind) => void;
   /** Switch to ``kind`` panel and open the file picker (kind-aware). */
-  onOpenFileKind: (kind: "signal" | "image") => void;
+  onOpenFileKind: (kind: Kind) => void;
   /** Open the HDF5 browser dialog (flagship feature). */
   onBrowseHdf5: () => void;
   onOpenWorkspaceHdf5: () => void;
@@ -39,19 +57,15 @@ export interface WelcomeViewProps {
   onOpenUserGuide: () => void;
 }
 
-interface KindChip {
-  kind: "signal" | "image";
-  label: string;
-  iconUrl: string | undefined;
-  onClick: () => void;
-}
-
 interface QuickAction {
   iconUrl: string | undefined;
   label: string;
   description?: string;
   onClick?: () => void;
-  chips?: KindChip[];
+  /** When set, clicking the row opens a small popover letting the user
+   *  choose between Signal and Image. ``onKindSelect`` receives the
+   *  picked kind. */
+  onKindSelect?: (kind: Kind) => void;
 }
 
 /** Read/write helper for the "show welcome on startup" preference. */
@@ -85,37 +99,18 @@ export function WelcomeView({
   onStartTour,
   onOpenUserGuide,
 }: WelcomeViewProps) {
-  const signalChip: KindChip = {
-    kind: "signal",
-    label: "Signal",
-    iconUrl: getRootIconUrl("signal.svg"),
-    onClick: () => {},
-  };
-  const imageChip: KindChip = {
-    kind: "image",
-    label: "Image",
-    iconUrl: getRootIconUrl("image.svg"),
-    onClick: () => {},
-  };
-
   const startActions: QuickAction[] = [
     {
       iconUrl: getRootIconUrl("signal.svg"),
       label: "Create…",
       description: "Generate a 1D signal or 2D image from a Sigima template.",
-      chips: [
-        { ...signalChip, onClick: () => onCreateKind("signal") },
-        { ...imageChip, onClick: () => onCreateKind("image") },
-      ],
+      onKindSelect: onCreateKind,
     },
     {
       iconUrl: getIoIconUrl("fileopen_sig.svg"),
       label: "Open file…",
       description: "Load a signal or image from your computer.",
-      chips: [
-        { ...signalChip, onClick: () => onOpenFileKind("signal") },
-        { ...imageChip, onClick: () => onOpenFileKind("image") },
-      ],
+      onKindSelect: onOpenFileKind,
     },
     {
       iconUrl: getH5IconUrl("h5browser.svg"),
@@ -239,66 +234,189 @@ function WelcomeActionRow({
     variant === "card"
       ? "welcome-action welcome-action-card"
       : "welcome-action";
-  const hasChips = action.chips && action.chips.length > 0;
-  const content = (
-    <>
-      {action.iconUrl && (
-        <img
-          src={action.iconUrl}
-          alt=""
-          aria-hidden="true"
-          className="welcome-action-icon"
-        />
-      )}
-      <span className="welcome-action-text">
-        <span className="welcome-action-label">{action.label}</span>
-        {action.description && (
-          <span className="welcome-action-description">
-            {action.description}
-          </span>
-        )}
-      </span>
-      {hasChips && (
-        <span className="welcome-action-chips">
-          {action.chips!.map((chip) => (
-            <button
-              key={chip.kind}
-              type="button"
-              className="welcome-action-chip"
-              onClick={(e) => {
-                e.stopPropagation();
-                chip.onClick();
-              }}
-              title={`${action.label.replace(/…$/, "")} ${chip.label}`}
-            >
-              {chip.iconUrl && (
-                <img
-                  src={chip.iconUrl}
-                  alt=""
-                  aria-hidden="true"
-                  className="welcome-action-chip-icon"
-                />
-              )}
-              <span>{chip.label}</span>
-            </button>
-          ))}
-        </span>
-      )}
-    </>
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const hasKindPicker = !!action.onKindSelect;
+  const handleClick = useCallback(() => {
+    if (hasKindPicker) {
+      setPickerOpen((open) => !open);
+    } else {
+      action.onClick?.();
+    }
+  }, [action, hasKindPicker]);
+  const handleKindPick = useCallback(
+    (kind: Kind) => {
+      setPickerOpen(false);
+      action.onKindSelect?.(kind);
+    },
+    [action],
   );
-  if (hasChips) {
-    // No outer button — chips are the interactive elements.
-    return (
-      <li>
-        <div className={className + " welcome-action-static"}>{content}</div>
-      </li>
-    );
-  }
   return (
     <li>
-      <button type="button" className={className} onClick={action.onClick}>
-        {content}
+      <button
+        ref={buttonRef}
+        type="button"
+        className={className}
+        onClick={handleClick}
+        aria-haspopup={hasKindPicker ? "menu" : undefined}
+        aria-expanded={hasKindPicker ? pickerOpen : undefined}
+      >
+        {action.iconUrl && (
+          <img
+            src={action.iconUrl}
+            alt=""
+            aria-hidden="true"
+            className="welcome-action-icon"
+          />
+        )}
+        <span className="welcome-action-text">
+          <span className="welcome-action-label">{action.label}</span>
+          {action.description && (
+            <span className="welcome-action-description">
+              {action.description}
+            </span>
+          )}
+        </span>
+        {hasKindPicker && (
+          <span className="welcome-action-caret" aria-hidden="true">
+            ▾
+          </span>
+        )}
       </button>
+      {hasKindPicker && pickerOpen && (
+        <WelcomeKindPicker
+          anchorRef={buttonRef}
+          actionLabel={action.label}
+          onPick={handleKindPick}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * Small floating popover anchored under a Welcome action row, letting
+ * the user pick between **Signal** and **Image** for kind-aware actions
+ * (Create…, Open file…).
+ *
+ * Closes on outside click, ``Escape``, scroll or window resize — same
+ * dismissal contract as the app's :class:`ContextMenu`.
+ */
+function WelcomeKindPicker({
+  anchorRef,
+  actionLabel,
+  onPick,
+  onClose,
+}: {
+  anchorRef: React.RefObject<HTMLElement | null>;
+  actionLabel: string;
+  onPick: (kind: Kind) => void;
+  onClose: () => void;
+}) {
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const firstItemRef = useRef<HTMLButtonElement | null>(null);
+
+  // Anchor under the row's lower-left corner and match its width so the
+  // popover spans the same clickable area as the row. Clamp inside the
+  // viewport after the popover has been laid out.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+  }, [anchorRef]);
+
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    if (!el || !pos) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 4;
+    let { top, left } = pos;
+    if (left + rect.width > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - rect.width - margin);
+    }
+    if (top + rect.height > window.innerHeight - margin) {
+      const anchorRect = anchorRef.current?.getBoundingClientRect();
+      if (anchorRect) {
+        top = Math.max(margin, anchorRect.top - rect.height - 4);
+      } else {
+        top = Math.max(margin, window.innerHeight - rect.height - margin);
+      }
+    }
+    if (top !== pos.top || left !== pos.left) {
+      setPos({ top, left, width: pos.width });
+    }
+  }, [pos, anchorRef]);
+
+  useEffect(() => {
+    firstItemRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (popoverRef.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleScrollOrResize = () => onClose();
+    document.addEventListener("mousedown", handleDown);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", handleScrollOrResize);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    return () => {
+      document.removeEventListener("mousedown", handleDown);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+    };
+  }, [anchorRef, onClose]);
+
+  const cleanLabel = actionLabel.replace(/…$/, "");
+  const kinds: Kind[] = ["signal", "image"];
+  return (
+    <div
+      ref={popoverRef}
+      className="welcome-kind-picker"
+      role="menu"
+      aria-label={cleanLabel}
+      style={{
+        position: "fixed",
+        top: pos?.top ?? -9999,
+        left: pos?.left ?? -9999,
+        width: pos?.width,
+        visibility: pos ? "visible" : "hidden",
+        zIndex: 1000,
+      }}
+    >
+      {kinds.map((kind, idx) => (
+        <button
+          key={kind}
+          ref={idx === 0 ? firstItemRef : undefined}
+          type="button"
+          className="welcome-kind-picker-item"
+          role="menuitem"
+          onClick={() => onPick(kind)}
+          title={`${cleanLabel} ${KIND_LABEL[kind]}`}
+        >
+          <img
+            src={getRootIconUrl(KIND_ICON[kind])}
+            alt=""
+            aria-hidden="true"
+            className="welcome-kind-picker-icon"
+          />
+          <span>{KIND_LABEL[kind]}</span>
+        </button>
+      ))}
+    </div>
   );
 }
