@@ -436,6 +436,47 @@ input {
   width: 480px;
 }
 
+/* Draggable + resizable overlay window (AI Assistant).  Position
+   and size are controlled inline by :class:`DraggableFloating`; we
+   only set the chrome and the native ``resize`` affordance here.
+   The ``.floating-dock-host`` class is reused for visual parity
+   with the docked overlays. */
+.floating-window {
+  z-index: 25;
+  resize: both;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.floating-window .panel-header {
+  cursor: move;
+  user-select: none;
+}
+
+/* Bottom-left resize handle, mirroring the native bottom-right grip
+   provided by ``resize: both``. */
+.floating-window-resize-sw {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+  background: linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 5px,
+    var(--border, #555) 5px,
+    var(--border, #555) 6px,
+    transparent 6px,
+    transparent 8px,
+    var(--border, #555) 8px,
+    var(--border, #555) 9px,
+    transparent 9px
+  );
+  z-index: 1;
+}
+
 .ai-floating-pill {
   position: absolute;
   bottom: 16px;

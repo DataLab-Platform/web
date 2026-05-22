@@ -107,6 +107,7 @@ import {
 import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
 import { FloatingDockStack } from "./components/FloatingDock";
+import { DraggableFloating } from "./components/DraggableFloating";
 import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
 import {
   NotebookPanel,
@@ -3116,34 +3117,42 @@ export default function App() {
               AI
             </button>
           )}
-          {runtime &&
-            ((aiPanelVisible && !aiPanelCollapsed) ||
-              notebookFloating ||
-              macroFloating) && (
-              <FloatingDockStack>
-                {aiPanelVisible && !aiPanelCollapsed && (
-                  <div className="floating-dock-host" data-tour="ai-assistant">
-                    <AIAssistantPanel
-                      runtime={runtime}
-                      onMinimize={() => setAIPanelCollapsed(true)}
-                      onClose={() => setAIPanelVisible(false)}
-                    />
-                  </div>
-                )}
-                {notebookFloating && (
-                  <div
-                    ref={setNotebookFloatingHost}
-                    className="floating-dock-host floating-dock-host--notebook"
-                  />
-                )}
-                {macroFloating && (
-                  <div
-                    ref={setMacroFloatingHost}
-                    className="floating-dock-host floating-dock-host--macro"
-                  />
-                )}
-              </FloatingDockStack>
-            )}
+          {runtime && aiPanelVisible && !aiPanelCollapsed && (
+            <DraggableFloating
+              storageKey="datalab-web.aiPanelFloating"
+              defaultWidth={400}
+              minWidth={300}
+              minHeight={260}
+              className="floating-dock-host"
+            >
+              <div
+                data-tour="ai-assistant"
+                style={{ width: "100%", height: "100%" }}
+              >
+                <AIAssistantPanel
+                  runtime={runtime}
+                  onMinimize={() => setAIPanelCollapsed(true)}
+                  onClose={() => setAIPanelVisible(false)}
+                />
+              </div>
+            </DraggableFloating>
+          )}
+          {runtime && (notebookFloating || macroFloating) && (
+            <FloatingDockStack>
+              {notebookFloating && (
+                <div
+                  ref={setNotebookFloatingHost}
+                  className="floating-dock-host floating-dock-host--notebook"
+                />
+              )}
+              {macroFloating && (
+                <div
+                  ref={setMacroFloatingHost}
+                  className="floating-dock-host floating-dock-host--macro"
+                />
+              )}
+            </FloatingDockStack>
+          )}
           {userGuideOpen && (
             <div className="userguide-floating-host">
               <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
