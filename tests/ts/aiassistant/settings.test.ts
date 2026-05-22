@@ -187,7 +187,7 @@ describe("aiassistant/settings — testConnection", () => {
   });
 
   it("omits Authorization when apiKey is empty", async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ data: [] }), {
           status: 200,
@@ -196,12 +196,12 @@ describe("aiassistant/settings — testConnection", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await testConnection("http://localhost:11434/v1", "");
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(init.headers).toEqual({});
   });
 
   it("sets Authorization: Bearer when apiKey is provided", async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ data: [] }), {
           status: 200,
@@ -210,7 +210,7 @@ describe("aiassistant/settings — testConnection", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await testConnection("https://api.openai.com/v1", "sk-abc");
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const init = fetchMock.mock.calls[0]![1] as RequestInit;
     expect(init.headers).toEqual({ Authorization: "Bearer sk-abc" });
   });
 

@@ -91,7 +91,7 @@ describe("capture_view tool (multimodal followup)", () => {
       (p) => p.type === "image_url",
     );
     expect(imagePart).toBeDefined();
-    expect(imagePart!.type === "image_url" && imagePart.image_url.url).toMatch(
+    expect(imagePart!.type === "image_url" && imagePart!.image_url.url).toMatch(
       /^data:image\/png;base64,/,
     );
     // The mock recorded both turns; the second turn must include the
