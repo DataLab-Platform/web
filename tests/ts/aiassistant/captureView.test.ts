@@ -35,6 +35,7 @@ const settings: ProviderSettings = {
   apiKey: "",
   model: "mock",
   temperature: 0,
+  maxHistoryMessages: 0,
 };
 
 const runtime = {} as DataLabRuntime;

@@ -68,6 +68,7 @@ beforeEach(async () => {
     apiKey: "test-key",
     model: "fake",
     temperature: 0,
+    maxHistoryMessages: 0,
   });
   // The API key is no longer persisted by ``saveSettings``; route it
   // through secure storage so the panel hydrates it on mount and skips

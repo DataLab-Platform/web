@@ -39,6 +39,7 @@ describe("aiassistant/settings", () => {
       apiKey: "sk-secret",
       model: "llama3",
       temperature: 0.7,
+      maxHistoryMessages: 0,
     });
     const raw = window.localStorage.getItem("datalab-web.aiassistant.settings");
     expect(raw).not.toBeNull();

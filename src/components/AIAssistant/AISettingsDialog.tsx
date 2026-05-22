@@ -229,6 +229,31 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               }
             />
           </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span>Max history messages (0 = unlimited)</span>
+            <input
+              type="number"
+              min={0}
+              max={1024}
+              step={1}
+              value={settings.maxHistoryMessages}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                update(
+                  "maxHistoryMessages",
+                  Number.isFinite(n) && n >= 0 ? n : 0,
+                );
+              }}
+            />
+            <small style={{ color: "var(--text-dim)" }}>
+              Cap the number of past messages (user + assistant + tool) sent to
+              the provider on each request. Useful with local models that have a
+              small context window (e.g. <code>n_ctx=4096</code> on llama.cpp):
+              if the conversation grows beyond the model&apos;s context, the
+              server returns HTTP 400. Set to 0 to disable the cap. The system
+              prompt and the current user turn are always preserved.
+            </small>
+          </label>
           {settings.provider === "openai" && (
             <div
               style={{

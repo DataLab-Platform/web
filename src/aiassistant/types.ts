@@ -145,6 +145,13 @@ export interface ProviderSettings {
   model: string;
   /** 0..2 (OpenAI scale). */
   temperature: number;
+  /** Cap on the number of non-system messages sent to the provider on
+   *  each request (0 = no cap). Useful with local models that have a
+   *  small context window (e.g. ``n_ctx=4096`` on llama.cpp): if the
+   *  conversation grows beyond the model's context, the server returns
+   *  HTTP 400. The system prompt and the current user turn are always
+   *  preserved. Mirrors DataLab Qt's ``max_history_messages``. */
+  maxHistoryMessages: number;
 }
 
 /** Abstract LLM provider — one round-trip per ``chatCompletions`` call.

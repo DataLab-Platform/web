@@ -14,6 +14,7 @@ const settings: ProviderSettings = {
   apiKey: "",
   model: "fake",
   temperature: 0,
+  maxHistoryMessages: 0,
 };
 
 function makeFetch(responses: ProviderResponse[]) {
@@ -389,5 +390,96 @@ describe("AIController", () => {
     });
     ctrl.reset();
     expect(ctrl.getUsage()).toEqual({});
+  });
+
+  it("messagesForProvider returns the full history when cap is 0", () => {
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    ctrl.setMessages([
+      { role: "user", content: "u1" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+    ]);
+    const out = ctrl.messagesForProvider(0);
+    expect(out.map((m) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+  });
+
+  it("messagesForProvider caps history and trims to start on a user turn", () => {
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    ctrl.setMessages([
+      { role: "user", content: "u1" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u2" },
+      { role: "assistant", content: "a2" },
+      { role: "user", content: "u3" },
+      { role: "assistant", content: "a3" },
+    ]);
+    // Cap=3 keeps the last 3 messages [u3, a3] — but the slice starts on
+    // assistant "a2", which gets trimmed; window becomes [u3, a3].
+    const out = ctrl.messagesForProvider(3);
+    expect(
+      out.map((m) => `${m.role}:${(m as { content: string }).content}`),
+    ).toEqual(["system:s", "user:u3", "assistant:a3"]);
+  });
+
+  it("messagesForProvider preserves the current turn when cap is too tight", () => {
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+    });
+    // Simulates a turn that produced an assistant tool_calls + tool reply
+    // already, with cap=1: a naive slice would leave the trailing tool
+    // result orphaned. The fallback rewinds to the latest user message.
+    ctrl.setMessages([
+      { role: "user", content: "u1" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u2" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "c1",
+            type: "function",
+            function: { name: "ping", arguments: "{}" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "c1",
+        name: "ping",
+        content: '{"ok":true}',
+      },
+    ]);
+    const out = ctrl.messagesForProvider(1);
+    expect(out.map((m) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "tool",
+    ]);
+    expect((out[1] as { content: string }).content).toBe("u2");
   });
 });

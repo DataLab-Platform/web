@@ -137,6 +137,33 @@ export class AIController {
     return { ...this.cumulativeUsage };
   }
 
+  /** Return the (possibly truncated) message window sent to the
+   *  provider on the next request. Mirrors DataLab Qt's
+   *  ``_messages_for_provider``: when ``maxHistoryMessages`` is
+   *  positive, only the latest N non-system messages are kept, then
+   *  leading messages are trimmed so the window always starts on a
+   *  ``user`` message — this avoids leaving an orphan ``tool`` reply
+   *  or an assistant ``tool_calls`` whose responses were dropped,
+   *  which most providers reject. */
+  messagesForProvider(cap: number): ChatMessage[] {
+    if (cap <= 0) return [...this.history];
+    const system = this.history[0];
+    const nonSystem = this.history.slice(1);
+    let window = nonSystem.slice(-cap);
+    while (window.length > 0 && window[0].role !== "user") {
+      window = window.slice(1);
+    }
+    if (window.length === 0) {
+      for (let idx = nonSystem.length - 1; idx >= 0; idx -= 1) {
+        if (nonSystem[idx].role === "user") {
+          window = nonSystem.slice(idx);
+          break;
+        }
+      }
+    }
+    return system ? [system, ...window] : window;
+  }
+
   /** Push the user message, drive the tool-call loop, return the final
    *  assistant prose. May be ``null`` if the assistant only emitted
    *  tool calls and produced no closing message — rare but possible. */
@@ -180,7 +207,7 @@ export class AIController {
           : undefined;
         const response = await chatCompletions(
           settings,
-          this.history,
+          this.messagesForProvider(settings.maxHistoryMessages ?? 0),
           this.tools,
           { signal, ...(onDelta ? { onDelta } : {}) },
         );

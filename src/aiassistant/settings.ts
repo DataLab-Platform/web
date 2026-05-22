@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: ProviderSettings = {
   apiKey: "",
   model: "gpt-4o-mini",
   temperature: 0.2,
+  maxHistoryMessages: 0,
 };
 
 function normaliseProvider(value: unknown): ProviderKind {
@@ -73,6 +74,11 @@ export function loadSettings(): ProviderSettings {
         typeof parsed.temperature === "number"
           ? parsed.temperature
           : DEFAULT_SETTINGS.temperature,
+      maxHistoryMessages:
+        typeof parsed.maxHistoryMessages === "number" &&
+        parsed.maxHistoryMessages >= 0
+          ? Math.floor(parsed.maxHistoryMessages)
+          : DEFAULT_SETTINGS.maxHistoryMessages,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
