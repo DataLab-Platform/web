@@ -144,6 +144,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   /** Cumulative token usage for the active conversation. Hydrated from
    *  the persisted record on load and updated by ``onUsage``. */
   const [usage, setUsage] = useState<TokenUsage>({});
+  /** Token usage of the most recent turn. ``promptTokens`` is the
+   *  context size of the last request as reported by the server. */
+  const [turnUsage, setTurnUsage] = useState<TokenUsage>({});
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   // Active persisted conversation. ``null`` means the controller is empty
   // (post-mount, before the first user message of a fresh conversation).
@@ -246,7 +249,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             void call;
             void result;
           },
-          onUsage: (_turn, cumulative) => {
+          onUsage: (turn, cumulative) => {
+            setTurnUsage(turn);
             setUsage(cumulative);
           },
         },
@@ -276,6 +280,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         controller.setMessages(conv.messages, conv.usage);
         setTranscript(conv.messages.map((message) => ({ message })));
         setUsage(conv.usage ?? {});
+        setTurnUsage({});
         conversationRef.current = conv;
         setConversationId(conv.id);
       } catch (err) {
@@ -400,6 +405,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     autoApprovedRef.current.clear();
     setTranscript([]);
     setUsage({});
+    setTurnUsage({});
     setErrorMessage(null);
     setStreamingText("");
     conversationRef.current = null;
@@ -417,6 +423,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         controller.setMessages(conv.messages, conv.usage);
         setTranscript(conv.messages.map((message) => ({ message })));
         setUsage(conv.usage ?? {});
+        setTurnUsage({});
         conversationRef.current = conv;
         setConversationId(conv.id);
         autoApprovedRef.current.clear();
@@ -444,21 +451,6 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         }}
       >
         <span style={{ flex: 1 }}>AI Assistant</span>
-        {(usage.totalTokens ?? 0) > 0 && (
-          <span
-            className="ai-usage-badge"
-            title={formatUsageTooltip(usage)}
-            style={{
-              fontSize: 11,
-              opacity: 0.65,
-              fontVariantNumeric: "tabular-nums",
-              padding: "0 4px",
-            }}
-            data-testid="ai-usage-badge"
-          >
-            {formatUsageBadge(usage)}
-          </span>
-        )}
         <button
           type="button"
           className="ai-panel-button ai-panel-icon-button"
@@ -624,7 +616,22 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             boxSizing: "border-box",
           }}
         />
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {((turnUsage.promptTokens ?? 0) > 0 ||
+            (usage.totalTokens ?? 0) > 0) && (
+            <span
+              className="ai-usage-badge"
+              title={formatUsageTooltip(turnUsage, usage)}
+              style={{
+                fontSize: 11,
+                opacity: 0.65,
+                fontVariantNumeric: "tabular-nums",
+              }}
+              data-testid="ai-usage-badge"
+            >
+              {formatUsageBadge(turnUsage, usage)}
+            </span>
+          )}
           <span style={{ flex: 1 }} />
           {busy ? (
             <button
@@ -670,30 +677,44 @@ function formatTokenCount(n: number): string {
   return k >= 100 ? `${Math.round(k)}k` : `${k.toFixed(1)}k`;
 }
 
-/** Header badge: ``promptTokens / completionTokens`` (when available),
- *  falling back to ``totalTokens`` alone. */
-function formatUsageBadge(usage: TokenUsage): string {
-  const p = usage.promptTokens;
-  const c = usage.completionTokens;
-  if (typeof p === "number" && typeof c === "number") {
-    return `${formatTokenCount(p)} / ${formatTokenCount(c)}`;
+/** Header badge: ``ctx N · prompt / completion`` (last request context
+ *  size + cumulative prompt/completion), falling back to the cumulative
+ *  ``totalTokens`` alone when nothing better is available. */
+function formatUsageBadge(turn: TokenUsage, cumulative: TokenUsage): string {
+  const parts: string[] = [];
+  if (typeof turn.promptTokens === "number" && turn.promptTokens > 0) {
+    parts.push(`ctx ${formatTokenCount(turn.promptTokens)}`);
   }
-  return formatTokenCount(usage.totalTokens ?? 0);
+  const p = cumulative.promptTokens;
+  const c = cumulative.completionTokens;
+  if (typeof p === "number" && typeof c === "number") {
+    parts.push(`${formatTokenCount(p)} / ${formatTokenCount(c)}`);
+  } else if ((cumulative.totalTokens ?? 0) > 0) {
+    parts.push(formatTokenCount(cumulative.totalTokens ?? 0));
+  }
+  return parts.join(" \u00b7 ");
 }
 
 /** Verbose tooltip with raw counts. */
-function formatUsageTooltip(usage: TokenUsage): string {
+function formatUsageTooltip(turn: TokenUsage, cumulative: TokenUsage): string {
   const parts: string[] = [];
-  if (typeof usage.promptTokens === "number") {
-    parts.push(`Prompt: ${usage.promptTokens}`);
+  if (typeof turn.promptTokens === "number" && turn.promptTokens > 0) {
+    parts.push(`Last request context size: ${turn.promptTokens} tokens`);
   }
-  if (typeof usage.completionTokens === "number") {
-    parts.push(`Completion: ${usage.completionTokens}`);
+  const cumParts: string[] = [];
+  if (typeof cumulative.promptTokens === "number") {
+    cumParts.push(`Prompt: ${cumulative.promptTokens}`);
   }
-  if (typeof usage.totalTokens === "number") {
-    parts.push(`Total: ${usage.totalTokens}`);
+  if (typeof cumulative.completionTokens === "number") {
+    cumParts.push(`Completion: ${cumulative.completionTokens}`);
   }
-  return parts.length ? parts.join(" \u2022 ") : "No usage reported";
+  if (typeof cumulative.totalTokens === "number") {
+    cumParts.push(`Total: ${cumulative.totalTokens}`);
+  }
+  if (cumParts.length) {
+    parts.push(`Cumulative \u2014 ${cumParts.join(" \u2022 ")}`);
+  }
+  return parts.length ? parts.join("\n") : "No usage reported";
 }
 
 function TranscriptItem({

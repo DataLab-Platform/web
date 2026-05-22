@@ -70,6 +70,37 @@ function joinUrl(base: string, path: string): string {
   return base.replace(/\/+$/, "") + path;
 }
 
+/** Extract a human-readable error message from a provider error payload.
+ *
+ * Handles the three shapes seen in the wild:
+ *  - ``{"error": {"message": "..."}}`` — OpenAI, Azure, vLLM
+ *  - ``{"error": "..."}``              — llama.cpp (bare string)
+ *  - ``{"message": "..."}``            — generic fallback
+ *
+ * Returns ``null`` when *raw* is not JSON or doesn't match any shape, so
+ * the caller can fall back to the original payload.
+ */
+export function extractErrorMessage(raw: string): string | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const err = obj.error;
+  if (typeof err === "string" && err.trim()) return err;
+  if (err && typeof err === "object") {
+    const msg = (err as Record<string, unknown>).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  const msg = obj.message;
+  if (typeof msg === "string" && msg.trim()) return msg;
+  return null;
+}
+
 /** Defensive normalisation of an outgoing assistant message: OpenAI
  *  rejects ``content: null`` unless ``tool_calls`` is present, but some
  *  local servers (LM Studio, llama.cpp) emit a ``null`` content even
@@ -136,17 +167,13 @@ export async function openAiChatCompletions(
     signal,
   });
   if (!response.ok) {
-    let detail: string;
+    let raw: string;
     try {
-      const errPayload = (await response.json()) as RawChatCompletion;
-      detail = errPayload.error?.message ?? "";
+      raw = await response.text();
     } catch {
-      try {
-        detail = await response.text();
-      } catch {
-        detail = "";
-      }
+      raw = "";
     }
+    const detail = extractErrorMessage(raw) ?? raw;
     throw new Error(
       `LLM request failed (${response.status} ${response.statusText})` +
         (detail ? `: ${detail}` : ""),
