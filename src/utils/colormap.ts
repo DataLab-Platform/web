@@ -101,6 +101,14 @@ function jetEval(t: number): RGB {
   return [r, g, b];
 }
 
+/** Closed-form ``hot`` colormap (matplotlib): black → red → yellow → white. */
+function hotEval(t: number): RGB {
+  const r = Math.max(0, Math.min(1, t / (3 / 8)));
+  const g = Math.max(0, Math.min(1, (t - 3 / 8) / (3 / 8)));
+  const b = Math.max(0, Math.min(1, (t - 6 / 8) / (2 / 8)));
+  return [r, g, b];
+}
+
 const POLYS: Record<string, Polynom> = {
   viridis: VIRIDIS_POLY,
   plasma: PLASMA_POLY,
@@ -116,6 +124,7 @@ function resolveColormap(name: string): (t: number) => RGB {
     return (t) => [t, t, t];
   }
   if (key === "jet") return jetEval;
+  if (key === "hot") return hotEval;
   const poly = POLYS[key];
   if (poly) return (t) => evalPoly(poly, t);
   // Unknown name → silently fall back to Viridis (matches DataLab Qt
@@ -178,3 +187,45 @@ export function paintImageData(
   }
   return img;
 }
+
+/**
+ * Build a Plotly colorscale ``[[t, "rgb(r,g,b)"], …]`` sampled from the
+ * same lookup table as :func:`paintImageData`.
+ *
+ * Used by :class:`ImagePlot` so its standalone colorbar (a hidden
+ * scatter trace) is guaranteed to match the canvas-rasterised image,
+ * even for colormaps Plotly does not know natively or that we
+ * approximate with a polynomial fit.
+ */
+export function buildColorscale(
+  colormap: string,
+  inverted: boolean,
+  steps: number = 32,
+): Array<[number, string]> {
+  const sample = resolveColormap(colormap);
+  const out: Array<[number, string]> = new Array(steps);
+  const last = steps - 1;
+  for (let i = 0; i < steps; i += 1) {
+    const t = i / last;
+    const [r, g, b] = sample(inverted ? 1 - t : t);
+    out[i] = [
+      t,
+      `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`,
+    ];
+  }
+  return out;
+}
+
+/** List of colormap names natively supported by :func:`paintImageData`
+ *  / :func:`buildColorscale`.  Names outside this list silently fall
+ *  back to Viridis when rasterising. */
+export const SUPPORTED_COLORMAPS: readonly string[] = [
+  "Viridis",
+  "Plasma",
+  "Inferno",
+  "Magma",
+  "Cividis",
+  "Hot",
+  "Jet",
+  "Greys",
+] as const;

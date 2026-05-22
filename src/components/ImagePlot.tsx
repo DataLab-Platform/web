@@ -6,6 +6,11 @@ import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
 import { buildRoiOverlays } from "./imageRoi";
 import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
+import {
+  SUPPORTED_COLORMAPS,
+  buildColorscale,
+  paintImageData,
+} from "../utils/colormap";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -119,46 +124,170 @@ export function ImagePlot({
     return [data.data_min, data.data_max];
   }, [draftLut, lutRange, data.data_min, data.data_max]);
 
+  // ------------------------------------------------------------------
+  // Canvas rasterisation pipeline.
+  //
+  // Plotly's ``heatmap`` trace renders each cell through SVG/Canvas2D
+  // primitives, which scales poorly past ~10⁶ cells (a 2048×2048
+  // image freezes the UI for several seconds on every relayout).
+  // Instead we colormap the pixels into an offscreen ``<canvas>`` —
+  // O(W·H) tight loop, ~30–80 ms on 2048² — encode the result as a
+  // blob, and hand the resulting URL to a Plotly ``image`` trace as
+  // its ``source``.  The image trace rasterises in a single
+  // ``drawImage`` call, so pan/zoom/relayout cost a few milliseconds
+  // independent of resolution.
+  //
+  // We re-rasterise only when the data, LUT or colormap actually
+  // change (``useEffect`` dependency list).  The colorbar is rendered
+  // by a separate hidden ``scatter`` trace whose ``marker.colorscale``
+  // is sampled from the same LUT (see ``buildColorscale``) so it
+  // matches the canvas exactly — even for colormaps Plotly does not
+  // know natively.
+  //
+  // Plotly's ``image`` trace requires a *data URL* for ``source``
+  // (``blob:`` URLs are rejected by its loader).  We therefore use
+  // ``canvas.toDataURL`` rather than ``toBlob`` + ``createObjectURL``.
+  // ------------------------------------------------------------------
+  const [bitmapUrl, setBitmapUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const w = data.width;
+    const h = data.height;
+    if (w <= 0 || h <= 0) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const arr = data.data as
+      | Float32Array[]
+      | number[][]
+      | ArrayLike<ArrayLike<number>>;
+    let flat: Float32Array | ArrayLike<ArrayLike<number>>;
+    if (Array.isArray(arr) && arr[0] instanceof Float32Array) {
+      const first = arr[0] as Float32Array;
+      flat = new Float32Array(first.buffer, first.byteOffset, w * h);
+    } else {
+      flat = arr as ArrayLike<ArrayLike<number>>;
+    }
+    const img = paintImageData(
+      ctx,
+      flat,
+      w,
+      h,
+      effectiveLut[0],
+      effectiveLut[1],
+      colormapName,
+      colormapInverted,
+    );
+    ctx.putImageData(img, 0, 0);
+    // Synchronous PNG encode → data URL.  For 2048² this is on the
+    // order of 200 ms once per LUT/colormap change; pan/zoom never
+    // re-encodes because ``layout`` is the only thing that changes.
+    setBitmapUrl(canvas.toDataURL("image/png"));
+  }, [
+    data.id,
+    data.data,
+    data.width,
+    data.height,
+    effectiveLut,
+    colormapName,
+    colormapInverted,
+  ]);
+
+  // Precomputed colorscale shared by the colorbar trace; matches the
+  // canvas LUT bit-for-bit.
+  const plotlyColorscale = useMemo(
+    () => buildColorscale(colormapName, colormapInverted),
+    [colormapName, colormapInverted],
+  );
+
+  // Live reference to the Plotly graph div, used by the custom hover
+  // handler to convert pixel coordinates to data coordinates without
+  // depending on Plotly's hover events (which the ``image`` trace
+  // does not emit when ``hoverinfo`` is ``"skip"``).
+  const gdRef = useRef<
+    | (HTMLElement & {
+        _fullLayout?: {
+          xaxis?: { p2c: (px: number) => number; _offset?: number };
+          yaxis?: { p2c: (px: number) => number; _offset?: number };
+        };
+      })
+    | null
+  >(null);
+  // Hover state for the custom tooltip and the profiles tool.
+  const [hoverInfo, setHoverInfo] = useState<{
+    x: number;
+    y: number;
+    z: number;
+    px: number;
+    py: number;
+  } | null>(null);
+  useEffect(() => {
+    setHoverInfo(null);
+  }, [data.id]);
+
   const traces = useMemo(() => {
-    const z = data.data;
-    // Default to Viridis (matches DataLab Qt) and honour the per-image
-    // ``colormap`` / ``invert_colormap`` metadata when present.  The
-    // local ``colormapName`` / ``colormapInverted`` state lets the
-    // toolbar override both at runtime; changes are persisted via
-    // ``onColormapChange``.  Plotly's ``_r`` suffix convention reverses
-    // the scale.
-    const baseColormap = colormapName || "Viridis";
-    const colorscale = colormapInverted ? `${baseColormap}_r` : baseColormap;
-    return [
-      {
-        type: "heatmap" as const,
-        z,
-        // Use Plotly's ``x0``/``dx`` shorthand instead of materialising
-        // ``width``/``height`` coordinate arrays — saves O(W+H)
-        // allocations on every re-render and skips Plotly's array
-        // validation pass.  ``+ 0.5 * d`` aligns ticks to pixel
-        // centres (DataLab desktop convention).
-        x0: data.x0 + 0.5 * data.dx,
+    // Background image trace — rasterised by Plotly with a single
+    // ``drawImage`` from the blob URL.  When ``bitmapUrl`` is still
+    // null (first paint or in-flight repaint) we omit the trace so
+    // only the axes/shapes layer is shown.
+    const out: unknown[] = [];
+    if (bitmapUrl) {
+      out.push({
+        type: "image" as const,
+        source: bitmapUrl,
+        // ``image`` traces use the upper-left of the first pixel as
+        // origin (unlike ``heatmap`` which uses pixel centers).  No
+        // 0.5*dx offset needed.
+        x0: data.x0,
         dx: data.dx,
-        y0: data.y0 + 0.5 * data.dy,
+        y0: data.y0,
         dy: data.dy,
-        zmin: effectiveLut[0],
-        zmax: effectiveLut[1],
-        colorscale: colorscale as unknown as "Viridis",
+        // We render our own tooltip via ``onMouseMove`` (gd → data
+        // coords) and look ``z`` up directly in the typed array — the
+        // ``image`` trace cannot show ``z`` natively.
+        hoverinfo: "skip" as const,
+      });
+    }
+    // Hidden scatter trace whose sole purpose is to render the
+    // colorbar.  ``marker.colorscale`` is sampled from the same LUT
+    // as ``paintImageData`` so the bar and the image stay in sync,
+    // including for colormaps Plotly does not know natively (Hot,
+    // approximate Viridis/Plasma/…).
+    out.push({
+      type: "scatter" as const,
+      x: [null],
+      y: [null],
+      mode: "markers" as const,
+      hoverinfo: "skip" as const,
+      showlegend: false,
+      marker: {
+        color: [effectiveLut[0]],
+        colorscale: plotlyColorscale as unknown as "Viridis",
+        cmin: effectiveLut[0],
+        cmax: effectiveLut[1],
         showscale: true,
+        opacity: 0,
         colorbar: {
           title: {
             text: data.zunit ? `${data.zlabel} (${data.zunit})` : data.zlabel,
           },
           thickness: 12,
         },
-        hovertemplate:
-          `${data.xlabel || "x"}: %{x}<br>` +
-          `${data.ylabel || "y"}: %{y}<br>` +
-          `${data.zlabel || "z"}: %{z}<extra></extra>`,
       },
-    ];
-  }, [data, effectiveLut, colormapName, colormapInverted]);
+    });
+    return out;
+  }, [
+    bitmapUrl,
+    data.x0,
+    data.y0,
+    data.dx,
+    data.dy,
+    data.zlabel,
+    data.zunit,
+    effectiveLut,
+    plotlyColorscale,
+  ]);
 
   const { roiShapes, roiAnnotations: rawRoiAnnotations } = useMemo(
     () => buildRoiOverlays(roi, roiEditMode),
@@ -246,6 +375,13 @@ export function ImagePlot({
   const layout = useMemo(() => {
     const xtitle = data.xunit ? `${data.xlabel} (${data.xunit})` : data.xlabel;
     const ytitle = data.yunit ? `${data.ylabel} (${data.yunit})` : data.ylabel;
+    // Image-trace axes are not auto-ranged from typed-array data —
+    // compute the pixel-aligned extents explicitly so the image fills
+    // the plot regardless of the hidden colorbar scatter trace.
+    const xMin = data.x0;
+    const xMax = data.x0 + data.width * data.dx;
+    const yMin = data.y0;
+    const yMax = data.y0 + data.height * data.dy;
     return {
       ...plotlyTheme,
       title: { text: data.title || "" },
@@ -263,13 +399,16 @@ export function ImagePlot({
         ...plotlyTheme.xaxis,
         title: { text: xtitle },
         constrain: "domain" as const,
+        range: [xMin, xMax],
+        autorange: false as const,
       },
       yaxis: {
         ...plotlyTheme.yaxis,
         title: { text: ytitle },
         scaleanchor: "x" as const,
         scaleratio: data.dy / data.dx,
-        autorange: "reversed" as const,
+        range: [yMax, yMin],
+        autorange: false as const,
       },
       // Legend positioned to the right of the colorbar (paper coords),
       // outside the plot area, so it never overlaps the image or the
@@ -330,6 +469,53 @@ export function ImagePlot({
     },
     [tool],
   );
+
+  // ------------------------------------------------------------------
+  // Custom hover handler.
+  //
+  // The ``image`` trace has ``hoverinfo: "skip"`` so Plotly does not
+  // emit hover events for it (and could not show the original ``z``
+  // value anyway — it only sees rasterised RGBA).  We listen to the
+  // wrapper's mousemove, convert client pixel coords to data coords
+  // through the graph-div axis helpers, then look ``z`` up directly
+  // in the original ``Float32Array``.  This also drives the profiles
+  // crosshair, replacing the old plotly-hover-driven path.
+  // ------------------------------------------------------------------
+  const handleWrapperMouseMove = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      const gd = gdRef.current;
+      const fl = gd?._fullLayout;
+      const xa = fl?.xaxis;
+      const ya = fl?.yaxis;
+      if (!gd || !xa || !ya || typeof xa.p2c !== "function") return;
+      const rect = gd.getBoundingClientRect();
+      const px = evt.clientX - rect.left;
+      const py = evt.clientY - rect.top;
+      const xOff = xa._offset ?? 0;
+      const yOff = ya._offset ?? 0;
+      const xData = xa.p2c(px - xOff);
+      const yData = ya.p2c(py - yOff);
+      if (!Number.isFinite(xData) || !Number.isFinite(yData)) {
+        if (hoverInfo) setHoverInfo(null);
+        return;
+      }
+      const i = Math.floor((xData - data.x0) / data.dx);
+      const j = Math.floor((yData - data.y0) / data.dy);
+      if (i < 0 || i >= data.width || j < 0 || j >= data.height) {
+        if (hoverInfo) setHoverInfo(null);
+        return;
+      }
+      const row = data.data[j] as Float32Array | number[];
+      const z = row ? row[i] : NaN;
+      setHoverInfo({ x: xData, y: yData, z, px, py });
+      if (tool === "profiles") setCursor({ x: xData, y: yData });
+    },
+    [data, tool, hoverInfo],
+  );
+
+  const handleWrapperMouseLeave = useCallback(() => {
+    setHoverInfo(null);
+  }, []);
 
   const handleRelayout = useCallback(
     (event: Record<string, unknown>) => {
@@ -547,10 +733,60 @@ export function ImagePlot({
       }
       onRelayout={handleRelayout}
       onHover={handleHover}
-      onInitialized={(_fig, gd) => registerActivePlot("image", gd)}
-      onUpdate={(_fig, gd) => registerActivePlot("image", gd)}
-      onPurge={() => registerActivePlot("image", null)}
+      onInitialized={(_fig, gd) => {
+        gdRef.current = gd as unknown as typeof gdRef.current;
+        registerActivePlot("image", gd);
+      }}
+      onUpdate={(_fig, gd) => {
+        gdRef.current = gd as unknown as typeof gdRef.current;
+        registerActivePlot("image", gd);
+      }}
+      onPurge={() => {
+        gdRef.current = null;
+        registerActivePlot("image", null);
+      }}
     />
+  );
+
+  // Custom hover tooltip — small overlay positioned next to the
+  // cursor, mirroring Plotly's default look but driven by the typed
+  // array lookup so we always show the original ``z`` value.
+  const hoverTooltip = hoverInfo ? (
+    <div
+      className="image-hover-tooltip"
+      style={{
+        position: "absolute",
+        left: hoverInfo.px + 14,
+        top: hoverInfo.py + 14,
+        pointerEvents: "none",
+        background: "var(--plot-tooltip-bg, rgba(20,20,20,0.85))",
+        color: "var(--plot-tooltip-fg, #fff)",
+        padding: "4px 6px",
+        borderRadius: 3,
+        fontSize: 11,
+        lineHeight: 1.3,
+        whiteSpace: "nowrap",
+        zIndex: 5,
+      }}
+    >
+      {data.xlabel || "x"}: {fmt(hoverInfo.x)}
+      <br />
+      {data.ylabel || "y"}: {fmt(hoverInfo.y)}
+      <br />
+      {data.zlabel || "z"}: {fmt(hoverInfo.z)}
+    </div>
+  ) : null;
+
+  const imagePlotEl = (
+    <div
+      className="image-plot-host"
+      style={{ position: "relative", width: "100%", height: "100%" }}
+      onMouseMove={handleWrapperMouseMove}
+      onMouseLeave={handleWrapperMouseLeave}
+    >
+      {heatmapPlot}
+      {hoverTooltip}
+    </div>
   );
 
   return (
@@ -616,7 +852,7 @@ export function ImagePlot({
             </div>
             <div className="image-plot-cell image-plot-cell-corner" />
             <div className="image-plot-cell image-plot-cell-heatmap">
-              {heatmapPlot}
+              {imagePlotEl}
             </div>
             <div className="image-plot-cell image-plot-cell-yprofile">
               {profileData ? (
@@ -657,7 +893,7 @@ export function ImagePlot({
             </div>
           </div>
         ) : (
-          heatmapPlot
+          imagePlotEl
         )}
         {tool === "stats" && statsValues && (
           <div className="image-stats-overlay">
@@ -792,25 +1028,11 @@ function ImageToolbar({
   );
 }
 
-/** Colormaps offered in the toolbar.  These are all built-in Plotly
- *  colorscales so they need no extra runtime resources.  ``Viridis`` is
- *  the default to match DataLab Qt. */
-const COLORMAP_CHOICES: readonly string[] = [
-  "Viridis",
-  "Plasma",
-  "Inferno",
-  "Magma",
-  "Cividis",
-  "Hot",
-  "Jet",
-  "Greys",
-  "Greens",
-  "Blues",
-  "Reds",
-  "RdBu",
-  "Picnic",
-  "Portland",
-] as const;
+/** Colormaps offered in the toolbar.  Restricted to the lookup tables
+ *  natively supported by :func:`paintImageData` / :func:`buildColorscale`
+ *  so the rasterised image and the colorbar always match.  ``Viridis``
+ *  is the default to match DataLab Qt. */
+const COLORMAP_CHOICES = SUPPORTED_COLORMAPS;
 
 // ---------------------------------------------------------------------------
 // Contrast panel — histogram + dual range slider + Auto.
