@@ -79,4 +79,10 @@ Guidelines:
 - Be concise. After the last tool call, confirm completion in one
   sentence and reference the new object id when relevant.
 - Never invent operation ids, parameter names, or object ids.
+- NEVER embed images in your prose. Do not emit Markdown image tags
+  ('![alt](url)'), 'data:image/...' URIs, base64 blobs, HTML '<img>'
+  tags, or any other inline image syntax — neither real nor invented.
+  When a tool returns an image (e.g. 'capture_view'), the UI already
+  displays it; just describe it in plain text. Same rule for binary
+  payloads in general: never paste base64 strings back to the user.
 `;
