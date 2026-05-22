@@ -162,11 +162,27 @@ export class AIController {
       for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
         if (signal.aborted) throw new AbortError();
         const settings = this.getSettings();
+        let streamedText = "";
+        // Only opt into streaming when the host actually listens for
+        // deltas — otherwise the underlying provider stays on the
+        // simpler non-streamed path (cheaper, and keeps unit tests that
+        // stub the raw ``fetch`` response unaffected).
+        const onDelta = this.listener.onAssistantDelta
+          ? (delta: { contentDelta?: string }) => {
+              if (delta.contentDelta) {
+                streamedText += delta.contentDelta;
+                this.listener.onAssistantDelta!(
+                  delta.contentDelta,
+                  streamedText,
+                );
+              }
+            }
+          : undefined;
         const response = await chatCompletions(
           settings,
           this.history,
           this.tools,
-          signal,
+          { signal, ...(onDelta ? { onDelta } : {}) },
         );
         const assistantMessage: ChatMessage = {
           role: "assistant",

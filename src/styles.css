@@ -1383,6 +1383,17 @@ input {
   }
 }
 
+@keyframes dlw-ai-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
 .overlay {
   position: fixed;
   inset: 0;

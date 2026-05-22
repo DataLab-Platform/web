@@ -12,6 +12,7 @@
  */
 
 import type {
+  ChatCompletionsOptions,
   ChatMessage,
   LLMProvider,
   ProviderResponse,
@@ -88,6 +89,12 @@ function nextToolCallId(): string {
   return `mock-call-${toolCallCounter}`;
 }
 
+/** Per-chunk wait when streaming mock prose. Small enough that the
+ *  Vitest suite stays under a second per test, large enough that a
+ *  browser-driven Playwright spec can reliably observe intermediate
+ *  states. */
+const MOCK_STREAM_CHUNK_MS = 10;
+
 function makeAbortError(): Error {
   const err = new Error("Aborted");
   err.name = "AbortError";
@@ -119,8 +126,10 @@ export async function mockChatCompletions(
   settings: ProviderSettings,
   messages: ChatMessage[],
   tools: Tool[],
-  signal?: AbortSignal,
+  options?: ChatCompletionsOptions,
 ): Promise<ProviderResponse> {
+  const signal = options?.signal;
+  const onDelta = options?.onDelta;
   STATE.requests.push({ settings, messages, tools: tools.slice() });
   if (signal?.aborted) {
     throw makeAbortError();
@@ -134,6 +143,17 @@ export async function mockChatCompletions(
   STATE.index += 1;
   if (turn.delayMs && turn.delayMs > 0) {
     await waitWithAbort(turn.delayMs, signal);
+  }
+  if (onDelta && typeof turn.content === "string" && turn.content.length > 0) {
+    // Emit prose word-by-word so streaming consumers (Playwright, UI
+    // typing indicator) can observe progress. ~10 ms/word keeps Vitest
+    // fast while staying visible in a browser.
+    const chunks = turn.content.match(/\S+\s*/g) ?? [turn.content];
+    for (const chunk of chunks) {
+      if (signal?.aborted) throw makeAbortError();
+      onDelta({ contentDelta: chunk });
+      await waitWithAbort(MOCK_STREAM_CHUNK_MS, signal);
+    }
   }
   const toolCalls: ToolCall[] = (turn.toolCalls ?? []).map((tc) => ({
     id: tc.id ?? nextToolCallId(),

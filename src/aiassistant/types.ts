@@ -72,6 +72,32 @@ export interface ProviderResponse {
   usage?: TokenUsage;
 }
 
+/** Incremental delta emitted by a streaming provider. Mirrors OpenAI's
+ *  SSE ``delta`` shape: each chunk carries either a slice of prose
+ *  (``contentDelta``) or a partial tool-call (``toolCallDelta``). Final
+ *  aggregation is still returned via :type:`ProviderResponse` so
+ *  non-streaming code paths stay unchanged. */
+export interface ProviderResponseDelta {
+  contentDelta?: string;
+  toolCallDelta?: {
+    index: number;
+    id?: string;
+    name?: string;
+    argumentsDelta?: string;
+  };
+}
+
+/** Optional streaming hook accepted by :meth:`LLMProvider.chatCompletions`. */
+export type ProviderDeltaCallback = (delta: ProviderResponseDelta) => void;
+
+/** Options bag for :meth:`LLMProvider.chatCompletions`. */
+export interface ChatCompletionsOptions {
+  signal?: AbortSignal;
+  /** Invoked for every incremental chunk when the provider streams.
+   *  Non-streaming providers simply never call it. */
+  onDelta?: ProviderDeltaCallback;
+}
+
 /** Outcome of a tool invocation, serialised as the ``content`` of the
  *  ``role:"tool"`` message sent back to the LLM. */
 export interface ToolResult {
@@ -121,7 +147,12 @@ export interface ProviderSettings {
   temperature: number;
 }
 
-/** Abstract LLM provider — one round-trip per ``chatCompletions`` call. */
+/** Abstract LLM provider — one round-trip per ``chatCompletions`` call.
+ *
+ *  Streaming is opt-in: pass ``options.onDelta`` to receive incremental
+ *  chunks; the returned promise still resolves with the fully-assembled
+ *  :type:`ProviderResponse` so callers that don't care about streaming
+ *  (tests, batch jobs) can stay synchronous in shape. */
 export interface LLMProvider {
   readonly kind: ProviderKind;
   /** Optional capability flag exposed for prompt-tuning purposes. */
@@ -130,7 +161,7 @@ export interface LLMProvider {
     settings: ProviderSettings,
     messages: ChatMessage[],
     tools: Tool[],
-    signal?: AbortSignal,
+    options?: ChatCompletionsOptions,
   ): Promise<ProviderResponse>;
 }
 
@@ -143,6 +174,11 @@ export type ConfirmToolCallback = (
 /** Notified for every interesting controller event. */
 export interface ControllerListener {
   onMessageAppended?: (message: ChatMessage) => void;
+  /** Fired for each streamed prose chunk *before* the corresponding
+   *  assistant message lands via :meth:`onMessageAppended`. The
+   *  cumulative text so far is passed so the UI can render a "typing"
+   *  preview without re-assembling chunks itself. */
+  onAssistantDelta?: (chunk: string, accumulated: string) => void;
   onToolStarted?: (toolCall: ToolCall) => void;
   onToolFinished?: (toolCall: ToolCall, result: ToolResult) => void;
   onError?: (error: Error) => void;

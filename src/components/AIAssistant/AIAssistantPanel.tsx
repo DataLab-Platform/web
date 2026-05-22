@@ -137,6 +137,10 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  /** Live preview of the assistant's prose while the provider streams.
+   *  Cleared as soon as the matching ``role:"assistant"`` message lands
+   *  via ``onMessageAppended`` (the full message takes over rendering). */
+  const [streamingText, setStreamingText] = useState("");
   /** Cumulative token usage for the active conversation. Hydrated from
    *  the persisted record on load and updated by ``onUsage``. */
   const [usage, setUsage] = useState<TokenUsage>({});
@@ -226,7 +230,15 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           onMessageAppended: (message) => {
             // Skip the system prompt (controller seeds it on construction).
             if (message.role === "system") return;
+            if (message.role === "assistant") {
+              // The streamed preview is now superseded by the final
+              // message bubble; drop it to avoid a brief duplicate.
+              setStreamingText("");
+            }
             setTranscript((prev) => [...prev, { message }]);
+          },
+          onAssistantDelta: (_chunk, accumulated) => {
+            setStreamingText(accumulated);
           },
           onToolFinished: (call: ToolCall, result: ToolResult) => {
             // No-op: the matching ``role:"tool"`` message is appended by
@@ -247,7 +259,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     const el = transcriptRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [transcript, busy, pendingConfirm]);
+  }, [transcript, busy, pendingConfirm, streamingText]);
 
   // On mount: try to restore the most-recent conversation. Runs at most
   // once even under React 18 strict-mode double invocation.
@@ -389,6 +401,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     setTranscript([]);
     setUsage({});
     setErrorMessage(null);
+    setStreamingText("");
     conversationRef.current = null;
     setConversationId(null);
     inputHistoryRef.current?.resetNavigation();
@@ -528,7 +541,33 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
         {transcript.map((entry, idx) => (
           <TranscriptItem key={idx} entry={entry} runtime={runtime} />
         ))}
-        {busy && (
+        {streamingText && (
+          <div
+            className="ai-bubble ai-bubble-assistant ai-bubble-streaming"
+            style={{
+              alignSelf: "flex-start",
+              background: "var(--panel)",
+              border: "1px solid var(--border)",
+              padding: "6px 10px",
+              borderRadius: 8,
+              maxWidth: "95%",
+              fontSize: 13,
+            }}
+          >
+            <MarkdownView text={streamingText} />
+            <span
+              aria-hidden
+              style={{
+                display: "inline-block",
+                width: "0.5em",
+                marginLeft: 2,
+                borderRight: "2px solid var(--text-dim)",
+                animation: "dlw-ai-cursor 1s steps(2) infinite",
+              }}
+            />
+          </div>
+        )}
+        {busy && !streamingText && (
           <div
             className="ai-bubble ai-bubble-status"
             style={{

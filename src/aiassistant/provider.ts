@@ -8,6 +8,7 @@
  */
 
 import type {
+  ChatCompletionsOptions,
   ChatMessage,
   LLMProvider,
   ProviderResponse,
@@ -34,12 +35,12 @@ export function chatCompletions(
   settings: ProviderSettings,
   messages: ChatMessage[],
   tools: Tool[],
-  signal?: AbortSignal,
+  options?: ChatCompletionsOptions,
 ): Promise<ProviderResponse> {
   return getProvider(settings).chatCompletions(
     settings,
     messages,
     tools,
-    signal,
+    options,
   );
 }
