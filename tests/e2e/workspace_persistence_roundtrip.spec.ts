@@ -118,7 +118,7 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   // -- 3. Save HDF5 via the File menu ---------------------------------
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: "File" }).first().click();
-  await page.getByRole("menuitem", { name: /Save HDF5 workspace/i }).click();
+  await page.getByRole("menuitem", { name: /Save to HDF5 file/i }).click();
   const download = await downloadPromise;
   const suggested = download.suggestedFilename();
   expect(suggested).toMatch(/^workspace-.*\.h5$/);
@@ -150,7 +150,7 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   // -- 5. Re-open the saved HDF5 via the File menu --------------------
   const fileChooserPromise = page.waitForEvent("filechooser");
   await page.getByRole("menuitem", { name: "File" }).first().click();
-  await page.getByRole("menuitem", { name: /Open HDF5 workspace/i }).click();
+  await page.getByRole("menuitem", { name: /Open HDF5 files/i }).click();
   const chooser = await fileChooserPromise;
   await chooser.setFiles(tmpPath);
 

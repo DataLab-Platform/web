@@ -77,7 +77,7 @@ test.describe("Workspace persistence UX (PR 2)", () => {
     // -- 4. After a Save HDF5, the (recovered) hint clears. --
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("menuitem", { name: "File" }).first().click();
-    await page.getByRole("menuitem", { name: /Save HDF5 workspace/i }).click();
+    await page.getByRole("menuitem", { name: /Save to HDF5 file/i }).click();
     const dl = await downloadPromise;
     const filename = dl.suggestedFilename();
     await dl.saveAs(test.info().outputPath(filename));
@@ -139,9 +139,9 @@ test.describe("Workspace persistence UX (PR 2)", () => {
     await expect(banner).toBeVisible({ timeout: 30_000 });
     await expect(banner).toContainText(/notebook/i);
 
-    // Click "Save HDF5 workspace…" inside the banner.
+    // Click "Save to HDF5 file…" inside the banner.
     const downloadPromise = page.waitForEvent("download");
-    await banner.getByRole("button", { name: /Save HDF5 workspace/i }).click();
+    await banner.getByRole("button", { name: /Save to HDF5 file/i }).click();
     const dl = await downloadPromise;
     expect(dl.suggestedFilename()).toMatch(/^workspace-.*\.h5$/);
     await dl.saveAs(test.info().outputPath(dl.suggestedFilename()));

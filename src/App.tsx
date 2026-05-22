@@ -16,6 +16,7 @@ import { registerSelectionSource } from "./runtime/selectionState";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
+  H5BrowserNode,
   ImageData,
   InteractiveFitInfo,
   PanelTree,
@@ -185,6 +186,14 @@ function usePersistedSize(
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
 const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
+
+function collectSupportedH5NodeIds(
+  node: H5BrowserNode,
+  out: Set<string>,
+): void {
+  if (node.is_supported) out.add(node.id);
+  for (const child of node.children) collectSupportedH5NodeIds(child, out);
+}
 
 /** Persist a boolean preference to localStorage. */
 function usePersistedBool(
@@ -2129,11 +2138,40 @@ export default function App() {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           // Qt parity: when the file is a regular HDF5 file (not a
-          // DataLab workspace), fall through to the H5 browser dialog.
+          // DataLab workspace), import every supported dataset directly
+          // (matches Qt's ``File > Open HDF5 files...`` with import_all=True).
+          // The H5 browser remains available via ``File > Import from
+          // HDF5...`` (handleImportHdf5).
           if (msg.includes("Not a DataLab HDF5 workspace")) {
+            let opened: H5BrowserFile | null = null;
             try {
-              const opened = await runtime.openH5Browser(file.name, bytes);
-              setH5BrowserFiles([opened]);
+              opened = await runtime.openH5Browser(file.name, bytes);
+              const supported = new Set<string>();
+              collectSupportedH5NodeIds(opened.root, supported);
+              if (supported.size === 0) {
+                await notify({
+                  kind: "warning",
+                  title: "Open HDF5",
+                  message: "No supported data available in HDF5 file.",
+                });
+                return;
+              }
+              const result = await runtime.importH5BrowserNodes(
+                opened.file_id,
+                Array.from(supported),
+                null,
+              );
+              if (result.uint32_clipped) {
+                await notify({
+                  kind: "warning",
+                  message:
+                    "Some uint32 image data was clipped to int32 range during import.",
+                });
+              }
+              setSelectedIds([]);
+              setCurrentId(result.oids[result.oids.length - 1] ?? null);
+              setWorkspaceVersion((v) => v + 1);
+              await refresh(result.oids[result.oids.length - 1] ?? null);
             } catch (err2) {
               await notify({
                 kind: "error",
@@ -2142,6 +2180,10 @@ export default function App() {
                   err2 instanceof Error ? err2.message : String(err2)
                 }`,
               });
+            } finally {
+              if (opened) {
+                await runtime.closeH5Browser(opened.file_id).catch(() => {});
+              }
             }
             return;
           }

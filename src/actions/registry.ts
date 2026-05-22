@@ -89,8 +89,8 @@ export function buildStaticActions(
     },
     {
       id: "file.open_workspace_h5",
-      label: "Open HDF5 workspace…",
-      menuPath: "File/Open HDF5 workspace…",
+      label: "Open HDF5 files…",
+      menuPath: "File/Open HDF5 files…",
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       beginGroup: true,
       enabled: ready,
@@ -98,8 +98,8 @@ export function buildStaticActions(
     },
     {
       id: "file.save_workspace_h5",
-      label: "Save HDF5 workspace…",
-      menuPath: "File/Save HDF5 workspace…",
+      label: "Save to HDF5 file…",
+      menuPath: "File/Save to HDF5 file…",
       iconUrl: getIoIconUrl("filesave_h5.svg"),
       enabled: (s) =>
         ready(s) && (s.hasObjects || s.hasMacros || s.hasNotebooks),
@@ -107,8 +107,8 @@ export function buildStaticActions(
     },
     {
       id: "file.import_hdf5",
-      label: "Import from HDF5…",
-      menuPath: "File/Import from HDF5…",
+      label: "Browse HDF5 file…",
+      menuPath: "File/Browse HDF5 file…",
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       enabled: ready,
       run: cb.onImportHdf5,

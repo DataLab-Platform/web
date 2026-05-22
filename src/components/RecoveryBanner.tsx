@@ -86,7 +86,7 @@ export function RecoveryBanner({
           onClick={handleSave}
           disabled={saveDisabled}
         >
-          Save HDF5 workspace…
+          Save to HDF5 file…
         </button>
         <button
           type="button"
