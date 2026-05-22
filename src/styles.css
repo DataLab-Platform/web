@@ -226,6 +226,33 @@ input {
   color: var(--text);
 }
 
+/* AI Assistant show/hide toggle — same visual weight as the theme
+   toggle, with an active state highlighting the accent colour when
+   the panel is currently visible. */
+.menubar-ai-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  margin-left: 4px;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.menubar-ai-toggle:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.menubar-ai-toggle.menubar-ai-toggle--active {
+  color: var(--accent, #2d7ff9);
+  border-color: var(--accent, #2d7ff9);
+}
+
 /* Persistent console-status indicator — mirrors DataLab Qt's
    ``ConsoleStatus``: shows an info glyph (ⓘ) when no warning/error has
    been logged, and a warning glyph (⚠) with a numeric badge once one

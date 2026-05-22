@@ -2824,6 +2824,8 @@ export default function App() {
             actions={actions}
             onShowExperimentalInfo={() => setHelpView("about")}
             onOpenConsole={() => setHelpView("console")}
+            aiPanelVisible={aiPanelVisible}
+            onToggleAIPanel={toggleAIPanel}
           />
         </div>
         {recoveryBanner && (

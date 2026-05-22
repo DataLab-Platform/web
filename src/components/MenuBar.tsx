@@ -17,6 +17,13 @@ interface Props {
   /** Callback invoked when the user clicks the console-status indicator;
    *  typically opens the Help > Browser console log dialog. */
   onOpenConsole?: () => void;
+  /** Current visibility of the AI Assistant panel. When ``undefined``
+   *  the toggle button is hidden (used by surfaces that don't expose
+   *  the assistant). */
+  aiPanelVisible?: boolean;
+  /** Toggle handler for the AI Assistant panel. Required to render
+   *  the toggle button. */
+  onToggleAIPanel?: () => void;
 }
 
 export function MenuBar(props: Props) {
@@ -27,6 +34,8 @@ export function MenuBar(props: Props) {
     actions,
     onShowExperimentalInfo,
     onOpenConsole,
+    aiPanelVisible,
+    onToggleAIPanel,
   } = props;
   const tree = useMemo(() => buildMenuTree(actions), [actions]);
   const [openTop, setOpenTop] = useState<string | null>(null);
@@ -105,8 +114,52 @@ export function MenuBar(props: Props) {
         {status}
       </span>
       {onOpenConsole && <ConsoleStatusIndicator onOpen={onOpenConsole} />}
+      {onToggleAIPanel && (
+        <AIToggleButton visible={!!aiPanelVisible} onToggle={onToggleAIPanel} />
+      )}
       <ThemeToggleButton />
     </div>
+  );
+}
+
+/** AI Assistant show/hide toggle, rendered next to the theme toggle.
+ *  The pressed state mirrors :prop:`visible` so screen readers and
+ *  visual styling stay in sync with the panel itself. */
+function AIToggleButton({
+  visible,
+  onToggle,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  const label = visible ? "Hide AI Assistant" : "Show AI Assistant";
+  return (
+    <button
+      type="button"
+      className={
+        "menubar-ai-toggle" + (visible ? " menubar-ai-toggle--active" : "")
+      }
+      onClick={onToggle}
+      title={label}
+      aria-label={label}
+      aria-pressed={visible}
+    >
+      <svg
+        width={16}
+        height={16}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        focusable={false}
+      >
+        <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.5A8 8 0 1 1 21 12z" />
+        <path d="M9 11h.01M12 11h.01M15 11h.01" />
+      </svg>
+    </button>
   );
 }
 
