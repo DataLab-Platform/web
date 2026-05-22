@@ -75,6 +75,7 @@ import {
 } from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
 import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
+import { useProgress } from "./components/ProgressDialog";
 import {
   SeparateViewDialog,
   type SeparateViewContent,
@@ -229,6 +230,7 @@ export default function App() {
   const confirm = useConfirm();
   const notify = useMessage();
   const prompt = usePrompt();
+  const runWithProgress = useProgress();
   const {
     dirty: workspaceDirty,
     filename: workspaceFilename,
@@ -2549,20 +2551,27 @@ export default function App() {
       setBusy(true);
       let lastId: string | null = null;
       try {
-        for (const file of Array.from(files)) {
-          const buf = new Uint8Array(await file.arrayBuffer());
-          const ids = isImage
-            ? await runtime.openImageFromBytes(file.name, buf)
-            : await runtime.openSignalFromBytes(file.name, buf);
-          if (ids.length > 0) lastId = ids[ids.length - 1];
-        }
+        const fileList = Array.from(files);
+        await runWithProgress({
+          title: isImage ? "Opening images…" : "Opening signals…",
+          total: fileList.length,
+          step: async (i, { setLabel }) => {
+            const file = fileList[i];
+            setLabel(`${i + 1} / ${fileList.length} — ${file.name}`);
+            const buf = new Uint8Array(await file.arrayBuffer());
+            const ids = isImage
+              ? await runtime.openImageFromBytes(file.name, buf)
+              : await runtime.openSignalFromBytes(file.name, buf);
+            if (ids.length > 0) lastId = ids[ids.length - 1];
+          },
+        });
         await refresh(lastId);
       } finally {
         setBusy(false);
       }
     };
     input.click();
-  }, [runtime, refresh, treeKind]);
+  }, [runtime, refresh, treeKind, runWithProgress]);
 
   const hasObjects = useMemo(() => {
     if (!tree) return false;

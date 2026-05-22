@@ -1515,6 +1515,43 @@ input {
   font-size: 12px;
 }
 
+/* Progress dialog */
+.progress-dialog {
+  min-width: 420px;
+  max-width: min(560px, 90vw);
+}
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent, #3a8bd0);
+  transition: width 120ms ease-out;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted, #aaa);
+  margin-top: 6px;
+}
+
+.progress-label {
+  margin: 8px 0 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Help / About / Shortcuts / Console dialog */
 .help-dialog {
   min-width: 520px;

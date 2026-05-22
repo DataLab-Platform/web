@@ -27,6 +27,7 @@ import type {
   H5BrowserPreview,
 } from "../runtime/runtime";
 import { useRuntime } from "../runtime/RuntimeContext";
+import { useProgress } from "./ProgressDialog";
 
 interface Props {
   /** Optional already-opened files (e.g. opened by the caller before
@@ -67,6 +68,7 @@ function findNode(root: H5BrowserNode, id: string): H5BrowserNode | null {
 
 export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
   const { runtime } = useRuntime();
+  const runWithProgress = useProgress();
   const [files, setFiles] = useState<OpenFileState[]>(() =>
     (initial ?? []).map((f) => ({
       file: f,
@@ -353,15 +355,30 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     setError(null);
     const allOids: string[] = [];
     let uintClipped = false;
+    // Flatten (file, node) pairs so the progress bar reflects per-node
+    // granularity. Each node is imported individually to keep the bar
+    // responsive and cancellation reactive between nodes.
+    const tasks: { fileId: string; nodeId: string }[] = [];
+    for (const f of files) {
+      for (const nid of f.checked) {
+        tasks.push({ fileId: f.file.file_id, nodeId: nid });
+      }
+    }
     try {
-      for (const f of files) {
-        if (f.checked.size === 0) continue;
-        const result = await runtime.importH5BrowserNodes(
-          f.file.file_id,
-          Array.from(f.checked),
-        );
-        allOids.push(...result.oids);
-        if (result.uint32_clipped) uintClipped = true;
+      const { cancelled } = await runWithProgress({
+        title: "Importing HDF5 nodes…",
+        total: tasks.length,
+        step: async (i, { setLabel }) => {
+          const { fileId, nodeId } = tasks[i];
+          setLabel(`${i + 1} / ${tasks.length} — ${nodeId}`);
+          const result = await runtime.importH5BrowserNodes(fileId, [nodeId]);
+          allOids.push(...result.oids);
+          if (result.uint32_clipped) uintClipped = true;
+        },
+      });
+      if (cancelled && allOids.length === 0) {
+        setBusy(false);
+        return;
       }
       // Close all owned files before notifying the caller.
       const ids = Array.from(ownedFileIds.current);
@@ -374,7 +391,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
-  }, [runtime, files, totalChecked, onImport]);
+  }, [runtime, files, totalChecked, onImport, runWithProgress]);
 
   // ------------------------------------------------------------------
   // Render
