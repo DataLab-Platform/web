@@ -50,12 +50,9 @@ const guidataBackendsSource = (() => {
   return first ?? null;
 })();
 
-// Pyodide is loaded from a CDN <script> tag in index.html; declare its global.
-declare global {
-  interface Window {
-    loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI>;
-  }
-}
+// Pyodide is loaded from a CDN <script> tag in index.html; the
+// ``window.loadPyodide`` global is declared in
+// ``src/types/pyodide-global.d.ts`` (shared with the bench).
 
 export interface PyodideAPI {
   runPythonAsync: (code: string) => Promise<unknown>;
@@ -860,7 +857,9 @@ export class DataLabRuntime {
       );
     }
     onProgress?.("Loading Pyodide runtime…");
-    const py = await window.loadPyodide({ indexURL: PYODIDE_INDEX });
+    const py = (await window.loadPyodide!({
+      indexURL: PYODIDE_INDEX,
+    })) as PyodideAPI;
 
     // ---------------------------------------------------------------
     // Pin the Pyodide locale to ``C`` *before* any ``guidata`` /
