@@ -129,3 +129,181 @@ export async function fetchDevOpenAIKey(): Promise<string> {
     return "";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Base-URL presets — pure UI helper (no schema change to ``ProviderSettings``).
+// ---------------------------------------------------------------------------
+
+/** One entry of the "preset" dropdown in :class:`AISettingsDialog`. */
+export interface BaseUrlPreset {
+  /** Stable id used as the ``<option value>``. */
+  id: string;
+  /** Human label shown in the dropdown. */
+  label: string;
+  /** Filled into the ``baseUrl`` field when selected; ``null`` for
+   *  the "Custom" entry which leaves the existing value untouched. */
+  baseUrl: string | null;
+  /** Default model name to suggest alongside the URL. */
+  defaultModel?: string;
+  /** True when the server typically runs on the user's machine — used
+   *  to tailor error hints (CORS, ``OLLAMA_ORIGINS``, …). */
+  isLocal: boolean;
+  /** One-line instruction for enabling cross-origin access. */
+  corsHint?: string;
+}
+
+export const BASE_URL_PRESETS: BaseUrlPreset[] = [
+  {
+    id: "openai",
+    label: "OpenAI (cloud)",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    isLocal: false,
+  },
+  {
+    id: "ollama",
+    label: "Ollama (local)",
+    baseUrl: "http://localhost:11434/v1",
+    defaultModel: "llama3.2:3b",
+    isLocal: true,
+    corsHint:
+      "Start ollama with OLLAMA_ORIGINS=* (env var) so the browser can connect.",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio (local)",
+    baseUrl: "http://localhost:1234/v1",
+    defaultModel: "local-model",
+    isLocal: true,
+    corsHint:
+      "In LM Studio → Developer → Server Settings, enable CORS, then set Model to the loaded model's API identifier (e.g. 'google/gemma-4-e4b').",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp server (local)",
+    baseUrl: "http://localhost:8080/v1",
+    defaultModel: "local-model",
+    isLocal: true,
+    corsHint:
+      "Run llama-server with --api-key-allow-empty and the default CORS headers (built-in).",
+  },
+  {
+    id: "vllm",
+    label: "vLLM (local)",
+    baseUrl: "http://localhost:8000/v1",
+    defaultModel: "local-model",
+    isLocal: true,
+    corsHint:
+      "Start vllm with --allowed-origins '*' so the browser can reach /v1/*.",
+  },
+  {
+    id: "custom",
+    label: "Custom…",
+    baseUrl: null,
+    isLocal: false,
+  },
+];
+
+/** Return the preset that matches *baseUrl* exactly, or ``"custom"``. */
+export function detectPreset(baseUrl: string): BaseUrlPreset {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  for (const p of BASE_URL_PRESETS) {
+    if (p.baseUrl && p.baseUrl.replace(/\/+$/, "") === trimmed) return p;
+  }
+  return BASE_URL_PRESETS[BASE_URL_PRESETS.length - 1];
+}
+
+// ---------------------------------------------------------------------------
+// Connection probe (Test Connection button).
+// ---------------------------------------------------------------------------
+
+/** Outcome of :func:`testConnection`. */
+export interface ConnectionProbeResult {
+  ok: boolean;
+  /** Human-readable summary suitable for display next to the button. */
+  message: string;
+  /** ``true`` when the failure looks like a CORS / network reachability
+   *  issue against a local server — caller may surface the
+   *  preset-specific :attr:`BaseUrlPreset.corsHint`. */
+  likelyCors?: boolean;
+  /** Round-trip latency in milliseconds when the probe succeeded. */
+  latencyMs?: number;
+}
+
+function joinUrl(base: string, path: string): string {
+  return base.replace(/\/+$/, "") + path;
+}
+
+/** Send a minimal request to ``${baseUrl}/models`` to verify reachability,
+ *  authentication and CORS.
+ *
+ *  Uses ``GET /models`` rather than a full chat completion because every
+ *  OpenAI-compatible server implements it and it carries no token cost.
+ */
+export async function testConnection(
+  baseUrl: string,
+  apiKey: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ConnectionProbeResult> {
+  const trimmedUrl = baseUrl.trim();
+  if (!trimmedUrl) {
+    return { ok: false, message: "Base URL is empty." };
+  }
+  const headers: Record<string, string> = {};
+  if (apiKey.trim()) headers["Authorization"] = `Bearer ${apiKey.trim()}`;
+  const started = performance.now();
+  let response: Response;
+  try {
+    response = await fetch(joinUrl(trimmedUrl, "/models"), {
+      method: "GET",
+      headers,
+      signal: options.signal,
+    });
+  } catch (err) {
+    // ``fetch`` rejects with a generic ``TypeError`` on network errors —
+    // including CORS rejections, DNS failures and connection refused.
+    // Heuristic: if the URL targets a local host, suggest CORS.
+    const message = err instanceof Error ? err.message : String(err);
+    const likelyCors = /^https?:\/\/(localhost|127\.|\[::1\])/i.test(
+      trimmedUrl,
+    );
+    return {
+      ok: false,
+      message: `Cannot reach ${trimmedUrl} — ${message}`,
+      likelyCors,
+    };
+  }
+  const latencyMs = Math.round(performance.now() - started);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      detail = (await response.text()).slice(0, 200);
+    } catch {
+      /* ignore */
+    }
+    return {
+      ok: false,
+      message: `HTTP ${response.status} ${response.statusText}${
+        detail ? ` — ${detail}` : ""
+      }`,
+      latencyMs,
+    };
+  }
+  let modelCount: number | null = null;
+  try {
+    const payload = (await response.json()) as {
+      data?: Array<{ id?: string }>;
+    };
+    if (Array.isArray(payload.data)) modelCount = payload.data.length;
+  } catch {
+    /* not JSON — still consider the probe successful */
+  }
+  return {
+    ok: true,
+    latencyMs,
+    message:
+      modelCount !== null
+        ? `Connected — ${modelCount} model${modelCount === 1 ? "" : "s"} (${latencyMs} ms)`
+        : `Connected (${latencyMs} ms)`,
+  };
+}

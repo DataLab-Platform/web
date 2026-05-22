@@ -8,6 +8,9 @@ import {
   loadApiKey,
   loadSettings,
   saveSettings,
+  BASE_URL_PRESETS,
+  detectPreset,
+  testConnection,
 } from "../../../src/aiassistant/settings";
 import { _resetSecureStorageForTests } from "../../../src/aiassistant/secureStorage";
 
@@ -138,5 +141,117 @@ describe("aiassistant/settings", () => {
       ),
     );
     expect(await fetchDevOpenAIKey()).toBe("");
+  });
+});
+
+describe("aiassistant/settings — presets", () => {
+  it("exposes OpenAI + local presets and a Custom entry", () => {
+    const ids = BASE_URL_PRESETS.map((p) => p.id);
+    expect(ids).toContain("openai");
+    expect(ids).toContain("ollama");
+    expect(ids).toContain("lmstudio");
+    expect(ids).toContain("custom");
+    expect(BASE_URL_PRESETS[BASE_URL_PRESETS.length - 1].id).toBe("custom");
+  });
+
+  it("detectPreset matches a canonical local URL", () => {
+    expect(detectPreset("http://localhost:11434/v1").id).toBe("ollama");
+    // Trailing slash should not matter.
+    expect(detectPreset("http://localhost:11434/v1/").id).toBe("ollama");
+  });
+
+  it("detectPreset falls back to 'custom' for unknown URLs", () => {
+    expect(detectPreset("https://my-private-proxy.example.com/v1").id).toBe(
+      "custom",
+    );
+  });
+});
+
+describe("aiassistant/settings — testConnection", () => {
+  it("returns ok with model count on a successful GET /models", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ data: [{ id: "llama3" }, { id: "qwen" }] }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    const res = await testConnection("http://localhost:11434/v1", "");
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain("2 models");
+    expect(typeof res.latencyMs).toBe("number");
+  });
+
+  it("omits Authorization when apiKey is empty", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await testConnection("http://localhost:11434/v1", "");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toEqual({});
+  });
+
+  it("sets Authorization: Bearer when apiKey is provided", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await testConnection("https://api.openai.com/v1", "sk-abc");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toEqual({ Authorization: "Bearer sk-abc" });
+  });
+
+  it("reports HTTP error responses with status + detail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 401 })),
+    );
+    const res = await testConnection("https://api.openai.com/v1", "bad");
+    expect(res.ok).toBe(false);
+    expect(res.message).toMatch(/401/);
+  });
+
+  it("flags likelyCors when fetch throws against a localhost URL", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const res = await testConnection("http://localhost:11434/v1", "");
+    expect(res.ok).toBe(false);
+    expect(res.likelyCors).toBe(true);
+  });
+
+  it("does not flag likelyCors for a remote URL failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const res = await testConnection("https://api.openai.com/v1", "sk-x");
+    expect(res.ok).toBe(false);
+    expect(res.likelyCors).toBeFalsy();
+  });
+
+  it("rejects an empty base URL early", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await testConnection("", "");
+    expect(res.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -11,12 +11,16 @@
 
 import { useEffect, useState } from "react";
 import {
+  BASE_URL_PRESETS,
   DEFAULT_SETTINGS,
+  detectPreset,
   fetchDevOpenAIKey,
   loadApiKey,
   loadSettings,
   saveApiKey,
   saveSettings,
+  testConnection,
+  type ConnectionProbeResult,
 } from "../../aiassistant/settings";
 import type { ProviderSettings } from "../../aiassistant/types";
 
@@ -30,6 +34,9 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
     loadSettings(),
   );
   const [devKeyAvailable, setDevKeyAvailable] = useState(false);
+  const [probe, setProbe] = useState<ConnectionProbeResult | null>(null);
+  const [probing, setProbing] = useState(false);
+  const activePreset = detectPreset(settings.baseUrl);
 
   // Hydrate the (encrypted) API key from secure storage, then probe the
   // dev-only ``/__dev__/openai-key`` endpoint. The dev key only wins
@@ -66,6 +73,34 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
     value: ProviderSettings[K],
   ) {
     setSettings((s) => ({ ...s, [key]: value }));
+    // The probe result becomes stale as soon as ``baseUrl`` / ``apiKey``
+    // change — clear it to avoid showing a misleading green check.
+    if (key === "baseUrl" || key === "apiKey") setProbe(null);
+  }
+
+  function handlePresetChange(presetId: string) {
+    const preset = BASE_URL_PRESETS.find((p) => p.id === presetId);
+    if (!preset || preset.baseUrl === null) return;
+    setSettings((s) => ({
+      ...s,
+      baseUrl: preset.baseUrl as string,
+      // Only overwrite the model when the user hasn't customised it.
+      model:
+        s.model && s.model !== DEFAULT_SETTINGS.model
+          ? s.model
+          : (preset.defaultModel ?? s.model),
+    }));
+    setProbe(null);
+  }
+
+  async function handleTestConnection() {
+    setProbing(true);
+    try {
+      const result = await testConnection(settings.baseUrl, settings.apiKey);
+      setProbe(result);
+    } finally {
+      setProbing(false);
+    }
   }
 
   function handleSave() {
@@ -116,6 +151,25 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
             </small>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span>Endpoint preset</span>
+            <select
+              value={activePreset.id}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              disabled={settings.provider === "mock"}
+            >
+              {BASE_URL_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {activePreset.isLocal && activePreset.corsHint && (
+              <small style={{ color: "var(--text-dim)" }}>
+                {activePreset.corsHint}
+              </small>
+            )}
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span>Base URL</span>
             <input
               type="text"
@@ -124,9 +178,8 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               placeholder="https://api.openai.com/v1"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              OpenAI-compatible endpoint. For a local Ollama, run it with
-              <code> OLLAMA_ORIGINS=*</code> and use
-              <code> http://localhost:11434/v1</code>.
+              OpenAI-compatible endpoint. Pick a preset above for a one-click
+              local setup (Ollama, LM Studio, llama.cpp, vLLM).
             </small>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -176,6 +229,46 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               }
             />
           </label>
+          {settings.provider === "openai" && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+                marginTop: 4,
+              }}
+            >
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={probing || !settings.baseUrl.trim()}
+                >
+                  {probing ? "Testing…" : "Test connection"}
+                </button>
+                {probe && (
+                  <span
+                    style={{
+                      color: probe.ok
+                        ? "var(--text-success, #2a8a2a)"
+                        : "var(--text-danger, #c33)",
+                    }}
+                  >
+                    {probe.ok ? "✓ " : "✗ "}
+                    {probe.message}
+                  </span>
+                )}
+              </div>
+              {probe &&
+                !probe.ok &&
+                probe.likelyCors &&
+                activePreset.corsHint && (
+                  <small style={{ color: "var(--text-danger, #c33)" }}>
+                    {activePreset.corsHint}
+                  </small>
+                )}
+            </div>
+          )}
         </div>
         <div className="actions" style={{ marginTop: 16 }}>
           <button type="button" onClick={handleReset}>
