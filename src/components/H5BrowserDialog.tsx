@@ -92,6 +92,9 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
   const ownedFileIds = useRef<Set<string>>(
     new Set((initial ?? []).map((f) => f.file_id)),
   );
+  // Handle of a pending deferred-close scheduled by the cleanup effect.
+  // The next mount cancels it to survive StrictMode's double-invoke.
+  const pendingClose = useRef<number | null>(null);
 
   // Esc closes the dialog.
   useEffect(() => {
@@ -106,13 +109,23 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cleanup any still-open files on unmount.
+  // Cleanup any still-open files on unmount. Defer the actual close to
+  // the next macrotask so React 18 StrictMode's mount → cleanup → mount
+  // cycle in development does not destroy the Python-side state that
+  // the remounted component still references (would cause KeyError on
+  // the first node selection).
   useEffect(() => {
+    pendingClose.current = null;
     const ownedRef = ownedFileIds;
     return () => {
       if (!runtime) return;
       const ids = Array.from(ownedRef.current);
-      ids.forEach((fid) => void runtime.closeH5Browser(fid).catch(() => {}));
+      const handle = window.setTimeout(() => {
+        if (pendingClose.current !== handle) return;
+        pendingClose.current = null;
+        ids.forEach((fid) => void runtime.closeH5Browser(fid).catch(() => {}));
+      }, 0);
+      pendingClose.current = handle;
     };
   }, [runtime]);
 
