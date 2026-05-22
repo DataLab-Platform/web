@@ -12,6 +12,8 @@ import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
 import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
+import dlwMacroLintSource from "./dlw_macro_lint.py?raw";
+import macroProxySource from "./macro_proxy.py?raw";
 // Tiny module that installs Sigima's ``PlaceholderTitleFormatter`` as the
 // default; pushed into every Pyodide instance (main runtime + workers)
 // so processed objects carry the same placeholder titles (later resolved
@@ -668,6 +670,27 @@ export interface MacroRecord extends MacroMeta {
   code: string;
 }
 
+/** One issue or proxy call reported by :meth:`DataLabRuntime.lintMacro`. */
+export interface MacroLintLocation {
+  name: string;
+  line: number;
+  col: number;
+}
+
+export interface MacroLintProxyCall extends MacroLintLocation {
+  awaited: boolean;
+  is_async: boolean;
+}
+
+/** Result of statically linting a macro source. */
+export interface MacroLintResult {
+  ok: boolean;
+  syntax_error: { line: number; col: number; message: string } | null;
+  unknown_methods: MacroLintLocation[];
+  missing_await: MacroLintLocation[];
+  proxy_calls: MacroLintProxyCall[];
+}
+
 /** Lightweight notebook entry returned by ``listNotebooks`` (no content). */
 export interface NotebookMeta {
   id: string;
@@ -916,6 +939,11 @@ await micropip.install(["sigima", "guidata"])
       dlwInteractiveFitSource,
     );
     py.FS.writeFile("/home/pyodide/dlw_title_format.py", dlwTitleFormatSource);
+    // ``macro_proxy.py`` is normally only loaded into worker Pyodides,
+    // but the main instance needs the source so :mod:`dlw_macro_lint`
+    // can introspect the ``_Proxy`` API surface.
+    py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
+    py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
 
     onProgress?.("Ready.");
@@ -2302,6 +2330,11 @@ _after = {k: list(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
 
   async setMacroCode(macroId: string, code: string): Promise<void> {
     await this.callPy("set_macro_code", { macro_id: macroId, code });
+  }
+
+  /** Statically lint *code* against the proxy API surface. */
+  async lintMacro(code: string): Promise<MacroLintResult> {
+    return (await this.callPy("lint_macro", { code })) as MacroLintResult;
   }
 
   async renameMacro(macroId: string, title: string): Promise<void> {

@@ -62,6 +62,7 @@ import dlw_processor as _proc
 import dlw_title_format  # noqa: F401  # pylint: disable=unused-import
 import numpy as np
 import sigima
+from dlw_macro_lint import lint_macro
 from sigima.objects import SignalObj
 from sigima.objects.signal.creation import (
     SIGNAL_TYPE_PARAM_CLASSES,
@@ -4586,6 +4587,7 @@ __all__ = [
     "duplicate_macro",
     "reorder_macros",
     "replace_macros",
+    "lint_macro",
     "list_notebooks",
     "get_notebook",
     "create_notebook",

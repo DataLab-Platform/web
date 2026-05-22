@@ -589,21 +589,95 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       URL.revokeObjectURL(url);
     }, [activeId, macros]);
 
+    /**
+     * Flush any pending debounced save for *macroId* so subsequent
+     * Python-side operations (run, lint, ...) see the user's latest edits.
+     */
+    const flushPendingSave = useCallback(
+      async (macroId: string, code: string) => {
+        const pending = saveTimers.current.get(macroId);
+        if (pending) {
+          window.clearTimeout(pending);
+          saveTimers.current.delete(macroId);
+          await runtime.setMacroCode(macroId, code);
+        }
+      },
+      [runtime],
+    );
+
+    /**
+     * Lint *code* and surface any issues through the console.
+     *
+     * Returns ``true`` when the macro is safe to run. ``announceSuccess``
+     * controls whether a "✓ Validation passed" line is emitted when there
+     * are no issues — true for the Validate button, false for the
+     * pre-Run check (which would be noise on every Run).
+     */
+    const lintAndReport = useCallback(
+      async (code: string, announceSuccess: boolean): Promise<boolean> => {
+        const cons = consoleRef.current;
+        try {
+          const res = await runtime.lintMacro(code);
+          if (res.syntax_error) {
+            const e = res.syntax_error;
+            cons?.append(
+              "stderr",
+              `✗ Syntax error at line ${e.line}, col ${e.col + 1}: ${e.message}\n`,
+            );
+            return false;
+          }
+          for (const u of res.unknown_methods) {
+            cons?.append(
+              "stderr",
+              `✗ Unknown proxy method "${u.name}" at line ${u.line}, col ${u.col + 1}\n`,
+            );
+          }
+          for (const m2 of res.missing_await) {
+            cons?.append(
+              "stderr",
+              `✗ Missing "await" before proxy.${m2.name}(...) at line ${m2.line}, col ${m2.col + 1}\n`,
+            );
+          }
+          if (res.ok && announceSuccess) {
+            const n = res.proxy_calls.length;
+            cons?.append(
+              "stdout",
+              `✓ Validation passed (${n} proxy call${n === 1 ? "" : "s"})\n`,
+            );
+          }
+          return res.ok;
+        } catch (err) {
+          cons?.append(
+            "stderr",
+            `✗ Validation failed: ${err instanceof Error ? err.message : String(err)}\n`,
+          );
+          return false;
+        }
+      },
+      [runtime],
+    );
+
     const handleRun = useCallback(async () => {
       const rt = macroRtRef.current;
       if (!rt || !activeId) return;
       const m = macros.find((x) => x.id === activeId);
       if (!m) return;
-      setRunning(true);
-      // Flush any pending debounced save before running.
-      const pending = saveTimers.current.get(activeId);
-      if (pending) {
-        window.clearTimeout(pending);
-        saveTimers.current.delete(activeId);
-        await runtime.setMacroCode(activeId, m.code ?? "");
+      const code = m.code ?? "";
+      await flushPendingSave(activeId, code);
+      // Pre-Run lint: abort silently-on-success, loudly-on-failure so
+      // the user gets actionable feedback instead of a confusing Python
+      // traceback (or — worse — a half-applied workspace mutation).
+      const ok = await lintAndReport(code, false);
+      if (!ok) {
+        consoleRef.current?.append(
+          "stderr",
+          "✗ Macro not started: fix the issues above (or press ✓ Validate to re-check).\n",
+        );
+        return;
       }
+      setRunning(true);
       try {
-        await rt.run(m.code ?? "", m.title, {
+        await rt.run(code, m.title, {
           onStream: (kind, text) => consoleRef.current?.append(kind, text),
           onFinished: () => setRunning(false),
         });
@@ -614,12 +688,21 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         );
         setRunning(false);
       }
-    }, [activeId, macros, runtime]);
+    }, [activeId, macros, flushPendingSave, lintAndReport]);
 
     const handleStop = useCallback(() => {
       macroRtRef.current?.stop();
       setRunning(false);
     }, []);
+
+    const handleValidate = useCallback(async () => {
+      if (!activeId) return;
+      const m = macros.find((x) => x.id === activeId);
+      if (!m) return;
+      const code = m.code ?? "";
+      await flushPendingSave(activeId, code);
+      await lintAndReport(code, true);
+    }, [activeId, macros, flushPendingSave, lintAndReport]);
 
     const handleConvertToNotebook = useCallback(() => {
       if (!activeId || !onConvertToNotebook) return;
@@ -778,6 +861,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             title="Stop current macro"
           >
             ■ Stop
+          </button>
+          <button
+            type="button"
+            className="macro-btn"
+            onClick={handleValidate}
+            disabled={!activeId}
+            title="Statically lint current macro (syntax, proxy API, missing await)"
+          >
+            ✓ Validate
           </button>
           <span className="macro-toolbar-sep" />
           <button
