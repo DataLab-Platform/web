@@ -70,6 +70,22 @@ Qt-based PlotPy is unavailable in the browser. Use **Plotly.js** (via
 `react-plotly.js`). Mirror the conventions of `DataLab-Kernel/datalab_kernel/plotly_backend.py`
 when extending plot features (curve styles, ROI overlays, geometry results).
 
+For **images** (`ImagePlot.tsx`, `MultiImagePlot.tsx`) we deliberately avoid Plotly's `heatmap`
+trace — it freezes the UI for several seconds on 2048²+ arrays. Instead we pre-rasterise the
+data on an off-screen `<canvas>` via `src/utils/colormap.ts` (`paintImageData`) and feed Plotly
+an `image` trace. Three non-obvious constraints when touching this path:
+
+- `image.source` must be a **`data:` URL** (`canvas.toDataURL`). `blob:` URLs from
+  `URL.createObjectURL` are silently rejected by Plotly's loader.
+- Set `xaxis.range`/`yaxis.range` and `autorange: false` explicitly. `image` traces carry no
+  X/Y arrays, so any other trace (e.g. a hidden `scatter` for the colorbar) collapses autorange.
+- `image` traces don't emit `plotly_hover`. Tooltips are wired manually via `onMouseMove` on
+  the wrapper, converting client px → data coords with `gd._fullLayout.xaxis.p2c`.
+
+The colorbar uses a hidden `scatter` trace whose `marker.colorscale` is sampled from the same
+LUT (`buildColorscale`), so it matches the canvas bit-for-bit even for colormaps Plotly
+doesn't know natively.
+
 ## Adding a new processing
 
 Processings are discovered by introspecting Sigima's catalog in
@@ -131,7 +147,11 @@ done (bug fix, feature, or any phase of a multi-phase task):
    silently break in ways only a browser-driven test catches reliably.
    Use a throwaway probe (`tests/e2e/_repro_*.spec.ts`, deleted
    afterwards) when the change does not warrant a permanent regression
-   spec.
+   spec. A neighbouring perf benchmark or a sibling component's tests
+   do **not** count — they may stay green while your code path never
+   runs. The probe must assert something visible (a DOM node, a trace,
+   a pixel) rather than just calling `window.runtime.*` from
+   `page.evaluate`, which can silently no-op.
 3. **For `src/runtime/*.py` changes**, run pytest (`tests/python`).
 
 ## Git workflow
