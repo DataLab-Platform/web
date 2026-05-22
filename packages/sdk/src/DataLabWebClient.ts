@@ -476,6 +476,12 @@ export class DataLabWebClient {
     return this.call("get_current_panel") as Promise<string>;
   }
 
+  /** Return the UUID of the currently selected object on the active
+   *  panel, or ``null`` when nothing is selected. */
+  getCurrentObjectUuid(): Promise<string | null> {
+    return this.call("get_current_object_uuid") as Promise<string | null>;
+  }
+
   resetAll(): Promise<null> {
     return this.call("reset_all") as Promise<null>;
   }

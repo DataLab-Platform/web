@@ -52,6 +52,7 @@ const PANEL_MD = [
 const PANEL_CODE = [
   'await proxy.set_current_panel("signal")',
   'print(f"Current panel: {await proxy.get_current_panel()}")',
+  'print(f"Current object UUID: {await proxy.get_current_object_uuid()}")',
 ].join("\n");
 
 const FEATURES_MD = [

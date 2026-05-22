@@ -254,6 +254,15 @@ _e = _MODEL._objects[${JSON.stringify(oid)}]
     /** Return the id list currently selected on the active panel.
      *  Empty when nothing is selected (or no host is wired). */
     get_selection: async () => ext.getSelection?.() ?? [],
+    /** Return the UUID of the "current" object — the first element of
+     *  the active panel's selection, or ``null`` when nothing is
+     *  selected. Mirrors the desktop ``SimpleObjectTree.get_current_item_id``
+     *  helper; gives macros a single-call shortcut to the object the
+     *  user is focused on. */
+    get_current_object_uuid: async () => {
+      const sel = ext.getSelection?.() ?? [];
+      return sel.length > 0 ? sel[0] : null;
+    },
     call_method: async (p: unknown) => {
       const a = p as {
         name: string;

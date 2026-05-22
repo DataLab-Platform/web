@@ -258,6 +258,14 @@ class _Proxy:
         """Switch the active panel kind."""
         return await _call("set_current_panel", panel=panel)
 
+    async def get_current_object_uuid(self) -> str | None:
+        """Return the UUID of the current object, or ``None`` if nothing is selected.
+
+        "Current" means the first entry of the active panel's selection,
+        mirroring DataLab desktop's ``SimpleObjectTree.get_current_item_id``.
+        """
+        return await _call("get_current_object_uuid")
+
     # -- Generic call (escape hatch) --------------------------------------
 
     async def call_method(self, name: str, *args, **kwargs):
