@@ -2134,7 +2134,9 @@ export default function App() {
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
         try {
-          await runtime.openWorkspaceHdf5(file.name, bytes, true);
+          await runtime.openWorkspaceHdf5(file.name, bytes, true, {
+            silent: true,
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           // Qt parity: when the file is a regular HDF5 file (not a

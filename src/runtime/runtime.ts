@@ -1084,7 +1084,9 @@ await micropip.install(["sigima", "guidata"])
         }
         return value;
       } catch (err) {
-        console.error(`[runtime] ${name} failed`, err);
+        if (!options.silent) {
+          console.error(`[runtime] ${name} failed`, err);
+        }
         throw err;
       } finally {
         fn.destroy?.();
@@ -1587,17 +1589,27 @@ await micropip.install(["sigima", "guidata"])
   }
 
   /** Load *bytes* (a DataLab-compatible HDF5 workspace) into the model.
-   *  When *replace* is true (default), the current model is wiped first. */
+   *  When *replace* is true (default), the current model is wiped first.
+   *
+   *  Pass ``silent: true`` when the caller probes whether a file is a
+   *  workspace and intends to fall back to plain HDF5 import; in that
+   *  case the expected ``Not a DataLab HDF5 workspace`` Python error
+   *  should not be logged as a runtime error. */
   async openWorkspaceHdf5(
     filename: string,
     bytes: Uint8Array,
     replace: boolean = true,
+    options: { silent?: boolean } = {},
   ): Promise<WorkspaceLoadResult> {
-    return (await this.callPy("open_workspace_from_bytes", {
-      filename,
-      data: bytes,
-      replace,
-    })) as WorkspaceLoadResult;
+    return (await this.callPy(
+      "open_workspace_from_bytes",
+      {
+        filename,
+        data: bytes,
+        replace,
+      },
+      { silent: options.silent },
+    )) as WorkspaceLoadResult;
   }
 
   // ------------------------------------------------------------------
