@@ -70,6 +70,21 @@ function joinUrl(base: string, path: string): string {
   return base.replace(/\/+$/, "") + path;
 }
 
+/** Defensive normalisation of an outgoing assistant message: OpenAI
+ *  rejects ``content: null`` unless ``tool_calls`` is present, but some
+ *  local servers (LM Studio, llama.cpp) emit a ``null`` content even
+ *  for plain prose. Coerce to ``""`` when there are no tool calls so a
+ *  user who later switches back to the OpenAI cloud doesn't see
+ *  ``Invalid value for 'content': expected a string, got null.``. */
+function sanitiseOutgoingMessage(msg: ChatMessage): ChatMessage {
+  if (msg.role !== "assistant") return msg;
+  const hasToolCalls = !!msg.tool_calls && msg.tool_calls.length > 0;
+  if (msg.content === null && !hasToolCalls) {
+    return { ...msg, content: "" };
+  }
+  return msg;
+}
+
 /** OpenAI tool schema entry. */
 function toolToSchema(tool: Tool): Record<string, unknown> {
   return {
@@ -101,7 +116,7 @@ export async function openAiChatCompletions(
   }
   const body: Record<string, unknown> = {
     model: settings.model,
-    messages,
+    messages: messages.map(sanitiseOutgoingMessage),
     temperature: settings.temperature,
   };
   if (tools.length > 0) {

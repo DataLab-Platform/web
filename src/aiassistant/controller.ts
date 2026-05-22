@@ -186,7 +186,12 @@ export class AIController {
         );
         const assistantMessage: ChatMessage = {
           role: "assistant",
-          content: response.content,
+          // OpenAI accepts ``content: null`` only when ``tool_calls`` is
+          // also present. Some local servers (LM Studio, llama.cpp) emit
+          // ``content: null`` even on plain prose turns — coerce to ""
+          // so replaying the transcript against a strict provider works.
+          content:
+            response.content ?? (response.toolCalls.length > 0 ? null : ""),
           ...(response.toolCalls.length > 0
             ? { tool_calls: response.toolCalls }
             : {}),
