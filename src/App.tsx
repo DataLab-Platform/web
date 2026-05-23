@@ -69,6 +69,7 @@ import {
 } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
+import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
 import {
   markConsoleErrorsSeen,
   useConsoleErrorTitlePrefix,
@@ -524,6 +525,7 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   // Persistent error indicator: prefix the tab title with "(!) " when
   // any browser-console ``warn``/``error`` entry is still unseen.
   useConsoleErrorTitlePrefix();
@@ -2744,6 +2746,7 @@ export default function App() {
           setWelcomeForced(true);
         },
         onStartTour: handleStartTour,
+        onShowReleaseNotes: () => setReleaseNotesOpen(true),
       }),
       ...buildViewActions({
         showResultsOverlay,
@@ -3174,6 +3177,7 @@ export default function App() {
                         handleStartTour();
                       }}
                       onOpenUserGuide={() => setUserGuideOpen(true)}
+                      onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
                     />
                   );
                 }
@@ -3451,6 +3455,12 @@ export default function App() {
             view={helpView}
             onClose={() => setHelpView(null)}
             appVersion={import.meta.env.VITE_APP_VERSION}
+          />
+        )}
+        {releaseNotesOpen && (
+          <ReleaseNotesDialog
+            appVersion={(import.meta.env.VITE_APP_VERSION as string) ?? "dev"}
+            onClose={() => setReleaseNotesOpen(false)}
           />
         )}
         {h5BrowserFiles !== null && (

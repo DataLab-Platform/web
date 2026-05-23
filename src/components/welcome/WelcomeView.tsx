@@ -22,6 +22,7 @@ import { getRootIconUrl } from "../../assets/rootIcons";
 import { getIoIconUrl } from "../../assets/ioIcons";
 import { getHelpIconUrl } from "../../assets/helpIcons";
 import { getH5IconUrl } from "../../assets/h5Icons";
+import { useUnseenRelease } from "../../utils/releaseNotes";
 
 type Kind = "signal" | "image";
 
@@ -55,6 +56,7 @@ export interface WelcomeViewProps {
   onImportTextWizard: () => void;
   onStartTour: () => void;
   onOpenUserGuide: () => void;
+  onOpenReleaseNotes: () => void;
 }
 
 interface QuickAction {
@@ -66,6 +68,10 @@ interface QuickAction {
    *  choose between Signal and Image. ``onKindSelect`` receives the
    *  picked kind. */
   onKindSelect?: (kind: Kind) => void;
+  /** Optional short text rendered as a coloured pill at the end of the
+   *  row label (e.g. ``"NEW"`` to highlight the release notes entry on
+   *  the first launch after an upgrade). */
+  badge?: string;
 }
 
 /** Read/write helper for the "show welcome on startup" preference. */
@@ -98,7 +104,9 @@ export function WelcomeView({
   onImportTextWizard,
   onStartTour,
   onOpenUserGuide,
+  onOpenReleaseNotes,
 }: WelcomeViewProps) {
+  const releaseNotesUnseen = useUnseenRelease(appVersion);
   const startActions: QuickAction[] = [
     {
       iconUrl: getRootIconUrl("signal.svg"),
@@ -147,6 +155,14 @@ export function WelcomeView({
       description:
         "Open the in-app documentation covering the browser-native specifics.",
       onClick: onOpenUserGuide,
+    },
+    {
+      iconUrl: getHelpIconUrl("libre-gui-about.svg"),
+      label: `What’s new in v${appVersion}`,
+      description:
+        "Browse the full release notes and recent changes to DataLab-Web.",
+      onClick: onOpenReleaseNotes,
+      badge: releaseNotesUnseen ? "NEW" : undefined,
     },
   ];
 
@@ -270,7 +286,14 @@ function WelcomeActionRow({
           />
         )}
         <span className="welcome-action-text">
-          <span className="welcome-action-label">{action.label}</span>
+          <span className="welcome-action-label">
+            {action.label}
+            {action.badge && (
+              <span className="welcome-action-badge" aria-label="New">
+                {action.badge}
+              </span>
+            )}
+          </span>
           {action.description && (
             <span className="welcome-action-description">
               {action.description}

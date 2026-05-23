@@ -194,6 +194,7 @@ export interface HelpActionCallbacks {
   onOpenUserGuide: () => void;
   onOpenWelcome: () => void;
   onStartTour: () => void;
+  onShowReleaseNotes: () => void;
 }
 
 /** Wire Help / "?" menu actions. */
@@ -225,6 +226,14 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       beginGroup: true,
       enabled: always,
       run: cb.onOpenUserGuide,
+    },
+    {
+      id: "help.releaseNotes",
+      label: "Release notes",
+      menuPath: "Help/Release notes",
+      iconUrl: getHelpIconUrl("libre-gui-about.svg"),
+      enabled: always,
+      run: cb.onShowReleaseNotes,
     },
     {
       id: "help.documentation",

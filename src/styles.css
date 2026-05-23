@@ -1619,6 +1619,37 @@ input {
   margin: 8px 0;
 }
 
+.release-notes-body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.release-notes-body h2 {
+  font-size: 15px;
+  margin: 18px 0 6px;
+}
+
+.release-notes-body h2:first-child {
+  margin-top: 0;
+}
+
+.release-notes-body h3 {
+  font-size: 13px;
+  margin: 10px 0 4px;
+  color: var(--text-dim);
+}
+
+.release-notes-body ul {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.release-notes-body code {
+  background: var(--panel-alt);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
 .help-about {
   font-size: 13px;
   line-height: 1.5;
@@ -4237,6 +4268,21 @@ input {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
+}
+
+.welcome-action-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+  vertical-align: middle;
+  text-transform: uppercase;
 }
 
 .welcome-action-description {
