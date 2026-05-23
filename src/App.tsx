@@ -116,6 +116,7 @@ import {
   type NotebookPanelHandle,
 } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
+import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
 import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
@@ -2573,6 +2574,109 @@ export default function App() {
     input.click();
   }, [runtime, refresh, treeKind, runWithProgress]);
 
+  /** Mirror DataLab Qt's "Open from directory…": pick a folder, then for
+   *  every non-empty subfolder import its files as a new group. Read
+   *  failures are silently ignored (parity with ``ignore_errors=True``);
+   *  a summary toast reports the totals at the end. */
+  const handleOpenFromDirectory = useCallback(async () => {
+    if (!runtime) return;
+    const isImage = treeKind === "image";
+    let picked;
+    try {
+      picked = await pickDirectoryRecursive();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await notify({
+        kind: "error",
+        title: "Open from directory",
+        message: `Directory picker failed:\n${msg}`,
+      });
+      return;
+    }
+    if (!picked) return;
+    if (picked.length === 0) {
+      await notify({
+        kind: "info",
+        title: "Open from directory",
+        message:
+          "The selected folder contains no files (or browser denied " +
+          "access). Pick a folder that contains files directly or in " +
+          "sub-folders.",
+      });
+      return;
+    }
+    const folders = groupByFolder(picked);
+    if (folders.length === 0) return;
+    setBusy(true);
+    let lastId: string | null = null;
+    let totalObjects = 0;
+    let totalGroups = 0;
+    let totalErrors = 0;
+    try {
+      const { cancelled } = await runWithProgress({
+        title: isImage
+          ? "Opening images from directory…"
+          : "Opening signals from directory…",
+        total: folders.length,
+        step: async (i, { setLabel, signal }) => {
+          if (signal.aborted) return;
+          const folder = folders[i];
+          const label = folder.relativeDir || "(root)";
+          setLabel(`${i + 1} / ${folders.length} — ${label}`);
+          // Read every file's bytes before crossing the Pyodide bridge:
+          // ``File.arrayBuffer()`` is async and cheap, the Python call
+          // is the expensive part.
+          const payload: Array<{ name: string; data: Uint8Array }> = [];
+          for (const pf of folder.files) {
+            payload.push({
+              name: pf.name,
+              data: new Uint8Array(await pf.file.arrayBuffer()),
+            });
+          }
+          const result = await runtime.openFromDirectoryChunk(
+            isImage ? "image" : "signal",
+            label,
+            payload,
+          );
+          totalErrors += result.errors;
+          if (result.oids.length > 0) {
+            totalGroups += 1;
+            totalObjects += result.oids.length;
+            lastId = result.oids[result.oids.length - 1] ?? lastId;
+          }
+        },
+      });
+      await refresh(lastId);
+      if (totalObjects === 0) {
+        await notify({
+          kind: "info",
+          title: cancelled ? "Open cancelled" : "Open from directory",
+          message: cancelled
+            ? "No objects were loaded before cancellation."
+            : `No ${isImage ? "image" : "signal"} could be read from ` +
+              `the selected directory (${totalErrors} file(s) skipped).`,
+        });
+      } else if (totalErrors > 0 || cancelled) {
+        await notify({
+          kind: "info",
+          title: "Open from directory",
+          message:
+            `${totalObjects} object(s) loaded in ${totalGroups} group(s)` +
+            (totalErrors > 0 ? ` — ${totalErrors} file(s) skipped` : "") +
+            (cancelled ? " — cancelled" : ""),
+        });
+      } else {
+        await notify({
+          kind: "info",
+          title: "Open from directory",
+          message: `${totalObjects} object(s) loaded in ${totalGroups} group(s).`,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, refresh, treeKind, runWithProgress, notify]);
+
   const hasObjects = useMemo(() => {
     if (!tree) return false;
     for (const g of tree.groups) {
@@ -2616,6 +2720,7 @@ export default function App() {
         onDeleteSelection: handleDelete,
         onEditProperties: handleEditProperties,
         onOpenFile: handleOpenFile,
+        onOpenDirectory: handleOpenFromDirectory,
         onSaveFile: handleSaveFile,
         onSaveToDirectory: handleSaveToDirectory,
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,

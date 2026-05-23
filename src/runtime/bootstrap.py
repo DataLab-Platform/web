@@ -1708,6 +1708,82 @@ def save_image_to_bytes(oid: str, filename: str) -> bytes:
             pass
 
 
+def open_from_directory_chunk(kind: str, group_name: str, files: Any) -> dict[str, Any]:
+    """Open every file in *files* (one folder's worth) into a new group.
+
+    Mirrors DataLab desktop's per-subfolder branch of
+    ``BaseDataPanel.load_from_directory``: each file is loaded under a
+    ``try/except`` that swallows format errors, and the group is created
+    only if at least one object was successfully read — so empty / fully
+    unreadable folders leave no trace.
+
+    Args:
+        kind: ``"signal"`` or ``"image"`` — selects the I/O registry.
+        group_name: Display name for the new group (typically the path
+            relative to the folder the user picked).
+        files: List of ``{"name": str, "data": bytes}`` entries (a
+            Pyodide ``JsProxy`` is accepted and converted).
+
+    Returns:
+        ``{"gid": str | None, "oids": list[str], "errors": int}``.
+    """
+    import os
+    import tempfile
+
+    if kind == "image":
+        from sigima.io import read_images as _read
+
+        panel = "image"
+    else:
+        from sigima.io import read_signals as _read
+
+        panel = "signal"
+
+    if hasattr(files, "to_py"):
+        files = files.to_py()
+
+    tmpdir = tempfile.mkdtemp(prefix="dlw_opendir_")
+    objs: list[Any] = []
+    errors = 0
+    try:
+        for entry in files:
+            name = entry.get("name") if isinstance(entry, dict) else entry["name"]
+            data = entry.get("data") if isinstance(entry, dict) else entry["data"]
+            if hasattr(data, "to_py"):
+                data = data.to_py()
+            if not isinstance(data, (bytes, bytearray, memoryview)):
+                data = bytes(data)
+            base = os.path.basename(name) or "upload.bin"
+            path = os.path.join(tmpdir, base)
+            try:
+                with open(path, "wb") as fh:
+                    fh.write(bytes(data))
+                read_objs = _read(path)
+            except Exception:  # noqa: BLE001 — parity with Qt `ignore_errors=True`
+                errors += 1
+                continue
+            finally:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            if read_objs:
+                objs.extend(read_objs)
+            else:
+                errors += 1
+    finally:
+        try:
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+    if not objs:
+        return {"gid": None, "oids": [], "errors": errors}
+    gid = _MODEL.create_group(panel, group_name)
+    oids = [_MODEL.add_object(panel, obj, group_id=gid) for obj in objs]
+    return {"gid": gid, "oids": oids, "errors": errors}
+
+
 # ---------------------------------------------------------------------------
 # Object model helpers (panel-agnostic)
 # ---------------------------------------------------------------------------
@@ -4543,6 +4619,7 @@ __all__ = [
     "list_image_io_formats",
     "open_image_from_bytes",
     "save_image_to_bytes",
+    "open_from_directory_chunk",
     "format_signal_basenames",
     "list_signals",
     "get_signal_xy",

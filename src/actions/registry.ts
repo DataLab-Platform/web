@@ -25,6 +25,7 @@ export interface StaticActionCallbacks {
   onDeleteSelection: () => void;
   onEditProperties: () => void;
   onOpenFile: () => void;
+  onOpenDirectory: () => void;
   onSaveFile: () => void;
   onSaveToDirectory: () => void;
   onOpenWorkspaceHdf5: () => void;
@@ -53,6 +54,7 @@ export function buildStaticActions(
   const suffix = cb.panel === "image" ? "ima" : "sig";
   const openLabel = `Open ${noun}…`;
   const saveLabel = `Save ${noun}…`;
+  const openDirLabel = `Open ${noun}s from directory…`;
   return [
     {
       id: "file.open",
@@ -61,6 +63,14 @@ export function buildStaticActions(
       iconUrl: getIoIconUrl(`fileopen_${suffix}.svg`),
       enabled: ready,
       run: cb.onOpenFile,
+    },
+    {
+      id: "file.open_from_directory",
+      label: openDirLabel,
+      menuPath: `File/${openDirLabel}`,
+      iconUrl: getIoIconUrl("fileopen_directory.svg"),
+      enabled: ready,
+      run: cb.onOpenDirectory,
     },
     {
       id: "file.save",

@@ -820,6 +820,7 @@ export class DataLabRuntime {
       "run_image_analysis",
       "open_signal_from_bytes",
       "open_image_from_bytes",
+      "open_from_directory_chunk",
       "import_signal_csv",
       "commit_text_import",
       "add_object_pickled",
@@ -1301,6 +1302,27 @@ await micropip.install(["sigima", "guidata"])
     if (result instanceof Uint8Array) return result;
     if (result instanceof ArrayBuffer) return new Uint8Array(result);
     return Uint8Array.from(result as number[]);
+  }
+
+  /** Open every file from a single directory in one Python round-trip.
+   *
+   *  Mirrors the per-subfolder branch of DataLab desktop's
+   *  ``BaseDataPanel.load_from_directory``: individual read failures are
+   *  swallowed (parity with ``ignore_errors=True``) and the group is
+   *  created only if at least one object was successfully read.
+   */
+  async openFromDirectoryChunk(
+    kind: "signal" | "image",
+    groupName: string,
+    files: Array<{ name: string; data: Uint8Array }>,
+  ): Promise<{ gid?: string; oids: string[]; errors: number }> {
+    // ``gid`` is absent (``undefined``) when no object was successfully
+    // read — Pyodide converts Python ``None`` to JS ``undefined``.
+    return (await this.callPy("open_from_directory_chunk", {
+      kind,
+      group_name: groupName,
+      files,
+    })) as { gid?: string; oids: string[]; errors: number };
   }
 
   /** Build basenames for *oids* using DataLab's filename pattern syntax
