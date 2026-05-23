@@ -75,6 +75,7 @@ import {
 } from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
 import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
+import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
 import {
   SeparateViewDialog,
@@ -3118,6 +3119,7 @@ export default function App() {
                     className="plot-loading-logo"
                   />
                   <div className="plot-loading-message">{message}</div>
+                  <EdgeSlowLoadHint />
                 </div>
               )}
             {centralView === "plot" &&

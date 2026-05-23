@@ -12,6 +12,12 @@ The latest release is deployed automatically to GitHub Pages. Open the link in a
 
 > First load downloads Pyodide and installs Sigima via `micropip` (~30–60 s). Subsequent loads are cached by the browser.
 
+> **Microsoft Edge users:** if the first load takes several minutes instead of ~30 s, Edge's _Enhance your security on the web_ setting is disabling the WebAssembly JIT compiler on this site. Microsoft [documents this behaviour and explicitly recommends the workaround](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-security-browse-safer) — quoting the page:
+>
+> > Developers should be aware that the WebAssembly (WASM) interpreter running in enhanced security mode might not yield the expected level of performance. We recommend adding your site as an exception to opt-out of enhanced security mode for site users.
+>
+> To add the exception: open `edge://settings/privacy` → _Security_ → _Manage enhanced security for sites_ → under _Never use enhanced security for these sites_, click _Add a site_ and enter `https://datalab-platform.com` (or your deployment URL). Reload the page; load time drops back to ~30 s. Chrome, Firefox and Safari are not affected.
+
 ![DataLab Web — 2D sinc image with statistics and contrast tools](doc/images/screenshot-image-sinc2d.png)
 
 ## Features
