@@ -142,7 +142,6 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         "Operations/Combine with imaginary part",
         operand_label="Imaginary part signal",
     ),
-    "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
     "astype": FeatureOverride("Convert data type…", "Operations/Convert data type"),
     "average": FeatureOverride("Average", "Operations/Average"),
     "standard_deviation": FeatureOverride(
@@ -358,7 +357,6 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     "inverse": FeatureOverride("Inverse", "Operations/Inverse"),
     "exp": FeatureOverride("Exponential", "Operations/Exponential"),
     "log10": FeatureOverride("Logarithm (base 10)", "Operations/Logarithm (base 10)"),
-    "logp1": FeatureOverride("Log10(z+n)…", "Operations/Log10(z+n)"),
     "log10_z_plus_n": FeatureOverride("Log10(z+n)…", "Operations/Log10(z+n)"),
     "absolute": FeatureOverride("Absolute value", "Operations/Absolute value"),
     "phase": FeatureOverride("Phase…", "Operations/Phase"),
@@ -374,7 +372,6 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Operations/Combine with imaginary part",
         operand_label="Imaginary part image",
     ),
-    "conjugate": FeatureOverride("Conjugate", "Operations/Conjugate"),
     "astype": FeatureOverride("Convert data type…", "Operations/Convert data type"),
     "average": FeatureOverride("Average", "Operations/Average"),
     "standard_deviation": FeatureOverride(
@@ -838,7 +835,6 @@ _FEATURE_ICON_DEFAULTS: dict[str, str] = {
     # Operations / Math --------------------------------------------------
     "exp": "exp.svg",
     "log10": "log10.svg",
-    "logp1": "log10.svg",
     "log10_z_plus_n": "log10.svg",
     "sqrt": "sqrt.svg",
     "power": "power.svg",
