@@ -9,21 +9,29 @@
  * the release pipeline.
  *
  * Usage:
- *   node scripts/release.mjs <version>
+ *   node scripts/release.mjs <version> [--allow-empty-changelog]
  *
  * <version> may be either an explicit SemVer (``0.2.0``, ``1.0.0-rc.1``)
  * or one of the ``npm version`` keywords (``patch``, ``minor``,
  * ``major``, ``prerelease``).
+ *
+ * The script also promotes the ``[Unreleased]`` section of
+ * ``CHANGELOG.md`` to ``[X.Y.Z] - YYYY-MM-DD`` and refreshes the
+ * bottom-of-file link references in the same commit. It refuses to
+ * proceed if ``[Unreleased]`` has no entries, unless
+ * ``--allow-empty-changelog`` is passed (intended for tag-only or
+ * infrastructure releases).
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_PKG = resolve(ROOT, "package.json");
 const SDK_PKG = resolve(ROOT, "packages/sdk/package.json");
+const CHANGELOG = resolve(ROOT, "CHANGELOG.md");
 
 function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, {
@@ -45,10 +53,87 @@ function readVersion(pkgPath) {
   return JSON.parse(readFileSync(pkgPath, "utf8")).version;
 }
 
-const version = process.argv[2];
+/**
+ * Promote the ``[Unreleased]`` block of CHANGELOG.md to a versioned
+ * section dated today, leaving a fresh empty ``[Unreleased]`` on top
+ * and updating the bottom link references. Returns ``true`` if the
+ * file was modified.
+ *
+ * If the ``[Unreleased]`` block is empty, the release is aborted
+ * unless ``allowEmpty`` is true (CLI flag ``--allow-empty-changelog``).
+ */
+function promoteChangelog(newVersion, allowEmpty) {
+  let md;
+  try {
+    md = readFileSync(CHANGELOG, "utf8");
+  } catch {
+    console.warn("⚠️  CHANGELOG.md not found, skipping promotion.");
+    return false;
+  }
+  const header = "## [Unreleased]";
+  const start = md.indexOf(header);
+  if (start === -1) {
+    console.warn("⚠️  CHANGELOG.md: no [Unreleased] section, skipping.");
+    return false;
+  }
+  const next = md.indexOf("\n## [", start + header.length);
+  if (next === -1) {
+    console.warn("⚠️  CHANGELOG.md: no following version section, skipping.");
+    return false;
+  }
+  const body = md.slice(start + header.length, next).trim();
+  if (!body) {
+    if (!allowEmpty) {
+      fail(
+        "CHANGELOG.md: the [Unreleased] section is empty.\n" +
+          "Add bullets describing the user-visible changes since the previous\n" +
+          "release (see CONTRIBUTING.md), or re-run with --allow-empty-changelog\n" +
+          "if this is intentional (e.g. tag-only / infrastructure release).",
+      );
+    }
+    console.warn(
+      "⚠️  CHANGELOG.md: [Unreleased] is empty — promoting an empty section\n" +
+        "   (--allow-empty-changelog was passed).",
+    );
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const promoted = body.replace(/in Unreleased\b/g, `in ${newVersion}`);
+  const replacement =
+    `${header}\n\n` +
+    `## [${newVersion}] - ${today}\n\n` +
+    (promoted ? `${promoted}\n\n` : "");
+  md = md.slice(0, start) + replacement + md.slice(next + 1);
+
+  const linkRe =
+    /^\[Unreleased\]:\s*(.+?)\/compare\/v([^.\s]+(?:\.[^.\s]+)*)\.\.\.HEAD\s*$/m;
+  const m = md.match(linkRe);
+  if (m) {
+    const base = m[1];
+    const prev = m[2];
+    md = md.replace(
+      linkRe,
+      `[Unreleased]: ${base}/compare/v${newVersion}...HEAD`,
+    );
+    md = md.replace(
+      /^(\[Unreleased\]:.*\n)/m,
+      `$1[${newVersion}]: ${base}/compare/v${prev}...v${newVersion}\n`,
+    );
+  } else {
+    console.warn("⚠️  CHANGELOG.md: could not update bottom link references.");
+  }
+
+  writeFileSync(CHANGELOG, md);
+  return true;
+}
+
+const argv = process.argv.slice(2);
+const allowEmptyChangelog = argv.includes("--allow-empty-changelog");
+const positional = argv.filter((a) => !a.startsWith("--"));
+const version = positional[0];
 if (!version) {
   fail(
-    "Usage: node scripts/release.mjs <version|patch|minor|major|prerelease>",
+    "Usage: node scripts/release.mjs <version|patch|minor|major|prerelease>\n" +
+      "                              [--allow-empty-changelog]",
   );
 }
 
@@ -99,14 +184,18 @@ if (appVersion !== sdkVersion) {
 }
 const tag = `v${appVersion}`;
 
-// 6. Stage, commit, tag.
+// 6. Promote the [Unreleased] section of CHANGELOG.md to vX.Y.Z dated today.
+const changelogUpdated = promoteChangelog(appVersion, allowEmptyChangelog);
+
+// 7. Stage, commit, tag.
 console.log(`→ Committing and tagging ${tag} ...`);
-run("git", [
-  "add",
+const toStage = [
   "package.json",
   "package-lock.json",
   "packages/sdk/package.json",
-]);
+];
+if (changelogUpdated) toStage.push("CHANGELOG.md");
+run("git", ["add", ...toStage]);
 run("git", ["commit", "-m", tag]);
 run("git", ["tag", "-a", tag, "-m", tag]);
 
