@@ -98,6 +98,10 @@ export function SidePanel(props: Props) {
   } = props;
   const [active, setActive] = useState<TabId>(preferredTab);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
+  // Tracks the live PiP window plus its ``pagehide`` handler so it can be
+  // closed and its listener detached from any code path (dock button or
+  // unmount), independently of when the window was opened.
+  const pipRef = useRef<{ win: Window; onHide: () => void } | null>(null);
   const notify = useMessage();
   // Cached "last processing" payload for the current object.  Fetched
   // here (not just inside the Processing tab) so the tab header can be
@@ -139,16 +143,18 @@ export function SidePanel(props: Props) {
     setActive(preferredTab);
   }, [preferredTab, currentId]);
 
-  // Cleanup the PiP window when the side panel unmounts.
+  // Cleanup the PiP window when the side panel unmounts. We read the live
+  // window from ``pipRef`` (not the captured ``pipWindow`` state) so a
+  // window opened after mount is still closed and its listener detached.
   useEffect(() => {
     return () => {
-      if (pipWindow && !pipWindow.closed) {
-        pipWindow.close();
+      const entry = pipRef.current;
+      if (entry) {
+        entry.win.removeEventListener("pagehide", entry.onHide);
+        if (!entry.win.closed) entry.win.close();
+        pipRef.current = null;
       }
     };
-    // ``pipWindow`` capture is intentional — we only want this to fire
-    // on unmount, not whenever the window changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePopOut = useCallback(async () => {
@@ -180,7 +186,23 @@ export function SidePanel(props: Props) {
       win.document.title = "DataLab Web — Object panel";
       win.document.body.style.margin = "0";
       win.document.body.style.background = "var(--panel)";
-      win.addEventListener("pagehide", () => setPipWindow(null));
+      // Defensive: close any previous PiP window before tracking the new
+      // one (the dock button normally closes it first).
+      const prev = pipRef.current;
+      if (prev) {
+        prev.win.removeEventListener("pagehide", prev.onHide);
+        if (!prev.win.closed) prev.win.close();
+      }
+      const onHide = () => {
+        const entry = pipRef.current;
+        if (entry) {
+          entry.win.removeEventListener("pagehide", entry.onHide);
+          pipRef.current = null;
+        }
+        setPipWindow(null);
+      };
+      win.addEventListener("pagehide", onHide);
+      pipRef.current = { win, onHide };
       setPipWindow(win);
     } catch (err) {
       // User dismissed the picker, or browser denied — silently ignore.
@@ -189,9 +211,14 @@ export function SidePanel(props: Props) {
   }, [width, notify]);
 
   const handleDock = useCallback(() => {
-    if (pipWindow && !pipWindow.closed) pipWindow.close();
+    const entry = pipRef.current;
+    if (entry) {
+      entry.win.removeEventListener("pagehide", entry.onHide);
+      if (!entry.win.closed) entry.win.close();
+      pipRef.current = null;
+    }
     setPipWindow(null);
-  }, [pipWindow]);
+  }, []);
 
   const popped = pipWindow !== null && !pipWindow.closed;
 
