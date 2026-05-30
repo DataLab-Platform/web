@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import DOMPurify from "dompurify";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 import { t } from "../../i18n/translate";
 
@@ -23,6 +24,14 @@ import { t } from "../../i18n/translate";
 // ---------------------------------------------------------------------------
 
 type Values = Record<string, unknown>;
+
+/** Sanitise a guidata label before injecting it as HTML. Labels may
+ *  legitimately carry simple inline markup (``<b>``, ``<sub>``, units
+ *  like ``m<sup>2</sup>``), so we keep an HTML profile but strip any
+ *  script/event-handler payload. */
+function sanitizeLabel(html: string): { __html: string } {
+  return { __html: DOMPurify.sanitize(html, { USE_PROFILES: { html: true } }) };
+}
 
 export interface DataSetFormProps {
   schema: JsonSchema;
@@ -130,7 +139,7 @@ function LayoutNodeView({
   return (
     <fieldset className="dataset-form-group">
       {node.label && (
-        <legend dangerouslySetInnerHTML={{ __html: node.label }} />
+        <legend dangerouslySetInnerHTML={sanitizeLabel(node.label)} />
       )}
       {(node.items ?? []).map((child, idx) => (
         <LayoutNodeView
@@ -173,9 +182,9 @@ function TabGroup({
             type="button"
             className={idx === active ? "active" : ""}
             onClick={() => setActive(idx)}
-            dangerouslySetInnerHTML={{
-              __html: tab.label || t("Tab {n}", { n: idx + 1 }),
-            }}
+            dangerouslySetInnerHTML={sanitizeLabel(
+              tab.label || t("Tab {n}", { n: idx + 1 }),
+            )}
           />
         ))}
       </div>
@@ -219,7 +228,7 @@ function FieldRow(props: FieldRowProps) {
       <label
         className="dataset-form-label"
         title={help}
-        dangerouslySetInnerHTML={{ __html: label }}
+        dangerouslySetInnerHTML={sanitizeLabel(label)}
       />
       <div className="dataset-form-control">
         <FieldWidget {...props} disabled={readOnly} />
