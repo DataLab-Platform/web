@@ -1997,11 +1997,6 @@ def list_signals() -> list[dict[str, Any]]:
     ]
 
 
-def delete_signal(oid: str) -> None:
-    """Backwards-compatible alias for :func:`delete_object`."""
-    _MODEL.delete_object(oid)
-
-
 # ---------------------------------------------------------------------------
 # Image panel
 # ---------------------------------------------------------------------------
@@ -4659,7 +4654,6 @@ __all__ = [
     "get_signal_xy",
     "get_signals_xy",
     "set_signal_style",
-    "delete_signal",
     "create_image",
     "create_image_typed",
     "list_image_creation_types",
