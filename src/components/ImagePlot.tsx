@@ -6,6 +6,7 @@ import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
 import { buildRoiOverlays } from "./imageRoi";
 import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
+import { t } from "../i18n/translate";
 import {
   SUPPORTED_COLORMAPS,
   buildColorscale,
@@ -898,24 +899,36 @@ export function ImagePlot({
         {tool === "stats" && statsValues && (
           <div className="image-stats-overlay">
             <div className="image-stats-overlay-header">
-              <strong>Stats</strong>
+              <strong>{t("Stats")}</strong>
               <button
                 type="button"
                 className="image-stats-overlay-close"
                 onClick={() => setStatsRect(null)}
-                aria-label="Clear stats area"
-                title="Clear stats area"
+                aria-label={t("Clear stats area")}
+                title={t("Clear stats area")}
               >
                 ×
               </button>
             </div>
             <div className="image-stats-overlay-body">
-              <span>n: {statsValues.count}</span>
-              <span>mean: {fmt(statsValues.mean)}</span>
-              <span>std: {fmt(statsValues.std)}</span>
-              <span>min: {fmt(statsValues.min)}</span>
-              <span>max: {fmt(statsValues.max)}</span>
-              <span>sum: {fmt(statsValues.sum)}</span>
+              <span>
+                {t("n")}: {statsValues.count}
+              </span>
+              <span>
+                {t("mean")}: {fmt(statsValues.mean)}
+              </span>
+              <span>
+                {t("std")}: {fmt(statsValues.std)}
+              </span>
+              <span>
+                {t("min")}: {fmt(statsValues.min)}
+              </span>
+              <span>
+                {t("max")}: {fmt(statsValues.max)}
+              </span>
+              <span>
+                {t("sum")}: {fmt(statsValues.sum)}
+              </span>
             </div>
           </div>
         )}
@@ -965,25 +978,25 @@ function ImageToolbar({
   }> = [
     {
       id: "profiles",
-      label: "Cross profiles",
-      title: "Show X/Y intensity profiles under the cursor",
+      label: t("Cross profiles"),
+      title: t("Show X/Y intensity profiles under the cursor"),
     },
     {
       id: "contrast",
-      label: "Contrast",
-      title: "Adjust the LUT range with a histogram and dual-handle slider",
+      label: t("Contrast"),
+      title: t("Adjust the LUT range with a histogram and dual-handle slider"),
     },
     {
       id: "stats",
-      label: "Stats area",
-      title: "Draw a rectangle to display statistics over a region",
+      label: t("Stats area"),
+      title: t("Draw a rectangle to display statistics over a region"),
     },
   ];
   return (
     <div
       className="image-tools-toolbar"
       role="toolbar"
-      aria-label="Image visualization tools"
+      aria-label={t("Image visualization tools")}
     >
       {buttons.map((b) => (
         <button
@@ -991,7 +1004,9 @@ function ImageToolbar({
           type="button"
           className={`image-tools-button${tool === b.id ? " active" : ""}`}
           onClick={() => setTool(tool === b.id ? null : b.id)}
-          title={disabled ? "Disabled while ROI edit mode is active" : b.title}
+          title={
+            disabled ? t("Disabled while ROI edit mode is active") : b.title
+          }
           disabled={disabled}
           aria-pressed={tool === b.id}
         >
@@ -999,10 +1014,13 @@ function ImageToolbar({
         </button>
       ))}
       <span className="image-tools-separator" aria-hidden="true" />
-      <label className="image-tools-colormap" title="Colormap (lookup table)">
-        <span className="image-tools-colormap-label">Colormap</span>
+      <label
+        className="image-tools-colormap"
+        title={t("Colormap (lookup table)")}
+      >
+        <span className="image-tools-colormap-label">{t("Colormap")}</span>
         <select
-          aria-label="Colormap"
+          aria-label={t("Colormap")}
           value={colormap}
           onChange={(e) => onColormapChange(e.target.value)}
         >
@@ -1015,14 +1033,14 @@ function ImageToolbar({
       </label>
       <label
         className="image-tools-invert"
-        title="Reverse the colormap (Plotly _r suffix)"
+        title={t("Reverse the colormap (Plotly _r suffix)")}
       >
         <input
           type="checkbox"
           checked={inverted}
           onChange={(e) => onInvertChange(e.target.checked)}
         />
-        <span>Invert</span>
+        <span>{t("Invert")}</span>
       </label>
     </div>
   );
@@ -1136,7 +1154,7 @@ function ContrastPanel({
       )}
       <div className="contrast-sliders">
         <label>
-          min
+          {t("min")}
           <input
             type="range"
             min={0}
@@ -1150,7 +1168,7 @@ function ContrastPanel({
           <span className="contrast-value">{fmt(range[0])}</span>
         </label>
         <label>
-          max
+          {t("max")}
           <input
             type="range"
             min={0}
@@ -1167,9 +1185,9 @@ function ContrastPanel({
           type="button"
           className="contrast-auto"
           onClick={() => onCommit(null)}
-          title="Reset to the image's intrinsic data range"
+          title={t("Reset to the image's intrinsic data range")}
         >
-          Auto
+          {t("Auto")}
         </button>
       </div>
     </div>

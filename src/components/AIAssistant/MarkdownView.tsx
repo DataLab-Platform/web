@@ -16,6 +16,7 @@
 
 import { useMemo } from "react";
 import DOMPurify from "dompurify";
+import { t } from "../../i18n/translate";
 import { marked } from "marked";
 
 interface Props {
@@ -27,15 +28,18 @@ interface Props {
  *  parsing so the resulting HTML doesn't even contain the blob. */
 function stripInlineImages(text: string): string {
   // Markdown image with data: URI (any subtype, any length).
-  let out = text.replace(/!\[[^\]]*\]\(\s*data:[^)]*\)/gi, "_[image omitted]_");
+  let out = text.replace(
+    /!\[[^\]]*\]\(\s*data:[^)]*\)/gi,
+    t("_[image omitted]_"),
+  );
   // Markdown image with any other URL — also unwanted (the model
   // shouldn't be linking to remote images either).
-  out = out.replace(/!\[([^\]]*)\]\([^)]*\)/g, "_[image omitted: $1]_");
+  out = out.replace(/!\[([^\]]*)\]\([^)]*\)/g, t("_[image omitted: $1]_"));
   // Raw ``data:image/...;base64,XXXX`` URI sitting bare in prose
   // (truncated streaming responses sometimes leave one dangling).
   out = out.replace(
     /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]{40,}/gi,
-    "[base64 image omitted]",
+    t("[base64 image omitted]"),
   );
   return out;
 }

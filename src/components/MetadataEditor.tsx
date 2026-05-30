@@ -15,6 +15,7 @@ import type {
   MetadataValueType,
   DataLabRuntime,
 } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   runtime: DataLabRuntime;
@@ -119,13 +120,13 @@ export function MetadataEditor({
   }, [runtime, oid, newKey, newType, newValue, refresh]);
 
   return (
-    <section className="metadata-editor" aria-label="Metadata">
-      <h3 className="metadata-editor-title">Metadata</h3>
+    <section className="metadata-editor" aria-label={t("Metadata")}>
+      <h3 className="metadata-editor-title">{t("Metadata")}</h3>
       {error && <div className="metadata-editor-error">{error}</div>}
       {loading ? (
-        <div className="metadata-editor-loading">Loading…</div>
+        <div className="metadata-editor-loading">{t("Loading…")}</div>
       ) : entries.length === 0 ? (
-        <div className="metadata-editor-empty">No metadata.</div>
+        <div className="metadata-editor-empty">{t("No metadata.")}</div>
       ) : (
         <ul className="metadata-editor-list">
           {entries.map((entry) => (
@@ -141,28 +142,28 @@ export function MetadataEditor({
       <div className="metadata-editor-add">
         <input
           type="text"
-          placeholder="key"
+          placeholder={t("key")}
           value={newKey}
           onChange={(e) => setNewKey(e.target.value)}
-          aria-label="New metadata key"
+          aria-label={t("New metadata key")}
         />
         <select
           value={newType}
           onChange={(e) => setNewType(e.target.value as MetadataValueType)}
-          aria-label="New metadata value type"
+          aria-label={t("New metadata value type")}
         >
-          {VALUE_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {VALUE_TYPES.map((vt) => (
+            <option key={vt} value={vt}>
+              {vt}
             </option>
           ))}
         </select>
         <input
           type="text"
-          placeholder="value"
+          placeholder={t("value")}
           value={newValue}
           onChange={(e) => setNewValue(e.target.value)}
-          aria-label="New metadata value"
+          aria-label={t("New metadata value")}
         />
         <button
           type="button"
@@ -170,7 +171,7 @@ export function MetadataEditor({
           disabled={!newKey.trim()}
           className="metadata-editor-add-btn"
         >
-          Add
+          {t("Add")}
         </button>
       </div>
     </section>
@@ -214,11 +215,11 @@ function MetadataRow({ entry, onUpdate, onDelete }: MetadataRowProps) {
         value={draftType}
         onChange={(e) => setDraftType(e.target.value as MetadataValueType)}
         onBlur={commit}
-        aria-label={`Type for ${entry.key}`}
+        aria-label={t("Type for {key}", { key: entry.key })}
       >
-        {VALUE_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
+        {VALUE_TYPES.map((vt) => (
+          <option key={vt} value={vt}>
+            {vt}
           </option>
         ))}
       </select>
@@ -232,7 +233,7 @@ function MetadataRow({ entry, onUpdate, onDelete }: MetadataRowProps) {
               setDraft(v);
               onUpdate({ key: entry.key, value_type: "bool", value: v });
             }}
-            aria-label={`Value of ${entry.key}`}
+            aria-label={t("Value of {key}", { key: entry.key })}
           />
           {draft || "false"}
         </label>
@@ -243,7 +244,7 @@ function MetadataRow({ entry, onUpdate, onDelete }: MetadataRowProps) {
           rows={2}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
-          aria-label={`Value of ${entry.key}`}
+          aria-label={t("Value of {key}", { key: entry.key })}
         />
       ) : (
         <input
@@ -258,15 +259,15 @@ function MetadataRow({ entry, onUpdate, onDelete }: MetadataRowProps) {
               commit();
             }
           }}
-          aria-label={`Value of ${entry.key}`}
+          aria-label={t("Value of {key}", { key: entry.key })}
         />
       )}
       <button
         type="button"
         className="metadata-editor-delete"
         onClick={() => onDelete(entry.key)}
-        title={`Delete ${entry.key}`}
-        aria-label={`Delete ${entry.key}`}
+        title={t("Delete {key}", { key: entry.key })}
+        aria-label={t("Delete {key}", { key: entry.key })}
       >
         ×
       </button>

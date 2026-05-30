@@ -17,6 +17,7 @@
 
 import { saveApiKey } from "./secureStorage";
 import type { ProviderKind, ProviderSettings } from "./types";
+import { t } from "../i18n/translate";
 
 const STORAGE_KEY = "datalab-web.aiassistant.settings";
 
@@ -161,50 +162,54 @@ export interface BaseUrlPreset {
 export const BASE_URL_PRESETS: BaseUrlPreset[] = [
   {
     id: "openai",
-    label: "OpenAI (cloud)",
+    label: t("OpenAI (cloud)"),
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
     isLocal: false,
   },
   {
     id: "ollama",
-    label: "Ollama (local)",
+    label: t("Ollama (local)"),
     baseUrl: "http://localhost:11434/v1",
     defaultModel: "llama3.2:3b",
     isLocal: true,
-    corsHint:
+    corsHint: t(
       "Start ollama with OLLAMA_ORIGINS=* (env var) so the browser can connect.",
+    ),
   },
   {
     id: "lmstudio",
-    label: "LM Studio (local)",
+    label: t("LM Studio (local)"),
     baseUrl: "http://localhost:1234/v1",
     defaultModel: "local-model",
     isLocal: true,
-    corsHint:
+    corsHint: t(
       "In LM Studio → Developer → Server Settings, enable CORS, then set Model to the loaded model's API identifier (e.g. 'google/gemma-4-e4b').",
+    ),
   },
   {
     id: "llamacpp",
-    label: "llama.cpp server (local)",
+    label: t("llama.cpp server (local)"),
     baseUrl: "http://localhost:8080/v1",
     defaultModel: "local-model",
     isLocal: true,
-    corsHint:
+    corsHint: t(
       "Run llama-server with --api-key-allow-empty and the default CORS headers (built-in).",
+    ),
   },
   {
     id: "vllm",
-    label: "vLLM (local)",
+    label: t("vLLM (local)"),
     baseUrl: "http://localhost:8000/v1",
     defaultModel: "local-model",
     isLocal: true,
-    corsHint:
+    corsHint: t(
       "Start vllm with --allowed-origins '*' so the browser can reach /v1/*.",
+    ),
   },
   {
     id: "custom",
-    label: "Custom…",
+    label: t("Custom…"),
     baseUrl: null,
     isLocal: false,
   },
@@ -253,7 +258,7 @@ export async function testConnection(
 ): Promise<ConnectionProbeResult> {
   const trimmedUrl = baseUrl.trim();
   if (!trimmedUrl) {
-    return { ok: false, message: "Base URL is empty." };
+    return { ok: false, message: t("Base URL is empty.") };
   }
   const headers: Record<string, string> = {};
   if (apiKey.trim()) headers["Authorization"] = `Bearer ${apiKey.trim()}`;
@@ -275,7 +280,10 @@ export async function testConnection(
     );
     return {
       ok: false,
-      message: `Cannot reach ${trimmedUrl} — ${message}`,
+      message: t("Cannot reach {url} — {message}", {
+        url: trimmedUrl,
+        message,
+      }),
       likelyCors,
     };
   }
@@ -309,7 +317,10 @@ export async function testConnection(
     latencyMs,
     message:
       modelCount !== null
-        ? `Connected — ${modelCount} model${modelCount === 1 ? "" : "s"} (${latencyMs} ms)`
-        : `Connected (${latencyMs} ms)`,
+        ? t("Connected — {count} models ({latency} ms)", {
+            count: modelCount,
+            latency: latencyMs,
+          })
+        : t("Connected ({latency} ms)", { latency: latencyMs }),
   };
 }

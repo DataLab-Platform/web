@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { DataLabRuntime } from "./runtime";
 import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
 import { getCurrentPanel, getSelection } from "./selectionState";
+import { t } from "../i18n/translate";
 
 interface RuntimeContextValue {
   runtime: DataLabRuntime | null;
@@ -17,7 +18,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   const [runtime, setRuntime] = useState<DataLabRuntime | null>(null);
   const [status, setStatus] =
     useState<RuntimeContextValue["status"]>("loading");
-  const [message, setMessage] = useState("Initialising…");
+  const [message, setMessage] = useState(t("Initialising…"));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

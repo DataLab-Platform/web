@@ -226,6 +226,100 @@ input {
   color: var(--text);
 }
 
+/* Language selector — compact flag button with same visual weight as the
+   theme toggle; opens a small dropdown of available locales. */
+.menubar-language {
+  position: relative;
+  margin-left: 6px;
+  display: inline-flex;
+}
+
+.menubar-language-button {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 5px;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.menubar-language-button:hover,
+.menubar-language-button:focus {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  outline: none;
+}
+
+.menubar-flag {
+  width: 20px;
+  height: 14px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  display: block;
+}
+
+/* In the button, mute the flag so it carries the same low-key visual
+   weight as the neighbouring monochrome icons (theme/AI toggles). Full
+   colour is restored on hover/focus and in the dropdown menu, where the
+   flag acts as a recognisable picker affordance. */
+.menubar-language-button .menubar-flag {
+  filter: saturate(0.35) opacity(0.75);
+  transition: filter 0.12s ease;
+}
+
+.menubar-language-button:hover .menubar-flag,
+.menubar-language-button:focus .menubar-flag {
+  filter: none;
+}
+
+.menubar-flag-code {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  line-height: 14px;
+}
+
+.menubar-language-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  z-index: 1000;
+  min-width: 140px;
+}
+
+.menubar-language-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 3px;
+  text-align: left;
+}
+
+.menubar-language-item:hover,
+.menubar-language-item:focus {
+  background: var(--panel-alt);
+  outline: none;
+}
+
+.menubar-language-item--active {
+  font-weight: 600;
+}
+
 /* AI Assistant show/hide toggle — same visual weight as the theme
    toggle, with an active state highlighting the accent colour when
    the panel is currently visible. */

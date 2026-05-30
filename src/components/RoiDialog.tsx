@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { SignalRoiSegment } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   /** Initial ROI list (already cloned from the model). */
@@ -59,11 +60,11 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
       const xmin = Number(r.xmin);
       const xmax = Number(r.xmax);
       if (!Number.isFinite(xmin) || !Number.isFinite(xmax)) {
-        setError("All bounds must be valid numbers.");
+        setError(t("All bounds must be valid numbers."));
         return;
       }
       if (xmax <= xmin) {
-        setError("Each segment must satisfy xmin < xmax.");
+        setError(t("Each segment must satisfy xmin < xmax."));
         return;
       }
       out.push({ xmin, xmax, title: r.title });
@@ -80,19 +81,19 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <form onSubmit={handleSubmit}>
-          <h2>Edit regions of interest</h2>
+          <h2>{t("Edit regions of interest")}</h2>
           {rows.length === 0 && (
             <div style={{ color: "var(--text-dim)", marginBottom: 12 }}>
-              No ROI defined. Click <em>Add</em> to create one.
+              {t("No ROI defined. Click Add to create one.")}
             </div>
           )}
           {rows.length > 0 && (
             <table style={{ width: "100%", marginBottom: 8 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "var(--text-dim)" }}>
-                  <th>Title</th>
-                  <th>X min</th>
-                  <th>X max</th>
+                  <th>{t("Title")}</th>
+                  <th>{t("X min")}</th>
+                  <th>{t("X max")}</th>
                   <th />
                 </tr>
               </thead>
@@ -124,7 +125,7 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
                       <button
                         type="button"
                         onClick={() => removeRow(idx)}
-                        title="Remove"
+                        title={t("Remove")}
                       >
                         ×
                       </button>
@@ -142,13 +143,13 @@ export function RoiDialog({ initial, xMin, xMax, onSubmit, onCancel }: Props) {
             style={{ justifyContent: "space-between" }}
           >
             <button type="button" onClick={addRow}>
-              + Add
+              + {t("Add")}
             </button>
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" onClick={onCancel}>
-                Cancel
+                {t("Cancel")}
               </button>
-              <button type="submit">OK</button>
+              <button type="submit">{t("OK")}</button>
             </div>
           </div>
         </form>

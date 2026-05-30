@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { DialogProvider } from "./components/ConfirmDialog";
 import { ProgressProvider } from "./components/ProgressDialog";
+import { I18nProvider, initI18nEarly } from "./i18n";
 import { RuntimeProvider } from "./runtime/RuntimeContext";
 import { WorkspaceProvider } from "./runtime/WorkspaceContext";
 import { installConsoleCapture } from "./utils/consoleLog";
@@ -11,6 +12,7 @@ import "./styles.css";
 
 installConsoleCapture();
 initThemeEarly();
+initI18nEarly();
 
 const container = document.getElementById("root");
 if (!container) {
@@ -20,15 +22,17 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <ThemeProvider>
-      <RuntimeProvider>
-        <WorkspaceProvider>
-          <DialogProvider>
-            <ProgressProvider>
-              <App />
-            </ProgressProvider>
-          </DialogProvider>
-        </WorkspaceProvider>
-      </RuntimeProvider>
+      <I18nProvider>
+        <RuntimeProvider>
+          <WorkspaceProvider>
+            <DialogProvider>
+              <ProgressProvider>
+                <App />
+              </ProgressProvider>
+            </DialogProvider>
+          </WorkspaceProvider>
+        </RuntimeProvider>
+      </I18nProvider>
     </ThemeProvider>
   </StrictMode>,
 );

@@ -62,6 +62,7 @@ import {
 } from "../../storage/recentStore";
 import { Cell } from "./Cell";
 import { useConfirm, useMessage } from "../ConfirmDialog";
+import { t } from "../../i18n/translate";
 
 interface NotebookPanelProps {
   runtime: DataLabRuntime;
@@ -574,12 +575,11 @@ export const NotebookPanel = forwardRef<
 
   const restartKernel = useCallback(async () => {
     const ok = await confirm({
-      title: "Restart kernel?",
-      message:
-        "Restart the notebook kernel?\n\nThe user namespace (variables defined " +
-        "in previous cells) will be lost. Workspace objects in the Signals " +
-        "and Images panels are unaffected.",
-      confirmLabel: "Restart",
+      title: t("Restart kernel?"),
+      message: t(
+        "Restart the notebook kernel?\n\nThe user namespace (variables defined in previous cells) will be lost. Workspace objects in the Signals and Images panels are unaffected.",
+      ),
+      confirmLabel: t("Restart"),
       destructive: true,
     });
     if (!ok) return;
@@ -692,12 +692,15 @@ export const NotebookPanel = forwardRef<
   const handleCloseTab = useCallback(
     async (id: string) => {
       const nb = notebooksRef.current.find((n) => n.id === id);
-      const label = nb?.name ?? "this notebook";
+      const label = nb?.name ?? t("this notebook");
       if (
         !(await confirm({
-          title: "Close notebook",
-          message: `Close notebook "${label}"? It will stay in the workspace and the recent cache.`,
-          confirmLabel: "Close",
+          title: t("Close notebook"),
+          message: t(
+            'Close notebook "{label}"? It will stay in the workspace and the recent cache.',
+            { label },
+          ),
+          confirmLabel: t("Close"),
         }))
       ) {
         return;
@@ -791,8 +794,11 @@ export const NotebookPanel = forwardRef<
         console.error("Failed to read .ipynb file:", err);
         await notify({
           kind: "error",
-          title: "Open notebook",
-          message: `Failed to read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+          title: t("Open notebook"),
+          message: t("Failed to read {name}: {error}", {
+            name: file.name,
+            error: err instanceof Error ? err.message : String(err),
+          }),
         });
         input.value = "";
         return;
@@ -805,8 +811,11 @@ export const NotebookPanel = forwardRef<
         console.error("Failed to parse .ipynb file:", err);
         await notify({
           kind: "error",
-          title: "Open notebook",
-          message: `Failed to open ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+          title: t("Open notebook"),
+          message: t("Failed to open {name}: {error}", {
+            name: file.name,
+            error: err instanceof Error ? err.message : String(err),
+          }),
         });
       } finally {
         // Always reset so the user can pick the same file again later.
@@ -893,9 +902,11 @@ export const NotebookPanel = forwardRef<
       if (!meta) return;
       if (
         !(await confirm({
-          title: "Remove from recent",
-          message: `Remove notebook "${meta.title}" from recent cache?`,
-          confirmLabel: "Remove",
+          title: t("Remove from recent"),
+          message: t('Remove notebook "{title}" from recent cache?', {
+            title: meta.title,
+          }),
+          confirmLabel: t("Remove"),
           destructive: true,
         }))
       ) {
@@ -942,13 +953,13 @@ export const NotebookPanel = forwardRef<
   const kernelLabel = useMemo(() => {
     switch (kernelStatus) {
       case "loading":
-        return "● Kernel loading…";
+        return t("● Kernel loading…");
       case "running":
-        return "● Kernel running";
+        return t("● Kernel running");
       case "stopping":
-        return "● Kernel restarting…";
+        return t("● Kernel restarting…");
       default:
-        return "○ Kernel idle";
+        return t("○ Kernel idle");
     }
   }, [kernelStatus]);
 
@@ -961,7 +972,7 @@ export const NotebookPanel = forwardRef<
         style={{ display: "none" }}
         onChange={handleFilePicked}
       />
-      <div className="nb-tabs" role="tablist" aria-label="Open notebooks">
+      <div className="nb-tabs" role="tablist" aria-label={t("Open notebooks")}>
         {notebooks.map((n) => (
           <div
             key={n.id}
@@ -974,7 +985,7 @@ export const NotebookPanel = forwardRef<
               setRenameDraft(n.name);
               setRenamingId(n.id);
             }}
-            title="Double-click to rename"
+            title={t("Double-click to rename")}
           >
             {renamingId === n.id ? (
               <input
@@ -994,7 +1005,7 @@ export const NotebookPanel = forwardRef<
                     cancelRename();
                   }
                 }}
-                aria-label="Notebook name"
+                aria-label={t("Notebook name")}
               />
             ) : (
               <span className="nb-tab-title">{n.name}</span>
@@ -1006,8 +1017,8 @@ export const NotebookPanel = forwardRef<
                 e.stopPropagation();
                 handleCloseTab(n.id);
               }}
-              aria-label={`Close ${n.name}`}
-              title="Close tab"
+              aria-label={t("Close {name}", { name: n.name })}
+              title={t("Close tab")}
             >
               ×
             </button>
@@ -1027,7 +1038,7 @@ export const NotebookPanel = forwardRef<
               });
               setOpenMenuFor((prev) => (prev === "new" ? null : "new"));
             }}
-            title="New notebook…"
+            title={t("New notebook…")}
             aria-haspopup="menu"
             aria-expanded={openMenuFor === "new"}
           >
@@ -1053,9 +1064,11 @@ export const NotebookPanel = forwardRef<
                     handleNew();
                   }}
                 >
-                  <span className="nb-open-menu-name-text">Empty notebook</span>
+                  <span className="nb-open-menu-name-text">
+                    {t("Empty notebook")}
+                  </span>
                   <span className="nb-open-menu-name-when">
-                    Start from scratch
+                    {t("Start from scratch")}
                   </span>
                 </button>
               </div>
@@ -1070,9 +1083,11 @@ export const NotebookPanel = forwardRef<
                       handleNewFromTemplate(tpl.id);
                     }}
                   >
-                    <span className="nb-open-menu-name-text">{tpl.label}</span>
+                    <span className="nb-open-menu-name-text">
+                      {t(tpl.label)}
+                    </span>
                     <span className="nb-open-menu-name-when">
-                      {tpl.description}
+                      {t(tpl.description)}
                     </span>
                   </button>
                 </div>
@@ -1086,66 +1101,66 @@ export const NotebookPanel = forwardRef<
           type="button"
           onClick={() => activeCellId && runCell(activeCellId)}
           disabled={!activeCellId || kernelStatus === "loading"}
-          title="Run active cell (Ctrl+Enter)"
+          title={t("Run active cell (Ctrl+Enter)")}
         >
-          ▶ Run
+          ▶ {t("Run")}
         </button>
         <button
           type="button"
           onClick={runAll}
           disabled={kernelStatus === "loading" || !activeNotebook}
-          title="Run all cells"
+          title={t("Run all cells")}
         >
-          ▶▶ Run All
+          ▶▶ {t("Run All")}
         </button>
         <button
           type="button"
           onClick={restartKernel}
           disabled={kernelStatus === "loading"}
-          title="Restart kernel — loses user namespace"
+          title={t("Restart kernel — loses user namespace")}
         >
-          ↻ Restart
+          ↻ {t("Restart")}
         </button>
         <span className="nb-toolbar-sep" />
         <button
           type="button"
           onClick={() => handleInsertBelow(activeCellId)}
           disabled={!activeNotebook}
-          title="Insert code cell below"
+          title={t("Insert code cell below")}
         >
-          + Code
+          + {t("Code")}
         </button>
         <button
           type="button"
           onClick={() => handleInsertMarkdownBelow(activeCellId)}
           disabled={!activeNotebook}
-          title="Insert markdown cell below"
+          title={t("Insert markdown cell below")}
         >
-          + Markdown
+          + {t("Markdown")}
         </button>
         <button
           type="button"
           onClick={() => activeCellId && handleConvert(activeCellId)}
           disabled={!activeCellId}
-          title="Convert active cell between code and markdown"
+          title={t("Convert active cell between code and markdown")}
         >
-          ↔ Convert
+          ↔ {t("Convert")}
         </button>
         <button
           type="button"
           onClick={() => activeCellId && handleDeleteCell(activeCellId)}
           disabled={!activeCellId}
-          title="Delete active cell"
+          title={t("Delete active cell")}
         >
-          ✕ Delete
+          ✕ {t("Delete")}
         </button>
         <span className="nb-toolbar-sep" />
         <button
           type="button"
           onClick={handleOpenFromDisk}
-          title="Import .ipynb file from disk"
+          title={t("Import .ipynb file from disk")}
         >
-          Import…
+          {t("Import…")}
         </button>
         <div className="nb-open-menu-container" ref={openMenuRef}>
           <button
@@ -1154,15 +1169,15 @@ export const NotebookPanel = forwardRef<
               setOpenMenuFor((prev) => (prev === "stored" ? null : "stored"))
             }
             disabled={storedList.length === 0}
-            title="Open notebook from recent cache"
+            title={t("Open notebook from recent cache")}
           >
-            Recent… ({storedList.length})
+            {t("Recent… ({count})", { count: storedList.length })}
           </button>
           {openMenuFor === "stored" && (
             <div className="nb-open-menu" role="menu">
               {storedList.length === 0 && (
                 <div className="nb-open-menu-empty">
-                  No notebooks in recent cache.
+                  {t("No notebooks in recent cache.")}
                 </div>
               )}
               {storedList.map((m) => {
@@ -1182,13 +1197,16 @@ export const NotebookPanel = forwardRef<
                       onClick={() => handleOpenStored(m.id)}
                       title={
                         alreadyOpen
-                          ? `Already open — click to focus tab (last seen ${when})`
-                          : `Last seen ${when}`
+                          ? t(
+                              "Already open — click to focus tab (last seen {when})",
+                              { when },
+                            )
+                          : t("Last seen {when}", { when })
                       }
                     >
                       <span className="nb-open-menu-name-text">
                         {m.title}
-                        {alreadyOpen ? " (open)" : ""}
+                        {alreadyOpen ? t(" (open)") : ""}
                       </span>
                       <span className="nb-open-menu-name-when">{when}</span>
                     </button>
@@ -1196,8 +1214,10 @@ export const NotebookPanel = forwardRef<
                       type="button"
                       className="nb-open-menu-delete"
                       onClick={() => handleDeleteStored(m.id)}
-                      title="Remove from recent cache"
-                      aria-label={`Remove ${m.title} from recent cache`}
+                      title={t("Remove from recent cache")}
+                      aria-label={t("Remove {title} from recent cache", {
+                        title: m.title,
+                      })}
                     >
                       ×
                     </button>
@@ -1211,18 +1231,18 @@ export const NotebookPanel = forwardRef<
           type="button"
           onClick={handleSaveAs}
           disabled={!activeNotebook}
-          title="Export current notebook as .ipynb"
+          title={t("Export current notebook as .ipynb")}
         >
-          Export…
+          {t("Export…")}
         </button>
         {onConvertToMacro && (
           <button
             type="button"
             onClick={handleConvertToMacro}
             disabled={!activeNotebook}
-            title="Open this notebook as a new DataLab macro"
+            title={t("Open this notebook as a new DataLab macro")}
           >
-            Convert to macro
+            {t("Convert to macro")}
           </button>
         )}
         <span className="nb-toolbar-spacer" />
@@ -1234,14 +1254,16 @@ export const NotebookPanel = forwardRef<
             onClick={onTogglePlacement}
             title={
               placement === "floating"
-                ? "Dock this panel as a central tab"
-                : "Detach this panel as a floating overlay"
+                ? t("Dock this panel as a central tab")
+                : t("Detach this panel as a floating overlay")
             }
             aria-label={
-              placement === "floating" ? "Dock Notebooks" : "Detach Notebooks"
+              placement === "floating"
+                ? t("Dock Notebooks")
+                : t("Detach Notebooks")
             }
           >
-            {placement === "floating" ? "↙ Dock" : "↗ Detach"}
+            {placement === "floating" ? t("↙ Dock") : t("↗ Detach")}
           </button>
         )}
       </div>
@@ -1262,7 +1284,7 @@ export const NotebookPanel = forwardRef<
             />
           ))
         ) : (
-          <div className="nb-empty">No notebook open.</div>
+          <div className="nb-empty">{t("No notebook open.")}</div>
         )}
       </div>
     </div>

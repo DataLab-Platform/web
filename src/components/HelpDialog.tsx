@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
+import { t } from "../i18n/translate";
 import {
   clearConsoleEntries,
   getConsoleEntries,
@@ -58,7 +59,7 @@ export function HelpDialog({ view, onClose, appVersion }: Props) {
         </div>
         <div className="actions">
           <button type="button" onClick={onClose}>
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>
@@ -69,11 +70,11 @@ export function HelpDialog({ view, onClose, appVersion }: Props) {
 function titleFor(view: HelpView): string {
   switch (view) {
     case "about":
-      return "About DataLab Web";
+      return t("About DataLab Web");
     case "shortcuts":
-      return "Keyboard shortcuts";
+      return t("Keyboard shortcuts");
     case "console":
-      return "Browser console log";
+      return t("Browser console log");
   }
 }
 
@@ -88,21 +89,24 @@ function AboutView({ version }: { version: string }) {
         <img src={logoUrl} alt="" className="help-about-logo" />
         <div>
           <div className="help-about-name">DataLab Web</div>
-          <div className="help-about-version">version {version}</div>
+          <div className="help-about-version">
+            {t("version {version}", { version })}
+          </div>
         </div>
       </div>
       <div className="help-about-experimental" role="note">
-        <strong>Beta software.</strong> DataLab-Web is under active development
-        and some features may still be incomplete or behave unexpectedly. If you
-        run into an issue, please report it on the{" "}
+        <strong>{t("Beta software.")}</strong>{" "}
+        {t(
+          "DataLab-Web is under active development and some features may still be incomplete or behave unexpectedly. If you run into an issue, please report it on the",
+        )}{" "}
         <a
           href="https://github.com/DataLab-Platform/web/issues"
           target="_blank"
           rel="noopener noreferrer"
         >
-          GitHub issue tracker
+          {t("GitHub issue tracker")}
         </a>
-        . Contributions are welcome — see{" "}
+        . {t("Contributions are welcome — see")}{" "}
         <a
           href="https://github.com/DataLab-Platform/web/blob/main/CONTRIBUTING.md"
           target="_blank"
@@ -113,24 +117,22 @@ function AboutView({ version }: { version: string }) {
         .
       </div>
       <p>
-        Browser-native sibling of the DataLab desktop application. The Sigima
-        computation engine runs entirely client-side via Pyodide (CPython
-        compiled to WebAssembly); no data leaves your browser.
+        {t(
+          "Browser-native sibling of the DataLab desktop application. The Sigima computation engine runs entirely client-side via Pyodide (CPython compiled to WebAssembly); no data leaves your browser.",
+        )}
       </p>
       <div className="help-about-doc-scope" role="note">
-        <strong>About the online documentation.</strong> The{" "}
+        <strong>{t("About the online documentation.")}</strong> {t("The")}{" "}
         <a
           href="https://datalab-platform.com/"
           target="_blank"
           rel="noopener noreferrer"
         >
-          DataLab project website
+          {t("DataLab project website")}
         </a>{" "}
-        is centred on the desktop application. Because DataLab-Web shares the
-        same computation engine (Sigima) and the same processing catalog, most
-        of that content remains directly relevant. Web-specific differences
-        (in-browser execution via Pyodide, persistence, plugins, macros,
-        notebooks) are not covered there.
+        {t(
+          "is centred on the desktop application. Because DataLab-Web shares the same computation engine (Sigima) and the same processing catalog, most of that content remains directly relevant. Web-specific differences (in-browser execution via Pyodide, persistence, plugins, macros, notebooks) are not covered there.",
+        )}
       </div>
       <ul className="help-about-links">
         <li>
@@ -139,13 +141,13 @@ function AboutView({ version }: { version: string }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            DataLab project website
+            {t("DataLab project website")}
           </a>{" "}
           <span
             className="help-about-link-tag"
-            title="Centred on the DataLab desktop application"
+            title={t("Centred on the DataLab desktop application")}
           >
-            desktop-focused
+            {t("desktop-focused")}
           </span>
         </li>
         <li>
@@ -154,7 +156,7 @@ function AboutView({ version }: { version: string }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            DataLab-Web on GitHub
+            {t("DataLab-Web on GitHub")}
           </a>
         </li>
         <li>
@@ -163,7 +165,7 @@ function AboutView({ version }: { version: string }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Sigima computation engine
+            {t("Sigima computation engine")}
           </a>
         </li>
         <li>
@@ -177,14 +179,14 @@ function AboutView({ version }: { version: string }) {
         </li>
       </ul>
       <p className="help-about-credits">
-        Created by Pierre Raybaut
+        {t("Created by Pierre Raybaut")}
         <br />
-        Developed and maintained by DataLab Web open-source project team
+        {t("Developed and maintained by DataLab Web open-source project team")}
         <br />
-        Copyright © 2026 DataLab Platform Developers
+        {t("Copyright © 2026 DataLab Platform Developers")}
       </p>
       <p className="help-about-license">
-        Released under the BSD 3-Clause License.
+        {t("Released under the BSD 3-Clause License.")}
       </p>
     </div>
   );
@@ -253,7 +255,7 @@ function ShortcutsView() {
     <div className="help-shortcuts">
       {SHORTCUTS.map((group) => (
         <section key={group.group}>
-          <h3>{group.group}</h3>
+          <h3>{t(group.group)}</h3>
           <table>
             <tbody>
               {group.entries.map((s) => (
@@ -261,7 +263,7 @@ function ShortcutsView() {
                   <td>
                     <kbd>{s.keys}</kbd>
                   </td>
-                  <td>{s.action}</td>
+                  <td>{t(s.action)}</td>
                 </tr>
               ))}
             </tbody>
@@ -325,32 +327,34 @@ function ConsoleView() {
     <div className="help-console">
       <div className="help-console-toolbar">
         <label>
-          Level:
+          {t("Level:")}
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as typeof filter)}
           >
             {LEVEL_FILTERS.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.label}
+                {f.id === "all" ? t(f.label) : f.label}
               </option>
             ))}
           </select>
         </label>
-        <span className="help-console-count">{entries.length} entries</span>
+        <span className="help-console-count">
+          {t("{count} entries", { count: entries.length })}
+        </span>
         <div className="help-console-buttons">
           <button type="button" onClick={handleCopy}>
-            Copy
+            {t("Copy")}
           </button>
           <button type="button" onClick={clearConsoleEntries}>
-            Clear
+            {t("Clear")}
           </button>
         </div>
       </div>
       <div className="help-console-list" ref={listRef}>
         {entries.length === 0 ? (
           <div className="help-console-empty">
-            No console output captured yet.
+            {t("No console output captured yet.")}
           </div>
         ) : (
           entries.map((e) => (

@@ -23,6 +23,11 @@ import dlwTitleFormatSource from "./dlw_title_format.py?raw";
 // pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
 // monkey-patch the ``guidata.dataset`` namespace.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
+// Resolve the Pyodide ``LANG`` from the active UI locale so that
+// Sigima/guidata gettext labels match the rest of the interface. Import
+// from the React-free ``locale`` module to avoid pulling the provider in.
+import { pyodideLang } from "../i18n/locale";
+import { t } from "../i18n/translate";
 
 // Bundle the portable ``datalab.*`` shim package — every .py file under
 // src/sigima/dlplugins/ is mirrored to Pyodide's site-packages at startup
@@ -880,50 +885,52 @@ export class DataLabRuntime {
           "and your network / Content-Security-Policy settings.",
       );
     }
-    onProgress?.("Loading Pyodide runtime…");
+    onProgress?.(t("Loading Pyodide runtime…"));
     const py = (await window.loadPyodide!({
       indexURL: PYODIDE_INDEX,
     })) as PyodideAPI;
 
     // ---------------------------------------------------------------
-    // Pin the Pyodide locale to ``C`` *before* any ``guidata`` /
-    // ``sigima`` import.
+    // Pin the Pyodide locale *before* any ``guidata`` / ``sigima``
+    // import.
     //
     // Why: Sigima exposes user-facing labels (e.g. ``SignalTypes`` /
     // ``ImageTypes`` enum entries shown in the ``Create`` menu, plus
     // processing labels and parameter labels) wrapped in ``gettext
-    // _()``. ``guidata.configtools.get_translation`` falls back to the
-    // browser's locale via ``get_system_lang()`` when ``LANG`` is
-    // unset, so a French-locale browser would surface translated
-    // labels while the rest of the React UI is English-only — see the
-    // "Internationalisation" section of ``README.md``.
+    // _()``. ``guidata.configtools.get_translation`` reads
+    // ``os.environ["LANG"]`` and loads the matching ``.mo`` catalog
+    // (shipped inside the Sigima/guidata wheels) at first import.
     //
-    // Setting ``LANG=C`` (POSIX "no translation" locale) forces
-    // gettext to return the original ``msgid`` strings (English), which
-    // matches the rest of the UI. ``LANGUAGE`` is also unset to defeat
-    // GNU gettext's higher-priority override.
+    // We derive ``LANG`` from the active UI locale via
+    // ``pyodideLang()``: ``C`` for English (POSIX "no translation",
+    // returns the original ``msgid`` strings), or the locale code (e.g.
+    // ``fr``) to surface the translated catalog — keeping the Python
+    // labels consistent with the React UI. Switching language reloads
+    // the page, so a fresh Pyodide instance always boots with the right
+    // ``LANG``.
     //
     // This MUST run before ``loadPackage``/``micropip.install`` of
     // ``guidata`` and before any ``runPythonAsync`` that touches the
     // guidata shims, otherwise the translation object is cached at
     // import time and the language change comes too late.
     // ---------------------------------------------------------------
+    const lang = pyodideLang();
     await py.runPythonAsync(`
 import os
-os.environ["LANG"] = "C"
-os.environ["LANGUAGE"] = "C"
+os.environ["LANG"] = ${JSON.stringify(lang)}
+os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
-    onProgress?.("Loading scientific stack (numpy, scipy, h5py)…");
+    onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
     await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
 
-    onProgress?.("Installing Sigima…");
+    onProgress?.(t("Installing Sigima…"));
     await py.runPythonAsync(`
 import micropip
 await micropip.install(["sigima", "guidata"])
 `);
 
-    onProgress?.("Initialising Sigima namespace…");
+    onProgress?.(t("Initialising Sigima namespace…"));
     await py.runPythonAsync(guidataJsonSchemaShim);
     if (guidataBackendsSource) {
       await py.runPythonAsync(guidataBackendsSource);
@@ -947,7 +954,7 @@ await micropip.install(["sigima", "guidata"])
     py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
 
-    onProgress?.("Ready.");
+    onProgress?.(t("Ready."));
     const runtime = new DataLabRuntime(py);
     runtime.installDialogBridge();
     await runtime.installBuiltinPlugins(builtinPluginSources);

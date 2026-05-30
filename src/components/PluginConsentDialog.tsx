@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo } from "react";
+import { t } from "../i18n/translate";
 
 interface Props {
   filename: string;
@@ -34,17 +35,17 @@ export function PluginConsentDialog(props: Props) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card" style={{ minWidth: 500, maxWidth: 720 }}>
-        <h2>Load plugin?</h2>
+        <h2>{t("Load plugin?")}</h2>
         <p>
-          DataLab-Web is about to execute the following Python plugin. Plugins
-          run with full access to the in-browser Python runtime (Pyodide). Only
-          proceed if you trust the source.
+          {t(
+            "DataLab-Web is about to execute the following Python plugin. Plugins run with full access to the in-browser Python runtime (Pyodide). Only proceed if you trust the source.",
+          )}
         </p>
         <table style={{ width: "100%", marginBottom: 8 }}>
           <tbody>
             <tr>
               <td>
-                <strong>File</strong>
+                <strong>{t("File")}</strong>
               </td>
               <td>
                 <code>{filename}</code>
@@ -52,13 +53,13 @@ export function PluginConsentDialog(props: Props) {
             </tr>
             <tr>
               <td>
-                <strong>Size</strong>
+                <strong>{t("Size")}</strong>
               </td>
-              <td>{source.length} bytes</td>
+              <td>{t("{count} bytes", { count: source.length })}</td>
             </tr>
             <tr>
               <td>
-                <strong>SHA-256</strong>
+                <strong>{t("SHA-256")}</strong>
               </td>
               <td>
                 <code style={{ fontSize: 11 }}>{hash}</code>
@@ -67,7 +68,7 @@ export function PluginConsentDialog(props: Props) {
           </tbody>
         </table>
         <details>
-          <summary>Source preview (first 30 lines)</summary>
+          <summary>{t("Source preview (first 30 lines)")}</summary>
           <pre
             style={{
               maxHeight: 240,
@@ -82,8 +83,8 @@ export function PluginConsentDialog(props: Props) {
           </pre>
         </details>
         <div className="actions">
-          <button onClick={onCancel}>Cancel</button>
-          <button onClick={onAccept}>Trust &amp; load</button>
+          <button onClick={onCancel}>{t("Cancel")}</button>
+          <button onClick={onAccept}>{t("Trust & load")}</button>
         </div>
       </div>
     </div>

@@ -42,17 +42,19 @@ import dlw_interactive_fit as _ifit
 # pylint sees them as third-party because they live outside any package.
 # pylint: disable=wrong-import-order,ungrouped-imports,import-error
 # NOTE on locale / translations:
-# ``runtime.ts`` (and ``macroWorker.ts`` for the macro Pyodide instance)
-# pin ``os.environ["LANG"] = "C"`` *before* this module — and before any
-# ``guidata`` import — so that all ``gettext _()``-wrapped labels coming
-# from ``sigima`` / ``guidata`` (e.g. ``SignalTypes.label``,
-# ``ImageTypes.label``, processing names, parameter labels…) are
-# returned in English and stay consistent with the English-only React
-# UI. Do NOT set ``LANG`` here: ``guidata.configtools.get_translation``
-# caches the translation object at first import, so any change made
-# from this module would already be too late. See the
-# "Internationalisation" section of ``README.md`` for the long-term
-# multi-language perspective.
+# ``runtime.ts`` (and ``macroWorker.ts`` / ``notebookWorker.ts`` for the
+# secondary Pyodide instances) pin ``os.environ["LANG"]`` *before* this
+# module — and before any ``guidata`` import — to the value derived from
+# the active UI locale (``C`` for English, or e.g. ``fr``). All
+# ``gettext _()``-wrapped labels coming from ``sigima`` / ``guidata``
+# (e.g. ``SignalTypes.label``, ``ImageTypes.label``, processing names,
+# parameter labels…) are then returned in the matching language and stay
+# consistent with the React UI. Do NOT set ``LANG`` here:
+# ``guidata.configtools.get_translation`` caches the translation object
+# at first import, so any change made from this module would already be
+# too late — and switching language is handled by a full page reload, so
+# a fresh Pyodide instance always boots with the right ``LANG``. See the
+# "Internationalisation" section of ``README.md``.
 import dlw_processor as _proc
 
 # ``dlw_title_format`` installs Sigima's ``PlaceholderTitleFormatter`` as

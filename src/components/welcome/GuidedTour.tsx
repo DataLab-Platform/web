@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { t } from "../../i18n/translate";
 
 export interface TourStep {
   /** Optional CSS selector(s) for the element(s) to highlight.  When
@@ -414,8 +415,8 @@ export function GuidedTour({
             type="button"
             className="guided-tour-card-close"
             onClick={onClose}
-            aria-label="Close tour"
-            title="Close (Esc)"
+            aria-label={t("Close tour")}
+            title={t("Close (Esc)")}
           >
             ×
           </button>
@@ -429,7 +430,7 @@ export function GuidedTour({
               className="guided-tour-card-skip"
               onClick={handleRestart}
             >
-              Restart
+              {t("Restart")}
             </button>
           ) : (
             <button
@@ -437,15 +438,15 @@ export function GuidedTour({
               className="guided-tour-card-skip"
               onClick={onClose}
             >
-              Skip tour
+              {t("Skip tour")}
             </button>
           )}
           <div className="guided-tour-card-nav">
             <button type="button" onClick={handlePrev} disabled={isFirst}>
-              Previous
+              {t("Previous")}
             </button>
             <button type="button" className="primary" onClick={handleNext}>
-              {isLast ? "Finish" : "Next"}
+              {isLast ? t("Finish") : t("Next")}
             </button>
           </div>
         </div>

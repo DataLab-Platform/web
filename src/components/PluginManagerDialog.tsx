@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRuntime } from "../runtime/RuntimeContext";
 import type { PluginRecord } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 import { PluginConsentDialog } from "./PluginConsentDialog";
 import {
   hashSource,
@@ -110,19 +111,19 @@ export function PluginManagerDialog({ onClose }: Props) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card" style={{ minWidth: 600, maxWidth: 900 }}>
-        <h2>Plugins</h2>
+        <h2>{t("Plugins")}</h2>
         <div
           className="actions"
           style={{ justifyContent: "flex-start", marginBottom: 8 }}
         >
           <button onClick={() => fileRef.current?.click()} disabled={busy}>
-            Load from file…
+            {t("Load from file…")}
           </button>
           <button
             onClick={handleReloadAll}
             disabled={busy || records.length === 0}
           >
-            Reload all
+            {t("Reload all")}
           </button>
           <input
             ref={fileRef}
@@ -140,10 +141,10 @@ export function PluginManagerDialog({ onClose }: Props) {
         <table className="plugins-table" style={{ width: "100%" }}>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Version</th>
-              <th>Status</th>
-              <th>File</th>
+              <th>{t("Name")}</th>
+              <th>{t("Version")}</th>
+              <th>{t("Status")}</th>
+              <th>{t("File")}</th>
               <th></th>
             </tr>
           </thead>
@@ -151,7 +152,7 @@ export function PluginManagerDialog({ onClose }: Props) {
             {records.length === 0 && (
               <tr>
                 <td colSpan={5} style={{ textAlign: "center", color: "#888" }}>
-                  No plugin loaded.
+                  {t("No plugin loaded.")}
                 </td>
               </tr>
             )}
@@ -169,10 +170,10 @@ export function PluginManagerDialog({ onClose }: Props) {
                       }}
                       style={{ color: "#c62828" }}
                     >
-                      error
+                      {t("error")}
                     </a>
                   ) : r.loaded ? (
-                    <span style={{ color: "#2e7d32" }}>loaded</span>
+                    <span style={{ color: "#2e7d32" }}>{t("loaded")}</span>
                   ) : (
                     <span>—</span>
                   )}
@@ -182,7 +183,7 @@ export function PluginManagerDialog({ onClose }: Props) {
                 </td>
                 <td>
                   <button onClick={() => handleUnload(r)} disabled={busy}>
-                    Unload
+                    {t("Unload")}
                   </button>
                 </td>
               </tr>
@@ -190,7 +191,7 @@ export function PluginManagerDialog({ onClose }: Props) {
           </tbody>
         </table>
         <div className="actions">
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{t("Close")}</button>
         </div>
       </div>
       {pending && (
@@ -210,7 +211,7 @@ export function PluginManagerDialog({ onClose }: Props) {
       {errorOpen && (
         <div className="overlay" role="dialog" aria-modal="true">
           <div className="card" style={{ minWidth: 540, maxWidth: 800 }}>
-            <h2>Plugin error</h2>
+            <h2>{t("Plugin error")}</h2>
             <p>
               <code>{errorOpen.filename}</code>
             </p>
@@ -227,7 +228,7 @@ export function PluginManagerDialog({ onClose }: Props) {
               {errorOpen.error}
             </pre>
             <div className="actions">
-              <button onClick={() => setErrorOpen(null)}>Close</button>
+              <button onClick={() => setErrorOpen(null)}>{t("Close")}</button>
             </div>
           </div>
         </div>

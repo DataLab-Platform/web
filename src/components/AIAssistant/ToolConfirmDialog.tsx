@@ -19,6 +19,7 @@ import {
 } from "@codemirror/language";
 import type { Tool } from "../../aiassistant/types";
 import { useTheme } from "../../utils/theme";
+import { t } from "../../i18n/translate";
 
 export interface ToolConfirmRequest {
   tool: Tool;
@@ -79,10 +80,11 @@ export function ToolConfirmDialog({ request }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{ width: 520, maxWidth: "90vw" }}
       >
-        <h2 id="ai-tool-confirm-title">Approve tool call?</h2>
+        <h2 id="ai-tool-confirm-title">{t("Approve tool call?")}</h2>
         <p style={{ fontSize: 13 }}>
-          The assistant wants to run the following mutating tool. Review the
-          arguments and approve or reject.
+          {t(
+            "The assistant wants to run the following mutating tool. Review the arguments and approve or reject.",
+          )}
         </p>
         <div
           style={{
@@ -166,15 +168,15 @@ export function ToolConfirmDialog({ request }: Props) {
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
           />
-          Auto-approve <code>{request.tool.name}</code> for the rest of this
-          conversation
+          {t("Auto-approve")} <code>{request.tool.name}</code>{" "}
+          {t("for the rest of this conversation")}
         </label>
         <div className="actions" style={{ marginTop: 14 }}>
           <button type="button" onClick={handleReject}>
-            Reject
+            {t("Reject")}
           </button>
           <button type="button" onClick={handleApprove}>
-            Approve
+            {t("Approve")}
           </button>
         </div>
       </div>

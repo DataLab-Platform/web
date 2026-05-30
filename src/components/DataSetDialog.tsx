@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { DataSetForm } from "./DataSetForm";
+import { t } from "../i18n/translate";
 import type {
   DynamicChoice,
   JsonSchema,
@@ -66,10 +67,10 @@ export function DataSetDialog(props: Props) {
         {error && <div className="error">{error}</div>}
         <div className="actions">
           <button onClick={onCancel} disabled={submitting}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button onClick={submit} disabled={submitting}>
-            {submitting ? "Applying…" : "OK"}
+            {submitting ? t("Applying…") : t("OK")}
           </button>
         </div>
       </div>

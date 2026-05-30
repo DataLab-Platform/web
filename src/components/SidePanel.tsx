@@ -24,6 +24,7 @@ import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
 import { useMessage } from "./ConfirmDialog";
 import { getRootIconUrl } from "../assets/rootIcons";
+import { t } from "../i18n/translate";
 
 const CREATION_ICON = getRootIconUrl("libre-gui-add.svg");
 const PROPERTIES_ICON = getRootIconUrl("properties.svg");
@@ -208,7 +209,7 @@ export function SidePanel(props: Props) {
           {CREATION_ICON && (
             <img src={CREATION_ICON} alt="" className="switcher-tab-icon" />
           )}
-          Creation
+          {t("Creation")}
         </button>
         <button
           role="tab"
@@ -221,7 +222,7 @@ export function SidePanel(props: Props) {
           {PROPERTIES_ICON && (
             <img src={PROPERTIES_ICON} alt="" className="switcher-tab-icon" />
           )}
-          Properties
+          {t("Properties")}
         </button>
         {hasProcessing && (
           <button
@@ -233,14 +234,16 @@ export function SidePanel(props: Props) {
             onClick={() => setActive("processing")}
             title={
               lastProcessing
-                ? `Edit parameters of: ${lastProcessing.label}`
+                ? t("Edit parameters of: {label}", {
+                    label: lastProcessing.label,
+                  })
                 : undefined
             }
           >
             {PROCESSING_ICON && (
               <img src={PROCESSING_ICON} alt="" className="switcher-tab-icon" />
             )}
-            Processing
+            {t("Processing")}
           </button>
         )}
         <button
@@ -252,25 +255,26 @@ export function SidePanel(props: Props) {
           {RESULTS_ICON && (
             <img src={RESULTS_ICON} alt="" className="switcher-tab-icon" />
           )}
-          Results{results.length > 0 ? ` (${results.length})` : ""}
+          {t("Results")}
+          {results.length > 0 ? ` (${results.length})` : ""}
         </button>
         <button
           type="button"
           className="side-panel-popout"
           title={
             popped
-              ? "Dock the panel back into the main window"
-              : "Open the panel in a separate floating window"
+              ? t("Dock the panel back into the main window")
+              : t("Open the panel in a separate floating window")
           }
           onClick={popped ? handleDock : handlePopOut}
-          aria-label={popped ? "Dock panel" : "Pop out panel"}
+          aria-label={popped ? t("Dock panel") : t("Pop out panel")}
         >
           {popped ? "⇲" : "⇱"}
         </button>
       </div>
       <div className="side-panel-body">
         {!currentId && (
-          <div className="side-panel-empty">No object selected.</div>
+          <div className="side-panel-empty">{t("No object selected.")}</div>
         )}
         {currentId && active === "creation" && (
           <CreationPanel

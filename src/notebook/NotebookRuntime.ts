@@ -17,6 +17,7 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "../runtime/proxyBridge";
+import { pyodideLang } from "../i18n/locale";
 
 /** Outputs are MIME bundles, exactly like Jupyter ``display_data``. */
 export type MimeBundle = Record<string, unknown>;
@@ -192,7 +193,7 @@ export class NotebookRuntime {
       this.status = "idle";
       this.workerReady = false;
     };
-    w.postMessage({ type: "init" });
+    w.postMessage({ type: "init", lang: pyodideLang() });
     return w;
   }
 

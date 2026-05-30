@@ -70,6 +70,12 @@ const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/
 
 let pyPromise: Promise<PyodideAPI> | null = null;
 
+// ``LANG`` used to boot Pyodide. Defaults to the POSIX ``C`` (English) locale
+// and is overridden by the ``lang`` field of the ``init`` message so the
+// macro worker matches the main thread's UI locale (which alone can read
+// ``localStorage`` — workers cannot). See ``runtime.ts`` for the rationale.
+let pyLang = "C";
+
 /** Load Pyodide on first use; subsequent calls return the same instance. */
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
@@ -82,15 +88,15 @@ async function getPyodide(): Promise<PyodideAPI> {
     )) as { loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI> };
     const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
 
-    // Pin ``LANG=C`` before any guidata/sigima import so gettext-wrapped
-    // labels (e.g. signal/image creation types, processing labels) come
-    // back in English and stay consistent with the React UI. See the
-    // long-form comment in ``runtime.ts`` and the "Internationalisation"
-    // section of ``README.md`` for the rationale and the path forward.
+    // Pin ``LANG`` before any guidata/sigima import so gettext-wrapped
+    // labels (e.g. signal/image creation types, processing labels) match
+    // the main thread's UI locale (``C`` = English, or e.g. ``fr``). See
+    // the long-form comment in ``runtime.ts`` and the
+    // "Internationalisation" section of ``README.md`` for the rationale.
     await py.runPythonAsync(`
 import os
-os.environ["LANG"] = "C"
-os.environ["LANGUAGE"] = "C"
+os.environ["LANG"] = ${JSON.stringify(pyLang)}
+os.environ["LANGUAGE"] = ${JSON.stringify(pyLang)}
 `);
 
     await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
@@ -219,7 +225,7 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data as
-    | { type: "init" }
+    | { type: "init"; lang?: string }
     | { type: "run"; code: string; name?: string }
     | {
         type: "bridge_reply";
@@ -230,6 +236,7 @@ self.onmessage = async (event: MessageEvent) => {
       };
   try {
     if (msg.type === "init") {
+      if (msg.lang) pyLang = msg.lang;
       await getPyodide();
       self.postMessage({ type: "ready" });
       return;

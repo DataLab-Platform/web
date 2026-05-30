@@ -1,17 +1,28 @@
 import { resolveSubmenuIcon } from "./submenuIcons";
 import type { ActionDescriptor, MenuNode } from "./types";
 import { TOP_LEVEL_ORDER } from "./types";
+import { t } from "../i18n/translate";
 
 /** Build a hierarchical menu tree from a flat list of action descriptors.
  *
  * Each action's `menuPath` is split on `/`; intermediate segments become
  * submenu folders, the last segment becomes a leaf bound to the action.
  *
+ * Menu structure (folder matching, ordering, node keys) stays in the
+ * canonical English `menuPath`; the user-visible text is carried by
+ * `displayLabel` — folder segments are translated here, while leaves
+ * reuse the (already translated) `action.label`.
+ *
  * Top-level entries are sorted following `TOP_LEVEL_ORDER`; everything else
  * keeps insertion order.
  */
 export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
-  const root: MenuNode = { label: "", path: "", children: [] };
+  const root: MenuNode = {
+    label: "",
+    displayLabel: "",
+    path: "",
+    children: [],
+  };
 
   const findOrCreateFolder = (parent: MenuNode, label: string): MenuNode => {
     parent.children = parent.children ?? [];
@@ -20,7 +31,13 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
     );
     if (!node) {
       const path = parent.path ? `${parent.path}/${label}` : label;
-      node = { label, path, children: [], iconUrl: resolveSubmenuIcon(path) };
+      node = {
+        label,
+        displayLabel: t(label),
+        path,
+        children: [],
+        iconUrl: resolveSubmenuIcon(path),
+      };
       parent.children.push(node);
     }
     return node;
@@ -36,6 +53,7 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
     parent.children = parent.children ?? [];
     parent.children.push({
       label: parts[parts.length - 1],
+      displayLabel: action.label,
       path: action.menuPath,
       action,
     });
@@ -137,6 +155,7 @@ export function buildObjectContextMenu(
     if (!action) continue;
     const node: MenuNode = {
       label: action.label,
+      displayLabel: action.label,
       path: action.menuPath,
       action: pendingSeparator ? { ...action, beginGroup: true } : action,
       iconUrl: action.iconUrl,

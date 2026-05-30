@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { getH5IconUrl } from "../assets/h5Icons";
+import { t } from "../i18n/translate";
 import type {
   H5BrowserArray,
   H5BrowserFile,
@@ -366,7 +367,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     }
     try {
       const { cancelled } = await runWithProgress({
-        title: "Importing HDF5 nodes…",
+        title: t("Importing HDF5 nodes…"),
         total: tasks.length,
         step: async (i, { setLabel }) => {
           const { fileId, nodeId } = tasks[i];
@@ -409,7 +410,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
         className="card h5browser-dialog"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="h5browser-title">HDF5 Browser</h2>
+        <h2 id="h5browser-title">{t("HDF5 Browser")}</h2>
 
         <div className="h5browser-toolbar">
           <select
@@ -418,7 +419,9 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
             onChange={(e) => setCurrentFileId(e.target.value || null)}
             disabled={files.length === 0}
           >
-            {files.length === 0 && <option value="">— no file open —</option>}
+            {files.length === 0 && (
+              <option value="">{t("— no file open —")}</option>
+            )}
             {files.map((f) => (
               <option key={f.file.file_id} value={f.file.file_id}>
                 {f.file.filename}
@@ -426,35 +429,35 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
             ))}
           </select>
           <button type="button" onClick={handleAddFile} disabled={busy}>
-            Open…
+            {t("Open…")}
           </button>
           <button
             type="button"
             onClick={handleCloseFile}
             disabled={!currentFileId || busy}
           >
-            Close
+            {t("Close")}
           </button>
           <span className="h5browser-spacer" />
           <button type="button" onClick={expandAll} disabled={!currentFile}>
-            Expand all
+            {t("Expand all")}
           </button>
           <button type="button" onClick={collapseAll} disabled={!currentFile}>
-            Collapse all
+            {t("Collapse all")}
           </button>
           <button
             type="button"
             onClick={expandSelection}
             disabled={!currentFile}
           >
-            Expand selection
+            {t("Expand selection")}
           </button>
           <button
             type="button"
             onClick={collapseSelection}
             disabled={!currentFile}
           >
-            Collapse selection
+            {t("Collapse selection")}
           </button>
         </div>
 
@@ -465,11 +468,11 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
               <table className="h5browser-tree">
                 <thead>
                   <tr>
-                    <th className="h5browser-col-name">Name</th>
-                    <th className="h5browser-col-shape">Size</th>
-                    <th className="h5browser-col-dtype">Type</th>
+                    <th className="h5browser-col-name">{t("Name")}</th>
+                    <th className="h5browser-col-shape">{t("Size")}</th>
+                    <th className="h5browser-col-dtype">{t("Type")}</th>
                     {showValues && (
-                      <th className="h5browser-col-value">Value</th>
+                      <th className="h5browser-col-value">{t("Value")}</th>
                     )}
                   </tr>
                 </thead>
@@ -489,7 +492,8 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
               </table>
             ) : (
               <div className="h5browser-empty">
-                Click <strong>Open…</strong> to load an HDF5 file.
+                {t("Click")} <strong>{t("Open…")}</strong>{" "}
+                {t("to load an HDF5 file.")}
               </div>
             )}
           </div>
@@ -509,7 +513,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
                   }
                   onClick={() => setActiveTab("group")}
                 >
-                  Group
+                  {t("Group")}
                 </button>
                 <button
                   type="button"
@@ -519,16 +523,16 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
                   }
                   onClick={() => setActiveTab("attrs")}
                 >
-                  Attributes
+                  {t("Attributes")}
                 </button>
                 <span className="h5browser-spacer" />
                 <button
                   type="button"
                   onClick={handleShowArray}
                   disabled={!isArraySelected(currentFile, selectedNodeId)}
-                  title="Show raw array data"
+                  title={t("Show raw array data")}
                 >
-                  Show array
+                  {t("Show array")}
                 </button>
               </div>
               <div className="h5browser-tab-body">
@@ -548,7 +552,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
               checked={showOnlySupported}
               onChange={(e) => setShowOnlySupported(e.target.checked)}
             />{" "}
-            Show only supported data
+            {t("Show only supported data")}
           </label>
           <label>
             <input
@@ -556,7 +560,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
               checked={showValues}
               onChange={(e) => setShowValues(e.target.checked)}
             />{" "}
-            Show values
+            {t("Show values")}
           </label>
           <span className="h5browser-spacer" />
           <button
@@ -564,25 +568,25 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
             onClick={() => toggleAll(true)}
             disabled={!currentFile}
           >
-            Check all
+            {t("Check all")}
           </button>
           <button
             type="button"
             onClick={() => toggleAll(false)}
             disabled={!currentFile}
           >
-            Uncheck all
+            {t("Uncheck all")}
           </button>
           <span className="h5browser-spacer" />
           <button type="button" onClick={handleCancel} disabled={busy}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="button"
             onClick={handleAccept}
             disabled={busy || totalChecked === 0}
           >
-            OK ({totalChecked})
+            {t("OK ({count})", { count: totalChecked })}
           </button>
         </div>
 
@@ -684,7 +688,7 @@ function TreeRows(props: TreeRowsProps): JSX.Element | null {
                 e.stopPropagation();
                 onToggleExpand(node.id);
               }}
-              aria-label={expanded ? "Collapse" : "Expand"}
+              aria-label={expanded ? t("Collapse") : t("Expand")}
             >
               {expanded ? "▾" : "▸"}
             </button>
@@ -737,12 +741,15 @@ function TreeRows(props: TreeRowsProps): JSX.Element | null {
 
 function PreviewPlot({ preview }: { preview: H5BrowserPreview | null }) {
   if (!preview) {
-    return <div className="h5browser-empty">Select a node to preview…</div>;
+    return (
+      <div className="h5browser-empty">{t("Select a node to preview…")}</div>
+    );
   }
   if (preview.kind === "unsupported") {
     return (
       <div className="h5browser-empty">
-        Unsupported data{preview.error ? ` (${preview.error})` : ""}
+        {t("Unsupported data")}
+        {preview.error ? ` (${preview.error})` : ""}
       </div>
     );
   }
@@ -794,13 +801,13 @@ function PreviewPlot({ preview }: { preview: H5BrowserPreview | null }) {
 
 function GroupTable({ attrs }: { attrs: H5BrowserNodeAttrs | null }) {
   if (!attrs) {
-    return <div className="h5browser-empty">Select a node…</div>;
+    return <div className="h5browser-empty">{t("Select a node…")}</div>;
   }
   const rows: [string, string][] = [
-    ["Path", attrs.path],
-    ["Name", attrs.name],
-    ["Description", attrs.description],
-    ["Textual preview", attrs.text_preview],
+    [t("Path"), attrs.path],
+    [t("Name"), attrs.name],
+    [t("Description"), attrs.description],
+    [t("Textual preview"), attrs.text_preview],
   ];
   return (
     <table className="h5browser-attrs">
@@ -820,11 +827,11 @@ function GroupTable({ attrs }: { attrs: H5BrowserNodeAttrs | null }) {
 
 function AttrsTable({ attrs }: { attrs: H5BrowserNodeAttrs | null }) {
   if (!attrs) {
-    return <div className="h5browser-empty">Select a node…</div>;
+    return <div className="h5browser-empty">{t("Select a node…")}</div>;
   }
   const entries = Object.entries(attrs.attributes);
   if (entries.length === 0) {
-    return <div className="h5browser-empty">No HDF5 attributes.</div>;
+    return <div className="h5browser-empty">{t("No HDF5 attributes.")}</div>;
   }
   return (
     <table className="h5browser-attrs">
@@ -881,7 +888,10 @@ function ArrayDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2>
-          Array — shape {data.shape.join(" × ")} ({data.dtype})
+          {t("Array — shape {shape} ({dtype})", {
+            shape: data.shape.join(" × "),
+            dtype: data.dtype,
+          })}
         </h2>
         <div className="h5browser-array-grid">
           <table>
@@ -904,12 +914,12 @@ function ArrayDialog({
         </div>
         {(truncatedRows || truncatedCols) && (
           <div className="h5browser-array-truncated">
-            View truncated to 200 rows × 50 columns.
+            {t("View truncated to 200 rows × 50 columns.")}
           </div>
         )}
         <div className="actions">
           <button type="button" onClick={onClose}>
-            Close
+            {t("Close")}
           </button>
         </div>
       </div>

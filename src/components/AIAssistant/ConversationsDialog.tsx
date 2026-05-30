@@ -17,6 +17,7 @@ import {
   downloadMarkdown,
   sanitizeFilename,
 } from "../../aiassistant/conversationExport";
+import { t } from "../../i18n/translate";
 
 interface Props {
   /** Called with the selected conversation id (or ``null`` to dismiss). */
@@ -116,7 +117,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        "Delete the selected conversation? This cannot be undone.",
+        t("Delete the selected conversation? This cannot be undone."),
       )
     ) {
       return;
@@ -151,10 +152,13 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{ width: 640, maxWidth: "92vw" }}
       >
-        <h2 id="ai-history-title">AI Assistant — Conversation history</h2>
+        <h2 id="ai-history-title">
+          {t("AI Assistant — Conversation history")}
+        </h2>
         <p style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 0 }}>
-          Double-click a conversation to load it. Loading replaces the current
-          one (it stays saved).
+          {t(
+            "Double-click a conversation to load it. Loading replaces the current one (it stays saved).",
+          )}
         </p>
         <div
           style={{
@@ -175,7 +179,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                 textAlign: "center",
               }}
             >
-              No saved conversations yet.
+              {t("No saved conversations yet.")}
             </div>
           )}
           {items.map((info) => {
@@ -201,7 +205,14 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                     startRename(info);
                   }
                 }}
-                title={`Created: ${formatDate(info.createdAt)}\nUpdated: ${formatDate(info.updatedAt)}\nMessages: ${info.messageCount}`}
+                title={t(
+                  "Created: {created}\nUpdated: {updated}\nMessages: {count}",
+                  {
+                    created: formatDate(info.createdAt),
+                    updated: formatDate(info.updatedAt),
+                    count: info.messageCount,
+                  },
+                )}
                 style={{
                   padding: "6px 8px",
                   borderBottom: "1px solid var(--border)",
@@ -249,7 +260,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                       data-testid="ai-history-rename-input"
                     />
                   ) : (
-                    <strong>{info.title || "(untitled)"}</strong>
+                    <strong>{info.title || t("(untitled)")}</strong>
                   )}
                   {!isEditing && isActive && (
                     <span
@@ -259,12 +270,13 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
                         color: "var(--text-dim)",
                       }}
                     >
-                      (current)
+                      {t("(current)")}
                     </span>
                   )}
                 </span>
                 <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                  {info.messageCount} msg · {formatDate(info.updatedAt)}
+                  {t("{count} msg", { count: info.messageCount })} ·{" "}
+                  {formatDate(info.updatedAt)}
                 </span>
               </div>
             );
@@ -275,7 +287,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
           style={{ marginTop: 12, display: "flex", gap: 6 }}
         >
           <button type="button" onClick={handleDelete} disabled={!selectedId}>
-            Delete
+            {t("Delete")}
           </button>
           <button
             type="button"
@@ -284,27 +296,27 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
               if (info) startRename(info);
             }}
             disabled={!selectedId || editingId !== null}
-            title="Rename the selected conversation (F2)"
+            title={t("Rename the selected conversation (F2)")}
           >
-            Rename
+            {t("Rename")}
           </button>
           <button
             type="button"
             onClick={() => void handleExport()}
             disabled={!selectedId || editingId !== null}
-            title="Download the selected conversation as Markdown"
+            title={t("Download the selected conversation as Markdown")}
           >
-            Export…
+            {t("Export…")}
           </button>
           <button type="button" onClick={() => void refresh()} disabled={busy}>
-            Refresh
+            {t("Refresh")}
           </button>
           <span style={{ flex: 1 }} />
           <button type="button" onClick={() => onClose(null)}>
-            Close
+            {t("Close")}
           </button>
           <button type="button" onClick={handleLoad} disabled={!selectedId}>
-            Load
+            {t("Load")}
           </button>
         </div>
       </div>

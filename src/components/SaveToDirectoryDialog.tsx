@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { t } from "../i18n/translate";
 
 /** One source signal exposed in the preview. */
 export interface SaveToDirectorySource {
@@ -144,7 +145,7 @@ export function SaveToDirectoryDialog(props: Props) {
   return (
     <div className="overlay">
       <div className="card" style={{ minWidth: 520, maxWidth: "90vw" }}>
-        <h2>Save to directory…</h2>
+        <h2>{t("Save to directory…")}</h2>
         <p
           style={{
             fontSize: 12,
@@ -152,11 +153,12 @@ export function SaveToDirectoryDialog(props: Props) {
             margin: "0 0 10px",
           }}
         >
-          {sources.length} object{sources.length > 1 ? "s" : ""} will be written
-          to the selected directory.
+          {t("{count} object(s) will be written to the selected directory.", {
+            count: sources.length,
+          })}
         </p>
         <div className="row">
-          <label htmlFor="stdir-pattern">Basename pattern</label>
+          <label htmlFor="stdir-pattern">{t("Basename pattern")}</label>
           <div style={{ display: "flex", gap: 6 }}>
             <input
               id="stdir-pattern"
@@ -169,14 +171,14 @@ export function SaveToDirectoryDialog(props: Props) {
             <button
               type="button"
               onClick={() => setShowHelp((v) => !v)}
-              title="Show pattern syntax help"
+              title={t("Show pattern syntax help")}
             >
               ?
             </button>
           </div>
         </div>
         <div className="row">
-          <label htmlFor="stdir-ext">Extension</label>
+          <label htmlFor="stdir-ext">{t("Extension")}</label>
           <select
             id="stdir-ext"
             value={extension}
@@ -193,14 +195,16 @@ export function SaveToDirectoryDialog(props: Props) {
           <span />
           <label
             style={{ display: "flex", alignItems: "center", gap: 6 }}
-            title="Overwrite existing files (only when writing to a real directory)"
+            title={t(
+              "Overwrite existing files (only when writing to a real directory)",
+            )}
           >
             <input
               type="checkbox"
               checked={overwrite}
               onChange={(e) => setOverwrite(e.target.checked)}
             />
-            Overwrite existing files
+            {t("Overwrite existing files")}
           </label>
         </div>
         {showHelp && (
@@ -215,11 +219,11 @@ export function SaveToDirectoryDialog(props: Props) {
               margin: "8px 0",
             }}
           >
-            {HELP_TEXT}
+            {t(HELP_TEXT)}
           </pre>
         )}
         <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 12, marginBottom: 4 }}>Preview</div>
+          <div style={{ fontSize: 12, marginBottom: 4 }}>{t("Preview")}</div>
           <div
             style={{
               border: "1px solid var(--border)",
@@ -232,10 +236,12 @@ export function SaveToDirectoryDialog(props: Props) {
             }}
           >
             {error ? (
-              <div className="error">Invalid pattern: {error}</div>
+              <div className="error">
+                {t("Invalid pattern: {error}", { error })}
+              </div>
             ) : previewFilenames.length === 0 ? (
               <div style={{ color: "var(--text-dim)" }}>
-                (computing preview…)
+                {t("(computing preview…)")}
               </div>
             ) : (
               previewFilenames.map((name, i) => (
@@ -251,10 +257,10 @@ export function SaveToDirectoryDialog(props: Props) {
         </div>
         <div className="actions">
           <button type="button" onClick={onCancel}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button type="button" onClick={handleOk} disabled={!canSubmit}>
-            OK
+            {t("OK")}
           </button>
         </div>
       </div>

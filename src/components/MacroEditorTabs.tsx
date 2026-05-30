@@ -27,6 +27,7 @@ import {
   closeBracketsKeymap,
   completionKeymap,
 } from "@codemirror/autocomplete";
+import { t } from "../i18n/translate";
 
 export interface MacroTab {
   id: string;
@@ -245,17 +246,17 @@ export function MacroEditorTabs({
   return (
     <div className="macro-editor">
       <div className="macro-tabs" role="tablist">
-        {tabs.map((t) => (
+        {tabs.map((tab) => (
           <div
-            key={t.id}
+            key={tab.id}
             role="tab"
-            aria-selected={t.id === activeId}
-            className={`macro-tab${t.id === activeId ? " active" : ""}`}
-            onClick={() => onActivate(t.id)}
-            onDoubleClick={() => onRenameRequest(t.id)}
-            title="Double-click to rename"
+            aria-selected={tab.id === activeId}
+            className={`macro-tab${tab.id === activeId ? " active" : ""}`}
+            onClick={() => onActivate(tab.id)}
+            onDoubleClick={() => onRenameRequest(tab.id)}
+            title={t("Double-click to rename")}
           >
-            {renamingId === t.id ? (
+            {renamingId === tab.id ? (
               <input
                 className="nb-tab-rename-input"
                 type="text"
@@ -273,27 +274,27 @@ export function MacroEditorTabs({
                     onCancelRename?.();
                   }
                 }}
-                aria-label="Macro name"
+                aria-label={t("Macro name")}
               />
             ) : (
-              <span className="macro-tab-title">{t.title}</span>
+              <span className="macro-tab-title">{tab.title}</span>
             )}
             <button
               type="button"
               className="macro-tab-close"
               onClick={(e) => {
                 e.stopPropagation();
-                onClose(t.id);
+                onClose(tab.id);
               }}
-              aria-label={`Close ${t.title}`}
-              title="Close tab"
+              aria-label={t("Close {title}", { title: tab.title })}
+              title={t("Close tab")}
             >
               ×
             </button>
           </div>
         ))}
         {tabs.length === 0 && (
-          <div className="macro-tabs-empty">No macro open.</div>
+          <div className="macro-tabs-empty">{t("No macro open.")}</div>
         )}
         {onNew && (
           <div className="macro-tab-new-container" ref={newMenuRef}>
@@ -310,7 +311,7 @@ export function MacroEditorTabs({
                 });
                 setNewMenuOpen((o) => !o);
               }}
-              title="New macro…"
+              title={t("New macro…")}
               aria-haspopup="menu"
               aria-expanded={newMenuOpen}
             >
@@ -326,7 +327,7 @@ export function MacroEditorTabs({
                   top: newMenuAnchor.top,
                 }}
               >
-                {(newMenuEntries ?? [{ label: "Blank macro" }]).map(
+                {(newMenuEntries ?? [{ label: t("Blank macro") }]).map(
                   (entry, i) => (
                     <button
                       type="button"

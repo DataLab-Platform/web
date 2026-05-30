@@ -8,6 +8,7 @@ import {
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 import { getEditIconUrl } from "../assets/editIcons";
 import { useConfirm } from "./ConfirmDialog";
+import { t } from "../i18n/translate";
 import { TitleWithLinks } from "./TitleWithLinks";
 
 const DELETE_ICON_URL = getEditIconUrl("delete.svg");
@@ -378,7 +379,7 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                       }}
                       onDrop={(e) => handleDrop(groupZone, e)}
                     >
-                      (empty — drop here)
+                      {t("(empty — drop here)")}
                     </li>
                   )}
                   {group.objects.map((o: ObjectNode) => {

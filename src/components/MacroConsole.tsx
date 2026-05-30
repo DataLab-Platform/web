@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import type { MacroStreamKind } from "../runtime/MacroRuntime";
+import { t } from "../i18n/translate";
 
 const MAX_LINES = 5000;
 
@@ -131,20 +132,20 @@ export const MacroConsole = forwardRef<MacroConsoleHandle, object>(
     return (
       <div className="macro-console">
         <div className="macro-console-toolbar">
-          <span className="macro-console-title">Output</span>
+          <span className="macro-console-title">{t("Output")}</span>
           <div className="macro-console-actions">
             <button type="button" onClick={handleClear}>
-              Clear
+              {t("Clear")}
             </button>
             <button type="button" onClick={handleExport}>
-              Export…
+              {t("Export…")}
             </button>
           </div>
         </div>
         <div className="macro-console-body" ref={containerRef}>
           {lines.length === 0 ? (
             <div className="macro-console-empty">
-              Run a macro to see its output here.
+              {t("Run a macro to see its output here.")}
             </div>
           ) : (
             lines.map((line, idx) => (
@@ -159,7 +160,7 @@ export const MacroConsole = forwardRef<MacroConsoleHandle, object>(
               className="macro-console-resume"
               onClick={handleResume}
             >
-              ↓ Resume auto-scroll
+              {t("↓ Resume auto-scroll")}
             </button>
           )}
         </div>

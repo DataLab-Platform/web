@@ -19,6 +19,7 @@ import type {
   InteractiveFitParam,
 } from "../runtime/runtime";
 import { useRuntime } from "../runtime/RuntimeContext";
+import { t } from "../i18n/translate";
 
 interface Props {
   oid: string;
@@ -204,7 +205,7 @@ export function InteractiveFitDialog(props: Props) {
                     y: init.y,
                     type: "scatter",
                     mode: "lines+markers",
-                    name: "Source",
+                    name: t("Source"),
                     marker: { size: 3, color: "#7aa6da" },
                     line: { color: "#7aa6da", width: 1 },
                   },
@@ -213,7 +214,7 @@ export function InteractiveFitDialog(props: Props) {
                     y: yFit,
                     type: "scatter",
                     mode: "lines",
-                    name: "Fit",
+                    name: t("Fit"),
                     line: { color: "#e07b00", width: 2 },
                   },
                 ]}
@@ -233,13 +234,13 @@ export function InteractiveFitDialog(props: Props) {
                 useResizeHandler
               />
             ) : (
-              <div className="ifit-placeholder">Loading…</div>
+              <div className="ifit-placeholder">{t("Loading…")}</div>
             )}
           </div>
           <div className="ifit-params">
             {fit.needs_degree && (
               <div className="ifit-param-row ifit-degree-row">
-                <span className="ifit-param-label">Degree</span>
+                <span className="ifit-param-label">{t("Degree")}</span>
                 <input
                   type="number"
                   min={1}
@@ -252,7 +253,7 @@ export function InteractiveFitDialog(props: Props) {
                   className="ifit-param-input"
                 />
                 <span className="ifit-degree-hint">
-                  Changing the degree resets the parameters.
+                  {t("Changing the degree resets the parameters.")}
                 </span>
               </div>
             )}
@@ -268,13 +269,13 @@ export function InteractiveFitDialog(props: Props) {
         {error && <div className="error">{error}</div>}
         <div className="actions">
           <button onClick={onCancel} disabled={busy}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button onClick={handleAutoFit} disabled={busy || !init}>
-            Auto fit
+            {t("Auto fit")}
           </button>
           <button onClick={handleOk} disabled={busy || !init}>
-            {busy ? "Working…" : "OK"}
+            {busy ? t("Working…") : t("OK")}
           </button>
         </div>
       </div>

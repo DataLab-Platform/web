@@ -17,6 +17,7 @@ import { getIoIconUrl } from "../assets/ioIcons";
 import { getRoiIconUrl } from "../assets/roiIcons";
 import { getRootIconUrl } from "../assets/rootIcons";
 import datalabIconUrl from "../assets/DataLab.svg?url";
+import { t } from "../i18n/translate";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -50,39 +51,51 @@ export function buildStaticActions(
   cb: StaticActionCallbacks,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
-  const noun = cb.panel === "image" ? "image" : "signal";
   const suffix = cb.panel === "image" ? "ima" : "sig";
-  const openLabel = `Open ${noun}…`;
-  const saveLabel = `Save ${noun}…`;
-  const openDirLabel = `Open ${noun}s from directory…`;
+  // Canonical English labels (kept literal in ``menuPath`` for a stable
+  // structural key; the displayed ``label`` is translated). Separate
+  // signal/image strings avoid gendered-article interpolation pitfalls
+  // ("Open signal…" → "Ouvrir le signal…" vs "Ouvrir l'image…").
+  const en =
+    cb.panel === "image"
+      ? {
+          open: "Open image…",
+          save: "Save image…",
+          openDir: "Open images from directory…",
+        }
+      : {
+          open: "Open signal…",
+          save: "Save signal…",
+          openDir: "Open signals from directory…",
+        };
   return [
     {
       id: "file.open",
-      label: openLabel,
-      menuPath: `File/${openLabel}`,
+      label: t(en.open),
+      menuPath: `File/${en.open}`,
       iconUrl: getIoIconUrl(`fileopen_${suffix}.svg`),
       enabled: ready,
       run: cb.onOpenFile,
     },
     {
       id: "file.open_from_directory",
-      label: openDirLabel,
-      menuPath: `File/${openDirLabel}`,
+      label: t(en.openDir),
+      menuPath: `File/${en.openDir}`,
       iconUrl: getIoIconUrl("fileopen_directory.svg"),
       enabled: ready,
       run: cb.onOpenDirectory,
     },
     {
       id: "file.save",
-      label: saveLabel,
-      menuPath: `File/${saveLabel}`,
+      label: t(en.save),
+      menuPath: `File/${en.save}`,
       iconUrl: getIoIconUrl(`filesave_${suffix}.svg`),
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onSaveFile,
     },
     {
       id: "file.save_to_directory",
-      label: "Save to directory\u2026",
+      label: t("Save to directory\u2026"),
       menuPath: "File/Save to directory\u2026",
       iconUrl: getIoIconUrl("save_to_directory.svg"),
       enabled: (s) =>
@@ -91,7 +104,7 @@ export function buildStaticActions(
     },
     {
       id: "file.import_text",
-      label: "Import text data…",
+      label: t("Import text data…"),
       menuPath: "File/Import text data…",
       iconUrl: getIoIconUrl("import_text.svg"),
       enabled: ready,
@@ -99,7 +112,7 @@ export function buildStaticActions(
     },
     {
       id: "file.open_workspace_h5",
-      label: "Open HDF5 files…",
+      label: t("Open HDF5 files…"),
       menuPath: "File/Open HDF5 files…",
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       beginGroup: true,
@@ -108,7 +121,7 @@ export function buildStaticActions(
     },
     {
       id: "file.save_workspace_h5",
-      label: "Save to HDF5 file…",
+      label: t("Save to HDF5 file…"),
       menuPath: "File/Save to HDF5 file…",
       iconUrl: getIoIconUrl("filesave_h5.svg"),
       enabled: (s) =>
@@ -117,7 +130,7 @@ export function buildStaticActions(
     },
     {
       id: "file.import_hdf5",
-      label: "Browse HDF5 file…",
+      label: t("Browse HDF5 file…"),
       menuPath: "File/Browse HDF5 file…",
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       enabled: ready,
@@ -127,7 +140,7 @@ export function buildStaticActions(
     // then per-object actions).
     {
       id: "edit.new_group",
-      label: "New group",
+      label: t("New group"),
       menuPath: "Edit/New group",
       iconUrl: getEditIconUrl("new_group.svg"),
       enabled: (s) => ready(s),
@@ -135,7 +148,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.delete",
-      label: "Delete selection",
+      label: t("Delete selection"),
       menuPath: "Edit/Delete selection",
       iconUrl: getEditIconUrl("delete.svg"),
       beginGroup: true,
@@ -144,7 +157,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.rename",
-      label: "Rename",
+      label: t("Rename"),
       menuPath: "Edit/Rename",
       iconUrl: getEditIconUrl("rename.svg"),
       beginGroup: true,
@@ -153,7 +166,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.duplicate",
-      label: "Duplicate",
+      label: t("Duplicate"),
       menuPath: "Edit/Duplicate",
       iconUrl: getEditIconUrl("duplicate.svg"),
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
@@ -161,7 +174,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.move_up",
-      label: "Move up",
+      label: t("Move up"),
       menuPath: "Edit/Move up",
       iconUrl: getEditIconUrl("move_up.svg"),
       enabled: (s) => ready(s) && s.currentId !== null,
@@ -169,7 +182,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.move_down",
-      label: "Move down",
+      label: t("Move down"),
       menuPath: "Edit/Move down",
       iconUrl: getEditIconUrl("move_down.svg"),
       enabled: (s) => ready(s) && s.currentId !== null,
@@ -177,7 +190,7 @@ export function buildStaticActions(
     },
     {
       id: "edit.properties",
-      label: "Properties…",
+      label: t("Properties…"),
       menuPath: "Edit/Properties…",
       iconUrl: getRootIconUrl("properties.svg"),
       enabled: (s) => ready(s) && s.currentId !== null,
@@ -204,7 +217,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
   return [
     {
       id: "help.welcome",
-      label: "Welcome",
+      label: t("Welcome"),
       menuPath: "Help/Welcome",
       iconUrl: datalabIconUrl,
       enabled: always,
@@ -212,7 +225,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.tour",
-      label: "Take the guided tour",
+      label: t("Take the guided tour"),
       menuPath: "Help/Take the guided tour",
       iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
       enabled: always,
@@ -220,7 +233,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.userguide",
-      label: "User guide",
+      label: t("User guide"),
       menuPath: "Help/User guide",
       iconUrl: getHelpIconUrl("libre-gui-help.svg"),
       beginGroup: true,
@@ -229,7 +242,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.releaseNotes",
-      label: "Release notes",
+      label: t("Release notes"),
       menuPath: "Help/Release notes",
       iconUrl: getHelpIconUrl("libre-gui-about.svg"),
       enabled: always,
@@ -237,7 +250,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.documentation",
-      label: "DataLab project website",
+      label: t("DataLab project website"),
       menuPath: "Help/DataLab project website",
       iconUrl: getHelpIconUrl("libre-gui-globe.svg"),
       enabled: always,
@@ -250,7 +263,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.shortcuts",
-      label: "Keyboard shortcuts",
+      label: t("Keyboard shortcuts"),
       menuPath: "Help/Keyboard shortcuts",
       iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
       enabled: always,
@@ -258,7 +271,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.console",
-      label: "Browser console log",
+      label: t("Browser console log"),
       menuPath: "Help/Browser console log",
       iconUrl: getRootIconUrl("console.svg"),
       beginGroup: true,
@@ -267,7 +280,7 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "help.about",
-      label: "About DataLab Web",
+      label: t("About DataLab Web"),
       menuPath: "Help/About DataLab Web",
       iconUrl: getHelpIconUrl("libre-gui-about.svg"),
       beginGroup: true,
@@ -317,7 +330,7 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   return [
     {
       id: "view.open_separate_view",
-      label: "View in a new window\u2026",
+      label: t("View in a new window…"),
       menuPath: "View/View in a new window\u2026",
       enabled: (s) =>
         s.status === "ready" &&
@@ -328,7 +341,7 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "view.results_overlay",
-      label: `${overlayPrefix}Show results overlay on plot`,
+      label: `${overlayPrefix}${t("Show results overlay on plot")}`,
       menuPath: `View/${overlayPrefix}Show results overlay on plot`,
       beginGroup: true,
       enabled: always,
@@ -336,14 +349,14 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "view.show_graphical_titles",
-      label: `${titlesPrefix}Show graphical object titles`,
+      label: `${titlesPrefix}${t("Show graphical object titles")}`,
       menuPath: `View/${titlesPrefix}Show graphical object titles`,
       enabled: always,
       run: cb.onToggleGraphicalTitles,
     },
     {
       id: "view.notebook_floating",
-      label: `${notebookPrefix}Detach Notebooks panel`,
+      label: `${notebookPrefix}${t("Detach Notebooks panel")}`,
       menuPath: `View/${notebookPrefix}Detach Notebooks panel`,
       beginGroup: true,
       enabled: always,
@@ -351,7 +364,7 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
     },
     {
       id: "view.macro_floating",
-      label: `${macroPrefix}Detach Macros panel`,
+      label: `${macroPrefix}${t("Detach Macros panel")}`,
       menuPath: `View/${macroPrefix}Detach Macros panel`,
       enabled: always,
       run: cb.onToggleMacroFloating,
@@ -378,7 +391,7 @@ export function buildAIAssistantActions(
   return [
     {
       id: "view.ai_assistant.toggle",
-      label: `${checkPrefix}Show AI Assistant`,
+      label: `${checkPrefix}${t("Show AI Assistant")}`,
       menuPath: `View/${checkPrefix}Show AI Assistant`,
       beginGroup: true,
       enabled: always,
@@ -386,7 +399,7 @@ export function buildAIAssistantActions(
     },
     {
       id: "view.ai_assistant.settings",
-      label: "AI Assistant settings\u2026",
+      label: t("AI Assistant settings…"),
       menuPath: "View/AI Assistant settings\u2026",
       enabled: always,
       run: cb.onOpenSettings,
@@ -401,7 +414,11 @@ export function buildFeatureActions(
 ): ActionDescriptor[] {
   return features.map((f) => ({
     id: `feature.${f.id}`,
-    label: f.label,
+    // Leaf labels may be DataLab-Web overrides (English, from
+    // ``processor.py``) or Sigima-owned strings already localised by the
+    // ``.mo`` catalog. ``t()`` is a safe pass-through for the latter (no
+    // matching key → returned unchanged) and translates the former.
+    label: t(f.label),
     menuPath: f.menu_path,
     iconUrl: getFeatureIconUrl(f.icon),
     enabled: (s) => {
@@ -424,7 +441,7 @@ export function buildInteractiveFitActions(
 ): ActionDescriptor[] {
   return fits.map((f, idx) => ({
     id: `ifit.${f.id}`,
-    label: `${f.label}\u2026`,
+    label: `${t(f.label)}\u2026`,
     menuPath: `Processing/Fitting/Interactive fitting/${f.label}`,
     beginGroup: idx === 0,
     enabled: (s) => s.status === "ready" && !s.busy && s.currentId !== null,
@@ -440,14 +457,14 @@ export function buildSignalCreationActions(
   onCreate: (stype: string) => void,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
-  return types.map((t) => ({
-    id: `create.signal.${t.value}`,
-    label: t.label,
-    menuPath: `Create/${t.label}`,
-    iconUrl: getCreateIconUrl(t.icon),
-    beginGroup: t.separator_before,
+  return types.map((ct) => ({
+    id: `create.signal.${ct.value}`,
+    label: t(ct.label),
+    menuPath: `Create/${ct.label}`,
+    iconUrl: getCreateIconUrl(ct.icon),
+    beginGroup: ct.separator_before,
     enabled: ready,
-    run: () => onCreate(t.value),
+    run: () => onCreate(ct.value),
   }));
 }
 
@@ -457,14 +474,14 @@ export function buildImageCreationActions(
   onCreate: (stype: string) => void,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
-  return types.map((t) => ({
-    id: `create.image.${t.value}`,
-    label: t.label,
-    menuPath: `Create/${t.label}`,
-    iconUrl: getCreateIconUrl(t.icon),
-    beginGroup: t.separator_before,
+  return types.map((ct) => ({
+    id: `create.image.${ct.value}`,
+    label: t(ct.label),
+    menuPath: `Create/${ct.label}`,
+    iconUrl: getCreateIconUrl(ct.icon),
+    beginGroup: ct.separator_before,
     enabled: ready,
-    run: () => onCreate(t.value),
+    run: () => onCreate(ct.value),
   }));
 }
 
@@ -492,10 +509,12 @@ function buildAnalysisActions(
   onRun: (funcId: string, hasParams: boolean) => void,
 ): ActionDescriptor[] {
   return entries.map((e) => {
-    // Substitute U+2215 (DIVISION SLASH) for ASCII "/" in labels containing
-    // a math fraction (e.g. "Full width at 1/e²"); otherwise the menu-path
-    // splitter would treat it as a sub-menu separator.  Visually identical.
-    const safeLabel = e.label.replace(/\//g, "\u2215");
+    // Translate first, then substitute U+2215 (DIVISION SLASH) for ASCII
+    // "/" in labels containing a math fraction (e.g. "Full width at
+    // 1/e²"); otherwise the menu-path splitter would treat it as a
+    // sub-menu separator. Visually identical. ``t()`` is a safe
+    // pass-through for Sigima-owned labels already localised by ``.mo``.
+    const safeLabel = t(e.label).replace(/\//g, "\u2215");
     return {
       id: `analysis.${kind}.${e.id}`,
       label: e.has_params ? `${safeLabel}…` : safeLabel,
@@ -536,7 +555,7 @@ export function buildRoiActions(
   const out: ActionDescriptor[] = [
     {
       id: "roi.edit_graphical",
-      label: roiEditMode ? "Stop graphical edit" : "Edit graphically",
+      label: roiEditMode ? t("Stop graphical edit") : t("Edit graphically"),
       menuPath: roiEditMode
         ? "ROI/Stop graphical edit"
         : "ROI/Edit graphically",
@@ -546,7 +565,7 @@ export function buildRoiActions(
     },
     {
       id: "roi.edit_numerical",
-      label: "Edit numerically…",
+      label: t("Edit numerically…"),
       menuPath: "ROI/Edit numerically…",
       iconUrl: getRoiIconUrl("roi_coordinate"),
       enabled: ready,
@@ -554,7 +573,7 @@ export function buildRoiActions(
     },
     {
       id: "roi.extract_each",
-      label: "Extract (one signal per ROI)",
+      label: t("Extract (one signal per ROI)"),
       menuPath: "ROI/Extract (one signal per ROI)",
       iconUrl: getRoiIconUrl("roi_sig"),
       beginGroup: true,
@@ -563,7 +582,7 @@ export function buildRoiActions(
     },
     {
       id: "roi.extract_merged",
-      label: "Extract (merged into one signal)",
+      label: t("Extract (merged into one signal)"),
       menuPath: "ROI/Extract (merged into one signal)",
       iconUrl: getRoiIconUrl("roi_sig"),
       enabled: readyWithRoi,
@@ -586,7 +605,7 @@ export function buildRoiActions(
   });
   out.push({
     id: "roi.remove_all",
-    label: "Remove all",
+    label: t("Remove all"),
     menuPath: "ROI/Remove/Remove all",
     iconUrl: getRoiIconUrl("roi_delete"),
     beginGroup: roi.length > 0,
@@ -631,7 +650,7 @@ export function buildImageRoiActions(
   const out: ActionDescriptor[] = [
     {
       id: "image_roi.edit_graphical",
-      label: roiEditMode ? "Stop graphical edit" : "Edit graphically",
+      label: roiEditMode ? t("Stop graphical edit") : t("Edit graphically"),
       menuPath: roiEditMode
         ? "ROI/Stop graphical edit"
         : "ROI/Edit graphically",
@@ -641,7 +660,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.add_rectangle",
-      label: "Add rectangular ROI…",
+      label: t("Add rectangular ROI…"),
       menuPath: "ROI/Add rectangular ROI…",
       iconUrl: getRoiIconUrl("roi_new_rectangle"),
       beginGroup: true,
@@ -650,7 +669,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.add_circle",
-      label: "Add circular ROI…",
+      label: t("Add circular ROI…"),
       menuPath: "ROI/Add circular ROI…",
       iconUrl: getRoiIconUrl("roi_new_circle"),
       enabled: ready,
@@ -658,7 +677,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.create_grid",
-      label: "Create ROI grid\u2026",
+      label: t("Create ROI grid\u2026"),
       menuPath: "ROI/Create ROI grid\u2026",
       iconUrl: getRoiIconUrl("roi_grid"),
       enabled: ready,
@@ -666,7 +685,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.edit_numerical",
-      label: "Edit numerically…",
+      label: t("Edit numerically…"),
       menuPath: "ROI/Edit numerically…",
       iconUrl: getRoiIconUrl("roi_coordinate"),
       beginGroup: true,
@@ -675,7 +694,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.extract_each",
-      label: "Extract (one image per ROI)",
+      label: t("Extract (one image per ROI)"),
       menuPath: "ROI/Extract (one image per ROI)",
       iconUrl: getRoiIconUrl("roi_ima"),
       beginGroup: true,
@@ -684,7 +703,7 @@ export function buildImageRoiActions(
     },
     {
       id: "image_roi.extract_merged",
-      label: "Extract (merged into one image)",
+      label: t("Extract (merged into one image)"),
       menuPath: "ROI/Extract (merged into one image)",
       iconUrl: getRoiIconUrl("roi_ima"),
       enabled: readyWithRoi,
@@ -692,7 +711,7 @@ export function buildImageRoiActions(
     },
   ];
   roi.forEach((seg, idx) => {
-    const fallback = `${seg.geometry === "rectangle" ? "Rect" : seg.geometry === "circle" ? "Circle" : "Poly"} ${idx + 1}`;
+    const fallback = `${seg.geometry === "rectangle" ? t("Rect") : seg.geometry === "circle" ? t("Circle") : t("Poly")} ${idx + 1}`;
     const safeTitle = (seg.title || fallback).replace(/\//g, "\u2215");
     out.push({
       id: `image_roi.remove.${idx}`,
@@ -706,7 +725,7 @@ export function buildImageRoiActions(
   });
   out.push({
     id: "image_roi.remove_all",
-    label: "Remove all",
+    label: t("Remove all"),
     menuPath: "ROI/Remove/Remove all",
     iconUrl: getRoiIconUrl("roi_delete"),
     beginGroup: roi.length > 0,
@@ -733,7 +752,7 @@ export function buildImageEraseActions(
   return [
     {
       id: "image.erase_area",
-      label: "Erase area\u2026",
+      label: t("Erase area\u2026"),
       menuPath: "Processing/Restoration/Erase area\u2026",
       enabled: ready,
       run: cb.onErase,
@@ -763,7 +782,7 @@ export function buildImageGridActions(
   return [
     {
       id: "image.distribute_on_grid",
-      label: "Distribute on a grid…",
+      label: t("Distribute on a grid…"),
       menuPath: "Processing/Geometry/Distribute on a grid…",
       beginGroup: true,
       enabled,
@@ -771,7 +790,7 @@ export function buildImageGridActions(
     },
     {
       id: "image.reset_positions",
-      label: "Reset image positions",
+      label: t("Reset image positions"),
       menuPath: "Processing/Geometry/Reset image positions",
       enabled,
       run: cb.onResetPositions,
@@ -797,14 +816,14 @@ export function buildPluginActions(
   const fixed: ActionDescriptor[] = [
     {
       id: "plugins.manager",
-      label: "Manage plugins…",
+      label: t("Manage plugins…"),
       menuPath: "Plugins/Manage plugins…",
       enabled: ready,
       run: cb.onOpenManager,
     },
     {
       id: "plugins.reload_all",
-      label: "Reload all plugins",
+      label: t("Reload all plugins"),
       menuPath: "Plugins/Reload all plugins",
       beginGroup: true,
       enabled: ready,

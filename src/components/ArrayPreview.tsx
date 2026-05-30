@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { ObjectStats, DataLabRuntime } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   runtime: DataLabRuntime;
@@ -91,7 +92,8 @@ function SignalArrayPreview({
   }, [data, oid]);
 
   if (error) return <div className="array-preview-error">{error}</div>;
-  if (!data) return <div className="array-preview-loading">Loading data…</div>;
+  if (!data)
+    return <div className="array-preview-loading">{t("Loading data…")}</div>;
 
   // Compute head + tail (with an ellipsis row when the array is long
   // enough to justify it).
@@ -109,17 +111,20 @@ function SignalArrayPreview({
   }
 
   return (
-    <section className="array-preview" aria-label="Data preview">
+    <section className="array-preview" aria-label={t("Data preview")}>
       <header className="array-preview-header">
         <h3 className="array-preview-title">
-          Data ({total} {total === 1 ? "point" : "points"})
+          {t("Data ({count} {unit})", {
+            count: total,
+            unit: total === 1 ? t("point") : t("points"),
+          })}
         </h3>
         <div className="array-preview-actions">
           <button type="button" onClick={handleCopyCsv}>
-            Copy CSV
+            {t("Copy CSV")}
           </button>
           <button type="button" onClick={handleDownload}>
-            Download
+            {t("Download")}
           </button>
         </div>
       </header>
@@ -161,15 +166,19 @@ function ImageArrayPreview({
   stats: Extract<ObjectStats, { kind: "image" }>;
 }) {
   return (
-    <section className="array-preview" aria-label="Data preview">
+    <section className="array-preview" aria-label={t("Data preview")}>
       <header className="array-preview-header">
         <h3 className="array-preview-title">
-          Image data ({stats.shape.join(" × ")} {stats.dtype})
+          {t("Image data ({shape} {dtype})", {
+            shape: stats.shape.join(" × "),
+            dtype: stats.dtype,
+          })}
         </h3>
       </header>
       <p className="array-preview-info">
-        Image data preview is not yet available — see the main canvas and the
-        statistics card above.
+        {t(
+          "Image data preview is not yet available — see the main canvas and the statistics card above.",
+        )}
       </p>
     </section>
   );

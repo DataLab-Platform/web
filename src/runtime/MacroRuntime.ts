@@ -13,6 +13,7 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "./proxyBridge";
+import { pyodideLang } from "../i18n/locale";
 
 export type MacroStreamKind = "stdout" | "stderr" | "system";
 
@@ -140,7 +141,7 @@ export class MacroRuntime {
       this.currentRun = null;
       this.state = "idle";
     };
-    w.postMessage({ type: "init" });
+    w.postMessage({ type: "init", lang: pyodideLang() });
     return w;
   }
 
@@ -157,7 +158,7 @@ export class MacroRuntime {
       }
       // Warm worker should not receive anything else before adoption.
     };
-    w.postMessage({ type: "init" });
+    w.postMessage({ type: "init", lang: pyodideLang() });
     this.warmWorker = w;
     // Track readiness for adoptWarmWorker(); we only adopt if ready.
     (w as unknown as { __ready: () => boolean }).__ready = () => ready;

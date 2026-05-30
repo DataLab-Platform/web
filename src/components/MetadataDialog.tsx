@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ObjectMeta } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   initial: ObjectMeta;
@@ -22,30 +23,30 @@ export function MetadataDialog({ initial, onSubmit, onCancel }: Props) {
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit}>
-          <h2>Edit metadata</h2>
+          <h2>{t("Edit metadata")}</h2>
           <div className="dialog-form">
-            <label>Title</label>
+            <label>{t("Title")}</label>
             <input
               autoFocus
               value={values.title}
               onChange={(e) => update("title", e.target.value)}
             />
-            <label>X label</label>
+            <label>{t("X label")}</label>
             <input
               value={values.xlabel}
               onChange={(e) => update("xlabel", e.target.value)}
             />
-            <label>X unit</label>
+            <label>{t("X unit")}</label>
             <input
               value={values.xunit}
               onChange={(e) => update("xunit", e.target.value)}
             />
-            <label>Y label</label>
+            <label>{t("Y label")}</label>
             <input
               value={values.ylabel}
               onChange={(e) => update("ylabel", e.target.value)}
             />
-            <label>Y unit</label>
+            <label>{t("Y unit")}</label>
             <input
               value={values.yunit}
               onChange={(e) => update("yunit", e.target.value)}
@@ -53,9 +54,9 @@ export function MetadataDialog({ initial, onSubmit, onCancel }: Props) {
           </div>
           <div className="dialog-actions">
             <button type="button" onClick={onCancel}>
-              Cancel
+              {t("Cancel")}
             </button>
-            <button type="submit">OK</button>
+            <button type="submit">{t("OK")}</button>
           </div>
         </form>
       </div>

@@ -14,6 +14,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarkdownView } from "../AIAssistant/MarkdownView";
+import { t } from "../../i18n/translate";
 import welcomeMd from "../../../doc/userguide/welcome.md?raw";
 import differencesMd from "../../../doc/userguide/differences-from-desktop.md?raw";
 import engineMd from "../../../doc/userguide/computation-engine.md?raw";
@@ -132,16 +133,16 @@ export function UserGuidePanel({ onClose }: Props) {
       className="userguide-panel panel"
       data-testid="userguide-panel"
       role="complementary"
-      aria-label="User guide"
+      aria-label={t("User guide")}
     >
       <div className="panel-header userguide-header">
-        <span style={{ flex: 1 }}>User guide</span>
+        <span style={{ flex: 1 }}>{t("User guide")}</span>
         <button
           type="button"
           className="userguide-button"
           onClick={onClose}
-          title="Close user guide"
-          aria-label="Close user guide"
+          title={t("Close user guide")}
+          aria-label={t("Close user guide")}
         >
           ×
         </button>
@@ -149,7 +150,7 @@ export function UserGuidePanel({ onClose }: Props) {
       <div className="userguide-body">
         <nav
           className="userguide-toc"
-          aria-label="User guide table of contents"
+          aria-label={t("User guide table of contents")}
         >
           <ul>
             {PAGES.map((page) => (
@@ -163,7 +164,7 @@ export function UserGuidePanel({ onClose }: Props) {
                   }
                   onClick={() => goToPage(page.slug)}
                 >
-                  {page.title}
+                  {t(page.title)}
                 </button>
               </li>
             ))}

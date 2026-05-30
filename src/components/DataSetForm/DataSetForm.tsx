@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
+import { t } from "../../i18n/translate";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -166,14 +167,14 @@ function TabGroup({
   return (
     <div className="dataset-form-tabs">
       <div className="dataset-form-tab-bar">
-        {tabs.map((t, idx) => (
+        {tabs.map((tab, idx) => (
           <button
             key={idx}
             type="button"
             className={idx === active ? "active" : ""}
             onClick={() => setActive(idx)}
             dangerouslySetInnerHTML={{
-              __html: t.label || `Tab ${idx + 1}`,
+              __html: tab.label || t("Tab {n}", { n: idx + 1 }),
             }}
           />
         ))}
@@ -530,7 +531,7 @@ function FileField({ prop, value, onChange, disabled }: LeafProps) {
       <input
         type="text"
         value={list}
-        placeholder="path1; path2; …"
+        placeholder={t("path1; path2; …")}
         disabled={disabled}
         onChange={(e) =>
           onChange(
@@ -548,7 +549,7 @@ function FileField({ prop, value, onChange, disabled }: LeafProps) {
     <input
       type="text"
       value={v}
-      placeholder={mode === "directory" ? "directory path" : "file path"}
+      placeholder={mode === "directory" ? t("directory path") : t("file path")}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
     />
@@ -564,7 +565,7 @@ function FloatArrayField({ value, onChange, disabled }: LeafProps) {
     <input
       type="text"
       value={text}
-      placeholder="1, 2, 3, …"
+      placeholder={t("1, 2, 3, …")}
       disabled={disabled}
       onChange={(e) => {
         const next = e.target.value

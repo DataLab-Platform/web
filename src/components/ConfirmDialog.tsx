@@ -26,6 +26,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { t } from "../i18n/translate";
+
 // ---------------------------------------------------------------------
 // Confirm
 // ---------------------------------------------------------------------
@@ -54,8 +56,8 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   const {
     message,
     title,
-    confirmLabel = "OK",
-    cancelLabel = "Cancel",
+    confirmLabel = t("OK"),
+    cancelLabel = t("Cancel"),
     destructive = false,
   } = options;
   useEffect(() => {
@@ -69,7 +71,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card">
-        <h2>{title || "Confirm"}</h2>
+        <h2>{title || t("Confirm")}</h2>
         <p style={{ whiteSpace: "pre-wrap" }}>{message}</p>
         <div className="actions">
           <button onClick={() => onAnswer(false)}>{cancelLabel}</button>
@@ -118,7 +120,7 @@ const HEADING_BY_KIND: Record<MessageKind, string> = {
 /** Pure presentational alert dialog. */
 export function MessageDialog(props: MessageDialogProps) {
   const { options, onClose } = props;
-  const { message, kind = "info", title, closeLabel = "OK" } = options;
+  const { message, kind = "info", title, closeLabel = t("OK") } = options;
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter") onClose();
@@ -129,7 +131,7 @@ export function MessageDialog(props: MessageDialogProps) {
   return (
     <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="card" onClick={(e) => e.stopPropagation()}>
-        <h2>{title || HEADING_BY_KIND[kind]}</h2>
+        <h2>{title || t(HEADING_BY_KIND[kind])}</h2>
         <p style={{ whiteSpace: "pre-wrap" }}>{message}</p>
         <div className="actions">
           <button onClick={onClose} autoFocus>
@@ -170,8 +172,8 @@ export function PromptDialog(props: PromptDialogProps) {
     message,
     title,
     defaultValue = "",
-    confirmLabel = "OK",
-    cancelLabel = "Cancel",
+    confirmLabel = t("OK"),
+    cancelLabel = t("Cancel"),
     placeholder,
   } = options;
   const [value, setValue] = useState(defaultValue);
@@ -190,7 +192,7 @@ export function PromptDialog(props: PromptDialogProps) {
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="card">
-        <h2>{title || "Input"}</h2>
+        <h2>{title || t("Input")}</h2>
         <p style={{ whiteSpace: "pre-wrap", marginBottom: 8 }}>{message}</p>
         <input
           ref={inputRef}

@@ -35,6 +35,7 @@ import {
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
 import { useConfirm } from "./ConfirmDialog";
+import { t } from "../i18n/translate";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
@@ -453,12 +454,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     const closeTab = useCallback(
       async (id: string) => {
         const macro = macros.find((m) => m.id === id);
-        const label = macro?.title ?? "this macro";
+        const label = macro?.title ?? t("this macro");
         if (
           !(await confirm({
-            title: "Close macro",
-            message: `Close macro "${label}"? It will stay in the workspace and the recent cache.`,
-            confirmLabel: "Close",
+            title: t("Close macro"),
+            message: t(
+              'Close macro "{label}"? It will stay in the workspace and the recent cache.',
+              { label },
+            ),
+            confirmLabel: t("Close"),
           }))
         ) {
           return;
@@ -516,7 +520,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     const commitRename = useCallback(() => {
       const id = renamingId;
       if (id == null) return;
-      const trimmed = renameDraft.trim() || "Untitled";
+      const trimmed = renameDraft.trim() || t("Untitled");
       setRenamingId(null);
       const current = macros.find((x) => x.id === id);
       if (!current || current.title === trimmed) return;
@@ -622,34 +626,55 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             const e = res.syntax_error;
             cons?.append(
               "stderr",
-              `✗ Syntax error at line ${e.line}, col ${e.col + 1}: ${e.message}\n`,
+              t("✗ Syntax error at line {line}, col {col}: {message}", {
+                line: e.line,
+                col: e.col + 1,
+                message: e.message,
+              }) + "\n",
             );
             return false;
           }
           for (const u of res.unknown_methods) {
             cons?.append(
               "stderr",
-              `✗ Unknown proxy method "${u.name}" at line ${u.line}, col ${u.col + 1}\n`,
+              t('✗ Unknown proxy method "{name}" at line {line}, col {col}', {
+                name: u.name,
+                line: u.line,
+                col: u.col + 1,
+              }) + "\n",
             );
           }
           for (const m2 of res.missing_await) {
             cons?.append(
               "stderr",
-              `✗ Missing "await" before proxy.${m2.name}(...) at line ${m2.line}, col ${m2.col + 1}\n`,
+              t(
+                '✗ Missing "await" before proxy.{name}(...) at line {line}, col {col}',
+                {
+                  name: m2.name,
+                  line: m2.line,
+                  col: m2.col + 1,
+                },
+              ) + "\n",
             );
           }
           if (res.ok && announceSuccess) {
             const n = res.proxy_calls.length;
             cons?.append(
               "stdout",
-              `✓ Validation passed (${n} proxy call${n === 1 ? "" : "s"})\n`,
+              (n === 1
+                ? t("✓ Validation passed (1 proxy call)")
+                : t("✓ Validation passed ({count} proxy calls)", {
+                    count: n,
+                  })) + "\n",
             );
           }
           return res.ok;
         } catch (err) {
           cons?.append(
             "stderr",
-            `✗ Validation failed: ${err instanceof Error ? err.message : String(err)}\n`,
+            t("✗ Validation failed: {error}", {
+              error: err instanceof Error ? err.message : String(err),
+            }) + "\n",
           );
           return false;
         }
@@ -671,7 +696,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       if (!ok) {
         consoleRef.current?.append(
           "stderr",
-          "✗ Macro not started: fix the issues above (or press ✓ Validate to re-check).\n",
+          t(
+            "✗ Macro not started: fix the issues above (or press ✓ Validate to re-check).",
+          ) + "\n",
         );
         return;
       }
@@ -750,9 +777,11 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         if (!meta) return;
         if (
           !(await confirm({
-            title: "Remove from recent",
-            message: `Remove macro "${meta.title}" from recent cache?`,
-            confirmLabel: "Remove",
+            title: t("Remove from recent"),
+            message: t('Remove macro "{title}" from recent cache?', {
+              title: meta.title,
+            }),
+            confirmLabel: t("Remove"),
             destructive: true,
           }))
         ) {
@@ -828,18 +857,18 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
 
     const newMenuEntries: MacroNewMenuEntry[] = useMemo(
       () => [
-        { label: "Blank macro", description: "Start from scratch" },
-        ...TEMPLATES.map((t) => ({
-          label: `From template: ${t.label}`,
-          description: t.description,
-          templateCode: t.code,
+        { label: t("Blank macro"), description: t("Start from scratch") },
+        ...TEMPLATES.map((tpl) => ({
+          label: t("From template: {label}", { label: t(tpl.label) }),
+          description: t(tpl.description),
+          templateCode: tpl.code,
         })),
       ],
       [],
     );
 
     const openIdsSet = useMemo(() => new Set(openIds), [openIds]);
-    const runStatusLabel = running ? "● Macro running" : "○ Idle";
+    const runStatusLabel = running ? t("● Macro running") : t("○ Idle");
 
     return (
       <div className="macro-panel">
@@ -849,27 +878,29 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             className="macro-btn primary"
             onClick={handleRun}
             disabled={running || !activeId}
-            title="Run current macro (Ctrl+Enter)"
+            title={t("Run current macro (Ctrl+Enter)")}
           >
-            ▶ Run
+            ▶ {t("Run")}
           </button>
           <button
             type="button"
             className="macro-btn"
             onClick={handleStop}
             disabled={!running}
-            title="Stop current macro"
+            title={t("Stop current macro")}
           >
-            ■ Stop
+            ■ {t("Stop")}
           </button>
           <button
             type="button"
             className="macro-btn"
             onClick={handleValidate}
             disabled={!activeId}
-            title="Statically lint current macro (syntax, proxy API, missing await)"
+            title={t(
+              "Statically lint current macro (syntax, proxy API, missing await)",
+            )}
           >
-            ✓ Validate
+            ✓ {t("Validate")}
           </button>
           <span className="macro-toolbar-sep" />
           <button
@@ -877,18 +908,18 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             className="macro-btn"
             onClick={handleDuplicate}
             disabled={!activeId}
-            title="Duplicate current macro"
+            title={t("Duplicate current macro")}
           >
-            ⧉ Duplicate
+            ⧉ {t("Duplicate")}
           </button>
           <span className="macro-toolbar-sep" />
           <button
             type="button"
             className="macro-btn"
             onClick={handleImport}
-            title="Import .py file from disk"
+            title={t("Import .py file from disk")}
           >
-            Import…
+            {t("Import…")}
           </button>
           <div className="macro-recent-wrapper" ref={recentMenuRef}>
             <button
@@ -896,15 +927,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
               className="macro-btn"
               onClick={() => setRecentMenuOpen((o) => !o)}
               disabled={recentList.length === 0}
-              title="Open macro from recent cache"
+              title={t("Open macro from recent cache")}
             >
-              Recent… ({recentList.length})
+              {t("Recent… ({count})", { count: recentList.length })}
             </button>
             {recentMenuOpen && (
               <div className="macro-recent-menu" role="menu">
                 {recentList.length === 0 && (
                   <div className="macro-recent-menu-empty">
-                    No macros in recent cache.
+                    {t("No macros in recent cache.")}
                   </div>
                 )}
                 {recentList.map((m) => {
@@ -923,13 +954,16 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                         onClick={() => handleOpenRecent(m.id)}
                         title={
                           alreadyOpen
-                            ? `Already open — click to focus tab (last seen ${when})`
-                            : `Last seen ${when}`
+                            ? t(
+                                "Already open — click to focus tab (last seen {when})",
+                                { when },
+                              )
+                            : t("Last seen {when}", { when })
                         }
                       >
                         <span className="macro-recent-menu-name-text">
                           {m.title}
-                          {alreadyOpen ? " (open)" : ""}
+                          {alreadyOpen ? t(" (open)") : ""}
                         </span>
                         <span className="macro-recent-menu-name-when">
                           {when}
@@ -939,8 +973,10 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                         type="button"
                         className="macro-recent-menu-delete"
                         onClick={() => handleDeleteRecent(m.id)}
-                        title="Remove from recent cache"
-                        aria-label={`Remove ${m.title} from recent cache`}
+                        title={t("Remove from recent cache")}
+                        aria-label={t("Remove {title} from recent cache", {
+                          title: m.title,
+                        })}
                       >
                         ×
                       </button>
@@ -955,9 +991,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             className="macro-btn"
             onClick={handleExport}
             disabled={!activeId}
-            title="Export current macro as .py"
+            title={t("Export current macro as .py")}
           >
-            Export…
+            {t("Export…")}
           </button>
           {onConvertToNotebook && (
             <button
@@ -965,9 +1001,11 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
               className="macro-btn"
               onClick={handleConvertToNotebook}
               disabled={!activeId}
-              title="Open this macro as a new notebook (cells split on # %% markers)"
+              title={t(
+                "Open this macro as a new notebook (cells split on # %% markers)",
+              )}
             >
-              Convert to notebook
+              {t("Convert to notebook")}
             </button>
           )}
           <input
@@ -986,14 +1024,14 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
               onClick={onTogglePlacement}
               title={
                 placement === "floating"
-                  ? "Dock this panel as a central tab"
-                  : "Detach this panel as a floating overlay"
+                  ? t("Dock this panel as a central tab")
+                  : t("Detach this panel as a floating overlay")
               }
               aria-label={
-                placement === "floating" ? "Dock Macros" : "Detach Macros"
+                placement === "floating" ? t("Dock Macros") : t("Detach Macros")
               }
             >
-              {placement === "floating" ? "↙ Dock" : "↗ Detach"}
+              {placement === "floating" ? t("↙ Dock") : t("↗ Detach")}
             </button>
           )}
         </div>
@@ -1022,7 +1060,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             min={150}
             max={800}
             onChange={setEditorHeight}
-            ariaLabel="Resize macro editor"
+            ariaLabel={t("Resize macro editor")}
           />
           <div className="macro-console-wrap">
             <MacroConsole ref={consoleRef} />

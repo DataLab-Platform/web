@@ -23,6 +23,7 @@ import {
   type ConnectionProbeResult,
 } from "../../aiassistant/settings";
 import type { ProviderSettings } from "../../aiassistant/types";
+import { t } from "../../i18n/translate";
 
 interface Props {
   onClose: () => void;
@@ -127,10 +128,10 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
         onClick={(e) => e.stopPropagation()}
         style={{ width: 480, maxWidth: "90vw" }}
       >
-        <h2 id="ai-settings-title">AI Assistant — Settings</h2>
+        <h2 id="ai-settings-title">{t("AI Assistant — Settings")}</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Provider</span>
+            <span>{t("Provider")}</span>
             <select
               value={settings.provider}
               onChange={(e) =>
@@ -140,18 +141,19 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
                 )
               }
             >
-              <option value="openai">OpenAI-compatible (network)</option>
+              <option value="openai">{t("OpenAI-compatible (network)")}</option>
               <option value="mock">
-                Mock provider (deterministic, no network)
+                {t("Mock provider (deterministic, no network)")}
               </option>
             </select>
             <small style={{ color: "var(--text-dim)" }}>
-              The mock provider replays a scripted set of responses — used by
-              tests and demos, never reaches out to the network.
+              {t(
+                "The mock provider replays a scripted set of responses — used by tests and demos, never reaches out to the network.",
+              )}
             </small>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Endpoint preset</span>
+            <span>{t("Endpoint preset")}</span>
             <select
               value={activePreset.id}
               onChange={(e) => handlePresetChange(e.target.value)}
@@ -170,7 +172,7 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
             )}
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Base URL</span>
+            <span>{t("Base URL")}</span>
             <input
               type="text"
               value={settings.baseUrl}
@@ -178,12 +180,13 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               placeholder="https://api.openai.com/v1"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              OpenAI-compatible endpoint. Pick a preset above for a one-click
-              local setup (Ollama, LM Studio, llama.cpp, vLLM).
+              {t(
+                "OpenAI-compatible endpoint. Pick a preset above for a one-click local setup (Ollama, LM Studio, llama.cpp, vLLM).",
+              )}
             </small>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Model</span>
+            <span>{t("Model")}</span>
             <input
               type="text"
               value={settings.model}
@@ -192,7 +195,7 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
             />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>API key</span>
+            <span>{t("API key")}</span>
             <input
               type="password"
               value={settings.apiKey}
@@ -201,23 +204,27 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               autoComplete="off"
             />
             <small style={{ color: "var(--text-dim)" }}>
-              Encrypted at rest in this browser (AES-GCM, non-extractable key in
-              IndexedDB). This protects against passive disk reads but not
-              against malicious code running in this page. Leave blank for local
-              endpoints that don't require authentication.
+              {t(
+                "Encrypted at rest in this browser (AES-GCM, non-extractable key in IndexedDB). This protects against passive disk reads but not against malicious code running in this page. Leave blank for local endpoints that don't require authentication.",
+              )}
               {devKeyAvailable && (
                 <>
                   {" "}
                   <strong>
-                    Pre-filled from the <code>OPENAI_API_KEY</code> environment
-                    variable detected by the Vite dev server.
+                    {t(
+                      "Pre-filled from the OPENAI_API_KEY environment variable detected by the Vite dev server.",
+                    )}
                   </strong>
                 </>
               )}
             </small>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Temperature ({settings.temperature.toFixed(2)})</span>
+            <span>
+              {t("Temperature ({value})", {
+                value: settings.temperature.toFixed(2),
+              })}
+            </span>
             <input
               type="range"
               min={0}
@@ -230,7 +237,7 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
             />
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span>Max history messages (0 = unlimited)</span>
+            <span>{t("Max history messages (0 = unlimited)")}</span>
             <input
               type="number"
               min={0}
@@ -246,12 +253,9 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
               }}
             />
             <small style={{ color: "var(--text-dim)" }}>
-              Cap the number of past messages (user + assistant + tool) sent to
-              the provider on each request. Useful with local models that have a
-              small context window (e.g. <code>n_ctx=4096</code> on llama.cpp):
-              if the conversation grows beyond the model&apos;s context, the
-              server returns HTTP 400. Set to 0 to disable the cap. The system
-              prompt and the current user turn are always preserved.
+              {t(
+                "Cap the number of past messages (user + assistant + tool) sent to the provider on each request. Useful with local models that have a small context window (e.g. n_ctx=4096 on llama.cpp): if the conversation grows beyond the model's context, the server returns HTTP 400. Set to 0 to disable the cap. The system prompt and the current user turn are always preserved.",
+              )}
             </small>
           </label>
           {settings.provider === "openai" && (
@@ -269,7 +273,7 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
                   onClick={handleTestConnection}
                   disabled={probing || !settings.baseUrl.trim()}
                 >
-                  {probing ? "Testing…" : "Test connection"}
+                  {probing ? t("Testing…") : t("Test connection")}
                 </button>
                 {probe && (
                   <span
@@ -297,14 +301,14 @@ export function AISettingsDialog({ onClose, onSaved }: Props) {
         </div>
         <div className="actions" style={{ marginTop: 16 }}>
           <button type="button" onClick={handleReset}>
-            Reset to defaults
+            {t("Reset to defaults")}
           </button>
           <span style={{ flex: 1 }} />
           <button type="button" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button type="button" onClick={handleSave}>
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>

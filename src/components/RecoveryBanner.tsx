@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { t } from "../i18n/translate";
 
 /**
  * Cold-start recovery banner.
@@ -43,8 +44,8 @@ export interface RecoveryBannerProps {
   saveDisabled?: boolean;
 }
 
-function pluralise(n: number, singular: string, plural?: string): string {
-  return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`;
+function pluralise(n: number, singularKey: string, pluralKey: string): string {
+  return t(n === 1 ? singularKey : pluralKey, { count: n });
 }
 
 export function RecoveryBanner({
@@ -64,9 +65,13 @@ export function RecoveryBanner({
   // Build a "N macros and M notebooks" sentence; collapse when one
   // side is zero so we don't say "0 macros".
   const parts: string[] = [];
-  if (macroCount > 0) parts.push(pluralise(macroCount, "macro"));
-  if (notebookCount > 0) parts.push(pluralise(notebookCount, "notebook"));
-  const summary = parts.join(" and ");
+  if (macroCount > 0)
+    parts.push(pluralise(macroCount, "{count} macro", "{count} macros"));
+  if (notebookCount > 0)
+    parts.push(
+      pluralise(notebookCount, "{count} notebook", "{count} notebooks"),
+    );
+  const summary = parts.join(` ${t("and")} `);
 
   return (
     <div
@@ -75,9 +80,12 @@ export function RecoveryBanner({
       data-testid="recovery-banner"
     >
       <div className="recovery-banner-message">
-        <strong>Recovered {summary} from the previous session.</strong> Signals
-        and images were not restored — only macros and notebooks are cached in
-        the browser. Save an HDF5 workspace to make the current state durable.
+        <strong>
+          {t("Recovered {summary} from the previous session.", { summary })}
+        </strong>{" "}
+        {t(
+          "Signals and images were not restored — only macros and notebooks are cached in the browser. Save an HDF5 workspace to make the current state durable.",
+        )}
       </div>
       <div className="recovery-banner-actions">
         <button
@@ -86,15 +94,15 @@ export function RecoveryBanner({
           onClick={handleSave}
           disabled={saveDisabled}
         >
-          Save to HDF5 file…
+          {t("Save to HDF5 file…")}
         </button>
         <button
           type="button"
           className="recovery-banner-dismiss"
           onClick={handleDismiss}
-          aria-label="Dismiss recovery banner"
+          aria-label={t("Dismiss recovery banner")}
         >
-          Dismiss
+          {t("Dismiss")}
         </button>
       </div>
     </div>

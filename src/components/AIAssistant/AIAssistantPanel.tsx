@@ -44,6 +44,7 @@ import {
   type Conversation,
 } from "../../aiassistant/conversationStore";
 import { InputHistory } from "../../aiassistant/inputHistory";
+import { t } from "../../i18n/translate";
 
 interface Props {
   runtime: DataLabRuntime;
@@ -326,7 +327,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     if (!text || busy) return;
     if (!isConfigured(settings)) {
       setErrorMessage(
-        "Configure base URL and model in Settings before sending a message.",
+        t("Configure base URL and model in Settings before sending a message."),
       );
       return;
     }
@@ -450,14 +451,14 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           padding: "6px 8px",
         }}
       >
-        <span style={{ flex: 1 }}>AI Assistant</span>
+        <span style={{ flex: 1 }}>{t("AI Assistant")}</span>
         <button
           type="button"
           className="ai-panel-button ai-panel-icon-button"
           onClick={handleNewConversation}
           disabled={busy || transcript.length === 0}
-          title="Start a new conversation"
-          aria-label="New conversation"
+          title={t("Start a new conversation")}
+          aria-label={t("New conversation")}
         >
           <NewConversationIcon />
         </button>
@@ -466,8 +467,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           className="ai-panel-button ai-panel-icon-button"
           onClick={() => setShowHistory(true)}
           disabled={busy}
-          title="Browse, load or delete past conversations"
-          aria-label="Conversation history"
+          title={t("Browse, load or delete past conversations")}
+          aria-label={t("Conversation history")}
         >
           <HistoryIcon />
         </button>
@@ -475,8 +476,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           type="button"
           className="ai-panel-button ai-panel-icon-button"
           onClick={() => setShowSettings(true)}
-          title="Provider settings"
-          aria-label="Settings"
+          title={t("Provider settings")}
+          aria-label={t("Settings")}
         >
           <SettingsIcon />
         </button>
@@ -485,8 +486,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             type="button"
             className="ai-panel-button ai-panel-icon-button"
             onClick={onMinimize}
-            title="Minimise to floating button"
-            aria-label="Minimise AI Assistant"
+            title={t("Minimise to floating button")}
+            aria-label={t("Minimise AI Assistant")}
           >
             <MinimiseIcon />
           </button>
@@ -496,8 +497,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             type="button"
             className="ai-panel-button ai-panel-icon-button"
             onClick={onClose}
-            title="Hide AI Assistant"
-            aria-label="Hide AI Assistant"
+            title={t("Hide AI Assistant")}
+            aria-label={t("Hide AI Assistant")}
           >
             <CloseIcon />
           </button>
@@ -525,9 +526,9 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
               textAlign: "center",
             }}
           >
-            Ask the assistant to inspect the workspace, list available
-            processings, or apply one to the current selection. Mutating calls
-            will require your approval.
+            {t(
+              "Ask the assistant to inspect the workspace, list available processings, or apply one to the current selection. Mutating calls will require your approval.",
+            )}
           </div>
         )}
         {transcript.map((entry, idx) => (
@@ -569,7 +570,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
               fontStyle: "italic",
             }}
           >
-            Thinking…
+            {t("Thinking…")}
           </div>
         )}
         {errorMessage && (
@@ -606,8 +607,10 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           // (a) press Esc to stop and (b) start drafting the next prompt.
           // ``handleSend`` early-returns while ``busy`` so an accidental
           // Enter doesn't queue a second turn.
-          placeholder="Ask the assistant… (Enter to send, Shift+Enter newline, Ctrl+Up/Down: history, Esc to stop)"
-          aria-label="AI Assistant input"
+          placeholder={t(
+            "Ask the assistant… (Enter to send, Shift+Enter newline, Ctrl+Up/Down: history, Esc to stop)",
+          )}
+          aria-label={t("AI Assistant input")}
           style={{
             width: "100%",
             resize: "vertical",
@@ -637,10 +640,10 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
             <button
               type="button"
               onClick={handleStop}
-              title="Stop the assistant (Esc)"
+              title={t("Stop the assistant (Esc)")}
               style={{ background: "var(--danger, #c0392b)", color: "white" }}
             >
-              Stop
+              {t("Stop")}
             </button>
           ) : (
             <button
@@ -648,7 +651,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
               onClick={() => void handleSend()}
               disabled={!input.trim()}
             >
-              Send
+              {t("Send")}
             </button>
           )}
         </div>
@@ -699,22 +702,28 @@ function formatUsageBadge(turn: TokenUsage, cumulative: TokenUsage): string {
 function formatUsageTooltip(turn: TokenUsage, cumulative: TokenUsage): string {
   const parts: string[] = [];
   if (typeof turn.promptTokens === "number" && turn.promptTokens > 0) {
-    parts.push(`Last request context size: ${turn.promptTokens} tokens`);
+    parts.push(
+      t("Last request context size: {count} tokens", {
+        count: turn.promptTokens,
+      }),
+    );
   }
   const cumParts: string[] = [];
   if (typeof cumulative.promptTokens === "number") {
-    cumParts.push(`Prompt: ${cumulative.promptTokens}`);
+    cumParts.push(t("Prompt: {count}", { count: cumulative.promptTokens }));
   }
   if (typeof cumulative.completionTokens === "number") {
-    cumParts.push(`Completion: ${cumulative.completionTokens}`);
+    cumParts.push(
+      t("Completion: {count}", { count: cumulative.completionTokens }),
+    );
   }
   if (typeof cumulative.totalTokens === "number") {
-    cumParts.push(`Total: ${cumulative.totalTokens}`);
+    cumParts.push(t("Total: {count}", { count: cumulative.totalTokens }));
   }
   if (cumParts.length) {
-    parts.push(`Cumulative \u2014 ${cumParts.join(" \u2022 ")}`);
+    parts.push(t("Cumulative — {parts}", { parts: cumParts.join(" • ") }));
   }
-  return parts.length ? parts.join("\n") : "No usage reported";
+  return parts.length ? parts.join("\n") : t("No usage reported");
 }
 
 function TranscriptItem({
@@ -757,7 +766,7 @@ function TranscriptItem({
             <img
               key={i}
               src={part.image_url.url}
-              alt="Captured view"
+              alt={t("Captured view")}
               style={{
                 maxWidth: "100%",
                 borderRadius: 4,
@@ -795,7 +804,9 @@ function TranscriptItem({
               fontStyle: "italic",
             }}
           >
-            Calling: {message.tool_calls.map((c) => c.function.name).join(", ")}
+            {t("Calling: {names}", {
+              names: message.tool_calls.map((c) => c.function.name).join(", "),
+            })}
           </div>
         )}
       </div>
@@ -951,19 +962,21 @@ function ToolTranscriptBubble({
             }}
           >
             {saveState === "saved"
-              ? "Saved ✓"
+              ? t("Saved ✓")
               : saveState === "saving"
-                ? "Saving…"
+                ? t("Saving…")
                 : saveState === "error"
-                  ? "Retry save"
-                  : "💾 Save to Macros"}
+                  ? t("Retry save")
+                  : t("💾 Save to Macros")}
           </button>
           {saveState === "saved" && savedTitle && (
-            <span style={{ color: "var(--text-dim)" }}>as “{savedTitle}”</span>
+            <span style={{ color: "var(--text-dim)" }}>
+              {t("as “{title}”", { title: savedTitle })}
+            </span>
           )}
           {saveState === "error" && (
             <span style={{ color: "var(--error, #c33)" }}>
-              save failed (see console)
+              {t("save failed (see console)")}
             </span>
           )}
         </div>

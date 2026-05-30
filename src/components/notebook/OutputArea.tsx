@@ -21,6 +21,7 @@ import { useMemo } from "react";
 import Plot from "react-plotly.js";
 import type { CellOutput } from "../../notebook/types";
 import type { MimeBundle } from "../../notebook/NotebookRuntime";
+import { t } from "../../i18n/translate";
 
 interface OutputAreaProps {
   outputs: CellOutput[];
@@ -109,7 +110,7 @@ function MimeRenderer({ bundle }: { bundle: MimeBundle }): ReactElement | null {
       <div className="nb-output-image" style={{ padding: 4 }}>
         <img
           src={`data:image/png;base64,${png}`}
-          alt="cell output"
+          alt={t("cell output")}
           style={{ maxWidth: "100%" }}
         />
       </div>

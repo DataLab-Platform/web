@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 
 import { getRootIconUrl } from "../assets/rootIcons";
+import { t } from "../i18n/translate";
 
 export type CentralView = "plot" | "macro" | "notebook";
 
@@ -52,18 +53,21 @@ export function CentralViewSwitcher({
     <div
       className="central-view-switcher"
       role="tablist"
-      aria-label="Central view"
+      aria-label={t("Central view")}
     >
       {TABS.map(({ view, label, iconUrl }) => {
         const isDetached = !!detached?.[view];
         const isActive = active === view;
+        const tLabel = t(label);
         return (
           <button
             key={view}
             type="button"
             role="tab"
             aria-selected={isActive}
-            aria-label={isDetached ? `${label} (detached)` : label}
+            aria-label={
+              isDetached ? t("{label} (detached)", { label: tLabel }) : tLabel
+            }
             disabled={disabled}
             className={`central-view-switcher-tab${isActive ? " active" : ""}`}
             onClick={() => onChange(view)}
@@ -71,7 +75,7 @@ export function CentralViewSwitcher({
             {iconUrl && (
               <img src={iconUrl} alt="" className="switcher-tab-icon" />
             )}
-            {label}
+            {tLabel}
             {isDetached && (
               <span
                 className="central-view-switcher-tab-detached"

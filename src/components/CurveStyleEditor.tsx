@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from "react";
 import type { DataLabRuntime, SignalStyle } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   runtime: DataLabRuntime;
@@ -91,7 +92,7 @@ export function CurveStyleEditor({
       const widthValue =
         linewidth.trim() === "" ? null : Number(linewidth.trim());
       if (widthValue !== null && (Number.isNaN(widthValue) || widthValue <= 0))
-        throw new Error("Line width must be a positive number.");
+        throw new Error(t("Line width must be a positive number."));
       await runtime.setSignalStyle(oid, {
         color: color || null,
         linestyle: linestyle || null,
@@ -130,60 +131,60 @@ export function CurveStyleEditor({
 
   return (
     <fieldset className="curve-style-editor">
-      <legend>Curve style</legend>
+      <legend>{t("Curve style")}</legend>
       <div className="curve-style-grid">
         <label>
-          <span>Color</span>
+          <span>{t("Color")}</span>
           <span className="curve-style-color">
             <input
               type="color"
               value={color || "#1f77b4"}
               onChange={(e) => setColor(e.target.value)}
-              aria-label="Curve color"
+              aria-label={t("Curve color")}
             />
             <input
               type="text"
               value={color}
-              placeholder="(default)"
+              placeholder={t("(default)")}
               onChange={(e) => setColor(e.target.value)}
               spellCheck={false}
-              aria-label="Curve color hex value"
+              aria-label={t("Curve color hex value")}
             />
           </span>
         </label>
         <label>
-          <span>Line style</span>
+          <span>{t("Line style")}</span>
           <select
             value={linestyle}
             onChange={(e) => setLinestyle(e.target.value)}
           >
             {LINESTYLE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {t(o.label)}
               </option>
             ))}
           </select>
         </label>
         <label>
-          <span>Line width</span>
+          <span>{t("Line width")}</span>
           <input
             type="number"
             value={linewidth}
-            placeholder="(default)"
+            placeholder={t("(default)")}
             min={0.1}
             step={0.5}
             onChange={(e) => setLinewidth(e.target.value)}
           />
         </label>
         <label>
-          <span>Curve style</span>
+          <span>{t("Curve style")}</span>
           <select
             value={curvestyle}
             onChange={(e) => setCurvestyle(e.target.value)}
           >
             {CURVESTYLE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {t(o.label)}
               </option>
             ))}
           </select>
@@ -192,15 +193,17 @@ export function CurveStyleEditor({
       {error && <div className="error">{error}</div>}
       <div className="curve-style-actions">
         <button type="button" onClick={apply} disabled={busy}>
-          Apply
+          {t("Apply")}
         </button>
         <button
           type="button"
           onClick={reset}
           disabled={busy}
-          title="Clear all overrides and fall back to the auto-cycling palette"
+          title={t(
+            "Clear all overrides and fall back to the auto-cycling palette",
+          )}
         >
-          Reset
+          {t("Reset")}
         </button>
       </div>
     </fieldset>

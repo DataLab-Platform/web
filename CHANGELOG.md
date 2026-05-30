@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Internationalisation framework**: the UI now renders in the user's regional language (auto-detected, with a language selector in the menu bar and a `?lang=` URL override). English is the source language and French is the first translated locale. Both React strings and Python-origin labels (Sigima/guidata) are translated, with `npm run i18n:extract` / `npm run i18n:check` tooling for contributors. The language selector uses compact flag icons toned down to match the neighbouring monochrome icons, and the loading/initialisation messages plus the rest of the visible chrome (side panel, tabs, welcome page, recovery banner) are now fully translated. Translation coverage now extends to every dialog (About, keyboard shortcuts, HDF5 browser, plugin manager and consent, metadata, ROI editors, interactive fit, progress, AI Assistant panel, conversations, settings and tool-approval) and the guided welcome tour.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added in 0.3.0

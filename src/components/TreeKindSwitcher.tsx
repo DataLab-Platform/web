@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 
 import { getRootIconUrl } from "../assets/rootIcons";
+import { t } from "../i18n/translate";
 
 export type TreeKind = "signal" | "image";
 
@@ -28,7 +29,7 @@ export function TreeKindSwitcher({
     <div
       className="tree-kind-switcher"
       role="tablist"
-      aria-label="Object tree kind"
+      aria-label={t("Object tree kind")}
     >
       <button
         type="button"
@@ -43,7 +44,7 @@ export function TreeKindSwitcher({
         {SIGNAL_ICON && (
           <img src={SIGNAL_ICON} alt="" className="switcher-tab-icon" />
         )}
-        Signals
+        {t("Signals")}
       </button>
       <button
         type="button"
@@ -58,7 +59,7 @@ export function TreeKindSwitcher({
         {IMAGE_ICON && (
           <img src={IMAGE_ICON} alt="" className="switcher-tab-icon" />
         )}
-        Images
+        {t("Images")}
       </button>
     </div>
   );

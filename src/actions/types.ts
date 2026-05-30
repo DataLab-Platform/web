@@ -33,7 +33,14 @@ export interface ActionDescriptor {
 }
 
 export interface MenuNode {
+  /** Canonical English structural label (menu-path segment). Used as a
+   *  stable key for folder matching, ordering and tests — never shown
+   *  to the user directly; render {@link displayLabel} instead. */
   label: string;
+  /** Localised label shown in the UI. For folders this is the
+   *  translated structural segment; for leaves it is the (already
+   *  translated) action label. */
+  displayLabel: string;
   /** Path of *this* node (parent path joined with label). */
   path: string;
   /** Present when the node is a leaf bound to an action. */

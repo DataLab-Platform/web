@@ -75,6 +75,7 @@ import {
   useConsoleErrorTitlePrefix,
 } from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
+import { t } from "./i18n/translate";
 import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
@@ -2557,7 +2558,7 @@ export default function App() {
       try {
         const fileList = Array.from(files);
         await runWithProgress({
-          title: isImage ? "Opening images…" : "Opening signals…",
+          title: isImage ? t("Opening images…") : t("Opening signals…"),
           total: fileList.length,
           step: async (i, { setLabel }) => {
             const file = fileList[i];
@@ -2618,8 +2619,8 @@ export default function App() {
     try {
       const { cancelled } = await runWithProgress({
         title: isImage
-          ? "Opening images from directory…"
-          : "Opening signals from directory…",
+          ? t("Opening images from directory…")
+          : t("Opening signals from directory…"),
         total: folders.length,
         step: async (i, { setLabel, signal }) => {
           if (signal.aborted) return;
@@ -2980,7 +2981,7 @@ export default function App() {
           )}
         <div data-tour="menubar">
           <MenuBar
-            status={status === "ready" ? "Ready" : message}
+            status={status === "ready" ? t("Ready") : message}
             statusKind={status}
             state={actionState}
             actions={actions}
@@ -3032,7 +3033,7 @@ export default function App() {
             min={180}
             max={500}
             onChange={setLeftPanelWidth}
-            ariaLabel="Resize left panel"
+            ariaLabel={t("Resize left panel")}
           />
           <main className="plot-area" data-tour="plot-host">
             <div data-tour="central-view-switcher">
@@ -3093,7 +3094,7 @@ export default function App() {
               >
                 <div>
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                    Failed to initialise Sigima
+                    {t("Failed to initialise Sigima")}
                   </div>
                   <div style={{ fontSize: 12 }}>{error}</div>
                   <div
@@ -3103,7 +3104,7 @@ export default function App() {
                       color: "var(--text-dim)",
                     }}
                   >
-                    See the browser console for the full traceback.
+                    {t("See the browser console for the full traceback.")}
                   </div>
                 </div>
               </div>
@@ -3184,8 +3185,8 @@ export default function App() {
                 return (
                   <div className="plot-empty">
                     {treeKind === "signal"
-                      ? "Create a signal to get started."
-                      : "Create an image to get started."}
+                      ? t("Create a signal to get started.")
+                      : t("Create an image to get started.")}
                   </div>
                 );
               })()}
@@ -3277,8 +3278,8 @@ export default function App() {
               className="ai-floating-pill"
               data-tour="ai-assistant"
               onClick={() => setAIPanelCollapsed(false)}
-              title="Expand AI Assistant"
-              aria-label="Expand AI Assistant"
+              title={t("Expand AI Assistant")}
+              aria-label={t("Expand AI Assistant")}
             >
               AI
             </button>
@@ -3390,7 +3391,7 @@ export default function App() {
         )}
         {pendingImageGrid && (
           <DataSetDialog
-            title="Distribute on a grid"
+            title={t("Distribute on a grid")}
             payload={pendingImageGrid.schema}
             onSubmit={handleSubmitImageGrid}
             onCancel={() => setPendingImageGrid(null)}

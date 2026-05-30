@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ImageRoiSegment } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 interface Props {
   /** Initial ROI list (already cloned from the model). */
@@ -152,18 +153,18 @@ function rowToSegment(r: RowState): ImageRoiSegment {
 function validate(seg: ImageRoiSegment): string | null {
   if (seg.geometry === "rectangle") {
     if (!Number.isFinite(seg.x0) || !Number.isFinite(seg.y0)) {
-      return "Rectangle origin must be a number.";
+      return t("Rectangle origin must be a number.");
     }
     if (!(seg.dx > 0 && seg.dy > 0)) {
-      return "Rectangle dx/dy must be > 0.";
+      return t("Rectangle dx/dy must be > 0.");
     }
   } else if (seg.geometry === "circle") {
     if (!Number.isFinite(seg.xc) || !Number.isFinite(seg.yc)) {
-      return "Circle center must be a number.";
+      return t("Circle center must be a number.");
     }
-    if (!(seg.r > 0)) return "Circle radius must be > 0.";
+    if (!(seg.r > 0)) return t("Circle radius must be > 0.");
   } else {
-    if (seg.points.length < 3) return "Polygon needs ≥ 3 vertices.";
+    if (seg.points.length < 3) return t("Polygon needs ≥ 3 vertices.");
   }
   return null;
 }
@@ -244,10 +245,10 @@ export function ImageRoiDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <form onSubmit={handleSubmit}>
-          <h2>Edit image regions of interest</h2>
+          <h2>{t("Edit image regions of interest")}</h2>
           {rows.length === 0 && (
             <div style={{ color: "var(--text-dim)", marginBottom: 12 }}>
-              No ROI defined. Use the buttons below to add one.
+              {t("No ROI defined. Use the buttons below to add one.")}
             </div>
           )}
           {rows.map((r, idx) => (
@@ -261,7 +262,10 @@ export function ImageRoiDialog({
               }}
             >
               <legend style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                ROI {idx + 1} — {r.geometry}
+                {t("ROI {index} — {geometry}", {
+                  index: idx + 1,
+                  geometry: t(r.geometry),
+                })}
               </legend>
               <div
                 style={{
@@ -271,13 +275,13 @@ export function ImageRoiDialog({
                   alignItems: "center",
                 }}
               >
-                <label>Title</label>
+                <label>{t("Title")}</label>
                 <input
                   value={r.title}
                   placeholder={`ROI ${idx + 1}`}
                   onChange={(e) => updateRow(idx, "title", e.target.value)}
                 />
-                <label>Inverse</label>
+                <label>{t("Inverse")}</label>
                 <input
                   type="checkbox"
                   checked={r.inverse}
@@ -285,7 +289,7 @@ export function ImageRoiDialog({
                 />
                 <button
                   type="button"
-                  title="Remove"
+                  title={t("Remove")}
                   onClick={() => removeRow(idx)}
                 >
                   ×
@@ -359,7 +363,8 @@ export function ImageRoiDialog({
                         marginBottom: 2,
                       }}
                     >
-                      Vertices (space-separated <code>x,y</code> pairs)
+                      {t("Vertices (space-separated")} <code>x,y</code>{" "}
+                      {t("pairs)")}
                     </label>
                     <textarea
                       value={r.points}
@@ -381,20 +386,20 @@ export function ImageRoiDialog({
           >
             <div style={{ display: "flex", gap: 4 }}>
               <button type="button" onClick={addRect}>
-                + Rectangle
+                + {t("Rectangle")}
               </button>
               <button type="button" onClick={addCircle}>
-                + Circle
+                + {t("Circle")}
               </button>
               <button type="button" onClick={addPolygon}>
-                + Polygon
+                + {t("Polygon")}
               </button>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" onClick={onCancel}>
-                Cancel
+                {t("Cancel")}
               </button>
-              <button type="submit">OK</button>
+              <button type="submit">{t("OK")}</button>
             </div>
           </div>
         </form>

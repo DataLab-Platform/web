@@ -34,6 +34,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { t } from "../i18n/translate";
 
 // ---------------------------------------------------------------------
 // Public API
@@ -132,7 +133,7 @@ export function ProgressDialog({ state }: ProgressDialogProps) {
         {label && <p className="progress-label">{label}</p>}
         {cancellable && (
           <div className="actions">
-            <button onClick={onCancel}>Cancel</button>
+            <button onClick={onCancel}>{t("Cancel")}</button>
           </div>
         )}
       </div>

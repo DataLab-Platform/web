@@ -32,6 +32,7 @@ import {
 } from "@codemirror/autocomplete";
 import type { CellModel } from "../../notebook/types";
 import { OutputArea } from "./OutputArea";
+import { t } from "../../i18n/translate";
 
 interface CellProps {
   cell: CellModel;
@@ -94,11 +95,11 @@ export function Cell({
           <div
             className="nb-cell-markdown-rendered"
             onDoubleClick={() => setEditingMarkdown(true)}
-            title="Double-click to edit"
+            title={t("Double-click to edit")}
           >
             {cell.source.trim() === "" ? (
               <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                (empty markdown — double-click to edit)
+                {t("(empty markdown — double-click to edit)")}
               </pre>
             ) : (
               <MarkdownRendered source={cell.source} />

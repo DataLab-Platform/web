@@ -71,6 +71,11 @@ const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/
 
 let pyPromise: Promise<PyodideAPI> | null = null;
 
+// ``LANG`` used to boot Pyodide; overridden by the ``init`` message's
+// ``lang`` field so the notebook worker matches the main thread's UI
+// locale (workers cannot read ``localStorage``). See ``runtime.ts``.
+let pyLang = "C";
+
 /** Load Pyodide on first use; subsequent calls return the same instance. */
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
@@ -83,12 +88,12 @@ async function getPyodide(): Promise<PyodideAPI> {
     )) as { loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI> };
     const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
 
-    // Force English locale for any gettext-wrapped labels coming back
-    // from the bridge (mirrors the macro worker; same rationale).
+    // Pin the UI locale for any gettext-wrapped labels coming back from
+    // the bridge (mirrors the macro worker; same rationale).
     await py.runPythonAsync(`
 import os
-os.environ["LANG"] = "C"
-os.environ["LANGUAGE"] = "C"
+os.environ["LANG"] = ${JSON.stringify(pyLang)}
+os.environ["LANGUAGE"] = ${JSON.stringify(pyLang)}
 `);
 
     await py.loadPackage(["numpy", "scipy", "micropip"]);
@@ -266,7 +271,7 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data as
-    | { type: "init" }
+    | { type: "init"; lang?: string }
     | { type: "exec_cell"; cellId: string; code: string }
     | {
         type: "bridge_reply";
@@ -277,6 +282,7 @@ self.onmessage = async (event: MessageEvent) => {
       };
   try {
     if (msg.type === "init") {
+      if (msg.lang) pyLang = msg.lang;
       await getPyodide();
       self.postMessage({ type: "ready" });
       return;

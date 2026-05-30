@@ -14,6 +14,7 @@
  */
 
 import { useConsoleErrors } from "../utils/consoleLog";
+import { t } from "../i18n/translate";
 
 interface Props {
   /** Called when the user clicks the indicator.  The parent typically
@@ -29,8 +30,10 @@ export function ConsoleStatusIndicator({ onOpen }: Props) {
   // glyphs — same visual style as the theme toggle button (☼/☾).
   const glyph = alert ? "\u26A0" : "\u24D8"; // ⚠ / ⓘ
   const tooltip = alert
-    ? `${formatBreakdown(errors, warnings)} logged — click to open the browser console log`
-    : "No error or warning logged — click to open the browser console log";
+    ? t("{breakdown} logged — click to open the browser console log", {
+        breakdown: formatBreakdown(errors, warnings),
+      })
+    : t("No error or warning logged — click to open the browser console log");
   return (
     <button
       type="button"
@@ -56,7 +59,17 @@ export function ConsoleStatusIndicator({ onOpen }: Props) {
 
 function formatBreakdown(errors: number, warnings: number): string {
   const parts: string[] = [];
-  if (errors > 0) parts.push(`${errors} error${errors > 1 ? "s" : ""}`);
-  if (warnings > 0) parts.push(`${warnings} warning${warnings > 1 ? "s" : ""}`);
+  if (errors > 0)
+    parts.push(
+      errors > 1
+        ? t("{count} errors", { count: errors })
+        : t("{count} error", { count: errors }),
+    );
+  if (warnings > 0)
+    parts.push(
+      warnings > 1
+        ? t("{count} warnings", { count: warnings })
+        : t("{count} warning", { count: warnings }),
+    );
   return parts.join(", ");
 }

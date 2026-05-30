@@ -49,7 +49,7 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
                     <img src={node.iconUrl} alt="" className="menu-icon-img" />
                   )}
                 </span>
-                <span className="menu-label">{node.label}</span>
+                <span className="menu-label">{node.displayLabel}</span>
                 <span className="menu-arrow">›</span>
                 {isOpen && (
                   <MenuDropdown
@@ -86,7 +86,7 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
                   <img src={action.iconUrl} alt="" className="menu-icon-img" />
                 )}
               </span>
-              <span className="menu-label">{node.label}</span>
+              <span className="menu-label">{node.displayLabel}</span>
             </li>
           </Fragment>
         );

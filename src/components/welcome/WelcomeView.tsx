@@ -23,6 +23,7 @@ import { getIoIconUrl } from "../../assets/ioIcons";
 import { getHelpIconUrl } from "../../assets/helpIcons";
 import { getH5IconUrl } from "../../assets/h5Icons";
 import { useUnseenRelease } from "../../utils/releaseNotes";
+import { t } from "../../i18n/translate";
 
 type Kind = "signal" | "image";
 
@@ -110,33 +111,36 @@ export function WelcomeView({
   const startActions: QuickAction[] = [
     {
       iconUrl: getRootIconUrl("signal.svg"),
-      label: "Create…",
-      description: "Generate a 1D signal or 2D image from a Sigima template.",
+      label: t("Create…"),
+      description: t(
+        "Generate a 1D signal or 2D image from a Sigima template.",
+      ),
       onKindSelect: onCreateKind,
     },
     {
       iconUrl: getIoIconUrl("fileopen_sig.svg"),
-      label: "Open file…",
-      description: "Load a signal or image from your computer.",
+      label: t("Open file…"),
+      description: t("Load a signal or image from your computer."),
       onKindSelect: onOpenFileKind,
     },
     {
       iconUrl: getH5IconUrl("h5browser.svg"),
-      label: "Browse HDF5 file…",
-      description:
+      label: t("Browse HDF5 file…"),
+      description: t(
         "Inspect any HDF5 file and import selected datasets as signals or images.",
+      ),
       onClick: onBrowseHdf5,
     },
     {
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
-      label: "Open HDF5 workspace…",
-      description: "Resume a previously saved DataLab workspace.",
+      label: t("Open HDF5 workspace…"),
+      description: t("Resume a previously saved DataLab workspace."),
       onClick: onOpenWorkspaceHdf5,
     },
     {
       iconUrl: getIoIconUrl("import_text.svg"),
-      label: "Import text data…",
-      description: "Bring in CSV / TSV / column data with the wizard.",
+      label: t("Import text data…"),
+      description: t("Bring in CSV / TSV / column data with the wizard."),
       onClick: onImportTextWizard,
     },
   ];
@@ -144,23 +148,26 @@ export function WelcomeView({
   const walkthroughActions: QuickAction[] = [
     {
       iconUrl: getRootIconUrl("visualization.svg"),
-      label: "Take the guided tour",
-      description:
+      label: t("Take the guided tour"),
+      description: t(
         "A short interactive walk-through of the DataLab-Web workspace.",
+      ),
       onClick: onStartTour,
     },
     {
       iconUrl: getHelpIconUrl("libre-gui-help.svg"),
-      label: "Read the user guide",
-      description:
+      label: t("Read the user guide"),
+      description: t(
         "Open the in-app documentation covering the browser-native specifics.",
+      ),
       onClick: onOpenUserGuide,
     },
     {
       iconUrl: getHelpIconUrl("libre-gui-about.svg"),
-      label: `What’s new in v${appVersion}`,
-      description:
+      label: t("What’s new in v{version}", { version: appVersion }),
+      description: t(
         "Browse the full release notes and recent changes to DataLab-Web.",
+      ),
       onClick: onOpenReleaseNotes,
       badge: releaseNotesUnseen ? "NEW" : undefined,
     },
@@ -186,7 +193,10 @@ export function WelcomeView({
           />
           <div className="welcome-title-block">
             <div className="welcome-subtitle">
-              Browser-native scientific data processing — version {appVersion}
+              {t(
+                "Browser-native scientific data processing — version {version}",
+                { version: appVersion },
+              )}
             </div>
           </div>
           {onDismiss && (
@@ -194,8 +204,8 @@ export function WelcomeView({
               type="button"
               className="welcome-dismiss"
               onClick={onDismiss}
-              aria-label="Dismiss welcome page"
-              title="Dismiss"
+              aria-label={t("Dismiss welcome page")}
+              title={t("Dismiss")}
             >
               ×
             </button>
@@ -205,7 +215,7 @@ export function WelcomeView({
         <div className="welcome-columns">
           <section className="welcome-column">
             <h2 className="welcome-column-title">
-              {workspaceEmpty ? "Get started" : "Quick actions"}
+              {workspaceEmpty ? t("Get started") : t("Quick actions")}
             </h2>
             <ul className="welcome-action-list">
               {startActions.map((a) => (
@@ -215,7 +225,7 @@ export function WelcomeView({
           </section>
 
           <section className="welcome-column">
-            <h2 className="welcome-column-title">Walkthroughs</h2>
+            <h2 className="welcome-column-title">{t("Walkthroughs")}</h2>
             <ul className="welcome-action-list">
               {walkthroughActions.map((a) => (
                 <WelcomeActionRow key={a.label} action={a} variant="card" />
@@ -231,7 +241,7 @@ export function WelcomeView({
               defaultChecked={readShowWelcomeOnStartup()}
               onChange={handleShowOnStartupToggle}
             />
-            Show welcome page on startup
+            {t("Show welcome page on startup")}
           </label>
         </footer>
       </div>
@@ -289,7 +299,7 @@ function WelcomeActionRow({
           <span className="welcome-action-label">
             {action.label}
             {action.badge && (
-              <span className="welcome-action-badge" aria-label="New">
+              <span className="welcome-action-badge" aria-label={t("New")}>
                 {action.badge}
               </span>
             )}
@@ -429,7 +439,7 @@ function WelcomeKindPicker({
           className="welcome-kind-picker-item"
           role="menuitem"
           onClick={() => onPick(kind)}
-          title={`${cleanLabel} ${KIND_LABEL[kind]}`}
+          title={`${cleanLabel} ${t(KIND_LABEL[kind])}`}
         >
           <img
             src={getRootIconUrl(KIND_ICON[kind])}
@@ -437,7 +447,7 @@ function WelcomeKindPicker({
             aria-hidden="true"
             className="welcome-kind-picker-icon"
           />
-          <span>{KIND_LABEL[kind]}</span>
+          <span>{t(KIND_LABEL[kind])}</span>
         </button>
       ))}
     </div>

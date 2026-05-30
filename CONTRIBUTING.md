@@ -68,6 +68,15 @@ The recommended workflow:
 - Reformat the whole repo at any time with `npm run format` (TS/JS/CSS/HTML/MD/JSON) or `pre-commit run --all-files` (Python + everything else).
 - CI runs `npm run format:check` and `npm run lint` as blocking steps (see [tests.yml](.github/workflows/tests.yml)) and `npm run release:pack` runs them before lint/test/build, so any drift is caught early.
 
+## Internationalisation
+
+DataLab-Web is fully internationalised: English is the source language and French is the first translated locale. The framework, the user-facing behaviour and the full contributor workflow are documented in the **Internationalisation** section of [README.md](README.md). In short:
+
+- Wrap every new user-facing string in `t("…")` (from `src/i18n/translate`); use `t("…{x}…", { x })` for interpolation. Never translate brand names or AI-assistant system prompts.
+- Run `npm run i18n:extract` to merge new keys into `src/locales/fr.json`, then fill in the translations.
+- Run `npm run i18n:check` to verify there are no missing or empty keys (it is wise to run this in CI).
+- Keys referenced only through a variable must be listed in `src/locales/_dynamic-keys.json`.
+
 ## Pull requests
 
 - Open a pull request against `main`.
