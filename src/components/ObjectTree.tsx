@@ -8,6 +8,7 @@ import {
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
 import { getEditIconUrl } from "../assets/editIcons";
 import { useConfirm } from "./ConfirmDialog";
+import { useListSelection } from "./useListSelection";
 import { t } from "../i18n/translate";
 import { TitleWithLinks } from "./TitleWithLinks";
 
@@ -118,28 +119,11 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
 
     const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
-    const handleObjectClick = useCallback(
-      (oid: string, evt: React.MouseEvent) => {
-        if (evt.shiftKey && currentId) {
-          const a = flatIds.indexOf(currentId);
-          const b = flatIds.indexOf(oid);
-          if (a >= 0 && b >= 0) {
-            const [lo, hi] = a < b ? [a, b] : [b, a];
-            const range = flatIds.slice(lo, hi + 1);
-            onSelectionChange(range, oid);
-            return;
-          }
-        }
-        if (evt.ctrlKey || evt.metaKey) {
-          const next = new Set(selectedSet);
-          if (next.has(oid)) next.delete(oid);
-          else next.add(oid);
-          onSelectionChange(Array.from(next), next.has(oid) ? oid : currentId);
-          return;
-        }
-        onSelectionChange([oid], oid);
-      },
-      [selectedSet, currentId, flatIds, onSelectionChange],
+    const handleObjectClick = useListSelection(
+      flatIds,
+      selectedIds,
+      currentId,
+      onSelectionChange,
     );
 
     const handleGroupClick = useCallback(
