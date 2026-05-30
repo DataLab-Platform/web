@@ -25,6 +25,7 @@ import {
   type CellModel,
   type NotebookModel,
 } from "../notebook/types";
+import { t } from "../i18n/translate";
 
 const MARKDOWN_MARKER_RE = /^#\s*%%\s*\[markdown\]\s*$/i;
 const CODE_MARKER_RE = /^#\s*%%(?!\s*\[)\s*.*$/;
@@ -147,7 +148,7 @@ function splitMacroBodyIntoCells(body: string): CellModel[] {
  */
 export function macroToNotebook(title: string, source: string): NotebookModel {
   const stripped = stripMacroHeader(source);
-  const finalTitle = (stripped.title ?? title).trim() || "Untitled";
+  const finalTitle = (stripped.title ?? title).trim() || t("Untitled");
   const cells = splitMacroBodyIntoCells(stripped.body);
   const nb = emptyNotebook(finalTitle);
   nb.cells = cells.length > 0 ? cells : [emptyCodeCell(stripped.body)];

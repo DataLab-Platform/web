@@ -954,6 +954,17 @@ await micropip.install(["sigima", "guidata"])
     py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
 
+    // Bridge DataLab-Web's own (non-gettext) default labels into Python:
+    // the "Group" prefix for auto-created groups and the "Untitled" macro
+    // /notebook title. Sigima/guidata labels are translated via gettext
+    // (``LANG`` above), but ``bootstrap.py`` is our own code, so the React
+    // side owns these translations and pushes them in here.
+    await py.runPythonAsync(
+      `set_default_labels(${JSON.stringify(t("Group"))}, ${JSON.stringify(
+        t("Untitled"),
+      )})`,
+    );
+
     onProgress?.(t("Ready."));
     const runtime = new DataLabRuntime(py);
     runtime.installDialogBridge();

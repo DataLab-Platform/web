@@ -25,6 +25,7 @@ import {
   type NotebookModel,
 } from "./types";
 import type { MimeBundle } from "./NotebookRuntime";
+import { t } from "../i18n/translate";
 
 interface NbStreamOutput {
   output_type: "stream";
@@ -260,7 +261,7 @@ function nbCellToCell(nb: NbCell): CellModel | null {
 
 export function ipynbToNotebook(
   data: unknown,
-  fallbackName = "Untitled",
+  fallbackName = t("Untitled"),
 ): NotebookModel {
   if (typeof data !== "object" || data === null) {
     throw new Error("Invalid notebook: top-level value must be an object");
@@ -289,7 +290,7 @@ export function ipynbToNotebook(
 
 export function jsonStringToNotebook(
   text: string,
-  fallbackName = "Untitled",
+  fallbackName = t("Untitled"),
 ): NotebookModel {
   return ipynbToNotebook(JSON.parse(text), fallbackName);
 }

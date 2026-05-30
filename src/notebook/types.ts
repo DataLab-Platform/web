@@ -7,6 +7,7 @@
  */
 
 import type { MimeBundle } from "./NotebookRuntime";
+import { t } from "../i18n/translate";
 
 export type CellType = "code" | "markdown";
 
@@ -68,7 +69,7 @@ export function emptyMarkdownCell(source = ""): CellModel {
   };
 }
 
-export function emptyNotebook(name = "Untitled"): NotebookModel {
+export function emptyNotebook(name = t("Untitled")): NotebookModel {
   return {
     id: newNotebookId(),
     name,

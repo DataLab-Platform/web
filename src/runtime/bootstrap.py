@@ -92,6 +92,34 @@ def _new_id(prefix: str = "") -> str:
     return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
+# Locale-aware default labels. Unlike sigima/guidata strings (translated via
+# gettext, see the locale note above), bootstrap.py is DataLab-Web's own code,
+# so its few user-facing defaults — the "Group" prefix for auto-created groups
+# and the "Untitled" macro/notebook title — are bridged explicitly: the React
+# side owns the translations and pushes them in via :func:`set_default_labels`
+# right after this module is first executed (see ``runtime.ts``). Preserved
+# across HMR re-executions so the active locale survives a helper reload.
+_DEFAULT_LABELS: dict[str, str] = globals().get(  # type: ignore[assignment]
+    "_DEFAULT_LABELS", {"group": "Group", "untitled": "Untitled"}
+)
+
+
+def set_default_labels(group: str | None = None, untitled: str | None = None) -> None:
+    """Set locale-aware default labels for new groups, macros and notebooks.
+
+    Called once from the JS runtime at start-up with the strings already
+    translated for the active UI locale.
+
+    Args:
+        group: Translated default group-name prefix (e.g. ``"Groupe"``).
+        untitled: Translated default macro/notebook title (e.g. ``"Sans titre"``).
+    """
+    if group:
+        _DEFAULT_LABELS["group"] = group
+    if untitled:
+        _DEFAULT_LABELS["untitled"] = untitled
+
+
 @dataclass
 class _ObjectEntry:
     """One object stored in the model."""
@@ -116,7 +144,7 @@ class _Panel:
 
     kind: str
     groups: list[_Group] = field(default_factory=list)
-    default_group_name: str = "Group"
+    default_group_name: str = field(default_factory=lambda: _DEFAULT_LABELS["group"])
 
     def ensure_default_group(self) -> _Group:
         """Return the first group, creating one when the panel is empty."""
@@ -462,10 +490,11 @@ def _macro_index(macro_id: str) -> int:
 def _next_untitled_title() -> str:
     """Return a unique ``"Untitled N"`` title."""
     used = {m["title"] for m in _MACROS}
+    base = _DEFAULT_LABELS["untitled"]
     n = 1
-    while f"Untitled {n}" in used:
+    while f"{base} {n}" in used:
         n += 1
-    return f"Untitled {n}"
+    return f"{base} {n}"
 
 
 def list_macros() -> list[dict[str, str]]:
@@ -494,7 +523,7 @@ def set_macro_code(macro_id: str, code: str) -> None:
 
 def rename_macro(macro_id: str, title: str) -> None:
     """Rename macro *macro_id*."""
-    _MACROS[_macro_index(macro_id)]["title"] = title or "Untitled"
+    _MACROS[_macro_index(macro_id)]["title"] = title or _DEFAULT_LABELS["untitled"]
 
 
 def delete_macro(macro_id: str) -> None:
@@ -536,7 +565,7 @@ def replace_macros(records: Any) -> None:
     cleaned: list[dict[str, str]] = []
     for rec in records or []:
         rid = str(rec.get("id") or _new_id("m"))
-        title = str(rec.get("title") or "Untitled")
+        title = str(rec.get("title") or _DEFAULT_LABELS["untitled"])
         code = str(rec.get("code") or "")
         cleaned.append({"id": rid, "title": title, "code": code})
     _MACROS[:] = cleaned
@@ -566,10 +595,11 @@ def _notebook_index(notebook_id: str) -> int:
 def _next_untitled_notebook_title() -> str:
     """Return a unique ``"Untitled N"`` notebook title."""
     used = {n["title"] for n in _NOTEBOOKS}
+    base = _DEFAULT_LABELS["untitled"]
     n = 1
-    while f"Untitled {n}" in used:
+    while f"{base} {n}" in used:
         n += 1
-    return f"Untitled {n}"
+    return f"{base} {n}"
 
 
 def list_notebooks() -> list[dict[str, str]]:
@@ -605,7 +635,9 @@ def set_notebook_content(notebook_id: str, content: str) -> None:
 
 def rename_notebook(notebook_id: str, title: str) -> None:
     """Rename notebook *notebook_id*."""
-    _NOTEBOOKS[_notebook_index(notebook_id)]["title"] = title or "Untitled"
+    _NOTEBOOKS[_notebook_index(notebook_id)]["title"] = (
+        title or _DEFAULT_LABELS["untitled"]
+    )
 
 
 def delete_notebook(notebook_id: str) -> None:
@@ -647,7 +679,7 @@ def replace_notebooks(records: Any) -> None:
     cleaned: list[dict[str, str]] = []
     for rec in records or []:
         rid = str(rec.get("id") or _new_id("n"))
-        title = str(rec.get("title") or "Untitled")
+        title = str(rec.get("title") or _DEFAULT_LABELS["untitled"])
         content = str(rec.get("content") or "")
         cleaned.append({"id": rid, "title": title, "content": content})
     _NOTEBOOKS[:] = cleaned

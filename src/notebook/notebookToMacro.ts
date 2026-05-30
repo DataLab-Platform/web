@@ -18,6 +18,7 @@
  */
 
 import type { CellModel, NotebookModel } from "./types";
+import { t } from "../i18n/translate";
 
 /** Magic marker line identifying a markdown cell in macro form. */
 const MARKDOWN_MARKER = "# %% [markdown]";
@@ -61,7 +62,7 @@ export function notebookToMacroBody(nb: NotebookModel): string {
 /** Default macro title derived from a notebook name. */
 export function notebookTitleAsMacroTitle(nb: NotebookModel): string {
   const trimmed = nb.name.trim();
-  return trimmed === "" ? "Untitled" : trimmed;
+  return trimmed === "" ? t("Untitled") : trimmed;
 }
 
 /**
