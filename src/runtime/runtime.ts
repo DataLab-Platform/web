@@ -313,6 +313,15 @@ export interface ImageData {
   y0: number;
   dx: number;
   dy: number;
+  /** ``false`` for images carrying explicit per-column / per-row pixel-center
+   *  coordinates (``xcoords``/``ycoords``).  When ``false``, ``x0``/``dx`` are
+   *  meaningless and the viewer must render variable-width cells from the
+   *  coordinate arrays.  Defaults to uniform when omitted. */
+  is_uniform_coords?: boolean;
+  /** Per-column pixel-center X coordinates (non-uniform images only). */
+  xcoords?: number[];
+  /** Per-row pixel-center Y coordinates (non-uniform images only). */
+  ycoords?: number[];
   /** Pre-computed extrema, used to seed the LUT range. */
   data_min: number;
   data_max: number;

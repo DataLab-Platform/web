@@ -12,6 +12,7 @@ import {
   buildColorscale,
   paintImageData,
 } from "../utils/colormap";
+import { toBins, binSearchCell } from "../utils/imageCoords";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -126,6 +127,52 @@ export function ImagePlot({
   }, [draftLut, lutRange, data.data_min, data.data_max]);
 
   // ------------------------------------------------------------------
+  // Non-uniform images carry explicit per-column / per-row pixel-center
+  // coordinates instead of a regular ``x0``/``dx`` grid.  They are rendered
+  // exactly (matching desktop PlotPy ``XYImageItem``) via a Plotly ``heatmap``
+  // trace fed with *bin edges* — the cell boundaries — rather than through the
+  // uniform image-trace + canvas pipeline (which can only stretch a regular
+  // pixel grid linearly and would quantise the coordinates).
+  // ------------------------------------------------------------------
+  const isUniform = data.is_uniform_coords !== false;
+  const xEdges = useMemo(
+    () => (isUniform || !data.xcoords?.length ? null : toBins(data.xcoords)),
+    [isUniform, data.xcoords],
+  );
+  const yEdges = useMemo(
+    () => (isUniform || !data.ycoords?.length ? null : toBins(data.ycoords)),
+    [isUniform, data.ycoords],
+  );
+  // Physical extent of the image, used for axis ranges and crosshairs.
+  // For non-uniform images it spans the first/last bin edges; for uniform
+  // images it is the regular ``x0 + width·dx`` rectangle.
+  const extent = useMemo(() => {
+    if (xEdges && yEdges && xEdges.length > 1 && yEdges.length > 1) {
+      return {
+        xMin: xEdges[0],
+        xMax: xEdges[xEdges.length - 1],
+        yMin: yEdges[0],
+        yMax: yEdges[yEdges.length - 1],
+      };
+    }
+    return {
+      xMin: data.x0,
+      xMax: data.x0 + data.width * data.dx,
+      yMin: data.y0,
+      yMax: data.y0 + data.height * data.dy,
+    };
+  }, [
+    xEdges,
+    yEdges,
+    data.x0,
+    data.y0,
+    data.width,
+    data.height,
+    data.dx,
+    data.dy,
+  ]);
+
+  // ------------------------------------------------------------------
   // Canvas rasterisation pipeline.
   //
   // Plotly's ``heatmap`` trace renders each cell through SVG/Canvas2D
@@ -151,6 +198,12 @@ export function ImagePlot({
   // ------------------------------------------------------------------
   const [bitmapUrl, setBitmapUrl] = useState<string | null>(null);
   useEffect(() => {
+    // Non-uniform images are rendered by a ``heatmap`` trace (see below),
+    // not the canvas bitmap — skip the rasterisation entirely.
+    if (data.is_uniform_coords === false) {
+      setBitmapUrl(null);
+      return;
+    }
     const w = data.width;
     const h = data.height;
     if (w <= 0 || h <= 0) return;
@@ -190,6 +243,7 @@ export function ImagePlot({
     data.data,
     data.width,
     data.height,
+    data.is_uniform_coords,
     effectiveLut,
     colormapName,
     colormapInverted,
@@ -233,6 +287,36 @@ export function ImagePlot({
     // null (first paint or in-flight repaint) we omit the trace so
     // only the axes/shapes layer is shown.
     const out: unknown[] = [];
+    // ------------------------------------------------------------------
+    // Non-uniform images: exact ``heatmap`` rendering with bin edges.
+    //
+    // Feeding ``x``/``y`` arrays one longer than ``z``'s dimensions makes
+    // Plotly treat them as cell boundaries, so each variable-width cell is
+    // drawn vectorially at its true physical coordinates (no quantisation).
+    // The trace carries its own colorbar — the hidden-scatter trick used by
+    // the uniform path is not needed here.  Hover is still served by our
+    // custom tooltip (``hoverinfo: "skip"``) for UI parity and to look ``z``
+    // up in the original array.
+    // ------------------------------------------------------------------
+    if (xEdges && yEdges) {
+      out.push({
+        type: "heatmap" as const,
+        z: data.data,
+        x: xEdges,
+        y: yEdges,
+        zmin: effectiveLut[0],
+        zmax: effectiveLut[1],
+        colorscale: plotlyColorscale as unknown as "Viridis",
+        hoverinfo: "skip" as const,
+        colorbar: {
+          title: {
+            text: data.zunit ? `${data.zlabel} (${data.zunit})` : data.zlabel,
+          },
+          thickness: 12,
+        },
+      });
+      return out;
+    }
     if (bitmapUrl) {
       out.push({
         type: "image" as const,
@@ -280,6 +364,9 @@ export function ImagePlot({
     return out;
   }, [
     bitmapUrl,
+    xEdges,
+    yEdges,
+    data.data,
     data.x0,
     data.y0,
     data.dx,
@@ -321,10 +408,10 @@ export function ImagePlot({
   const toolShapes = useMemo(() => {
     const shapes: unknown[] = [];
     if (tool === "profiles" && cursor) {
-      const xMin = data.x0;
-      const xMax = data.x0 + data.width * data.dx;
-      const yMin = data.y0;
-      const yMax = data.y0 + data.height * data.dy;
+      const xMin = extent.xMin;
+      const xMax = extent.xMax;
+      const yMin = extent.yMin;
+      const yMax = extent.yMax;
       shapes.push({
         type: "line",
         xref: "x",
@@ -366,7 +453,7 @@ export function ImagePlot({
       });
     }
     return shapes;
-  }, [tool, cursor, statsRect, data]);
+  }, [tool, cursor, statsRect, extent]);
 
   const allTraces = useMemo(
     () => [...traces, ...resultTraces],
@@ -379,10 +466,13 @@ export function ImagePlot({
     // Image-trace axes are not auto-ranged from typed-array data —
     // compute the pixel-aligned extents explicitly so the image fills
     // the plot regardless of the hidden colorbar scatter trace.
-    const xMin = data.x0;
-    const xMax = data.x0 + data.width * data.dx;
-    const yMin = data.y0;
-    const yMax = data.y0 + data.height * data.dy;
+    const xMin = extent.xMin;
+    const xMax = extent.xMax;
+    const yMin = extent.yMin;
+    const yMax = extent.yMax;
+    // Uniform images keep square *pixels* (scaleratio = dy/dx); non-uniform
+    // images use physical units directly, so 1 x-unit == 1 y-unit on screen.
+    const scaleratio = isUniform ? data.dy / data.dx : 1;
     return {
       ...plotlyTheme,
       title: { text: data.title || "" },
@@ -407,7 +497,7 @@ export function ImagePlot({
         ...plotlyTheme.yaxis,
         title: { text: ytitle },
         scaleanchor: "x" as const,
-        scaleratio: data.dy / data.dx,
+        scaleratio,
         range: [yMax, yMin],
         autorange: false as const,
       },
@@ -445,6 +535,8 @@ export function ImagePlot({
   }, [
     plotlyTheme,
     data,
+    extent,
+    isUniform,
     roiShapes,
     roiAnnotations,
     resultShapes,
@@ -500,8 +592,15 @@ export function ImagePlot({
         if (hoverInfo) setHoverInfo(null);
         return;
       }
-      const i = Math.floor((xData - data.x0) / data.dx);
-      const j = Math.floor((yData - data.y0) / data.dy);
+      // Map data coords → cell indices.  Uniform images use the regular
+      // grid; non-uniform images binary-search the bin edges so the
+      // reported ``z`` is exact (no quantisation).
+      const i = xEdges
+        ? binSearchCell(xEdges, xData)
+        : Math.floor((xData - data.x0) / data.dx);
+      const j = yEdges
+        ? binSearchCell(yEdges, yData)
+        : Math.floor((yData - data.y0) / data.dy);
       if (i < 0 || i >= data.width || j < 0 || j >= data.height) {
         if (hoverInfo) setHoverInfo(null);
         return;
@@ -511,7 +610,7 @@ export function ImagePlot({
       setHoverInfo({ x: xData, y: yData, z, px, py });
       if (tool === "profiles") setCursor({ x: xData, y: yData });
     },
-    [data, tool, hoverInfo],
+    [data, tool, hoverInfo, xEdges, yEdges],
   );
 
   const handleWrapperMouseLeave = useCallback(() => {

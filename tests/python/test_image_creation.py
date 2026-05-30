@@ -136,3 +136,64 @@ def test_get_image_data_max_size_decimates_and_adjusts_spacing(fresh_bootstrap):
     # LUT extrema unchanged (computed before decimation).
     assert small["data_min"] == full["data_min"]
     assert small["data_max"] == full["data_max"]
+
+
+def test_get_image_data_uniform_has_empty_coords(fresh_bootstrap):
+    """Uniform images flag ``is_uniform_coords`` and ship no coord arrays.
+
+    Guards the non-regression contract: the uniform payload is unchanged
+    apart from the three new keys (which stay empty / ``True``).
+    """
+    bs = fresh_bootstrap
+    arr = np.arange(20, dtype=float).reshape(4, 5)
+    oid = bs.add_image_from_array("u", arr)
+    payload = bs.get_image_data(oid)
+    assert payload["is_uniform_coords"] is True
+    assert payload["xcoords"] == []
+    assert payload["ycoords"] == []
+    # Regular grid fields untouched.
+    assert payload["x0"] == 0.0 and payload["y0"] == 0.0
+    assert payload["dx"] == 1.0 and payload["dy"] == 1.0
+
+
+def test_get_image_data_non_uniform_ships_pixel_centers(fresh_bootstrap):
+    """Non-uniform images ship their explicit per-pixel coordinates.
+
+    The front-end converts these centers to bin edges to render the
+    variable-width cells exactly (matching desktop PlotPy).
+    """
+    bs = fresh_bootstrap
+    arr = np.arange(12, dtype=float).reshape(3, 4)
+    oid = bs.add_image_from_array("nu", arr)
+    obj = bs._MODEL.get(oid)
+    xc = np.array([0.0, 1.5, 4.0, 9.0])
+    yc = np.array([0.0, 2.0, 5.0])
+    obj.set_coords(xc, yc)
+    payload = bs.get_image_data(oid)
+    assert payload["is_uniform_coords"] is False
+    assert payload["xcoords"] == [0.0, 1.5, 4.0, 9.0]
+    assert payload["ycoords"] == [0.0, 2.0, 5.0]
+    # One coordinate per shipped column / row.
+    assert len(payload["xcoords"]) == payload["width"]
+    assert len(payload["ycoords"]) == payload["height"]
+
+
+def test_get_image_data_non_uniform_coords_track_downsampling(fresh_bootstrap):
+    """Coordinate arrays are subsampled with the same stride as the data.
+
+    Each shipped pixel must keep its true coordinate, so the coord arrays
+    stay aligned with the decimated data grid.
+    """
+    bs = fresh_bootstrap
+    arr = np.arange(40000, dtype=float).reshape(200, 200)
+    oid = bs.add_image_from_array("big_nu", arr)
+    obj = bs._MODEL.get(oid)
+    xc = np.linspace(0.0, 100.0, 200)
+    yc = np.linspace(0.0, 50.0, 200)
+    obj.set_coords(xc, yc)
+    small = bs.get_image_data(oid, max_size=50)
+    assert len(small["xcoords"]) == small["width"]
+    assert len(small["ycoords"]) == small["height"]
+    # First coordinate preserved (stride starts at index 0).
+    assert small["xcoords"][0] == 0.0
+    assert small["ycoords"][0] == 0.0

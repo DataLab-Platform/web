@@ -2221,7 +2221,9 @@ def get_image_data(
 
     Coordinates honour ``x0``/``y0``/``dx``/``dy`` (image origin and pixel
     spacing).  ``data_min``/``max`` let the front-end pick a default LUT
-    range without re-iterating.
+    range without re-iterating.  For non-uniform images (``is_uniform_coords``
+    is ``False``), ``xcoords``/``ycoords`` carry the explicit per-column /
+    per-row pixel-center coordinates and ``x0``/``dx`` should be ignored.
 
     Args:
         oid: image identifier in the in-memory store.
@@ -2246,6 +2248,23 @@ def get_image_data(
     data_min = float(np.nanmin(raw))
     data_max = float(np.nanmax(raw))
     data = _maybe_downsample(raw, max_size)
+    # Non-uniform images carry explicit per-column / per-row pixel-center
+    # coordinates (``is_uniform_coords`` is ``False``).  The front-end needs
+    # these to render variable-width cells exactly; ``x0``/``dx`` are
+    # meaningless in that case.  When the data was striped down to fit
+    # ``max_size``, subsample the coordinate arrays with the *same* stride so
+    # each shipped pixel keeps its true coordinate.
+    is_uniform = bool(getattr(obj, "is_uniform_coords", True))
+    xcoords: list[float] = []
+    ycoords: list[float] = []
+    if not is_uniform:
+        xc = getattr(obj, "xcoords", None)
+        yc = getattr(obj, "ycoords", None)
+        if xc is not None and yc is not None and len(xc) and len(yc):
+            xstride = int(np.ceil(raw.shape[1] / data.shape[1]))
+            ystride = int(np.ceil(raw.shape[0] / data.shape[0]))
+            xcoords = np.asarray(xc, dtype=float)[::xstride].tolist()
+            ycoords = np.asarray(yc, dtype=float)[::ystride].tolist()
     payload: dict[str, Any] = {
         "id": oid,
         "title": obj.title or "",
@@ -2259,6 +2278,9 @@ def get_image_data(
         "y0": float(getattr(obj, "y0", 0.0) or 0.0),
         "dx": float(getattr(obj, "dx", 1.0) or 1.0) * (raw.shape[1] / data.shape[1]),
         "dy": float(getattr(obj, "dy", 1.0) or 1.0) * (raw.shape[0] / data.shape[0]),
+        "is_uniform_coords": is_uniform,
+        "xcoords": xcoords,
+        "ycoords": ycoords,
         "data_min": data_min,
         "data_max": data_max,
         "xlabel": obj.xlabel or "",

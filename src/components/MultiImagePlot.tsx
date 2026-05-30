@@ -148,8 +148,19 @@ function MiniImageImpl({ image }: { image: ImageData }) {
       setHover(null);
       return;
     }
-    const x = image.x0 + (i + 0.5) * image.dx;
-    const y = image.y0 + (j + 0.5) * image.dy;
+    // Non-uniform images carry explicit pixel-center coordinates; report
+    // those exactly instead of the default ``x0 + (i+0.5)·dx`` grid (which
+    // would otherwise collapse to raw pixel indices).
+    const xc = image.xcoords;
+    const yc = image.ycoords;
+    const x =
+      image.is_uniform_coords === false && xc?.length
+        ? xc[i]
+        : image.x0 + (i + 0.5) * image.dx;
+    const y =
+      image.is_uniform_coords === false && yc?.length
+        ? yc[j]
+        : image.y0 + (j + 0.5) * image.dy;
     const data = image.data;
     let z: number;
     if (Array.isArray(data) && data[0] instanceof Float32Array) {
