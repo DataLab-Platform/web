@@ -319,7 +319,14 @@ def _array_is_signal(shape: tuple[int, ...]) -> bool:
     return len(shape) == 1 or shape[0] in (1, 2) or shape[1] in (1, 2)
 
 
-def _build_node(file_id: str, h5path: str, dset: Any) -> _NodeInfo:
+# Hard cap on HDF5 group nesting. The whole tree is shipped to the React
+# browser at once (unlike the lazy Qt tree), so a pathologically deep or
+# malformed file must not blow Python's recursion limit and crash the
+# worker. 100 levels is far beyond any real-world dataset.
+_MAX_H5_DEPTH = 100
+
+
+def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeInfo:
     """Recursively build one :class:`_NodeInfo`."""
     metadata = _collect_attrs(dset)
 
@@ -342,9 +349,17 @@ def _build_node(file_id: str, h5path: str, dset: Any) -> _NodeInfo:
             h5path=h5path,
             kind="group",
         )
+        if _depth >= _MAX_H5_DEPTH:
+            print(
+                f"[h5browser] max depth {_MAX_H5_DEPTH} reached at "
+                f"{h5path!r}: not descending further"
+            )
+            return info
         for child_dset in dset.values():
             try:
-                info.children.append(_build_node(file_id, child_dset.name, child_dset))
+                info.children.append(
+                    _build_node(file_id, child_dset.name, child_dset, _depth + 1)
+                )
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
                 print(
                     f"[h5browser] skip {child_dset.name!r}: {type(exc).__name__}: {exc}"
