@@ -7,6 +7,7 @@ import {
   buildSignalCreationActions,
   buildImageCreationActions,
   buildViewActions,
+  isFeatureActionEnabled,
 } from "../../../src/actions/registry";
 import type { ActionState } from "../../../src/actions/types";
 
@@ -165,6 +166,31 @@ describe("buildFeatureActions", () => {
     );
     expect(act.enabled(makeState())).toBe(false);
     expect(act.enabled(makeState({ currentId: "abc" }))).toBe(true);
+  });
+});
+
+describe("isFeatureActionEnabled", () => {
+  it("disables every pattern while the runtime is busy or not ready", () => {
+    const busy = makeState({ busy: true, currentId: "a", hasObjects: true });
+    const loading = makeState({ status: "loading", currentId: "a" });
+    for (const p of ["1_to_1", "2_to_1", "n_to_1"] as const) {
+      expect(isFeatureActionEnabled(p, busy)).toBe(false);
+      expect(isFeatureActionEnabled(p, loading)).toBe(false);
+    }
+  });
+
+  it("requires a second object for 2-to-1 features", () => {
+    const sel = makeState({ currentId: "a", selectedIds: ["a"] });
+    expect(isFeatureActionEnabled("2_to_1", sel)).toBe(false);
+    expect(isFeatureActionEnabled("2_to_1", { ...sel, hasObjects: true })).toBe(
+      true,
+    );
+  });
+
+  it("enables 1-to-1 and n-to-1 as soon as something is selected", () => {
+    const sel = makeState({ currentId: "a" });
+    expect(isFeatureActionEnabled("1_to_1", sel)).toBe(true);
+    expect(isFeatureActionEnabled("n_to_1", sel)).toBe(true);
   });
 });
 

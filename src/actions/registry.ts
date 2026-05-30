@@ -408,6 +408,33 @@ export function buildAIAssistantActions(
 }
 
 /** Wire feature-driven actions (Operations / Processing / …) ---------- */
+/**
+ * Decide whether a feature action is selectable for the current
+ * {@link ActionState}, based on its Sigima ``pattern``.
+ *
+ * The mapping mirrors the input arity declared by ``processor.py``:
+ *
+ * | pattern   | meaning                       | requirement beyond a selection |
+ * | --------- | ----------------------------- | ------------------------------ |
+ * | ``1_to_1``| one object → one object       | none                           |
+ * | ``n_to_1``| n objects → one object        | none (operates on the set)     |
+ * | ``2_to_1``| object + operand → one object | a second object must exist     |
+ *
+ * Every pattern first needs the runtime ready, not busy, and at least one
+ * selected or current object. Keep this in sync with ``processor.py`` when a
+ * new pattern is introduced.
+ */
+export function isFeatureActionEnabled(
+  pattern: FeatureDescriptor["pattern"],
+  s: ActionState,
+): boolean {
+  if (s.status !== "ready" || s.busy) return false;
+  if (s.selectedIds.length === 0 && !s.currentId) return false;
+  // ``2_to_1`` needs a second operand object to combine with the selection.
+  if (pattern === "2_to_1") return s.hasObjects;
+  return true;
+}
+
 export function buildFeatureActions(
   features: FeatureDescriptor[],
   onApply: (featureId: string) => void,
@@ -421,13 +448,7 @@ export function buildFeatureActions(
     label: t(f.label),
     menuPath: f.menu_path,
     iconUrl: getFeatureIconUrl(f.icon),
-    enabled: (s) => {
-      if (s.status !== "ready" || s.busy) return false;
-      if (s.selectedIds.length === 0 && !s.currentId) return false;
-      if (f.pattern === "n_to_1") return true;
-      if (f.pattern === "2_to_1") return s.hasObjects;
-      return true;
-    },
+    enabled: (s) => isFeatureActionEnabled(f.pattern, s),
     run: () => onApply(f.id),
   }));
 }
