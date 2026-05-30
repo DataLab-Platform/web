@@ -103,6 +103,21 @@ def test_get_object_property_schema_for_signal(fresh_bootstrap):
     assert isinstance(payload["values"], dict)
 
 
+def test_image_property_schema_marks_inactive_fields_read_only(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.zeros((4, 4)))
+    props = bs.get_object_property_schema(oid)["schema"]["properties"]
+    # ``is_uniform_coords`` is ``active=False`` in Sigima → read-only, like
+    # the DataLab desktop UI (greyed out, non-editable).
+    assert props["is_uniform_coords"]["readOnly"] is True
+    # A uniform image gates the origin/spacing fields as active → editable,
+    # and the coordinate arrays as inactive → read-only.
+    for name in ("x0", "y0", "dx", "dy"):
+        assert props[name].get("readOnly", False) is False
+    for name in ("xcoords", "ycoords"):
+        assert props[name]["readOnly"] is True
+
+
 def test_get_object_stats_returns_finite_numbers(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = bs.add_signal_from_arrays(

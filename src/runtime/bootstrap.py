@@ -1314,10 +1314,25 @@ def get_object_property_schema(oid: str) -> dict[str, Any]:
     The underlying :class:`SignalObj` inherits from
     :class:`guidata.dataset.DataSet`, so its full layout (tabs, groups,
     units, etc.) is reused to render the "Properties" side panel.
-    """
-    from guidata.dataset import dataset_to_schema_with_values
 
-    return dataset_to_schema_with_values(_MODEL.get(oid))
+    Items whose ``display.active`` resolves to ``False`` for this
+    instance (e.g. ``ImageObj.is_uniform_coords`` and the coordinate
+    fields it gates) are surfaced as ``readOnly`` so the side panel
+    matches the DataLab desktop behaviour, where inactive widgets are
+    greyed out and cannot be edited.
+    """
+    from guidata.dataset import (
+        dataset_to_schema_with_values,
+        resolve_dataset_active,
+    )
+
+    obj = _MODEL.get(oid)
+    payload = dataset_to_schema_with_values(obj)
+    properties = payload["schema"].get("properties", {})
+    for name, active in resolve_dataset_active(obj).items():
+        if not active and name in properties:
+            properties[name]["readOnly"] = True
+    return payload
 
 
 def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
