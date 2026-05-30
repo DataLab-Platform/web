@@ -174,6 +174,66 @@ describe("AIController", () => {
     });
   });
 
+  it("notifies onModelChanged after a successful mutating tool", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch([
+        {
+          content: null,
+          toolCalls: [
+            {
+              id: "a",
+              type: "function",
+              function: { name: "do_it", arguments: "{}" },
+            },
+          ],
+        },
+        { content: "done", toolCalls: [] },
+      ]),
+    );
+    const onModelChanged = vi.fn();
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [makeMutatingTool("do_it", () => "ok")],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+      onModelChanged,
+    });
+    await ctrl.sendUserMessage("go");
+    expect(onModelChanged).toHaveBeenCalledWith(null);
+  });
+
+  it("does not notify onModelChanged for read-only tools", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch([
+        {
+          content: null,
+          toolCalls: [
+            {
+              id: "a",
+              type: "function",
+              function: { name: "ping", arguments: "{}" },
+            },
+          ],
+        },
+        { content: "done", toolCalls: [] },
+      ]),
+    );
+    const onModelChanged = vi.fn();
+    const ctrl = new AIController({
+      runtime: fakeRuntime,
+      tools: [makeReadonlyTool("ping", () => "pong")],
+      systemPrompt: "s",
+      getSettings: () => settings,
+      confirmTool: async () => true,
+      onModelChanged,
+    });
+    await ctrl.sendUserMessage("go");
+    expect(onModelChanged).not.toHaveBeenCalled();
+  });
+
   it("propagates HTTP errors from the provider", async () => {
     vi.stubGlobal(
       "fetch",

@@ -15,6 +15,7 @@
  */
 
 import type { DataLabRuntime } from "../runtime/runtime";
+import { REMOTE_MODEL_CHANGED_EVENT } from "../runtime/remoteBridge";
 import { chatCompletions } from "./provider";
 import { callTool, indexTools } from "./tools";
 import type {
@@ -31,6 +32,22 @@ import type {
 /** Hard cap on the tool-call loop to avoid runaway iterations when a
  *  badly-tuned model keeps requesting tools. */
 const MAX_ITERATIONS = 10;
+
+/** Default ``onModelChanged`` emitter: broadcasts a DOM ``CustomEvent`` so
+ *  the React App refreshes the panel tree (parity with the remote-bridge
+ *  fan-out used by the macro proxy). Keeps the only DOM access in one place
+ *  and no-ops in non-DOM environments (tests). Hosts can inject their own
+ *  callback via :type:`ControllerOptions` to stay fully GUI-agnostic. */
+export function dispatchRemoteModelChanged(panel: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent(REMOTE_MODEL_CHANGED_EVENT, { detail: { panel } }),
+    );
+  } catch {
+    // ignore — non-DOM environments just skip the refresh.
+  }
+}
 
 /** Thrown when :meth:`AIController.abort` interrupts the running loop.
  *  Mirrors the browser's ``DOMException("...", "AbortError")`` (also
@@ -63,6 +80,11 @@ export interface ControllerOptions {
   getSettings: () => ProviderSettings;
   confirmTool: ConfirmToolCallback;
   listener?: ControllerListener;
+  /** Invoked after a mutating tool succeeds so the host can refresh its
+   *  view of the workspace. Defaults to :func:`dispatchRemoteModelChanged`
+   *  (a DOM ``CustomEvent`` broadcast); inject a callback to keep the
+   *  controller free of any DOM dependency. */
+  onModelChanged?: (panel: string | null) => void;
 }
 
 export class AIController {
@@ -72,6 +94,7 @@ export class AIController {
   private readonly getSettings: () => ProviderSettings;
   private readonly confirmTool: ConfirmToolCallback;
   private readonly listener: ControllerListener;
+  private readonly onModelChanged: (panel: string | null) => void;
   private readonly history: ChatMessage[];
   /** Set while :meth:`runLoop` is in flight; ``null`` otherwise. */
   private abortController: AbortController | null = null;
@@ -86,6 +109,7 @@ export class AIController {
     this.getSettings = opts.getSettings;
     this.confirmTool = opts.confirmTool;
     this.listener = opts.listener ?? {};
+    this.onModelChanged = opts.onModelChanged ?? dispatchRemoteModelChanged;
     this.history = [{ role: "system", content: opts.systemPrompt }];
   }
 
@@ -302,19 +326,11 @@ export class AIController {
 
       result = await callTool(tool, this.runtime, args);
     }
-    // Mutating tools changed the workspace — broadcast a model-changed
-    // event so the React App refreshes the panel tree (parity with the
-    // remote-bridge fan-out used by the macro proxy).
+    // Mutating tools changed the workspace — notify the host so the React
+    // App refreshes the panel tree (parity with the remote-bridge fan-out
+    // used by the macro proxy).
     if (tool && !tool.readonly && result.ok) {
-      try {
-        window.dispatchEvent(
-          new CustomEvent("datalab-web:remote-model-changed", {
-            detail: { panel: null },
-          }),
-        );
-      } catch {
-        // ignore — non-DOM environments (tests) just skip the refresh.
-      }
+      this.onModelChanged(null);
     }
     this.appendToolResultMessage(call, result);
     // Multimodal tools (e.g. ``capture_view``) attach extra messages
