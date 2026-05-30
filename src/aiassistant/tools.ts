@@ -11,6 +11,7 @@
 import type {
   DataLabRuntime,
   ImageCreationParams,
+  ObjectStats,
   SignalCreationParams,
 } from "../runtime/runtime";
 import {
@@ -22,7 +23,9 @@ import { isToolResult, type Tool, type ToolResult } from "./types";
 
 /** Compact statistics for a 1D signal — sent to the LLM instead of the
  *  full ``y`` array, which would blow the context window for any
- *  realistic signal. */
+ *  realistic signal. The numeric stats come from Sigima (via
+ *  :meth:`DataLabRuntime.getObjectStats`); only the head/tail sample
+ *  previews are sliced here. */
 function summariseSignal(
   meta: {
     id: string;
@@ -34,35 +37,23 @@ function summariseSignal(
   },
   x: number[],
   y: number[],
+  stats: Extract<ObjectStats, { kind: "signal" }>,
 ): Record<string, unknown> {
   const n = y.length;
   if (n === 0) {
     return { ...meta, n: 0 };
   }
-  let yMin = y[0]!;
-  let yMax = y[0]!;
-  let sum = 0;
-  let sumSq = 0;
-  for (let i = 0; i < n; i += 1) {
-    const v = y[i]!;
-    if (v < yMin) yMin = v;
-    if (v > yMax) yMax = v;
-    sum += v;
-    sumSq += v * v;
-  }
-  const mean = sum / n;
-  const variance = Math.max(0, sumSq / n - mean * mean);
-  const std = Math.sqrt(variance);
   const previewN = Math.min(8, n);
   return {
     ...meta,
     n,
-    x_min: x[0],
-    x_max: x[n - 1],
-    y_min: yMin,
-    y_max: yMax,
-    y_mean: mean,
-    y_std: std,
+    x_min: stats.x_min,
+    x_max: stats.x_max,
+    y_min: stats.y_min,
+    y_max: stats.y_max,
+    y_mean: stats.y_mean,
+    y_std: stats.y_std,
+    y_median: stats.y_median,
     first_x: x.slice(0, previewN),
     first_y: y.slice(0, previewN),
     last_x: x.slice(Math.max(0, n - previewN)),
@@ -126,6 +117,10 @@ const GET_SIGNAL_SUMMARY_TOOL: Tool = {
   handler: async (runtime, args) => {
     const id = String(args.id);
     const data = await runtime.getSignalData(id);
+    const stats = await runtime.getObjectStats(id);
+    if (stats.kind !== "signal") {
+      throw new Error(`Object ${id} is not a signal.`);
+    }
     return summariseSignal(
       {
         id: data.id,
@@ -137,6 +132,7 @@ const GET_SIGNAL_SUMMARY_TOOL: Tool = {
       },
       data.x,
       data.y,
+      stats,
     );
   },
 };

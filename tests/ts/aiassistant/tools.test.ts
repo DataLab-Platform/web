@@ -71,6 +71,19 @@ describe("aiassistant/tools", () => {
         x,
         y,
       })),
+      getObjectStats: vi.fn(async () => ({
+        kind: "signal" as const,
+        n_points: 100,
+        x_dtype: "float64",
+        y_dtype: "float64",
+        x_min: 0,
+        x_max: 99,
+        y_min: 0,
+        y_max: 198,
+        y_mean: 99,
+        y_std: 57.73,
+        y_median: 99,
+      })),
     });
     const result = (await callTool(tool, runtime, { id: "s1" })).data as Record<
       string,
