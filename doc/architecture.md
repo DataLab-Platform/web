@@ -134,7 +134,7 @@ Presentational React. Notable components:
 - ROI: `RoiDialog.tsx`, `ImageRoiDialog.tsx`, `RoiGridDialog.tsx`,
   `signalRoi.ts`, `imageRoi.ts`.
 - Other domain dialogs: `H5BrowserDialog.tsx`, `InteractiveFitDialog.tsx`,
-  `TextImportWizard.tsx`, `MetadataDialog.tsx`,
+  `TextImportWizard.tsx`, `ObjectPropertiesDialog.tsx`,
   `ProfileDefinitionDialog.tsx`, `SaveToDirectoryDialog.tsx`,
   `SeparateViewDialog.tsx`, `PluginManagerDialog.tsx`,
   `PluginConsentDialog.tsx`, `HelpDialog.tsx`.

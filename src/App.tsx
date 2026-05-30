@@ -85,7 +85,7 @@ import {
 } from "./components/SeparateViewDialog";
 import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
-import { MetadataDialog } from "./components/MetadataDialog";
+import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiDialog } from "./components/RoiDialog";
 import { ImageRoiDialog } from "./components/ImageRoiDialog";
 import { RoiGridDialog } from "./components/RoiGridDialog";
@@ -3414,7 +3414,7 @@ export default function App() {
           />
         )}
         {editingMeta && (
-          <MetadataDialog
+          <ObjectPropertiesDialog
             initial={editingMeta}
             onSubmit={handleSubmitMeta}
             onCancel={() => setEditingMeta(null)}

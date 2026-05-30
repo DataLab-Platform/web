@@ -8,7 +8,7 @@ interface Props {
   onCancel: () => void;
 }
 
-export function MetadataDialog({ initial, onSubmit, onCancel }: Props) {
+export function ObjectPropertiesDialog({ initial, onSubmit, onCancel }: Props) {
   const [values, setValues] = useState<ObjectMeta>(initial);
 
   const update = (key: keyof ObjectMeta, value: string) =>
