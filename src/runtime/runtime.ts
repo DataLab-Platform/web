@@ -1411,6 +1411,30 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("list_signals")) as SignalMeta[];
   }
 
+  /** Flat ``{id, title}`` list of every stored image. */
+  async listImages(): Promise<{ id: string; title: string }[]> {
+    return (await this.callPy("list_images")) as {
+      id: string;
+      title: string;
+    }[];
+  }
+
+  /** Minimal ``{id, kind, title}`` descriptor for a single object. */
+  async getObject(
+    id: string,
+  ): Promise<{ id: string; kind: string; title: string }> {
+    return (await this.callPy("get_object", { oid: id })) as {
+      id: string;
+      kind: string;
+      title: string;
+    };
+  }
+
+  /** Ids of every object hosted by *panel* (``"signal"`` or ``"image"``). */
+  async getObjectUuids(panel: string): Promise<string[]> {
+    return (await this.callPy("get_object_uuids", { panel })) as string[];
+  }
+
   async getSignalData(id: string): Promise<SignalData> {
     return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
   }

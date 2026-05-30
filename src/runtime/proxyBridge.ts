@@ -91,28 +91,10 @@ export function buildProxyBridge(
       return oid;
     },
     list_signals: async () => s.listSignals(),
-    list_images: async () =>
-      (await s.runPython(`
-[{"id": oid, "title": e.obj.title}
- for oid, e in _MODEL._objects.items() if e.kind == "image"]
-`)) as unknown,
-    get_object: async (p: unknown) => {
-      const oid = (p as { oid: string }).oid;
-      return (await s.runPython(`
-_e = _MODEL._objects[${JSON.stringify(oid)}]
-{
-  "id": _e.oid,
-  "kind": _e.kind,
-  "title": _e.obj.title,
-}
-`)) as unknown;
-    },
-    get_object_uuids: async (p: unknown) => {
-      const panel = (p as { panel: string }).panel;
-      return (await s.runPython(`
-[oid for oid, e in _MODEL._objects.items() if e.kind == ${JSON.stringify(panel)}]
-`)) as unknown;
-    },
+    list_images: async () => s.listImages(),
+    get_object: async (p: unknown) => s.getObject((p as { oid: string }).oid),
+    get_object_uuids: async (p: unknown) =>
+      s.getObjectUuids((p as { panel: string }).panel),
     delete_object: async (p: unknown) => {
       const oid = (p as { oid: string }).oid;
       await s.runPython(`_MODEL.delete_object(${JSON.stringify(oid)})`);

@@ -1997,6 +1997,21 @@ def list_signals() -> list[dict[str, Any]]:
     ]
 
 
+def list_images() -> list[dict[str, Any]]:
+    """Return ``{"id", "title"}`` for every stored image (flat)."""
+    return [{"id": oid, "title": obj.title} for oid, obj in _MODEL.iter_all("image")]
+
+
+def get_object(oid: str) -> dict[str, Any]:
+    """Return ``{"id", "kind", "title"}`` for the object identified by *oid*."""
+    return {"id": oid, "kind": _MODEL.kind_of(oid), "title": _MODEL.get(oid).title}
+
+
+def get_object_uuids(panel: str) -> list[str]:
+    """Return the ids of every object whose kind matches *panel*."""
+    return [oid for oid, _obj in _MODEL.iter_all(panel)]
+
+
 # ---------------------------------------------------------------------------
 # Image panel
 # ---------------------------------------------------------------------------
@@ -4651,6 +4666,9 @@ __all__ = [
     "open_from_directory_chunk",
     "format_signal_basenames",
     "list_signals",
+    "list_images",
+    "get_object",
+    "get_object_uuids",
     "get_signal_xy",
     "get_signals_xy",
     "set_signal_style",
