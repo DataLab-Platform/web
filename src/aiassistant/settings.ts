@@ -34,6 +34,34 @@ function normaliseProvider(value: unknown): ProviderKind {
   return value === "mock" ? "mock" : "openai";
 }
 
+// Guards the one-shot plaintext→encrypted API-key migration so it runs at
+// most once per session even if ``loadSettings`` is called repeatedly
+// before it completes. Reset to ``null`` on failure to allow a retry.
+let legacyKeyMigration: Promise<void> | null = null;
+
+function migrateLegacyPlaintextKey(legacyKey: string): Promise<void> {
+  if (legacyKeyMigration) return legacyKeyMigration;
+  legacyKeyMigration = saveApiKey(legacyKey)
+    .then(() => {
+      try {
+        const current = window.localStorage.getItem(STORAGE_KEY);
+        if (!current) return;
+        const obj = JSON.parse(current) as Record<string, unknown>;
+        if (obj && "apiKey" in obj) {
+          delete obj.apiKey;
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+        }
+      } catch {
+        /* ignore */
+      }
+    })
+    .catch(() => {
+      // Encrypted write failed — allow a later load to retry the migration.
+      legacyKeyMigration = null;
+    });
+  return legacyKeyMigration;
+}
+
 /** Read non-secret settings from ``localStorage``. The returned
  *  ``apiKey`` is always empty — call :func:`loadApiKey` to fetch the
  *  encrypted value from IndexedDB. */
@@ -46,23 +74,11 @@ export function loadSettings(): ProviderSettings {
     };
     // Migration: a previous version of DataLab-Web persisted the API
     // key in plaintext alongside the other fields. If we see one,
-    // fire-and-forget an encrypted copy and strip the plaintext from
-    // the on-disk record.
+    // encrypt it and strip the plaintext from the on-disk record. The
+    // migration is deduplicated so repeated ``loadSettings`` calls don't
+    // race each other.
     if (typeof parsed.apiKey === "string" && parsed.apiKey) {
-      const legacyKey = parsed.apiKey;
-      void saveApiKey(legacyKey).then(() => {
-        try {
-          const current = window.localStorage.getItem(STORAGE_KEY);
-          if (!current) return;
-          const obj = JSON.parse(current) as Record<string, unknown>;
-          if (obj && "apiKey" in obj) {
-            delete obj.apiKey;
-            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
-          }
-        } catch {
-          /* ignore */
-        }
-      });
+      void migrateLegacyPlaintextKey(parsed.apiKey);
     }
     return {
       provider: normaliseProvider(parsed.provider),
