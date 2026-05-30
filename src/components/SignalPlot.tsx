@@ -116,6 +116,14 @@ export function SignalPlot({
     }, 250);
   };
 
+  // Cancel any pending debounced writeback when the plot unmounts so we
+  // never call ``onAnnotationsChange`` on a torn-down component.
+  useEffect(() => {
+    return () => {
+      if (writeTimer.current) clearTimeout(writeTimer.current);
+    };
+  }, []);
+
   const handleRelayout = (event: Record<string, unknown>) => {
     let touched = false;
     let nextShapes = localShapes;
