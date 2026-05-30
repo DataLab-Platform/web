@@ -27,7 +27,7 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
   const findOrCreateFolder = (parent: MenuNode, label: string): MenuNode => {
     parent.children = parent.children ?? [];
     let node = parent.children.find(
-      (c) => c.label === label && c.children !== undefined && !c.action,
+      (c) => c.label === label && c.children !== undefined,
     );
     if (!node) {
       const path = parent.path ? `${parent.path}/${label}` : label;
