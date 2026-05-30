@@ -32,42 +32,22 @@
 import macroProxySource from "./macro_proxy.py?raw";
 import notebookDisplaySource from "./notebook_display.py?raw";
 import dlwTitleFormatSource from "./dlw_title_format.py?raw";
+import {
+  bootPyodide,
+  installBridge,
+  installProxyGlobal,
+  resolveBridgeReply,
+  type DLWWorkerScope,
+  type PyodideAPI,
+} from "./workerBase";
 
-declare const self: DedicatedWorkerGlobalScope & {
-  _dlw_bridge_call?: (method: string, payload: unknown) => Promise<unknown>;
-  _dlw_pending_replies?: Map<
-    string,
-    { resolve: (v: unknown) => void; reject: (e: unknown) => void }
-  >;
-  _dlw_current_cell_id?: string;
-  _dlw_post_display?: (mime: unknown) => void;
-  _dlw_post_execute_result?: (mime: unknown) => void;
-  _dlw_post_stream?: (kind: string, text: string) => void;
-};
-
-interface PyodideAPI {
-  runPythonAsync: (code: string) => Promise<unknown>;
-  loadPackage: (names: string | string[]) => Promise<void>;
-  globals: {
-    set: (name: string, value: unknown) => void;
-    get: (name: string) => unknown;
+declare const self: DedicatedWorkerGlobalScope &
+  DLWWorkerScope & {
+    _dlw_current_cell_id?: string;
+    _dlw_post_display?: (mime: unknown) => void;
+    _dlw_post_execute_result?: (mime: unknown) => void;
+    _dlw_post_stream?: (kind: string, text: string) => void;
   };
-  FS: {
-    writeFile: (path: string, data: string) => void;
-    mkdirTree?: (path: string) => void;
-  };
-  setStdout: (opts: {
-    batched?: (s: string) => void;
-    raw?: (c: number) => void;
-  }) => void;
-  setStderr: (opts: {
-    batched?: (s: string) => void;
-    raw?: (c: number) => void;
-  }) => void;
-}
-
-const PYODIDE_VERSION = "v0.26.4";
-const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 
 let pyPromise: Promise<PyodideAPI> | null = null;
 
@@ -80,37 +60,11 @@ let pyLang = "C";
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
   pyPromise = (async () => {
-    // Module workers don't support ``importScripts`` — use the ESM
-    // build of Pyodide and a dynamic ``import()`` instead.  Vite needs
-    // the ``/* @vite-ignore */`` hint because the URL is dynamic.
-    const pyodideMod = (await import(
-      /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
-    )) as { loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI> };
-    const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
-
-    // Pin the UI locale for any gettext-wrapped labels coming back from
-    // the bridge (mirrors the macro worker; same rationale).
-    await py.runPythonAsync(`
-import os
-os.environ["LANG"] = ${JSON.stringify(pyLang)}
-os.environ["LANGUAGE"] = ${JSON.stringify(pyLang)}
-`);
-
-    await py.loadPackage(["numpy", "scipy", "micropip"]);
-
-    // Install Sigima (and guidata) so user cells can ``import sigima``
-    // directly. This adds ~30s on first init but mirrors the main
-    // runtime's micropip install and is what the Quickstart template
-    // (and any "scientific Python" notebook) expects.
-    await py.runPythonAsync(`
-import micropip
-await micropip.install(["sigima", "guidata"])
-`);
-    // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced
-    // inside notebook cells use the same placeholder format as the main
-    // runtime (later resolved to source ``oid``s by the main bootstrap).
-    py.FS.writeFile("/home/pyodide/dlw_title_format.py", dlwTitleFormatSource);
-    await py.runPythonAsync(dlwTitleFormatSource);
+    const py = await bootPyodide({
+      lang: pyLang,
+      packages: ["numpy", "scipy", "micropip"],
+      titleFormatSource: dlwTitleFormatSource,
+    });
 
     // ----- Stream redirection (per-cell, tagged with current cell id) -----
     const postStream = (kind: string, text: string) =>
@@ -191,23 +145,11 @@ sys.stdout = _DLWStream("stdout")
 sys.stderr = _DLWStream("stderr")
 `);
 
-    // ----- Bridge plumbing (identical to macro worker) -------------------
-    self._dlw_pending_replies = new Map();
-    let nextId = 0;
-    self._dlw_bridge_call = (method: string, payload: unknown) =>
-      new Promise((resolve, reject) => {
-        const id = `b${++nextId}`;
-        self._dlw_pending_replies!.set(id, { resolve, reject });
-        self.postMessage({ type: "bridge_call", id, method, payload });
-      });
+    // ----- Bridge plumbing (shared with the macro worker) ----------------
+    installBridge(self, (m) => self.postMessage(m));
 
-    // ----- Install ``proxy`` global (same as macro worker) ---------------
-    try {
-      py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
-    } catch {
-      /* ignore */
-    }
-    await py.runPythonAsync(macroProxySource);
+    // ----- Install ``proxy`` global (shared with the macro worker) -------
+    await installProxyGlobal(py, macroProxySource);
 
     // ----- Install notebook display helpers ------------------------------
     try {
@@ -288,11 +230,7 @@ self.onmessage = async (event: MessageEvent) => {
       return;
     }
     if (msg.type === "bridge_reply") {
-      const pending = self._dlw_pending_replies?.get(msg.id);
-      if (!pending) return;
-      self._dlw_pending_replies!.delete(msg.id);
-      if (msg.ok) pending.resolve(msg.value);
-      else pending.reject(new Error(msg.error ?? "bridge call failed"));
+      resolveBridgeReply(self, msg);
       return;
     }
     if (msg.type === "exec_cell") {

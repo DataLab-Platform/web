@@ -22,6 +22,14 @@
 
 import macroProxySource from "./macro_proxy.py?raw";
 import dlwTitleFormatSource from "./dlw_title_format.py?raw";
+import {
+  bootPyodide,
+  installBridge,
+  installProxyGlobal,
+  resolveBridgeReply,
+  type DLWWorkerScope,
+  type PyodideAPI,
+} from "./workerBase";
 // Same JSON Schema / backends shims as the main runtime — required so
 // ``guidata.dataset`` (transitively imported by ``sigima``) loads
 // cleanly under Pyodide. See runtime.ts for the rationale.
@@ -36,37 +44,7 @@ const guidataBackendsSource = (() => {
   return first ?? null;
 })();
 
-declare const self: DedicatedWorkerGlobalScope & {
-  _dlw_bridge_call?: (method: string, payload: unknown) => Promise<unknown>;
-  _dlw_pending_replies?: Map<
-    string,
-    { resolve: (v: unknown) => void; reject: (e: unknown) => void }
-  >;
-};
-
-interface PyodideAPI {
-  runPythonAsync: (code: string) => Promise<unknown>;
-  loadPackage: (names: string | string[]) => Promise<void>;
-  globals: {
-    set: (name: string, value: unknown) => void;
-    get: (name: string) => unknown;
-  };
-  FS: {
-    writeFile: (path: string, data: string) => void;
-    mkdirTree?: (path: string) => void;
-  };
-  setStdout: (opts: {
-    batched?: (s: string) => void;
-    raw?: (c: number) => void;
-  }) => void;
-  setStderr: (opts: {
-    batched?: (s: string) => void;
-    raw?: (c: number) => void;
-  }) => void;
-}
-
-const PYODIDE_VERSION = "v0.26.4";
-const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
+declare const self: DedicatedWorkerGlobalScope & DLWWorkerScope;
 
 let pyPromise: Promise<PyodideAPI> | null = null;
 
@@ -80,40 +58,12 @@ let pyLang = "C";
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
   pyPromise = (async () => {
-    // Module workers don't support ``importScripts`` — use the ESM
-    // build of Pyodide and a dynamic ``import()`` instead.  Vite needs
-    // the ``/* @vite-ignore */`` hint because the URL is dynamic.
-    const pyodideMod = (await import(
-      /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
-    )) as { loadPyodide: (opts: { indexURL: string }) => Promise<PyodideAPI> };
-    const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
+    const py = await bootPyodide({
+      lang: pyLang,
+      packages: ["numpy", "scipy", "h5py", "micropip"],
+      titleFormatSource: dlwTitleFormatSource,
+    });
 
-    // Pin ``LANG`` before any guidata/sigima import so gettext-wrapped
-    // labels (e.g. signal/image creation types, processing labels) match
-    // the main thread's UI locale (``C`` = English, or e.g. ``fr``). See
-    // the long-form comment in ``runtime.ts`` and the
-    // "Internationalisation" section of ``README.md`` for the rationale.
-    await py.runPythonAsync(`
-import os
-os.environ["LANG"] = ${JSON.stringify(pyLang)}
-os.environ["LANGUAGE"] = ${JSON.stringify(pyLang)}
-`);
-
-    await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
-
-    // Install Sigima + guidata so macros can ``import sigima`` and
-    // ``import guidata.dataset`` exactly as they do in DataLab desktop.
-    // This adds ~10-20s to the first macro run; subsequent runs reuse
-    // the same worker.
-    await py.runPythonAsync(`
-import micropip
-await micropip.install(["sigima", "guidata"])
-`);
-    // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced
-    // inside macros use the same placeholder format as the main runtime
-    // (later resolved to source ``oid``s by the main bootstrap).
-    py.FS.writeFile("/home/pyodide/dlw_title_format.py", dlwTitleFormatSource);
-    await py.runPythonAsync(dlwTitleFormatSource);
     await py.runPythonAsync(guidataJsonSchemaShim);
     if (guidataBackendsSource) {
       await py.runPythonAsync(guidataBackendsSource);
@@ -170,25 +120,10 @@ sys.stderr = _DLWStream(_dlw_post_stderr)
     // Bridge: macro calls ``js._dlw_bridge_call(method, payload)`` and
     // awaits the returned Promise; we resolve it when the main thread
     // posts back ``{type: "bridge_reply", id, ok, value|error}``.
-    self._dlw_pending_replies = new Map();
-    let nextId = 0;
-    self._dlw_bridge_call = (method: string, payload: unknown) => {
-      const id = `b${++nextId}`;
-      return new Promise((resolve, reject) => {
-        self._dlw_pending_replies!.set(id, { resolve, reject });
-        self.postMessage({ type: "bridge_call", id, method, payload });
-      });
-    };
+    installBridge(self, (m) => self.postMessage(m));
 
     // Install the Python ``proxy`` global by executing macro_proxy.py.
-    // Also persist it to the FS so user code can ``import macro_proxy``
-    // explicitly if it wants to.
-    try {
-      py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
-    } catch {
-      /* /home/pyodide may not exist on every Pyodide build — ignore. */
-    }
-    await py.runPythonAsync(macroProxySource);
+    await installProxyGlobal(py, macroProxySource);
     return py;
   })();
   return pyPromise;
@@ -242,11 +177,7 @@ self.onmessage = async (event: MessageEvent) => {
       return;
     }
     if (msg.type === "bridge_reply") {
-      const pending = self._dlw_pending_replies?.get(msg.id);
-      if (!pending) return;
-      self._dlw_pending_replies!.delete(msg.id);
-      if (msg.ok) pending.resolve(msg.value);
-      else pending.reject(new Error(msg.error ?? "bridge call failed"));
+      resolveBridgeReply(self, msg);
       return;
     }
     if (msg.type === "run") {
