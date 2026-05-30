@@ -127,6 +127,17 @@ helpers — prefer the typed path for new work.
 - **Pyodide version is pinned** (`PYODIDE_VERSION` in `runtime.ts` and the
   `<script>` tag in `index.html`). Bump both together; Pyodide’s wheel index
   is version-specific.
+- **Internationalisation is mandatory for user-facing strings**: wrap every
+  new visible string in `t("English source")` (from `src/i18n/translate`;
+  the English text _is_ the key). Use `t("Delete {count}", { count })` for
+  interpolation. Do **not** translate brand names or AI-assistant system
+  prompts. Watch for `t` shadowing in `.map((t) => …)` (rename the param).
+  Literal `t("…")` calls are auto-extracted; keys passed only as a variable
+  (`t(label)`) must be listed in `src/locales/_dynamic-keys.json`. After
+  adding strings, run the **`🌍 i18n: Extract keys (step 1/2)`** task, fill
+  the new empty values in `src/locales/fr.json`, then run the
+  **`🌍 i18n: Check catalog (step 2/2)`** task. See the README
+  "Internationalisation" section for the full workflow.
 
 ## Testing
 
@@ -153,6 +164,9 @@ done (bug fix, feature, or any phase of a multi-phase task):
    a pixel) rather than just calling `window.runtime.*` from
    `page.evaluate`, which can silently no-op.
 3. **For `src/runtime/*.py` changes**, run pytest (`tests/python`).
+4. **When you add or change user-facing strings**, run `npm run i18n:check`
+   (or the `🌍 i18n: Check catalog (step 2/2)` task). CI fails on missing or
+   empty catalog keys.
 
 ## Git workflow
 

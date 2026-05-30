@@ -135,6 +135,38 @@
       "problemMatcher": []
     },
     {
+      "label": "🌍 i18n: Extract keys (step 1/2)",
+      "detail": "Step 1/2 — scan src/ for t(\"…\") calls and merge new keys into src/locales/fr.json (empty placeholders). Then fill the new French values by hand, and run step 2/2 to verify.",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "i18n:extract"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🌍 i18n: Check catalog (step 2/2)",
+      "detail": "Step 2/2 — verify every referenced key is present and non-empty in src/locales/fr.json (read-only; same check as CI). Run after filling in the French translations.",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "i18n:check"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "🚀 Pytest (Python)",
       "type": "shell",
       "command": "${command:python.interpreterPath}",
