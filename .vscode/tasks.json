@@ -321,7 +321,7 @@
       "problemMatcher": []
     },
     {
-      "label": "� Audit shims (versions)",
+      "label": "🔍 Audit shims (versions)",
       "detail": "Report which temporary backport shims are now removable by comparing each shim's removableFrom with the version resolved at runtime (PyPI / pyodide-lock). Report-only; needs network.",
       "type": "shell",
       "command": "npm",
@@ -332,7 +332,7 @@
       "problemMatcher": []
     },
     {
-      "label": "�🟢 Vitest watch",
+      "label": "🟢 Vitest watch",
       "type": "shell",
       "command": "npm",
       "args": ["run", "test:watch"],
