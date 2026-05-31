@@ -123,7 +123,8 @@ export const SHIM_REGISTRY: ShimDescriptor[] = [
     id: "sigima-results-display",
     summary:
       "Vendored TableResult / GeometryResult HTML display wrappers used by " +
-      "notebook output until Sigima ships sigima.viz.results_display.",
+      "notebook output. Superseded by the native _repr_html_ / to_html that " +
+      "TableResult and GeometryResult gained in Sigima 1.1.0.",
     kind: "backport",
     targetPackage: "sigima",
     files: [],
@@ -132,11 +133,12 @@ export const SHIM_REGISTRY: ShimDescriptor[] = [
       startMarker: "# Vendored TableResult / GeometryResult display shims",
       endMarker: "# END VENDORED RESULT DISPLAY SHIM",
     },
-    // The extraction PR (sigima.viz.results_display) is not released yet,
-    // so no removal version can be pinned. Update when it lands.
-    removableFrom: null,
+    // Sigima 1.1.0 added _repr_html_ / to_html directly on TableResult and
+    // GeometryResult (commit 6106269), so the objects render themselves and
+    // the vendored wrappers are redundant from 1.1.0 onwards.
+    removableFrom: "1.1.0",
     upstreamRef:
-      "sigima/sigima/viz/ (results_display module — not yet present)",
+      "sigima/sigima/objects/scalar/{table.py,geometry.py} (_repr_html_/to_html)",
     loadedBy: ["src/runtime/notebookWorker.ts"],
   },
   {
