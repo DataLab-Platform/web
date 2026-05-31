@@ -247,7 +247,8 @@ function ImageArrayPreview({
     runtime
       .getImageData(oid)
       .then((img) => {
-        const grid = Array.from(img.data, (row) => Array.from(row));
+        const rows = img.data as (number[] | Float32Array)[];
+        const grid: number[][] = rows.map((row) => Array.from(row));
         setMatrix(grid);
         setEditing(true);
       })
