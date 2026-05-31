@@ -28,7 +28,6 @@ appropriate React renderer in ``OutputArea.tsx``.
 from __future__ import annotations
 
 import base64
-import io
 import sys
 import traceback
 from typing import Any
@@ -86,21 +85,6 @@ def _bump_exec_count() -> int:
 # MIME serialisation
 # ---------------------------------------------------------------------------
 
-# Try to import sigima's shared result-display wrappers. When they are not
-# available (older Sigima releases — the extraction PR is in flight), fall
-# back to the lightweight vendored copies further down so notebooks still
-# render TableResult / GeometryResult prettily.
-try:  # pragma: no cover — exercised in Pyodide
-    from sigima.viz.results_display import (
-        GeometryResultDisplay as _GeometryResultDisplay,
-    )
-    from sigima.viz.results_display import (  # type: ignore[import-not-found]
-        TableResultDisplay as _TableResultDisplay,
-    )
-except ImportError:
-    _TableResultDisplay = None
-    _GeometryResultDisplay = None
-
 
 def _is_plotly_figure(obj: Any) -> bool:
     """Best-effort detection without importing plotly at module load time."""
@@ -111,22 +95,6 @@ def _is_plotly_figure(obj: Any) -> bool:
     }
 
 
-def _wrap_result(obj: Any) -> Any:
-    """Wrap raw Sigima results in their HTML display shim, if available."""
-    if obj is None:
-        return None
-    cls_name = type(obj).__name__
-    if _TableResultDisplay is not None and cls_name == "TableResult":
-        return _TableResultDisplay(obj)
-    if _GeometryResultDisplay is not None and cls_name == "GeometryResult":
-        return _GeometryResultDisplay(obj)
-    if _TableResultDisplay is None and cls_name == "TableResult":
-        return _VendoredTableDisplay(obj)
-    if _GeometryResultDisplay is None and cls_name == "GeometryResult":
-        return _VendoredGeometryDisplay(obj)
-    return obj
-
-
 def _to_mime_bundle(obj: Any) -> dict[str, Any] | None:
     """Convert a Python object to a Jupyter-style MIME bundle.
 
@@ -135,7 +103,6 @@ def _to_mime_bundle(obj: Any) -> dict[str, Any] | None:
     """
     if obj is None:
         return None
-    obj = _wrap_result(obj)
 
     # Plotly figures → ``application/vnd.plotly.v1+json``.
     if _is_plotly_figure(obj):
@@ -345,80 +312,3 @@ async def _exec_cell(source: str) -> None:
     bundle = _to_mime_bundle(result)
     if bundle is not None:
         _post(bundle, kind="execute_result")
-
-
-# ---------------------------------------------------------------------------
-# Vendored TableResult / GeometryResult display shims
-# ---------------------------------------------------------------------------
-# @shim-registry: sigima-results-display
-# Trimmed-down copies of the wrappers that live in DataLab-Kernel's
-# ``plotter.py``. Removed once Sigima ships ``sigima.viz.results_display``
-# (PR in flight). Pure ``_repr_html_`` based; no Jupyter dependency.
-
-_VENDORED_TABLE_STYLE = """
-<style>
-.sigima-table { border-collapse: collapse; font-family: -apple-system,
-  BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px;
-  margin: 10px 0; }
-.sigima-table th { background-color: #f8f9fa; border: 1px solid #dee2e6;
-  padding: 8px 12px; text-align: left; font-weight: 600; }
-.sigima-table td { border: 1px solid #dee2e6; padding: 8px 12px;
-  text-align: right; }
-.sigima-table tr:nth-child(even) { background-color: #f8f9fa; }
-.sigima-table-title { font-size: 14px; font-weight: 600;
-  margin-bottom: 8px; color: #495057; }
-</style>
-"""
-
-
-class _VendoredTableDisplay:  # pylint: disable=too-few-public-methods
-    """Minimal HTML wrapper for ``sigima.objects.TableResult``."""
-
-    def __init__(self, result: Any, title: str | None = None) -> None:
-        self._result = result
-        self._title = title
-
-    def _repr_html_(self) -> str:
-        try:
-            title = self._title or getattr(self._result, "title", "Table")
-            if hasattr(self._result, "to_html"):
-                return f"{_VENDORED_TABLE_STYLE}<div>{self._result.to_html()}</div>"
-            # Manual fallback via pandas if available.
-            import pandas as pd  # pylint: disable=import-outside-toplevel
-
-            df = pd.DataFrame(self._result.data, columns=list(self._result.headers))
-            html = df.to_html(classes="sigima-table")
-            return (
-                f"{_VENDORED_TABLE_STYLE}"
-                f'<div><div class="sigima-table-title">{title}</div>{html}</div>'
-            )
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            return f"<div>Error rendering table: {exc}</div>"
-
-
-class _VendoredGeometryDisplay:  # pylint: disable=too-few-public-methods
-    """Minimal HTML wrapper for ``sigima.objects.GeometryResult``."""
-
-    def __init__(self, result: Any, title: str | None = None) -> None:
-        self._result = result
-        self._title = title
-
-    def _repr_html_(self) -> str:
-        try:
-            title = self._title or getattr(self._result, "title", "Geometry")
-            if hasattr(self._result, "to_html"):
-                return f"{_VENDORED_TABLE_STYLE}<div>{self._result.to_html()}</div>"
-            buf = io.StringIO()
-            buf.write(f'<div class="sigima-table-title">{title}</div>')
-            buf.write('<table class="sigima-table"><tbody>')
-            for row in getattr(self._result, "coords", []):
-                buf.write("<tr>" + "".join(f"<td>{v:.6g}</td>" for v in row) + "</tr>")
-            buf.write("</tbody></table>")
-            return f"{_VENDORED_TABLE_STYLE}<div>{buf.getvalue()}</div>"
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            return f"<div>Error rendering geometry: {exc}</div>"
-
-
-# ---------------------------------------------------------------------------
-# END VENDORED RESULT DISPLAY SHIM
-# ---------------------------------------------------------------------------

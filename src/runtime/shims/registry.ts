@@ -120,28 +120,6 @@ export const SHIM_REGISTRY: ShimDescriptor[] = [
     loadedBy: ["src/runtime/runtime.ts", "src/runtime/macroWorker.ts"],
   },
   {
-    id: "sigima-results-display",
-    summary:
-      "Vendored TableResult / GeometryResult HTML display wrappers used by " +
-      "notebook output. Superseded by the native _repr_html_ / to_html that " +
-      "TableResult and GeometryResult gained in Sigima 1.1.0.",
-    kind: "backport",
-    targetPackage: "sigima",
-    files: [],
-    block: {
-      file: "src/runtime/notebook_display.py",
-      startMarker: "# Vendored TableResult / GeometryResult display shims",
-      endMarker: "# END VENDORED RESULT DISPLAY SHIM",
-    },
-    // Sigima 1.1.0 added _repr_html_ / to_html directly on TableResult and
-    // GeometryResult (commit 6106269), so the objects render themselves and
-    // the vendored wrappers are redundant from 1.1.0 onwards.
-    removableFrom: "1.1.0",
-    upstreamRef:
-      "sigima/sigima/objects/scalar/{table.py,geometry.py} (_repr_html_/to_html)",
-    loadedBy: ["src/runtime/notebookWorker.ts"],
-  },
-  {
     id: "sigima-custom-signal-xyarray",
     summary:
       "Restores user-edited CustomSignalParam.xyarray after generate_1d_data " +
