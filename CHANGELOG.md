@@ -8,7 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
-- **Internationalisation framework**: the UI now renders in the user's regional language (auto-detected, with a language selector in the menu bar and a `?lang=` URL override). English is the source language and French is the first translated locale. Both React strings and Python-origin labels (Sigima/guidata) are translated, with `npm run i18n:extract` / `npm run i18n:check` tooling for contributors. The language selector uses compact flag icons toned down to match the neighbouring monochrome icons, and the loading/initialisation messages plus the rest of the visible chrome (side panel, tabs, welcome page, recovery banner) are now fully translated. Translation coverage now extends to every dialog (About, keyboard shortcuts, HDF5 browser, plugin manager and consent, metadata, ROI editors, interactive fit, progress, AI Assistant panel, conversations, settings and tool-approval) and the guided welcome tour.
+- **Internationalisation framework**: the UI now renders in the user's regional language (auto-detected, with a language selector in the menu bar and a `?lang=` URL override). English is the source language and French is the first translated locale.
+- **Spreadsheet array editor**: signal and image raw data (signal X/Y values, image pixel matrices) can now be edited directly from the properties panel through a spreadsheet-style array editor dialog, with an enriched array preview.
+
+### Changed
+
+- Inactive and computed parameter fields are now displayed read-only in the properties panel, matching DataLab Qt's behaviour.
+
+### Fixed
+
+- Non-uniform images now render with their exact pixel coordinates (correct extent and hover Z values) instead of being collapsed onto a uniform grid.
+- Picture-in-Picture floating windows and their `pagehide` listener are now properly cleaned up when the side panel is closed.
+- Pending annotation writeback is cancelled when a signal plot is unmounted, avoiding writes to stale objects.
+- Legacy AI Assistant API keys are migrated to encrypted storage without creating duplicate entries.
+
+### Security
+
+- guidata field labels and descriptions are now sanitised before being injected as HTML in auto-generated parameter forms.
+- The HDF5 browser tree now guards against unbounded recursion depth when exploring deeply nested files.
 
 ## [0.3.0] - 2026-05-23
 
