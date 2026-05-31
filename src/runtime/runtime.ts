@@ -1448,6 +1448,12 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
   }
 
+  /** Overwrite the X / Y arrays of signal *id* with edited values
+   *  (used by the Properties > Data array editor). */
+  async setSignalData(id: string, x: number[], y: number[]): Promise<void> {
+    await this.callPy("set_signal_xydata", { oid: id, x, y });
+  }
+
   /** Binary variant of :meth:`getSignalData` — used by the remote
    *  bridge to ship large signals across the iframe boundary as a
    *  pair of ``Uint8Array`` (raw float64 little-endian) instead of
@@ -1834,6 +1840,12 @@ await micropip.install(["sigima", "guidata"])
       encoding: "bytes",
     })) as ImageData & { encoding?: string };
     return decodeImagePayload(raw);
+  }
+
+  /** Overwrite the 2D data array of image *oid* with edited values
+   *  (used by the Properties > Data array editor). */
+  async setImageData(oid: string, data: number[][]): Promise<void> {
+    await this.callPy("set_image_data", { oid, data });
   }
 
   /** Batched fetch for multi-image grid display.  Returns one entry per

@@ -570,6 +570,11 @@ def _float_array_to_property(item: gdi.FloatArrayItem) -> dict[str, Any]:
         prop["x-guidata-format"] = fmt
     if item.get_prop("display", "transpose", False):
         prop["x-guidata-transpose"] = True
+    if item.get_prop("edit", "variable_size", False):
+        prop["x-guidata-variable-size"] = True
+    minmax = item.get_prop("display", "minmax", None)
+    if minmax:
+        prop["x-guidata-minmax"] = minmax
     return prop
 
 

@@ -2185,6 +2185,118 @@ input {
 }
 
 /* ============================================================== */
+/* Array editor — graphical grid for FloatArrayItem               */
+/* ============================================================== */
+
+.dataset-form-array {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dataset-form-array-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.array-editor-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 360px;
+  max-width: min(90vw, 900px);
+}
+
+.array-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.array-editor-shape {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.array-editor-toolbar-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.array-editor-grid-wrap {
+  overflow: auto;
+  max-height: 60vh;
+  border: 1px solid var(--border);
+}
+
+.array-editor-grid {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.array-editor-grid th {
+  position: sticky;
+  background: var(--panel-alt, #1c1d20);
+  color: var(--text-dim);
+  font-weight: normal;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.array-editor-grid thead th {
+  top: 0;
+  z-index: 1;
+}
+
+.array-editor-grid tbody th {
+  left: 0;
+}
+
+.array-editor-corner {
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
+.array-editor-grid td {
+  border: 1px solid var(--border);
+  padding: 0;
+}
+
+.array-editor-grid td input {
+  border: none;
+  background: transparent;
+  width: 9ch;
+  padding: 2px 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.array-editor-grid td input:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.array-editor-cell-ro {
+  display: block;
+  padding: 2px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.array-editor-notice {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 12px;
+}
+
+/* ============================================================== */
 /* Properties tab — stats card, array preview, metadata editor    */
 /* ============================================================== */
 

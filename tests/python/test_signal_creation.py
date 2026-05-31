@@ -89,10 +89,50 @@ def test_update_signal_creation_params_regenerates_data(fresh_bootstrap):
     assert len(after["x"]) == new_size
 
 
+def test_update_signal_creation_params_preserves_custom_array(fresh_bootstrap):
+    """Editing a custom signal's XY array must survive Apply.
+
+    Regression test: ``CustomSignalParam.generate_1d_data`` used to
+    regenerate ``xyarray`` from size/xmin/xmax, discarding manual edits
+    applied through the Creation tab's array editor.
+    """
+    bs = fresh_bootstrap
+    oid = bs.create_signal_typed("custom")
+    schema = bs.get_creation_param_schema(oid)
+    values = dict(schema["values"])
+    # Simulate the user editing the Y column of the XY values table.
+    edited = [[0.0, 10.0], [0.25, 20.0], [0.5, 30.0], [0.75, 40.0]]
+    values["xyarray"] = edited
+    bs.update_signal_creation_params(oid, values)
+    after = bs.get_signal_xy(oid)
+    assert list(after["x"]) == [0.0, 0.25, 0.5, 0.75]
+    assert list(after["y"]) == [10.0, 20.0, 30.0, 40.0]
+    # Re-fetching the schema must echo the edited array, not the default grid.
+    reread = bs.get_creation_param_schema(oid)
+    assert reread["values"]["xyarray"] == edited
+
+
 def test_update_signal_creation_params_unknown_oid_raises(fresh_bootstrap):
     bs = fresh_bootstrap
     with pytest.raises(ValueError):
         bs.update_signal_creation_params("does-not-exist", {})
+
+
+def test_set_signal_xydata_overwrites_arrays(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.create_signal_typed("gauss")
+    summary = bs.set_signal_xydata(oid, [0.0, 1.0, 2.0], [10.0, 20.0, 30.0])
+    assert summary["size"] == 3
+    after = bs.get_signal_xy(oid)
+    assert list(after["x"]) == [0.0, 1.0, 2.0]
+    assert list(after["y"]) == [10.0, 20.0, 30.0]
+
+
+def test_set_signal_xydata_length_mismatch_raises(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.create_signal_typed("gauss")
+    with pytest.raises(ValueError):
+        bs.set_signal_xydata(oid, [0.0, 1.0], [1.0])
 
 
 def test_get_object_property_schema_for_signal(fresh_bootstrap):

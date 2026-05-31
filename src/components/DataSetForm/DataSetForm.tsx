@@ -8,7 +8,8 @@
  *
  * Supported kinds: int, float, bool, string, text, choice,
  * multiple_choice, image_choice, color, date, datetime, file,
- * float_array (read-only JSON), dict (raw JSON textarea).
+ * float_array (graphical grid editor via ArrayEditorDialog),
+ * dict (raw JSON textarea).
  *
  * Layout (groups, tabs) is taken from the ``x-guidata-layout`` key.
  * Falls back to a flat property order when that key is missing.
@@ -18,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import DOMPurify from "dompurify";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 import { t } from "../../i18n/translate";
+import { ArrayEditorDialog, normalizeToMatrix } from "../ArrayEditorDialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -565,25 +567,42 @@ function FileField({ prop, value, onChange, disabled }: LeafProps) {
   );
 }
 
-function FloatArrayField({ value, onChange, disabled }: LeafProps) {
-  // 1-D only for the MVP; the user types a comma-separated list. Multi-D
-  // editing needs a dedicated grid widget — out of scope here.
-  const arr = Array.isArray(value) ? (value as number[]) : [];
-  const text = arr.join(", ");
+function FloatArrayField({ prop, value, onChange, disabled }: LeafProps) {
+  const [editing, setEditing] = useState(false);
+  const format = prop["x-guidata-format"] as string | undefined;
+  const transpose = prop["x-guidata-transpose"] === true;
+  const variableSize = prop["x-guidata-variable-size"] === true;
+  const { matrix, is1D } = normalizeToMatrix(value);
+  const rows = matrix.length;
+  const cols = rows > 0 ? matrix[0].length : 0;
+  const shape = is1D ? `${rows}` : `${rows}×${cols}`;
   return (
-    <input
-      type="text"
-      value={text}
-      placeholder={t("1, 2, 3, …")}
-      disabled={disabled}
-      onChange={(e) => {
-        const next = e.target.value
-          .split(",")
-          .map((s) => parseFloat(s.trim()))
-          .filter((n) => Number.isFinite(n));
-        onChange(next);
-      }}
-    />
+    <div className="dataset-form-array">
+      <span className="dataset-form-array-summary">
+        {rows === 0 ? t("empty array") : t("array [{shape}]", { shape })}
+      </span>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setEditing(true)}
+      >
+        {disabled ? t("View…") : t("Edit…")}
+      </button>
+      {editing && (
+        <ArrayEditorDialog
+          value={value}
+          format={format}
+          transpose={transpose}
+          variableSize={variableSize && !disabled}
+          readOnly={disabled}
+          onCancel={() => setEditing(false)}
+          onSubmit={(next) => {
+            onChange(next);
+            setEditing(false);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

@@ -20,6 +20,25 @@ def test_add_image_from_array_basic(fresh_bootstrap):
     np.testing.assert_allclose(np.asarray(data["data"]), arr)
 
 
+def test_set_image_data_overwrites_and_preserves_dtype(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.zeros((2, 3), dtype=np.uint16))
+    dtype_before = bs.get_image_data(oid)["dtype"]
+    summary = bs.set_image_data(oid, [[1, 2, 3], [4, 5, 6]])
+    assert summary["width"] == 3 and summary["height"] == 2
+    data = bs.get_image_data(oid)
+    np.testing.assert_allclose(np.asarray(data["data"]), [[1, 2, 3], [4, 5, 6]])
+    # The edit preserves the image's stored dtype.
+    assert data["dtype"] == dtype_before
+
+
+def test_set_image_data_rejects_non_2d(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.zeros((2, 2)))
+    with pytest.raises(ValueError):
+        bs.set_image_data(oid, [1, 2, 3, 4])
+
+
 def test_list_image_creation_types(fresh_bootstrap):
     bs = fresh_bootstrap
     types = bs.list_image_creation_types()

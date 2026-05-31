@@ -1057,6 +1057,67 @@ def get_signals_xy(oids: list[str]) -> list[dict[str, Any]]:
     return out
 
 
+def set_signal_xydata(oid: str, x: Any, y: Any) -> dict[str, Any]:
+    """Overwrite the X / Y arrays of signal *oid* with edited values.
+
+    Used by the Properties > Data array editor.  ``x`` / ``y`` arrive
+    from JS as plain lists (or ``JsProxy``) and are coerced to
+    contiguous ``float64`` arrays, mirroring :class:`SignalObj`'s own
+    integer-to-float promotion.
+
+    Args:
+        oid: signal identifier in the in-memory store.
+        x: new X coordinates (1D sequence of numbers).
+        y: new Y values (1D sequence of numbers, same length as *x*).
+
+    Returns:
+        Summary dict with the resulting ``size``.
+
+    Raises:
+        ValueError: when *x* and *y* have mismatched lengths.
+    """
+    if hasattr(x, "to_py"):
+        x = x.to_py()
+    if hasattr(y, "to_py"):
+        y = y.to_py()
+    x_arr = np.asarray(x, dtype=np.float64).ravel()
+    y_arr = np.asarray(y, dtype=np.float64).ravel()
+    if x_arr.size != y_arr.size:
+        raise ValueError(
+            f"X and Y must have the same length (got {x_arr.size} and {y_arr.size})"
+        )
+    obj = _MODEL.get(oid)
+    obj.set_xydata(x_arr, y_arr)
+    return {"size": int(obj.x.size)}
+
+
+def set_image_data(oid: str, data: Any) -> dict[str, Any]:
+    """Overwrite the 2D data array of image *oid* with edited values.
+
+    Used by the Properties > Data array editor.  The incoming nested
+    list is coerced back to a 2D array and cast to the image's original
+    dtype so downstream ``.shape`` / LUT logic keeps working.
+
+    Args:
+        oid: image identifier in the in-memory store.
+        data: new pixel values as a 2D sequence (rows of numbers).
+
+    Returns:
+        Summary dict with the resulting ``width`` / ``height``.
+
+    Raises:
+        ValueError: when *data* is not a 2D rectangular array.
+    """
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    arr = np.asarray(data, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError(f"Image data must be 2D (got {arr.ndim}D)")
+    obj = _MODEL.get(oid)
+    obj.data = arr.astype(obj.data.dtype, copy=False)
+    return {"width": int(obj.data.shape[1]), "height": int(obj.data.shape[0])}
+
+
 def set_signal_style(
     oid: str,
     color: str | None = None,
@@ -1265,6 +1326,51 @@ def get_creation_param_schema(oid: str) -> dict[str, Any] | None:
     return payload
 
 
+# ===========================================================================
+# TEMPORARY SHIM — REMOVE WHEN Sigima >= 1.1.3 IS THE MINIMUM REQUIREMENT
+# ---------------------------------------------------------------------------
+# Sigima 1.1.2 (the wheel currently installed from PyPI in the browser) has a
+# bug in ``CustomSignalParam.generate_1d_data``: it unconditionally calls
+# ``setup_array()``, which regenerates ``xyarray`` from size/xmin/xmax and thus
+# discards any manual edits the user made in the Creation tab's array editor.
+#
+# The root-cause fix lives in Sigima (``creation.py``: only initialise the grid
+# when ``xyarray is None``) and ships in 1.1.3. Until that wheel is published
+# and pinned here, this shim restores the edited values after the regeneration.
+#
+# Removal checklist once Sigima >= 1.1.3 is pinned in ``requirements-dev.txt``:
+#   1. Delete ``_generate_1d_data_preserving_edits`` below.
+#   2. Inline ``x, y = param.generate_1d_data()`` back into
+#      ``update_signal_creation_params``.
+# ===========================================================================
+def _generate_1d_data_preserving_edits(param: Any) -> tuple[Any, Any]:
+    """Call ``param.generate_1d_data()`` without losing user-edited arrays.
+
+    Works around a Sigima 1.1.2 bug where ``generate_1d_data`` regenerates a
+    user-editable array (``CustomSignalParam.xyarray``) from scratch. When the
+    array is clobbered by the call, the pre-call values are restored so that
+    "Apply" preserves the edits.
+    """
+    edited_array = getattr(param, "xyarray", None)
+    if edited_array is not None:
+        edited_array = np.asarray(edited_array, dtype=float)
+    x, y = param.generate_1d_data()
+    post_array = getattr(param, "xyarray", None)
+    if (
+        edited_array is not None
+        and post_array is not None
+        and not np.array_equal(edited_array, np.asarray(post_array, dtype=float))
+    ):
+        param.xyarray = edited_array
+        x, y = edited_array.T
+    return x, y
+
+
+# ===========================================================================
+# END TEMPORARY SHIM
+# ===========================================================================
+
+
 def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str, Any]:
     """Apply *values* to the cached creation parameters and rebuild *oid*.
 
@@ -1284,7 +1390,7 @@ def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str,
         )
     update_dataset(param, values)
     obj = _MODEL.get(oid)
-    x, y = param.generate_1d_data()
+    x, y = _generate_1d_data_preserving_edits(param)
     obj.set_xydata(x, y)
     # Mirror ``create_signal_from_param``: if the user kept the default
     # title, regenerate it from ``param.generate_title()``.

@@ -12,26 +12,44 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ObjectStats, DataLabRuntime } from "../runtime/runtime";
 import { t } from "../i18n/translate";
+import { ArrayEditorDialog, MAX_EDITABLE_CELLS } from "./ArrayEditorDialog";
 
 interface Props {
   runtime: DataLabRuntime;
   oid: string;
   stats: ObjectStats;
   refreshNonce: number;
+  /** Called after the underlying data was edited so the parent can
+   *  refresh plots / stats. */
+  onApplied: () => void;
 }
 
 const HEAD_ROWS = 5;
 const TAIL_ROWS = 5;
 
-export function ArrayPreview({ runtime, oid, stats, refreshNonce }: Props) {
+export function ArrayPreview({
+  runtime,
+  oid,
+  stats,
+  refreshNonce,
+  onApplied,
+}: Props) {
   if (stats.kind === "image") {
-    return <ImageArrayPreview stats={stats} />;
+    return (
+      <ImageArrayPreview
+        runtime={runtime}
+        oid={oid}
+        stats={stats}
+        onApplied={onApplied}
+      />
+    );
   }
   return (
     <SignalArrayPreview
       runtime={runtime}
       oid={oid}
       refreshNonce={refreshNonce}
+      onApplied={onApplied}
     />
   );
 }
@@ -40,13 +58,16 @@ function SignalArrayPreview({
   runtime,
   oid,
   refreshNonce,
+  onApplied,
 }: {
   runtime: DataLabRuntime;
   oid: string;
   refreshNonce: number;
+  onApplied: () => void;
 }) {
   const [data, setData] = useState<{ x: number[]; y: number[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +131,11 @@ function SignalArrayPreview({
     rows.push({ idx: i, x: data.x[i], y: data.y[i] });
   }
 
+  // The editor materialises an N×2 string grid, so it is only offered for
+  // arrays at/under the cell cap. Larger signals are still viewable via the
+  // head/tail preview and Copy CSV.
+  const editable = total * 2 <= MAX_EDITABLE_CELLS;
+
   return (
     <section className="array-preview" aria-label={t("Data preview")}>
       <header className="array-preview-header">
@@ -120,6 +146,18 @@ function SignalArrayPreview({
           })}
         </h3>
         <div className="array-preview-actions">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            disabled={!editable}
+            title={
+              editable
+                ? t("Edit X / Y values in a spreadsheet")
+                : t("Array is too large to edit here")
+            }
+          >
+            {t("Edit data…")}
+          </button>
           <button type="button" onClick={handleCopyCsv}>
             {t("Copy CSV")}
           </button>
@@ -156,15 +194,69 @@ function SignalArrayPreview({
           </tbody>
         </table>
       </div>
+      {editing && (
+        <ArrayEditorDialog
+          value={data.x.map((xi, i) => [xi, data.y[i]])}
+          format="%g"
+          onCancel={() => setEditing(false)}
+          onSubmit={(next) => {
+            const matrix = next as number[][];
+            const xs = matrix.map((r) => r[0] ?? 0);
+            const ys = matrix.map((r) => r[1] ?? 0);
+            void runtime
+              .setSignalData(oid, xs, ys)
+              .then(() => {
+                setEditing(false);
+                onApplied();
+              })
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+                setEditing(false);
+              });
+          }}
+        />
+      )}
     </section>
   );
 }
 
 function ImageArrayPreview({
+  runtime,
+  oid,
   stats,
+  onApplied,
 }: {
+  runtime: DataLabRuntime;
+  oid: string;
   stats: Extract<ObjectStats, { kind: "image" }>;
+  onApplied: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [matrix, setMatrix] = useState<number[][] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const [height, width] = stats.shape;
+  // The editor materialises a full string grid; only offer it for images
+  // at/under the cell cap. Larger images remain viewable on the main canvas.
+  const editable = width * height <= MAX_EDITABLE_CELLS;
+
+  const handleEdit = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    runtime
+      .getImageData(oid)
+      .then((img) => {
+        const grid = Array.from(img.data, (row) => Array.from(row));
+        setMatrix(grid);
+        setEditing(true);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => setLoading(false));
+  }, [runtime, oid]);
+
   return (
     <section className="array-preview" aria-label={t("Data preview")}>
       <header className="array-preview-header">
@@ -174,12 +266,50 @@ function ImageArrayPreview({
             dtype: stats.dtype,
           })}
         </h3>
+        <div className="array-preview-actions">
+          <button
+            type="button"
+            onClick={handleEdit}
+            disabled={!editable || loading}
+            title={
+              editable
+                ? t("Edit pixel values in a spreadsheet")
+                : t("Array is too large to edit here")
+            }
+          >
+            {loading ? t("Loading data…") : t("Edit data…")}
+          </button>
+        </div>
       </header>
+      {error && <div className="array-preview-error">{error}</div>}
       <p className="array-preview-info">
-        {t(
-          "Image data preview is not yet available — see the main canvas and the statistics card above.",
-        )}
+        {editable
+          ? t(
+              "Use “Edit data…” to view and edit pixel values, or see the main canvas above.",
+            )
+          : t(
+              "Image is too large to edit here — see the main canvas and the statistics card above.",
+            )}
       </p>
+      {editing && matrix && (
+        <ArrayEditorDialog
+          value={matrix}
+          format="%g"
+          onCancel={() => setEditing(false)}
+          onSubmit={(next) => {
+            void runtime
+              .setImageData(oid, next as number[][])
+              .then(() => {
+                setEditing(false);
+                onApplied();
+              })
+              .catch((err) => {
+                setError(err instanceof Error ? err.message : String(err));
+                setEditing(false);
+              });
+          }}
+        />
+      )}
     </section>
   );
 }

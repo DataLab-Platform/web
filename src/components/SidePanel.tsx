@@ -603,6 +603,7 @@ function PropertiesPanel({
           oid={oid}
           stats={stats}
           refreshNonce={refreshNonce}
+          onApplied={onApplied}
         />
       )}
       <EditableForm
