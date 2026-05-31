@@ -2,6 +2,7 @@
 #
 # Licensed under the terms of the BSD 3-Clause
 # (see guidata/LICENSE for details)
+# @shim-registry: guidata-jsonschema
 
 """
 JSON Schema export for DataSet classes

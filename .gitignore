@@ -37,6 +37,9 @@ playwright-report/
 test-results/
 .playwright/
 
+# Generated diagnostics (runtime version snapshot from the shim audit probe)
+audit/
+
 # OS
 .DS_Store
 Thumbs.db

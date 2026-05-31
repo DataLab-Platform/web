@@ -326,7 +326,10 @@ param.edit_async(...)` for parameter dialogs.
 - **`_guidata_backends_shim.py`** / **`_guidata_jsonschema_shim.py`** —
   patch guidata so that DataSet parameter classes (a) do not require a
   Qt backend and (b) can be serialised as JSON schemas that
-  `DataSetDialog.tsx` consumes.
+  `DataSetDialog.tsx` consumes. These are **temporary backport shims**:
+  they are declared in `src/runtime/shims/registry.ts` and audited for
+  removal once upstream ships the feature — see
+  [`shim-registry.md`](shim-registry.md).
 
 ### 3.5 SDK — `packages/sdk/`
 

@@ -28,6 +28,9 @@ import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
 // from the React-free ``locale`` module to avoid pulling the provider in.
 import { pyodideLang } from "../i18n/locale";
 import { t } from "../i18n/translate";
+// Default set of packages whose installed versions are worth surfacing for
+// diagnostics and the shim version audit (see ``shims/registry.ts``).
+import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 
 // Bundle the portable ``datalab.*`` shim package — every .py file under
 // src/sigima/dlplugins/ is mirrored to Pyodide's site-packages at startup
@@ -2529,6 +2532,43 @@ _after = {k: list(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
   /** Run an arbitrary Python snippet and return its result as a JS value. */
   async runPython(code: string): Promise<unknown> {
     return toJs(await this.py.runPythonAsync(code));
+  }
+
+  /**
+   * Resolve the versions actually installed in the live Pyodide instance.
+   *
+   * Reads ``importlib.metadata.version`` for each requested package and
+   * returns a ``{ name: version | null }`` map (``null`` when the package
+   * is not importable). This is the **ground-truth** counterpart to the
+   * network-based shim audit (``tests/ts/shims/shim-audit.spec.ts``),
+   * which infers versions from PyPI / the Pyodide lockfile without booting
+   * Pyodide. Useful for diagnostics (About dialog, bug reports) and for an
+   * end-to-end audit probe.
+   *
+   * @param packages Package names to query; defaults to the packages
+   *  tracked by the shim registry (``guidata``, ``sigima``, ``numpy``,
+   *  ``scipy``, ``h5py``).
+   */
+  async getInstalledVersions(
+    packages: readonly string[] = Object.keys(PACKAGE_VERSION_SOURCES),
+  ): Promise<Record<string, string | null>> {
+    const names = JSON.stringify([...packages]);
+    const result = await this.py.runPythonAsync(`
+import json
+from importlib.metadata import version, PackageNotFoundError
+
+def _resolve(_names):
+    out = {}
+    for _name in _names:
+        try:
+            out[_name] = version(_name)
+        except PackageNotFoundError:
+            out[_name] = None
+    return out
+
+json.dumps(_resolve(json.loads(${JSON.stringify(names)})))
+`);
+    return JSON.parse(result as string) as Record<string, string | null>;
   }
 
   /**

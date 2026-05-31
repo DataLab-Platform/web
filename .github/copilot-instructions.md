@@ -139,6 +139,30 @@ helpers — prefer the typed path for new work.
   **`🌍 i18n: Check catalog (step 2/2)`** task. See the README
   "Internationalisation" section for the full workflow.
 
+## Temporary shims (backports)
+
+When you work around a bug or missing feature in a _released_ `guidata` /
+`sigima` / scientific-stack wheel, treat it as a **registry-tracked
+temporary shim**, not an ad-hoc patch:
+
+- Wrap inline shims in `# TEMPORARY SHIM` / `# END TEMPORARY SHIM` and add
+  a `# @shim-registry: <id>` tag (or put the tag in the module header for
+  whole-file shims).
+- Declare the shim once in `src/runtime/shims/registry.ts`
+  (`SHIM_REGISTRY`), with `kind: "backport"`, a `targetPackage` known to
+  `PACKAGE_VERSION_SOURCES`, the `files`/`block` location, and
+  `removableFrom` (the upstream version that makes it removable, or `null`
+  if not yet released).
+- **Do not** register architectural / portability layers
+  (`dlplugins/datalab/**`, `dlw_title_format.py`, vendored
+  `run_with_env.py`) — those are permanent.
+- The network-free anti-drift test in `npm test`
+  (`tests/ts/shims/shim-registry.test.ts`) **fails CI** if the registry,
+  the sources and the markers drift. The version audit
+  (`npm run audit:shims`, `*.spec.ts`) is **report-only** and runs only
+  via `vitest.audit.config.ts`. Full workflow in
+  [`doc/shim-registry.md`](../doc/shim-registry.md).
+
 ## Testing
 
 DataLab-Web has three test layers (pytest in Pyodide, Vitest + RTL,

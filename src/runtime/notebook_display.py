@@ -350,6 +350,7 @@ async def _exec_cell(source: str) -> None:
 # ---------------------------------------------------------------------------
 # Vendored TableResult / GeometryResult display shims
 # ---------------------------------------------------------------------------
+# @shim-registry: sigima-results-display
 # Trimmed-down copies of the wrappers that live in DataLab-Kernel's
 # ``plotter.py``. Removed once Sigima ships ``sigima.viz.results_display``
 # (PR in flight). Pure ``_repr_html_`` based; no Jupyter dependency.
@@ -416,3 +417,8 @@ class _VendoredGeometryDisplay:  # pylint: disable=too-few-public-methods
             return f"{_VENDORED_TABLE_STYLE}<div>{buf.getvalue()}</div>"
         except Exception as exc:  # pylint: disable=broad-exception-caught
             return f"<div>Error rendering geometry: {exc}</div>"
+
+
+# ---------------------------------------------------------------------------
+# END VENDORED RESULT DISPLAY SHIM
+# ---------------------------------------------------------------------------

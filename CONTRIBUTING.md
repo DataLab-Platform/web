@@ -77,6 +77,10 @@ DataLab-Web is fully internationalised: English is the source language and Frenc
 - Run `npm run i18n:check` to verify there are no missing or empty keys (it is wise to run this in CI).
 - Keys referenced only through a variable must be listed in `src/locales/_dynamic-keys.json`.
 
+## Temporary shims
+
+DataLab-Web sometimes backports a feature or patches a bug that is fixed upstream (`guidata`, `sigima`, …) but not yet in a released wheel. These **temporary shims** are tracked centrally so they can be audited and removed once upstream catches up. Every backport shim is declared once in [src/runtime/shims/registry.ts](src/runtime/shims/registry.ts), carries `# TEMPORARY SHIM` / `@shim-registry: <id>` markers in its source, and is kept in sync by a network-free anti-drift test that runs in `npm test`. Run `npm run audit:shims` (or the **🔍 Audit shims (versions)** task) to see which shims are now removable. Full workflow — adding, registering and removing a shim — is in [doc/shim-registry.md](doc/shim-registry.md).
+
 ## Pull requests
 
 - Open a pull request against `main`.

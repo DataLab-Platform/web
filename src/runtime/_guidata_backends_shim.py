@@ -1,5 +1,6 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause License
 # See LICENSE file for details
+# @shim-registry: guidata-backends
 """Monkey-patch the released ``guidata`` to add the pluggable backend API.
 
 The DataLab-Web team contributed a pluggable UI backend to guidata

@@ -1329,6 +1329,7 @@ def get_creation_param_schema(oid: str) -> dict[str, Any] | None:
 # ===========================================================================
 # TEMPORARY SHIM — REMOVE WHEN Sigima >= 1.1.3 IS THE MINIMUM REQUIREMENT
 # ---------------------------------------------------------------------------
+# @shim-registry: sigima-custom-signal-xyarray
 # Sigima 1.1.2 (the wheel currently installed from PyPI in the browser) has a
 # bug in ``CustomSignalParam.generate_1d_data``: it unconditionally calls
 # ``setup_array()``, which regenerates ``xyarray`` from size/xmin/xmax and thus
