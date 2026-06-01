@@ -31,7 +31,7 @@ function isMicrosoftEdge(): boolean {
   return /\bEdg\//.test(navigator.userAgent);
 }
 
-const HINT_DELAY_MS = 60_000;
+const HINT_DELAY_MS = 8_000;
 const EDGE_SETTINGS_URL = "edge://settings/privacy";
 const MS_DOC_URL =
   "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-security-browse-safer";
