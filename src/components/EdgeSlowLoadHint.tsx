@@ -36,7 +36,7 @@ function isMicrosoftEdge(): boolean {
   return /\bEdg\//.test(navigator.userAgent);
 }
 
-const HINT_DELAY_MS = 8_000;
+const HINT_DELAY_MS = 15_000;
 const EDGE_SETTINGS_URL = "edge://settings/privacy";
 
 /** Microsoft's documentation is localised; point French users at the
