@@ -13,9 +13,12 @@
  *   > level of performance. We recommend adding your site as an
  *   > exception to opt-out of enhanced security mode for site users.
  *
- * This component shows a discreet, English-only hint after a delay,
- * but only when the user agent looks like Microsoft Edge. The hint is
- * unmounted as soon as the runtime finishes loading.
+ * This component shows a discreet, localised hint after a delay, but
+ * only when the user agent looks like Microsoft Edge. The hint is
+ * unmounted as soon as the runtime finishes loading. The French strings
+ * reuse Microsoft's official Edge UI vocabulary (``Améliorer votre
+ * sécurité sur le web``, ``Gérer la sécurité renforcée des sites``, …)
+ * from the referenced ``microsoft-edge-security-browse-safer`` page.
  *
  * Note: Chromium blocks ``<a href="edge://...">`` navigation from web
  * pages for security reasons, so the settings URL is exposed as a
@@ -23,6 +26,8 @@
  */
 
 import { useEffect, useState } from "react";
+import { t } from "../i18n/translate";
+import { getActiveLocale } from "../i18n/locale";
 
 /** Detect Microsoft Edge (Chromium). The UA token is ``Edg/`` — not
  *  ``Edge/`` which was the legacy EdgeHTML browser. */
@@ -33,8 +38,13 @@ function isMicrosoftEdge(): boolean {
 
 const HINT_DELAY_MS = 8_000;
 const EDGE_SETTINGS_URL = "edge://settings/privacy";
-const MS_DOC_URL =
-  "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-security-browse-safer";
+
+/** Microsoft's documentation is localised; point French users at the
+ *  ``fr-fr`` variant so the wording matches the in-app hint. */
+function msDocUrl(): string {
+  const lang = getActiveLocale() === "fr" ? "fr-fr" : "en-us";
+  return `https://learn.microsoft.com/${lang}/deployedge/microsoft-edge-security-browse-safer`;
+}
 
 export function EdgeSlowLoadHint() {
   const [show, setShow] = useState(false);
@@ -61,21 +71,24 @@ export function EdgeSlowLoadHint() {
   return (
     <div className="plot-loading-edge-hint">
       <div className="plot-loading-edge-hint-title">
-        Loading is unusually slow on Microsoft Edge?
+        {t("Loading is unusually slow on Microsoft Edge?")}
       </div>
       <div className="plot-loading-edge-hint-body">
-        Edge&apos;s <strong>Enhance your security on the web</strong> setting
-        disables the WebAssembly JIT compiler on unfamiliar sites, which can
-        slow down Pyodide start-up by 20-40x.{" "}
-        <a href={MS_DOC_URL} target="_blank" rel="noopener noreferrer">
-          Microsoft recommends adding the site as an exception
+        {t("Edge's")} <strong>{t("Enhance your security on the web")}</strong>{" "}
+        {t(
+          "setting disables the WebAssembly JIT compiler on unfamiliar sites, which can slow down Pyodide start-up by 20-40x.",
+        )}{" "}
+        <a href={msDocUrl()} target="_blank" rel="noopener noreferrer">
+          {t("Microsoft recommends adding the site as an exception")}
         </a>{" "}
-        as the official workaround for WebAssembly-heavy applications:
+        {t("as the official workaround for WebAssembly-heavy applications:")}
         <ol>
           <li>
-            Open the Edge settings page (Chromium blocks direct links to{" "}
-            <code>edge://</code> URLs from web pages, so use the button below to
-            copy the URL, then paste it into the address bar):
+            {t("Open the Edge settings page (Chromium blocks direct links to")}{" "}
+            <code>edge://</code>{" "}
+            {t(
+              "URLs from web pages, so use the button below to copy the URL, then paste it into the address bar):",
+            )}
             <div className="plot-loading-edge-hint-url">
               <code>{EDGE_SETTINGS_URL}</code>
               <button
@@ -83,21 +96,24 @@ export function EdgeSlowLoadHint() {
                 onClick={copyUrl}
                 className="plot-loading-edge-hint-copy"
               >
-                {copied ? "Copied!" : "Copy URL"}
+                {copied ? t("Copied!") : t("Copy URL")}
               </button>
             </div>
           </li>
           <li>
-            Under <em>Security</em>, make sure{" "}
-            <em>Enhance your security on the web</em> is turned on, then click{" "}
-            <em>Manage enhanced security for sites</em>.
+            {t("Under")} <em>{t("Security")}</em>
+            {t(", make sure")} <em>{t("Enhance your security on the web")}</em>{" "}
+            {t("is turned on, then click")}{" "}
+            <em>{t("Manage enhanced security for sites")}</em>.
           </li>
           <li>
-            Under <em>Never use enhanced security for these sites</em>, click{" "}
-            <em>Add a site</em> and enter the URL of this application (for
-            example <code>https://datalab-platform.com</code>).
+            {t("Under")}{" "}
+            <em>{t("Never use enhanced security for these sites")}</em>
+            {t(", click")} <em>{t("Add a site")}</em>{" "}
+            {t("and enter the URL of this application (for example")}{" "}
+            <code>https://datalab-platform.com</code>).
           </li>
-          <li>Reload this page.</li>
+          <li>{t("Reload this page.")}</li>
         </ol>
       </div>
     </div>
