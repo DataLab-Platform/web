@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-01
+
 ### Added
 
 - **Internationalisation framework**: the UI now renders in the user's regional language (auto-detected, with a language selector in the menu bar and a `?lang=` URL override). English is the source language and French is the first translated locale.
@@ -98,7 +100,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DataLab-Platform/web/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DataLab-Platform/web/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/DataLab-Platform/web/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/DataLab-Platform/web/releases/tag/v0.1.0
