@@ -84,10 +84,8 @@ export function EdgeSlowLoadHint() {
         {t("as the official workaround for WebAssembly-heavy applications:")}
         <ol>
           <li>
-            {t("Open the Edge settings page (Chromium blocks direct links to")}{" "}
-            <code>edge://</code>{" "}
             {t(
-              "URLs from web pages, so use the button below to copy the URL, then paste it into the address bar):",
+              "Open the enhanced-security site exceptions page in Edge, either by copying the address below and pasting it into the address bar:",
             )}
             <div className="plot-loading-edge-hint-url">
               <code>{EDGE_SETTINGS_URL}</code>
@@ -99,19 +97,19 @@ export function EdgeSlowLoadHint() {
                 {copied ? t("Copied!") : t("Copy URL")}
               </button>
             </div>
+            {t(
+              "or by navigating manually (handy while Edge is busy loading the app):",
+            )}{" "}
+            <em>{t("Settings")}</em> ›{" "}
+            <em>{t("Privacy, search, and services")}</em> ›{" "}
+            <em>{t("Security")}</em> ›{" "}
+            <em>{t("Enhanced security mode site preferences")}</em>.
           </li>
           <li>
-            {t("Under")} <em>{t("Security")}</em>
-            {t(", make sure")} <em>{t("Enhance your security on the web")}</em>{" "}
-            {t("is turned on, then click")}{" "}
-            <em>{t("Manage enhanced security for sites")}</em>.
-          </li>
-          <li>
-            {t("Under")}{" "}
-            <em>{t("Never use enhanced security for these sites")}</em>
-            {t(", click")} <em>{t("Add a site")}</em>{" "}
-            {t("and enter the URL of this application (for example")}{" "}
-            <code>https://datalab-platform.com</code>).
+            {t("Click")} <em>{t("Add a site")}</em>
+            {t(", enter the URL of this application (for example")}{" "}
+            <code>https://datalab-platform.com</code>
+            {t("), and confirm.")}
           </li>
           <li>{t("Reload this page.")}</li>
         </ol>
