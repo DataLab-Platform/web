@@ -37,7 +37,7 @@ function isMicrosoftEdge(): boolean {
 }
 
 const HINT_DELAY_MS = 15_000;
-const EDGE_SETTINGS_URL = "edge://settings/privacy";
+const EDGE_SETTINGS_URL = "edge://settings/privacy/security/secureModeSites";
 
 /** Microsoft's documentation is localised; point French users at the
  *  ``fr-fr`` variant so the wording matches the in-app hint. */
