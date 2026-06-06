@@ -1617,6 +1617,331 @@ def delete_object_metadata_key(oid: str, key: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Edit > Metadata submenu (mirrors DataLab desktop's metadata actions)
+# ---------------------------------------------------------------------------
+
+# Per-panel metadata clipboard, mirroring DataLab Qt's
+# ``BaseDataPanel.metadata_clipboard``.  Preserved across HMR re-executions
+# like the rest of the singleton bootstrap state.
+_METADATA_CLIPBOARD: dict[str, Any] | None = globals().get("_METADATA_CLIPBOARD", None)
+
+# Default extension for exported metadata files (matches DataLab desktop).
+METADATA_FILE_EXT = ".dlabmeta"
+
+
+def _is_result_key(key: str) -> bool:
+    """Return ``True`` for analysis-result metadata keys.
+
+    Mirrors how DataLab-Web stores :class:`GeometryResult` /
+    :class:`TableResult` payloads (``Geometry_<func>_dict`` /
+    ``Table_<func>_dict``).
+    """
+    return (key.startswith("Geometry_") or key.startswith("Table_")) and key.endswith(
+        "_dict"
+    )
+
+
+def _metadata_paste_exclusions() -> set[str]:
+    """Keys never carried over by "Paste metadata" → "Other metadata".
+
+    Mirrors :data:`datalab.gui.panel.base.METADATA_PASTE_EXCLUSIONS`,
+    augmented with the DataLab-Web-private bookkeeping keys (creation
+    type, LUT range, Plotly annotations) that must stay object-specific.
+    """
+    from sigima.objects.base import ROI_KEY
+
+    return {ROI_KEY, "__uuid", _LUT_RANGE_KEY} | set(_HIDDEN_METADATA_KEYS)
+
+
+def has_metadata_in_clipboard() -> bool:
+    """Return ``True`` when "Paste metadata" can run (clipboard non-empty)."""
+    return bool(_METADATA_CLIPBOARD)
+
+
+def copy_object_metadata(oid: str) -> bool:
+    """Copy *oid*'s metadata into the panel clipboard.
+
+    Mirrors DataLab desktop's ``copy_metadata``: analysis-result keys are
+    renamed with a per-object prefix so a later paste onto the *same*
+    object type does not collide with existing results (the result token
+    prefix is preserved so geometry/table detection still works).
+    """
+    import copy
+
+    global _METADATA_CLIPBOARD  # noqa: PLW0603  # singleton clipboard
+    obj = _MODEL.get(oid)
+    clipboard = copy.deepcopy(dict(obj.metadata))
+    prefix = oid + "_"
+    for key in list(clipboard):
+        if not _is_result_key(key):
+            continue
+        value = clipboard.pop(key)
+        token = "Geometry_" if key.startswith("Geometry_") else "Table_"
+        new_key = token + prefix + key[len(token) :]
+        if isinstance(value, dict) and "title" in value:
+            value = dict(value)
+            value["title"] = prefix + str(value["title"])
+        clipboard[new_key] = value
+    _METADATA_CLIPBOARD = clipboard
+    return True
+
+
+def _paste_metadata_param() -> Any:
+    """Build the "Paste metadata" parameter set (mirrors Qt's class)."""
+    import guidata.dataset as gds
+
+    from sigima.config import _
+
+    class PasteMetadataParam(
+        gds.DataSet,
+        title=_("Paste metadata"),
+        comment=_(
+            "Select what to keep from the clipboard.<br><br>"
+            "Result shapes and annotations, if kept, will be merged with "
+            "existing ones. <u>All other metadata will be replaced</u>."
+        ),
+    ):
+        """Paste metadata parameters."""
+
+        keep_roi = gds.BoolItem(_("Regions of interest"), default=True)
+        keep_geometry = gds.BoolItem(_("Geometry results"), default=False).set_pos(
+            col=1
+        )
+        keep_tables = gds.BoolItem(_("Table results"), default=False).set_pos(col=1)
+        keep_other = gds.BoolItem(_("Other metadata"), default=True)
+
+    return PasteMetadataParam()
+
+
+async def paste_object_metadata(oids: list[str]) -> bool:
+    """Paste the clipboard metadata into every object of *oids*.
+
+    Mirrors DataLab desktop's ``paste_metadata``: a parameter dialog lets
+    the user choose which categories (ROI / geometry results / table
+    results / other) to keep; result shapes are merged while the rest is
+    replaced (``update_metadata_from``).
+    """
+    import copy
+
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if not _METADATA_CLIPBOARD:
+        return False
+    param = _paste_metadata_param()
+    if not await param.edit_async():
+        return False
+    from sigima.objects.base import ROI_KEY
+
+    exclusions = _metadata_paste_exclusions()
+    metadata: dict[str, Any] = {}
+    if param.keep_roi and ROI_KEY in _METADATA_CLIPBOARD:
+        metadata[ROI_KEY] = copy.deepcopy(_METADATA_CLIPBOARD[ROI_KEY])
+    for key, value in _METADATA_CLIPBOARD.items():
+        if _is_result_key(key):
+            is_geometry = key.startswith("Geometry_")
+            if (is_geometry and param.keep_geometry) or (
+                not is_geometry and param.keep_tables
+            ):
+                metadata[key] = copy.deepcopy(value)
+        elif param.keep_other and key not in exclusions:
+            metadata[key] = copy.deepcopy(value)
+    for oid in oids:
+        _MODEL.get(oid).update_metadata_from(metadata)
+    return True
+
+
+def _add_metadata_param() -> Any:
+    """Build the "Add metadata" parameter set (mirrors Qt's class)."""
+    import guidata.dataset as gds
+
+    from sigima.config import _
+
+    class AddMetadataParam(
+        gds.DataSet,
+        title=_("Add metadata"),
+        comment=_(
+            "Add a new metadata item to the selected objects.<br><br>"
+            "The metadata key is the same for all objects, but the value "
+            "can use a Python format pattern to generate different values."
+            "<br><br>"
+            "Available placeholders: <code>{title}</code>, "
+            "<code>{index}</code> (1-based), <code>{count}</code>, "
+            "<code>{xlabel}</code>, <code>{xunit}</code>, "
+            "<code>{ylabel}</code>, <code>{yunit}</code>, "
+            "<code>{metadata[key]}</code>. Standard format specifiers apply, "
+            "plus the <code>upper</code>/<code>lower</code> modifiers "
+            "(e.g. <code>{title:20.20upper}</code>)."
+        ),
+    ):
+        """Add metadata parameters."""
+
+        metadata_key = gds.StringItem(
+            _("Metadata key"),
+            default="custom_key",
+            notempty=True,
+            regexp=r"^[a-zA-Z_][a-zA-Z0-9_]*$",
+            help=_("The key name for the metadata item"),
+        )
+        value_pattern = gds.StringItem(
+            _("Value pattern"),
+            default="{index}",
+            help=_("Python format string. See description for details."),
+        )
+        conversion = gds.ChoiceItem(
+            _("Conversion"),
+            [
+                ("string", _("String")),
+                ("float", _("Float")),
+                ("int", _("Integer")),
+                ("bool", _("Boolean")),
+            ],
+            default="string",
+        )
+
+    return AddMetadataParam()
+
+
+def _convert_metadata_value(value_str: str, conversion: str) -> Any:
+    """Convert a formatted string to the requested type (mirrors Qt)."""
+    if conversion == "float":
+        return float(value_str)
+    if conversion == "int":
+        return int(value_str)
+    if conversion == "bool":
+        return value_str.strip().lower() in ("true", "1", "yes", "on")
+    return value_str
+
+
+async def add_object_metadata(oids: list[str]) -> bool:
+    """Add a metadata item to every object of *oids*.
+
+    Mirrors DataLab desktop's ``add_metadata``: the value is produced from
+    a Python format pattern (``{title}``, ``{index}``, ``{metadata[key]}``,
+    …) evaluated per object, then converted to the requested type.
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if not oids:
+        return False
+    param = _add_metadata_param()
+    if not await param.edit_async():
+        return False
+    from sigima.io.common.basename import format_basenames
+
+    objs = [_MODEL.get(oid) for oid in oids]
+    raw_values = format_basenames(objs, param.value_pattern)
+    for obj, value_str in zip(objs, raw_values):
+        obj.metadata[param.metadata_key] = _convert_metadata_value(
+            value_str, param.conversion
+        )
+    return True
+
+
+def delete_object_metadata(oids: list[str], keep_roi: bool = False) -> bool:
+    """Delete all metadata of every object of *oids*.
+
+    Mirrors DataLab desktop's ``delete_metadata``.  Whether regions of
+    interest survive the reset is decided by the caller (*keep_roi*): the
+    confirmation prompt lives on the JS side so it can be localised — see
+    :func:`objects_have_roi`.
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if not oids:
+        return False
+    for oid in oids:
+        obj = _MODEL.get(oid)
+        roi_backup = getattr(obj, "roi", None) if keep_roi else None
+        obj.reset_metadata_to_defaults()
+        if keep_roi and roi_backup is not None:
+            obj.roi = roi_backup
+    return True
+
+
+def objects_have_roi(oids: list[str]) -> bool:
+    """Return ``True`` when any object of *oids* carries a region of interest.
+
+    Lets the front-end decide whether to ask the user about keeping ROIs
+    before deleting metadata (mirrors DataLab desktop's prompt).
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    return any(getattr(_MODEL.get(oid), "roi", None) is not None for oid in oids)
+
+
+def export_object_metadata_bytes(oid: str) -> bytes:
+    """Serialise *oid*'s metadata to ``.dlabmeta`` (JSON) bytes.
+
+    Uses Sigima's :func:`write_metadata`, so the file is bit-compatible
+    with DataLab desktop's "Export metadata" and can be re-imported there.
+    """
+    import os
+    import tempfile
+
+    from sigima.io import write_metadata
+
+    obj = _MODEL.get(oid)
+    tmpdir = tempfile.mkdtemp(prefix="dlw_meta_save_")
+    path = os.path.join(tmpdir, "metadata" + METADATA_FILE_EXT)
+    try:
+        write_metadata(path, obj.metadata)
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+def import_object_metadata_bytes(oid: str, data: Any) -> None:
+    """Replace *oid*'s metadata from ``.dlabmeta`` (JSON) bytes.
+
+    Uses Sigima's :func:`read_metadata`, matching DataLab desktop's
+    "Import metadata".
+    """
+    import os
+    import tempfile
+
+    from sigima.io import read_metadata
+
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        data = bytes(data)
+    tmpdir = tempfile.mkdtemp(prefix="dlw_meta_open_")
+    path = os.path.join(tmpdir, "metadata" + METADATA_FILE_EXT)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(bytes(data))
+        _MODEL.get(oid).metadata = read_metadata(path)
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+def get_panel_titles_text(kind: str = "signal") -> str:
+    """Return an indented text tree of *kind*'s groups and object titles.
+
+    Mirrors DataLab desktop's "Copy titles to clipboard": top-level group
+    names on their own line, object titles indented by four spaces.
+    """
+    import os
+
+    tree = _MODEL.panel_tree(kind)
+    lines: list[str] = []
+    for group in tree["groups"]:
+        lines.append(group["name"])
+        for obj in group["objects"]:
+            lines.append("    " + str(obj.get("title", "")))
+    return os.linesep.join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Generic file I/O (mirrors DataLab's "Open"/"Save" actions).
 # ---------------------------------------------------------------------------
 

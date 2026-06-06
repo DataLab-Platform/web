@@ -43,6 +43,20 @@ export interface StaticActionCallbacks {
   onMoveSelectionUp: () => void;
   /** Move the current object one slot down in its group. */
   onMoveSelectionDown: () => void;
+  /** Copy the active panel's group/object titles to the clipboard. */
+  onCopyTitles: () => void;
+  /** Copy the current object's metadata into the panel clipboard. */
+  onCopyMetadata: () => void;
+  /** Paste the clipboard metadata onto every selected object. */
+  onPasteMetadata: () => void;
+  /** Add a metadata item to every selected object. */
+  onAddMetadata: () => void;
+  /** Import metadata from a ``.dlabmeta`` file into the current object. */
+  onImportMetadata: () => void;
+  /** Export the current object's metadata to a ``.dlabmeta`` file. */
+  onExportMetadata: () => void;
+  /** Delete all metadata of every selected object. */
+  onDeleteMetadata: () => void;
   /** Active object kind — drives the wording of File menu entries
    *  ("Open signal…" vs "Open image…", etc.). */
   panel: "signal" | "image";
@@ -205,6 +219,68 @@ export function buildStaticActions(
       iconUrl: getRootIconUrl("properties.svg"),
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onEditProperties,
+    },
+    // Metadata submenu — order mirrors DataLab Qt's Edit > Metadata.
+    {
+      id: "edit.metadata.copy",
+      label: t("Copy metadata"),
+      menuPath: "Edit/Metadata/Copy metadata",
+      iconUrl: getEditIconUrl("metadata_copy.svg"),
+      beginGroup: true,
+      enabled: (s) => ready(s) && s.selectedIds.length === 1,
+      run: cb.onCopyMetadata,
+    },
+    {
+      id: "edit.metadata.paste",
+      label: t("Paste metadata"),
+      menuPath: "Edit/Metadata/Paste metadata",
+      iconUrl: getEditIconUrl("metadata_paste.svg"),
+      enabled: (s) =>
+        ready(s) && s.hasMetadataClipboard && s.selectedIds.length > 0,
+      run: cb.onPasteMetadata,
+    },
+    {
+      id: "edit.metadata.add",
+      label: t("Add metadata…"),
+      menuPath: "Edit/Metadata/Add metadata…",
+      iconUrl: getEditIconUrl("metadata_add.svg"),
+      beginGroup: true,
+      enabled: (s) => ready(s) && s.selectedIds.length > 0,
+      run: cb.onAddMetadata,
+    },
+    {
+      id: "edit.metadata.import",
+      label: t("Import metadata…"),
+      menuPath: "Edit/Metadata/Import metadata…",
+      iconUrl: getEditIconUrl("metadata_import.svg"),
+      enabled: (s) => ready(s) && s.selectedIds.length === 1,
+      run: cb.onImportMetadata,
+    },
+    {
+      id: "edit.metadata.export",
+      label: t("Export metadata…"),
+      menuPath: "Edit/Metadata/Export metadata…",
+      iconUrl: getEditIconUrl("metadata_export.svg"),
+      enabled: (s) => ready(s) && s.selectedIds.length === 1,
+      run: cb.onExportMetadata,
+    },
+    {
+      id: "edit.metadata.delete",
+      label: t("Delete object metadata"),
+      menuPath: "Edit/Metadata/Delete object metadata",
+      iconUrl: getEditIconUrl("metadata_delete.svg"),
+      beginGroup: true,
+      enabled: (s) => ready(s) && s.selectedIds.length > 0,
+      run: cb.onDeleteMetadata,
+    },
+    {
+      id: "edit.copy_titles",
+      label: t("Copy titles to clipboard"),
+      menuPath: "Edit/Copy titles to clipboard",
+      iconUrl: getEditIconUrl("copy_titles.svg"),
+      beginGroup: true,
+      enabled: (s) => ready(s) && s.hasObjects,
+      run: cb.onCopyTitles,
     },
   ];
 }

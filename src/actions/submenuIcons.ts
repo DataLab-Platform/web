@@ -11,6 +11,7 @@
  * resolved through the corresponding bundle-time index.
  */
 
+import { getEditIconUrl } from "../assets/editIcons";
 import { getFeatureIconUrl } from "../assets/featureIcons";
 import { getRoiIconUrl } from "../assets/roiIcons";
 
@@ -22,6 +23,8 @@ interface SubmenuIconEntry {
 }
 
 const SUBMENU_ICONS: Record<string, SubmenuIconEntry> = {
+  // Edit -----------------------------------------------------------------
+  "Edit/Metadata": { file: "metadata.svg", resolver: getEditIconUrl },
   // Operations -----------------------------------------------------------
   "Operations/Constant": { file: "constant.svg", resolver: getFeatureIconUrl },
   // Processing -----------------------------------------------------------

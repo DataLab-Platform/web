@@ -830,6 +830,10 @@ export class DataLabRuntime {
       "set_object_property_values",
       "set_object_metadata_value",
       "delete_object_metadata_key",
+      "paste_object_metadata",
+      "add_object_metadata",
+      "delete_object_metadata",
+      "import_object_metadata_bytes",
       "set_object_meta",
       "set_signal_roi",
       "delete_signal_roi_at",
@@ -1296,6 +1300,83 @@ await micropip.install(["sigima", "guidata"])
       oid: id,
       key,
     })) as boolean;
+  }
+
+  /** Copy *id*'s metadata into the panel clipboard (mirrors DataLab
+   *  desktop's "Copy metadata"). */
+  async copyObjectMetadata(id: string): Promise<boolean> {
+    return (await this.callPy("copy_object_metadata", {
+      oid: id,
+    })) as boolean;
+  }
+
+  /** Return ``true`` when the metadata clipboard holds a payload that
+   *  "Paste metadata" can apply. */
+  async hasMetadataInClipboard(): Promise<boolean> {
+    return (await this.callPy("has_metadata_in_clipboard")) as boolean;
+  }
+
+  /** Paste the clipboard metadata onto every object of *ids* (shows a
+   *  parameter dialog).  Returns ``false`` when cancelled or empty. */
+  async pasteObjectMetadata(ids: string[]): Promise<boolean> {
+    return (await this.callPy("paste_object_metadata", {
+      oids: ids,
+    })) as boolean;
+  }
+
+  /** Add a metadata item to every object of *ids* (shows a parameter
+   *  dialog).  Returns ``false`` when cancelled. */
+  async addObjectMetadata(ids: string[]): Promise<boolean> {
+    return (await this.callPy("add_object_metadata", {
+      oids: ids,
+    })) as boolean;
+  }
+
+  /** Return ``true`` when any object of *ids* carries a region of
+   *  interest (used to decide whether to prompt before deleting). */
+  async objectsHaveRoi(ids: string[]): Promise<boolean> {
+    return (await this.callPy("objects_have_roi", { oids: ids })) as boolean;
+  }
+
+  /** Delete all metadata of every object of *ids*.  When *keepRoi* is
+   *  ``true`` the regions of interest survive the reset. */
+  async deleteObjectMetadata(
+    ids: string[],
+    keepRoi: boolean,
+  ): Promise<boolean> {
+    return (await this.callPy("delete_object_metadata", {
+      oids: ids,
+      keep_roi: keepRoi,
+    })) as boolean;
+  }
+
+  /** Serialise *id*'s metadata to ``.dlabmeta`` (JSON) bytes for
+   *  download. */
+  async exportObjectMetadataBytes(id: string): Promise<Uint8Array> {
+    const result = (await this.callPy("export_object_metadata_bytes", {
+      oid: id,
+    })) as Uint8Array | ArrayBuffer | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
+  }
+
+  /** Replace *id*'s metadata from previously exported ``.dlabmeta``
+   *  bytes. */
+  async importObjectMetadataBytes(
+    id: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
+    await this.callPy("import_object_metadata_bytes", {
+      oid: id,
+      data: bytes,
+    });
+  }
+
+  /** Return an indented text tree of *kind*'s groups and object titles
+   *  (mirrors DataLab desktop's "Copy titles to clipboard"). */
+  async getPanelTitlesText(kind: "signal" | "image"): Promise<string> {
+    return (await this.callPy("get_panel_titles_text", { kind })) as string;
   }
 
   /** List every signal I/O format supported by Sigima.  Used to drive

@@ -80,3 +80,89 @@ def test_plotly_annotations_round_trip(fresh_bootstrap):
     got = bs.get_plotly_annotations(oid)
     assert got["shapes"] == payload["shapes"]
     assert got["annotations"] == payload["annotations"]
+
+
+# ---------------------------------------------------------------------------
+# Edit > Metadata submenu helpers (copy/paste/delete/import/export/titles)
+# ---------------------------------------------------------------------------
+
+
+def test_clipboard_empty_then_copy(fresh_bootstrap):
+    bs = fresh_bootstrap
+    assert bs.has_metadata_in_clipboard() is False
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    bs.set_object_metadata_value(oid, "custom_key", "string", "hello")
+    assert bs.copy_object_metadata(oid) is True
+    assert bs.has_metadata_in_clipboard() is True
+
+
+def test_copy_renames_result_keys(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    obj = bs._MODEL.get(oid)
+    obj.metadata["Geometry_fwhm_dict"] = {"title": "FWHM", "coords": [[0, 1]]}
+    assert bs.copy_object_metadata(oid) is True
+    clip = bs._METADATA_CLIPBOARD
+    expected = "Geometry_" + oid + "_fwhm_dict"
+    assert expected in clip
+    assert clip[expected]["title"] == oid + "_FWHM"
+
+
+def test_is_result_key(fresh_bootstrap):
+    bs = fresh_bootstrap
+    assert bs._is_result_key("Geometry_fwhm_dict") is True
+    assert bs._is_result_key("Table_stats_dict") is True
+    assert bs._is_result_key("custom_key") is False
+    assert bs._is_result_key("Geometry_fwhm") is False
+
+
+def test_convert_metadata_value(fresh_bootstrap):
+    bs = fresh_bootstrap
+    assert bs._convert_metadata_value("42", "int") == 42
+    assert bs._convert_metadata_value("1.5", "float") == 1.5
+    assert bs._convert_metadata_value("true", "bool") is True
+    assert bs._convert_metadata_value("off", "bool") is False
+    assert bs._convert_metadata_value("text", "string") == "text"
+
+
+def test_delete_object_metadata(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    bs.set_object_metadata_value(oid, "custom_key", "string", "hello")
+    assert bs.delete_object_metadata([oid]) is True
+    keys = {entry["key"] for entry in bs.list_object_metadata(oid)}
+    assert "custom_key" not in keys
+
+
+def test_delete_object_metadata_empty_selection(fresh_bootstrap):
+    bs = fresh_bootstrap
+    assert bs.delete_object_metadata([]) is False
+
+
+def test_objects_have_roi_false_by_default(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", np.linspace(0, 1, 5), np.zeros(5))
+    assert bs.objects_have_roi([oid]) is False
+
+
+def test_export_import_metadata_round_trip(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src = bs.add_signal_from_arrays("S1", [0, 1], [0, 0])
+    bs.set_object_metadata_value(src, "custom_key", "string", "hello")
+    data = bs.export_object_metadata_bytes(src)
+    assert isinstance(data, (bytes, bytearray))
+    dst = bs.add_signal_from_arrays("S2", [0, 1], [0, 0])
+    bs.import_object_metadata_bytes(dst, data)
+    keys = {entry["key"] for entry in bs.list_object_metadata(dst)}
+    assert "custom_key" in keys
+
+
+def test_get_panel_titles_text(fresh_bootstrap):
+    bs = fresh_bootstrap
+    bs.add_signal_from_arrays("Alpha", [0, 1], [0, 0])
+    bs.add_signal_from_arrays("Beta", [0, 1], [0, 0])
+    text = bs.get_panel_titles_text("signal")
+    assert "Alpha" in text
+    assert "Beta" in text
+    # Object titles are indented by four spaces under their group.
+    assert "    Alpha" in text

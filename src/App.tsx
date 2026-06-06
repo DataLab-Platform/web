@@ -236,6 +236,9 @@ export default function App() {
   const notify = useMessage();
   const prompt = usePrompt();
   const runWithProgress = useProgress();
+  // Whether the metadata clipboard holds a payload "Paste metadata" can
+  // apply. Mirrors DataLab desktop's per-panel ``metadata_clipboard``.
+  const [hasMetadataClipboard, setHasMetadataClipboard] = useState(false);
   const {
     dirty: workspaceDirty,
     filename: workspaceFilename,
@@ -613,6 +616,13 @@ export default function App() {
     useState<PendingAnalysis | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
+  // Bumped after any action that mutates the *current* object's
+  // metadata (paste / add / delete / import metadata).  Metadata can
+  // carry ROIs, Plotly annotations and analysis results that are drawn
+  // on the central plot, so the plot-data effect re-reads them when
+  // this counter changes — mirroring DataLab desktop's "refresh the
+  // selected object's plot after a metadata action".
+  const [plotRefreshNonce, setPlotRefreshNonce] = useState(0);
   const [pendingImageGrid, setPendingImageGrid] = useState<{
     sourceIds: string[];
     schema: SchemaWithValues;
@@ -738,6 +748,22 @@ export default function App() {
     });
     return unsubscribe;
   }, [runtime, markDirty]);
+
+  // Sync the "Paste metadata" availability from the Python clipboard
+  // once the runtime is ready. The Python ``_METADATA_CLIPBOARD`` is
+  // preserved across HMR reloads, so the React flag (which resets to
+  // ``false`` on every reload) must be re-derived from it.
+  useEffect(() => {
+    if (!runtime) return;
+    let cancelled = false;
+    void (async () => {
+      const has = await runtime.hasMetadataInClipboard();
+      if (!cancelled) setHasMetadataClipboard(has);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime]);
 
   // Cold-start recovery banner: once after the runtime is ready and no
   // HDF5 file is associated with this session, peek at the IndexedDB
@@ -945,7 +971,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, currentId, treeKind, selectedIds]);
+  }, [runtime, currentId, treeKind, selectedIds, plotRefreshNonce]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null) => {
@@ -1762,6 +1788,158 @@ export default function App() {
     await runtime.moveObjectInGroup(currentId, 1);
     await refresh(currentId);
   }, [runtime, refresh, currentId]);
+
+  // --- Edit > Metadata + Copy titles to clipboard ----------------------
+  /** Resolve a friendly basename for an object's exported metadata. */
+  const titleForId = useCallback(
+    (oid: string): string => {
+      if (tree) {
+        for (const g of tree.groups) {
+          for (const o of g.objects) {
+            if (o.id === oid) return o.title || oid;
+          }
+        }
+      }
+      return oid;
+    },
+    [tree],
+  );
+
+  const handleCopyMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length !== 1) return;
+    await runtime.copyObjectMetadata(selectedIds[0]);
+    setHasMetadataClipboard(await runtime.hasMetadataInClipboard());
+  }, [runtime, selectedIds]);
+
+  const handlePasteMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length === 0) return;
+    setBusy(true);
+    try {
+      const done = await runtime.pasteObjectMetadata(selectedIds);
+      if (done) {
+        await refresh(currentId);
+        setSideRefreshNonce((n) => n + 1);
+        setPlotRefreshNonce((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, refresh]);
+
+  const handleAddMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length === 0) return;
+    setBusy(true);
+    try {
+      const done = await runtime.addObjectMetadata(selectedIds);
+      if (done) {
+        await refresh(currentId);
+        setSideRefreshNonce((n) => n + 1);
+        setPlotRefreshNonce((n) => n + 1);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, refresh]);
+
+  const handleDeleteMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length === 0) return;
+    let keepRoi = false;
+    if (await runtime.objectsHaveRoi(selectedIds)) {
+      // Mirror DataLab desktop: when ROIs are present, ask whether they
+      // should be removed too (the confirm button deletes them).
+      keepRoi = !(await confirm({
+        title: t("Delete metadata"),
+        message: t(
+          "Some selected objects have regions of interest. Do you want to delete them as well?",
+        ),
+        confirmLabel: t("Delete ROIs"),
+        cancelLabel: t("Keep ROIs"),
+        destructive: true,
+      }));
+    }
+    setBusy(true);
+    try {
+      await runtime.deleteObjectMetadata(selectedIds, keepRoi);
+      await refresh(currentId);
+      setSideRefreshNonce((n) => n + 1);
+      setPlotRefreshNonce((n) => n + 1);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, refresh, confirm]);
+
+  const handleExportMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length !== 1) return;
+    const oid = selectedIds[0];
+    setBusy(true);
+    try {
+      const bytes = await runtime.exportObjectMetadataBytes(oid);
+      const blob = new Blob([new Uint8Array(bytes)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${titleForId(oid)}.dlabmeta`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, titleForId]);
+
+  const handleImportMetadata = useCallback(async () => {
+    if (!runtime || selectedIds.length !== 1) return;
+    const oid = selectedIds[0];
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".dlabmeta,.json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await runtime.importObjectMetadataBytes(oid, bytes);
+        await refresh(oid);
+        setSideRefreshNonce((n) => n + 1);
+        setPlotRefreshNonce((n) => n + 1);
+      } catch (err) {
+        await notify({
+          kind: "error",
+          title: t("Import metadata"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }, [runtime, selectedIds, refresh, notify]);
+
+  const handleCopyTitles = useCallback(async () => {
+    if (!runtime) return;
+    const text = await runtime.getPanelTitlesText(treeKind);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API may be unavailable (insecure context); fall back
+      // to a hidden textarea + execCommand.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+  }, [runtime, treeKind]);
 
   // Object-tree context menu state.
   const [contextMenu, setContextMenu] = useState<{
@@ -2744,6 +2922,7 @@ export default function App() {
       hasObjects,
       hasMacros: macroCount > 0,
       hasNotebooks: notebookCount > 0,
+      hasMetadataClipboard,
     }),
     [
       status,
@@ -2753,6 +2932,7 @@ export default function App() {
       hasObjects,
       macroCount,
       notebookCount,
+      hasMetadataClipboard,
     ],
   );
 
@@ -2782,6 +2962,13 @@ export default function App() {
         onDuplicateSelection: handleDuplicateSelection,
         onMoveSelectionUp: handleMoveSelectionUp,
         onMoveSelectionDown: handleMoveSelectionDown,
+        onCopyTitles: handleCopyTitles,
+        onCopyMetadata: handleCopyMetadata,
+        onPasteMetadata: handlePasteMetadata,
+        onAddMetadata: handleAddMetadata,
+        onImportMetadata: handleImportMetadata,
+        onExportMetadata: handleExportMetadata,
+        onDeleteMetadata: handleDeleteMetadata,
         panel: treeKind,
       }),
       ...buildHelpActions({
@@ -2926,6 +3113,13 @@ export default function App() {
       handleMoveSelectionDown,
       handleMoveSelectionUp,
       handleRenameCurrent,
+      handleCopyTitles,
+      handleCopyMetadata,
+      handlePasteMetadata,
+      handleAddMetadata,
+      handleImportMetadata,
+      handleExportMetadata,
+      handleDeleteMetadata,
       notebookFloating,
       toggleNotebookFloating,
       macroFloating,

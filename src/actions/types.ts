@@ -17,6 +17,9 @@ export interface ActionState {
   hasMacros: boolean;
   /** ``true`` when at least one notebook is loaded in the workspace. */
   hasNotebooks: boolean;
+  /** ``true`` when the metadata clipboard holds a payload that
+   *  "Paste metadata" can apply. */
+  hasMetadataClipboard: boolean;
 }
 
 export interface ActionDescriptor {

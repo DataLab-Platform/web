@@ -20,6 +20,7 @@ function makeState(over: Partial<ActionState> = {}): ActionState {
     hasObjects: false,
     hasMacros: false,
     hasNotebooks: false,
+    hasMetadataClipboard: false,
     ...over,
   };
 }
@@ -28,8 +29,10 @@ function makeStaticCallbacks() {
   return {
     onNewGroup: vi.fn(),
     onDeleteSelection: vi.fn(),
+    onDeleteAllObjects: vi.fn(),
     onEditProperties: vi.fn(),
     onOpenFile: vi.fn(),
+    onOpenDirectory: vi.fn(),
     onSaveFile: vi.fn(),
     onSaveToDirectory: vi.fn(),
     onOpenWorkspaceHdf5: vi.fn(),
@@ -40,6 +43,13 @@ function makeStaticCallbacks() {
     onDuplicateSelection: vi.fn(),
     onMoveSelectionUp: vi.fn(),
     onMoveSelectionDown: vi.fn(),
+    onCopyTitles: vi.fn(),
+    onCopyMetadata: vi.fn(),
+    onPasteMetadata: vi.fn(),
+    onAddMetadata: vi.fn(),
+    onImportMetadata: vi.fn(),
+    onExportMetadata: vi.fn(),
+    onDeleteMetadata: vi.fn(),
     panel: "signal" as const,
   };
 }
