@@ -24,6 +24,8 @@ import type { ActionDescriptor, ActionState } from "./types";
 export interface StaticActionCallbacks {
   onNewGroup: () => void;
   onDeleteSelection: () => void;
+  /** Delete every group and object of the active panel. */
+  onDeleteAllObjects: () => void;
   onEditProperties: () => void;
   onOpenFile: () => void;
   onOpenDirectory: () => void;
@@ -154,6 +156,14 @@ export function buildStaticActions(
       beginGroup: true,
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
       run: cb.onDeleteSelection,
+    },
+    {
+      id: "edit.delete_all",
+      label: t("Delete all groups and objects"),
+      menuPath: "Edit/Delete all groups and objects",
+      iconUrl: getEditIconUrl("delete_all.svg"),
+      enabled: (s) => ready(s) && s.hasObjects,
+      run: cb.onDeleteAllObjects,
     },
     {
       id: "edit.rename",

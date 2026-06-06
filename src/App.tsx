@@ -1631,6 +1631,29 @@ export default function App() {
     await deleteObjects(selectedIds);
   }, [confirm, deleteObjects, selectedIds, tree]);
 
+  const handleDeleteAll = useCallback(async () => {
+    if (!runtime) return;
+    const ok = await confirm({
+      title: t("Delete all groups and objects"),
+      message:
+        treeKind === "image"
+          ? t("Delete all groups and images? This cannot be undone.")
+          : t("Delete all groups and signals? This cannot be undone."),
+      confirmLabel: t("Delete all"),
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await runtime.deleteAllObjects(treeKind);
+      setSelectedIds([]);
+      setCurrentId(null);
+      await refresh(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, confirm, treeKind, refresh, setSelectedIds]);
+
   const handleNewGroup = useCallback(async () => {
     if (!runtime) return;
     setBusy(true);
@@ -2722,6 +2745,7 @@ export default function App() {
       ...buildStaticActions({
         onNewGroup: handleNewGroup,
         onDeleteSelection: handleDelete,
+        onDeleteAllObjects: handleDeleteAll,
         onEditProperties: handleEditProperties,
         onOpenFile: handleOpenFile,
         onOpenDirectory: handleOpenFromDirectory,
@@ -2830,6 +2854,7 @@ export default function App() {
       handleAnalysis,
       handleNewGroup,
       handleDelete,
+      handleDeleteAll,
       handleApplyFeature,
       handleEditProperties,
       handleEditRoi,

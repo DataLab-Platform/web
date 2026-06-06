@@ -1997,6 +1997,26 @@ def delete_object(oid: str) -> None:
     _CREATION_PARAMS.pop(oid, None)
 
 
+def delete_all_objects(kind: str = "signal") -> None:
+    """Delete every object and group in *kind*'s panel (keep a default group).
+
+    Equivalent of DataLab desktop's "Delete all groups and objects": wipes
+    the whole panel content and leaves a single empty default group.
+    """
+    oids = [
+        entry.oid
+        for entry in list(_MODEL._objects.values())  # noqa: SLF001
+        if entry.kind == kind
+    ]
+    for oid in oids:
+        _MODEL.delete_object(oid)
+        _LAST_PROCESSING.pop(oid, None)
+        _CREATION_PARAMS.pop(oid, None)
+    panel = _MODEL.panel(kind)
+    panel.groups.clear()
+    panel.ensure_default_group()
+
+
 # ---------------------------------------------------------------------------
 # Pickle-based object exchange (used by the macro proxy bridge for
 # ``add_object`` / ``set_object`` — i.e. when a worker macro builds a

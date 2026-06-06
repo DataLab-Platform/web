@@ -815,6 +815,7 @@ export class DataLabRuntime {
       "extract_signal_rois",
       "extract_image_rois",
       "delete_object",
+      "delete_all_objects",
       "delete_signal",
       "rename_object",
       "move_object",
@@ -1562,6 +1563,15 @@ await micropip.install(["sigima", "guidata"])
 
   async deleteObject(oid: string): Promise<void> {
     await this.callPy("delete_object", { oid });
+  }
+
+  /**
+   * Delete every object and group of *kind*'s panel, keeping a single
+   * empty default group. Equivalent of DataLab desktop's "Delete all
+   * groups and objects".
+   */
+  async deleteAllObjects(kind: PanelKind = "signal"): Promise<void> {
+    await this.callPy("delete_all_objects", { kind });
   }
 
   /**
