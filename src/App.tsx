@@ -1665,13 +1665,13 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        await runtime.deleteGroup(gid);
+        await runtime.deleteGroup(gid, treeKind);
         await refresh();
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh],
+    [runtime, refresh, treeKind],
   );
 
   const handleMoveObjects = useCallback(
