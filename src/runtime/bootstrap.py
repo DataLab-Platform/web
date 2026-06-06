@@ -750,7 +750,7 @@ async def _async_edit_dataset(
 
     bridge = _require_bridge("edit_dataset_async")
     payload = dataset_to_schema_with_values(instance)
-    payload["title"] = getattr(instance, "_title", None) or type(instance).__name__
+    payload["title"] = instance.get_title()
     result = await bridge("edit_dataset", _to_js_payload(payload))
     if hasattr(result, "to_py"):
         result = result.to_py()
@@ -1689,7 +1689,6 @@ def copy_object_metadata(oid: str) -> bool:
 def _paste_metadata_param() -> Any:
     """Build the "Paste metadata" parameter set (mirrors Qt's class)."""
     import guidata.dataset as gds
-
     from sigima.config import _
 
     class PasteMetadataParam(
@@ -1753,7 +1752,6 @@ async def paste_object_metadata(oids: list[str]) -> bool:
 def _add_metadata_param() -> Any:
     """Build the "Add metadata" parameter set (mirrors Qt's class)."""
     import guidata.dataset as gds
-
     from sigima.config import _
 
     class AddMetadataParam(
