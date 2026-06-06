@@ -18,6 +18,8 @@
  * ```
  */
 
+import type { ResampleMethod } from "./imageLod";
+
 type RGB = [number, number, number];
 type Polynom = [RGB, RGB, RGB, RGB, RGB, RGB, RGB];
 
@@ -186,6 +188,128 @@ export function paintImageData(
     }
   }
   return img;
+}
+
+/**
+ * Paint a decimated **sub-window** of an image into an ``ImageData``.
+ *
+ * Unlike :func:`paintImageData`, this indexes the source as row arrays
+ * (``rows[j][i]``) so it never assumes a single contiguous buffer, and it
+ * aggregates ``strideX × strideY`` source pixels into each output cell using
+ * *method* before applying the colormap.  Aggregating the **data** (not the
+ * colours) keeps hot pixels visible under ``max`` and avoids colour-space
+ * averaging artefacts under ``mean``.  ``NaN`` source pixels are ignored by
+ * the aggregation; a cell with only ``NaN`` becomes fully transparent.
+ *
+ * @param ctx Target 2D context (only used to allocate the ``ImageData``).
+ * @param rows Full-resolution source rows (``Float32Array`` or ``number[]``).
+ * @param fullW Source width (columns).
+ * @param fullH Source height (rows).
+ * @param plan Window + stride from :func:`rasterPlan`.
+ * @param zmin LUT lower bound.
+ * @param zmax LUT upper bound.
+ * @param colormap Colormap name.
+ * @param inverted Reverse the colormap.
+ * @param method Aggregation method when ``stride > 1``.
+ */
+export function paintImageWindow(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  rows: ArrayLike<ArrayLike<number>>,
+  fullW: number,
+  fullH: number,
+  plan: {
+    i0: number;
+    j0: number;
+    cw: number;
+    ch: number;
+    strideX: number;
+    strideY: number;
+  },
+  zmin: number,
+  zmax: number,
+  colormap: string,
+  inverted: boolean,
+  method: ResampleMethod,
+): ImageData {
+  const sample = resolveColormap(colormap);
+  const range = zmax > zmin ? zmax - zmin : 1;
+  const { i0, j0, cw, ch, strideX, strideY } = plan;
+  const img = ctx.createImageData(cw, ch);
+  const buf = img.data;
+  const fast = strideX === 1 && strideY === 1;
+  let p = 0;
+  for (let r = 0; r < ch; r += 1) {
+    const sj0 = j0 + r * strideY;
+    // Fast path (zoomed in, 1:1): hoist the row fetch out of the column
+    // loop so each source row is dereferenced once, not once per pixel.
+    const fastRow = fast ? rows[sj0] : null;
+    for (let c = 0; c < cw; c += 1) {
+      const si0 = i0 + c * strideX;
+      let v: number;
+      if (fast) {
+        v = fastRow ? (fastRow[si0] as number) : NaN;
+      } else {
+        v = aggregate(rows, fullW, fullH, si0, sj0, strideX, strideY, method);
+      }
+      if (Number.isNaN(v)) {
+        buf[p] = 0;
+        buf[p + 1] = 0;
+        buf[p + 2] = 0;
+        buf[p + 3] = 0;
+      } else {
+        let t = (v - zmin) / range;
+        if (t < 0) t = 0;
+        else if (t > 1) t = 1;
+        if (inverted) t = 1 - t;
+        const [rr, gg, bb] = sample(t);
+        buf[p] = Math.round(rr * 255);
+        buf[p + 1] = Math.round(gg * 255);
+        buf[p + 2] = Math.round(bb * 255);
+        buf[p + 3] = 255;
+      }
+      p += 4;
+    }
+  }
+  return img;
+}
+
+/** Aggregate a ``strideX × strideY`` block starting at (si0, sj0), clamped to
+ *  the image bounds, ignoring ``NaN``.  Returns ``NaN`` for an all-``NaN``
+ *  block. */
+function aggregate(
+  rows: ArrayLike<ArrayLike<number>>,
+  fullW: number,
+  fullH: number,
+  si0: number,
+  sj0: number,
+  strideX: number,
+  strideY: number,
+  method: ResampleMethod,
+): number {
+  if (method === "nearest") {
+    const row = rows[sj0];
+    return row ? (row[si0] as number) : NaN;
+  }
+  const sj1 = Math.min(sj0 + strideY, fullH);
+  const si1 = Math.min(si0 + strideX, fullW);
+  let acc = method === "max" ? -Infinity : 0;
+  let count = 0;
+  for (let j = sj0; j < sj1; j += 1) {
+    const row = rows[j];
+    if (!row) continue;
+    for (let i = si0; i < si1; i += 1) {
+      const v = row[i] as number;
+      if (Number.isNaN(v)) continue;
+      if (method === "max") {
+        if (v > acc) acc = v;
+      } else {
+        acc += v;
+      }
+      count += 1;
+    }
+  }
+  if (count === 0) return NaN;
+  return method === "max" ? acc : acc / count;
 }
 
 /**

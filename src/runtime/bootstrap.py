@@ -2750,6 +2750,7 @@ def get_image_data(
     md = getattr(obj, "metadata", None) or {}
     colormap = md.get("colormap") or md.get("colourmap")
     invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
+    resample = md.get("resample_method")
     # LUT extrema are computed on the *full* resolution so the colour
     # range stays representative even when we ship a downsampled view.
     data_min = float(np.nanmin(raw))
@@ -2798,6 +2799,7 @@ def get_image_data(
         "zunit": getattr(obj, "zunit", "") or "",
         "colormap": str(colormap) if colormap else None,
         "invert_colormap": bool(invert_cm) if invert_cm is not None else False,
+        "resample_method": (str(resample) if resample in _RESAMPLE_METHODS else None),
     }
     if encoding == "bytes":
         # ``np.ascontiguousarray`` guarantees the byte buffer is a
@@ -3205,6 +3207,26 @@ def set_colormap(oid: str, name: str | None, inverted: bool = False) -> None:
         return
     obj.metadata["colormap"] = str(name)
     obj.metadata["invert_colormap"] = bool(inverted)
+
+
+_RESAMPLE_METHODS = ("nearest", "max", "mean")
+
+
+def set_resample_method(oid: str, method: str | None) -> None:
+    """Persist the display resampling method for image *oid*.
+
+    Stored under the ``resample_method`` metadata key and surfaced by
+    :func:`get_image_data`.  Only valid values (``"nearest"``, ``"max"``,
+    ``"mean"``) are kept; anything else (including ``None``) clears the
+    override so the viewer falls back to its default.  This setting only
+    affects the downsampled *display* bitmap — never profiles, statistics
+    or hover read-outs, which always use the full-resolution data.
+    """
+    obj = _MODEL.get(oid)
+    if method in _RESAMPLE_METHODS:
+        obj.metadata["resample_method"] = str(method)
+    else:
+        obj.metadata.pop("resample_method", None)
 
 
 # ---------------------------------------------------------------------------

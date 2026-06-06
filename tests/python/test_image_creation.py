@@ -101,6 +101,25 @@ def test_set_colormap_round_trips_via_image_data(fresh_bootstrap):
     assert payload["invert_colormap"] is False
 
 
+def test_set_resample_method_round_trips_via_image_data(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.arange(16, dtype=float).reshape(4, 4))
+    # Default: no override -> get_image_data returns None.
+    assert bs.get_image_data(oid)["resample_method"] is None
+    # Set a valid method: round-trips through metadata.
+    bs.set_resample_method(oid, "max")
+    assert bs.get_image_data(oid)["resample_method"] == "max"
+    bs.set_resample_method(oid, "mean")
+    assert bs.get_image_data(oid)["resample_method"] == "mean"
+    # Invalid / unknown values clear the override.
+    bs.set_resample_method(oid, "bogus")
+    assert bs.get_image_data(oid)["resample_method"] is None
+    bs.set_resample_method(oid, "nearest")
+    assert bs.get_image_data(oid)["resample_method"] == "nearest"
+    bs.set_resample_method(oid, None)
+    assert bs.get_image_data(oid)["resample_method"] is None
+
+
 def test_get_images_data_batched(fresh_bootstrap):
     bs = fresh_bootstrap
     a = bs.add_image_from_array("A", np.arange(4, dtype=float).reshape(2, 2))

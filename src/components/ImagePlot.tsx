@@ -10,8 +10,17 @@ import { t } from "../i18n/translate";
 import {
   SUPPORTED_COLORMAPS,
   buildColorscale,
-  paintImageData,
+  paintImageWindow,
 } from "../utils/colormap";
+import {
+  type ImageGeometry,
+  type ResampleMethod,
+  type ViewRange,
+  rasterPlan,
+  shouldUseLod,
+  visibleWindow,
+  windowPlacement,
+} from "../utils/imageLod";
 import { toBins, binSearchCell } from "../utils/imageCoords";
 import type {
   AnalysisResult,
@@ -55,6 +64,10 @@ interface ImagePlotProps {
    *  checkbox in the toolbar.  The new (name, inverted) pair should be
    *  persisted on the image object so it survives panel switches. */
   onColormapChange?: (name: string, inverted: boolean) => void;
+  /** Called when the user picks a new display resampling method in the
+   *  toolbar.  Persisted on the image object so it survives panel
+   *  switches.  Only affects the downsampled display bitmap. */
+  onResampleChange?: (method: ResampleMethod) => void;
 }
 
 /**
@@ -81,6 +94,7 @@ export function ImagePlot({
   lutRange = null,
   onLutRangeChange,
   onColormapChange,
+  onResampleChange,
 }: ImagePlotProps) {
   const plotlyTheme = usePlotlyTheme();
   // ------------------------------------------------------------------
@@ -114,6 +128,14 @@ export function ImagePlot({
     setColormapName(data.colormap || "Viridis");
     setColormapInverted(Boolean(data.invert_colormap));
   }, [data.id, data.colormap, data.invert_colormap]);
+  // Display resampling method (downsampled large images only). Resync'd
+  // from metadata when the image changes.
+  const [resampleMethod, setResampleMethod] = useState<ResampleMethod>(
+    normalizeResample(data.resample_method),
+  );
+  useEffect(() => {
+    setResampleMethod(normalizeResample(data.resample_method));
+  }, [data.id, data.resample_method]);
   useEffect(() => {
     setCursor(null);
     setStatsRect(null);
@@ -195,58 +217,108 @@ export function ImagePlot({
   // Plotly's ``image`` trace requires a *data URL* for ``source``
   // (``blob:`` URLs are rejected by its loader).  We therefore use
   // ``canvas.toDataURL`` rather than ``toBlob`` + ``createObjectURL``.
+  //
+  // Level-of-detail (LOD): for large images we rasterise only the
+  // *visible window* at *display resolution* (see ``imageLod.ts``).
+  // A 4096² image zoomed out to a 900-px viewport produces a ~900²
+  // bitmap instead of a 4096² one — an ~20× smaller canvas + PNG —
+  // while a zoom to a few pixels rasterises them 1:1 (crisp, exact).
+  // Profiles / stats / hover always read the full-resolution
+  // ``data.data``; only this display bitmap is decimated.
   // ------------------------------------------------------------------
+  // Current axis ranges (raw Plotly arrays: X ascending, Y reversed) and
+  // on-screen plot-area size, both used to size the LOD raster. ``null``
+  // view = full extent (fresh image / double-click reset).
+  const [viewRange, setViewRange] = useState<ViewRange | null>(null);
+  const [plotPx, setPlotPx] = useState<{ w: number; h: number }>({
+    w: 1024,
+    h: 1024,
+  });
+  const plotPxRef = useRef(plotPx);
+  // Physical placement of the (possibly windowed) bitmap. ``null`` falls
+  // back to the full-image origin/spacing.
+  const [bitmapPlacement, setBitmapPlacement] = useState<{
+    x0: number;
+    dx: number;
+    y0: number;
+    dy: number;
+  } | null>(null);
+  // Reset the view whenever the underlying image changes so a new image
+  // opens at full extent.
+  useEffect(() => {
+    setViewRange(null);
+  }, [data.id]);
+
   const [bitmapUrl, setBitmapUrl] = useState<string | null>(null);
   useEffect(() => {
     // Non-uniform images are rendered by a ``heatmap`` trace (see below),
     // not the canvas bitmap — skip the rasterisation entirely.
     if (data.is_uniform_coords === false) {
       setBitmapUrl(null);
+      setBitmapPlacement(null);
       return;
     }
     const w = data.width;
     const h = data.height;
     if (w <= 0 || h <= 0) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const arr = data.data as
-      | Float32Array[]
-      | number[][]
-      | ArrayLike<ArrayLike<number>>;
-    let flat: Float32Array | ArrayLike<ArrayLike<number>>;
-    if (Array.isArray(arr) && arr[0] instanceof Float32Array) {
-      const first = arr[0] as Float32Array;
-      flat = new Float32Array(first.buffer, first.byteOffset, w * h);
-    } else {
-      flat = arr as ArrayLike<ArrayLike<number>>;
-    }
-    const img = paintImageData(
-      ctx,
-      flat,
-      w,
-      h,
-      effectiveLut[0],
-      effectiveLut[1],
-      colormapName,
-      colormapInverted,
-    );
-    ctx.putImageData(img, 0, 0);
-    // Synchronous PNG encode → data URL.  For 2048² this is on the
-    // order of 200 ms once per LUT/colormap change; pan/zoom never
-    // re-encodes because ``layout`` is the only thing that changes.
-    setBitmapUrl(canvas.toDataURL("image/png"));
+    const geom: ImageGeometry = {
+      width: w,
+      height: h,
+      x0: data.x0,
+      y0: data.y0,
+      dx: data.dx,
+      dy: data.dy,
+    };
+    const useLod = shouldUseLod(w, h);
+    const win = useLod
+      ? visibleWindow(geom, viewRange)
+      : { i0: 0, i1: w, j0: 0, j1: h };
+    const dpr = window.devicePixelRatio || 1;
+    const plan = useLod
+      ? rasterPlan(win, plotPx.w, plotPx.h, dpr)
+      : { i0: 0, j0: 0, cw: w, ch: h, strideX: 1, strideY: 1 };
+    const rows = data.data as ArrayLike<ArrayLike<number>>;
+    // Debounce the heavy raster: rapid pan/zoom re-runs this effect and
+    // clears the pending timeout, so we only encode the final view.
+    const handle = window.setTimeout(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = plan.cw;
+      canvas.height = plan.ch;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const img = paintImageWindow(
+        ctx,
+        rows,
+        w,
+        h,
+        plan,
+        effectiveLut[0],
+        effectiveLut[1],
+        colormapName,
+        colormapInverted,
+        resampleMethod,
+      );
+      ctx.putImageData(img, 0, 0);
+      setBitmapUrl(canvas.toDataURL("image/png"));
+      setBitmapPlacement(windowPlacement(plan, geom));
+    }, RASTER_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
   }, [
     data.id,
     data.data,
     data.width,
     data.height,
+    data.x0,
+    data.y0,
+    data.dx,
+    data.dy,
     data.is_uniform_coords,
     effectiveLut,
     colormapName,
     colormapInverted,
+    resampleMethod,
+    viewRange,
+    plotPx,
   ]);
 
   // Precomputed colorscale shared by the colorbar trace; matches the
@@ -263,8 +335,18 @@ export function ImagePlot({
   const gdRef = useRef<
     | (HTMLElement & {
         _fullLayout?: {
-          xaxis?: { p2c: (px: number) => number; _offset?: number };
-          yaxis?: { p2c: (px: number) => number; _offset?: number };
+          xaxis?: {
+            p2c: (px: number) => number;
+            _offset?: number;
+            _length?: number;
+            range?: [number, number];
+          };
+          yaxis?: {
+            p2c: (px: number) => number;
+            _offset?: number;
+            _length?: number;
+            range?: [number, number];
+          };
         };
       })
     | null
@@ -280,6 +362,22 @@ export function ImagePlot({
   useEffect(() => {
     setHoverInfo(null);
   }, [data.id]);
+
+  // Read the on-screen plot-area size (in CSS px) from Plotly's resolved
+  // layout so the LOD raster targets the actual display resolution. Only
+  // updates state on a material change to avoid re-render churn.
+  const readPlotPx = useCallback((gd: typeof gdRef.current) => {
+    const fl = gd?._fullLayout;
+    const w = fl?.xaxis?._length;
+    const h = fl?.yaxis?._length;
+    if (typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+      const prev = plotPxRef.current;
+      if (Math.abs(prev.w - w) > 2 || Math.abs(prev.h - h) > 2) {
+        plotPxRef.current = { w, h };
+        setPlotPx({ w, h });
+      }
+    }
+  }, []);
 
   const traces = useMemo(() => {
     // Background image trace — rasterised by Plotly with a single
@@ -318,16 +416,24 @@ export function ImagePlot({
       return out;
     }
     if (bitmapUrl) {
+      const place = bitmapPlacement ?? {
+        x0: data.x0,
+        dx: data.dx,
+        y0: data.y0,
+        dy: data.dy,
+      };
       out.push({
         type: "image" as const,
         source: bitmapUrl,
         // ``image`` traces use the upper-left of the first pixel as
         // origin (unlike ``heatmap`` which uses pixel centers).  No
-        // 0.5*dx offset needed.
-        x0: data.x0,
-        dx: data.dx,
-        y0: data.y0,
-        dy: data.dy,
+        // 0.5*dx offset needed.  When LOD is active ``place`` carries
+        // the windowed sub-bitmap's origin / per-cell spacing so the
+        // decimated image lands on the same physical coordinates.
+        x0: place.x0,
+        dx: place.dx,
+        y0: place.y0,
+        dy: place.dy,
         // We render our own tooltip via ``onMouseMove`` (gd → data
         // coords) and look ``z`` up directly in the typed array — the
         // ``image`` trace cannot show ``z`` natively.
@@ -364,6 +470,7 @@ export function ImagePlot({
     return out;
   }, [
     bitmapUrl,
+    bitmapPlacement,
     xEdges,
     yEdges,
     data.data,
@@ -465,11 +572,16 @@ export function ImagePlot({
     const ytitle = data.yunit ? `${data.ylabel} (${data.yunit})` : data.ylabel;
     // Image-trace axes are not auto-ranged from typed-array data —
     // compute the pixel-aligned extents explicitly so the image fills
-    // the plot regardless of the hidden colorbar scatter trace.
-    const xMin = extent.xMin;
-    const xMax = extent.xMax;
-    const yMin = extent.yMin;
-    const yMax = extent.yMax;
+    // the plot regardless of the hidden colorbar scatter trace.  When
+    // the user has zoomed/panned we feed the captured ``viewRange``
+    // back so the view sticks (and matches the windowed LOD bitmap)
+    // instead of snapping back to the full extent on every re-render.
+    const xRange: [number, number] = viewRange
+      ? viewRange.x
+      : [extent.xMin, extent.xMax];
+    const yRange: [number, number] = viewRange
+      ? viewRange.y
+      : [extent.yMax, extent.yMin];
     // Uniform images keep square *pixels* (scaleratio = dy/dx); non-uniform
     // images use physical units directly, so 1 x-unit == 1 y-unit on screen.
     const scaleratio = isUniform ? data.dy / data.dx : 1;
@@ -490,7 +602,7 @@ export function ImagePlot({
         ...plotlyTheme.xaxis,
         title: { text: xtitle },
         constrain: "domain" as const,
-        range: [xMin, xMax],
+        range: xRange,
         autorange: false as const,
       },
       yaxis: {
@@ -498,7 +610,7 @@ export function ImagePlot({
         title: { text: ytitle },
         scaleanchor: "x" as const,
         scaleratio,
-        range: [yMax, yMin],
+        range: yRange,
         autorange: false as const,
       },
       // Legend positioned to the right of the colorbar (paper coords),
@@ -537,6 +649,7 @@ export function ImagePlot({
     data,
     extent,
     isUniform,
+    viewRange,
     roiShapes,
     roiAnnotations,
     resultShapes,
@@ -619,6 +732,45 @@ export function ImagePlot({
 
   const handleRelayout = useCallback(
     (event: Record<string, unknown>) => {
+      // Capture pan/zoom first (in any mode) so the LOD raster follows the
+      // visible window and the forced full-extent range does not snap the
+      // zoom back on the next re-render.
+      {
+        const ax0 = event["xaxis.range[0]"];
+        const ax1 = event["xaxis.range[1]"];
+        const ay0 = event["yaxis.range[0]"];
+        const ay1 = event["yaxis.range[1]"];
+        if (
+          event["xaxis.autorange"] === true ||
+          event["yaxis.autorange"] === true
+        ) {
+          setViewRange(null);
+        } else if (
+          ax0 !== undefined ||
+          ax1 !== undefined ||
+          ay0 !== undefined ||
+          ay1 !== undefined
+        ) {
+          const curX: [number, number] = viewRange
+            ? viewRange.x
+            : [extent.xMin, extent.xMax];
+          const curY: [number, number] = viewRange
+            ? viewRange.y
+            : [extent.yMax, extent.yMin];
+          const nx: [number, number] = [
+            ax0 !== undefined ? Number(ax0) : curX[0],
+            ax1 !== undefined ? Number(ax1) : curX[1],
+          ];
+          const ny: [number, number] = [
+            ay0 !== undefined ? Number(ay0) : curY[0],
+            ay1 !== undefined ? Number(ay1) : curY[1],
+          ];
+          if ([nx[0], nx[1], ny[0], ny[1]].every(Number.isFinite)) {
+            setViewRange({ x: nx, y: ny });
+          }
+        }
+      }
+
       // ROI edit mode — existing logic.
       if (roiEditMode && onRoiChange) {
         const roiCount = roiShapes.length;
@@ -721,6 +873,8 @@ export function ImagePlot({
       resultShapes.length,
       tool,
       statsRect,
+      viewRange,
+      extent,
     ],
   );
 
@@ -836,10 +990,12 @@ export function ImagePlot({
       onInitialized={(_fig, gd) => {
         gdRef.current = gd as unknown as typeof gdRef.current;
         registerActivePlot("image", gd);
+        readPlotPx(gdRef.current);
       }}
       onUpdate={(_fig, gd) => {
         gdRef.current = gd as unknown as typeof gdRef.current;
         registerActivePlot("image", gd);
+        readPlotPx(gdRef.current);
       }}
       onPurge={() => {
         gdRef.current = null;
@@ -904,6 +1060,12 @@ export function ImagePlot({
         onInvertChange={(inv) => {
           setColormapInverted(inv);
           onColormapChange?.(colormapName, inv);
+        }}
+        resample={resampleMethod}
+        showResample={shouldUseLod(data.width, data.height)}
+        onResampleChange={(method) => {
+          setResampleMethod(method);
+          onResampleChange?.(method);
         }}
       />
       <div className="image-plot-area">
@@ -1061,6 +1223,9 @@ function ImageToolbar({
   inverted,
   onColormapChange,
   onInvertChange,
+  resample,
+  showResample,
+  onResampleChange,
 }: {
   tool: ImageTool;
   setTool: (t: ImageTool) => void;
@@ -1069,6 +1234,9 @@ function ImageToolbar({
   inverted: boolean;
   onColormapChange: (name: string) => void;
   onInvertChange: (inverted: boolean) => void;
+  resample: ResampleMethod;
+  showResample: boolean;
+  onResampleChange: (method: ResampleMethod) => void;
 }) {
   const buttons: Array<{
     id: Exclude<ImageTool, null>;
@@ -1141,6 +1309,25 @@ function ImageToolbar({
         />
         <span>{t("Invert")}</span>
       </label>
+      {showResample && (
+        <label
+          className="image-tools-resample"
+          title={t(
+            "How pixels are combined when the zoomed-out view is downsampled. Profiles and statistics always use full-resolution data.",
+          )}
+        >
+          <span className="image-tools-resample-label">{t("Resampling")}</span>
+          <select
+            aria-label={t("Resampling")}
+            value={resample}
+            onChange={(e) => onResampleChange(e.target.value as ResampleMethod)}
+          >
+            <option value="nearest">{t("Nearest")}</option>
+            <option value="max">{t("Maximum")}</option>
+            <option value="mean">{t("Average")}</option>
+          </select>
+        </label>
+      )}
     </div>
   );
 }
@@ -1301,6 +1488,17 @@ const CROSSHAIR_COLOR = "#3da4ff";
 const STATS_COLOR = "#00c8c8";
 /** Foreground color for Plotly text (axes ticks/labels) — now provided by
  *  the per-theme helper :func:`getPlotlyThemeLayout`. */
+
+/** Debounce (ms) before re-encoding the display bitmap on pan/zoom/LUT
+ *  changes.  Short enough to feel immediate, long enough to skip the
+ *  intermediate frames of a drag. */
+const RASTER_DEBOUNCE_MS = 80;
+
+/** Coerce a persisted ``resample_method`` metadata value to a valid
+ *  :type:`ResampleMethod`, defaulting to ``"nearest"``. */
+function normalizeResample(value: string | null | undefined): ResampleMethod {
+  return value === "max" || value === "mean" ? value : "nearest";
+}
 
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return String(v);

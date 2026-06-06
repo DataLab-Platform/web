@@ -3494,6 +3494,18 @@ export default function App() {
                         );
                     }
                   }}
+                  onResampleChange={(method) => {
+                    if (runtime && currentId) {
+                      runtime
+                        .setResampleMethod(currentId, method)
+                        .catch((e) =>
+                          console.error(
+                            "Failed to persist resample method:",
+                            e,
+                          ),
+                        );
+                    }
+                  }}
                 />
               )}
           </main>

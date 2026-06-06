@@ -350,6 +350,12 @@ export interface ImageData {
   colormap?: string | null;
   /** Reverse the colormap (appends ``_r`` to the Plotly colorscale). */
   invert_colormap?: boolean;
+  /** Resampling method used when the viewer downsamples the display
+   *  bitmap (large images zoomed out): ``"nearest"`` (decimation,
+   *  default), ``"max"`` (preserve hot pixels) or ``"mean"`` (smooth).
+   *  Persisted in the image's metadata; never affects profiles /
+   *  statistics, which always read full-resolution data. */
+  resample_method?: string | null;
 }
 
 /** Legacy synthetic image parameters (kept for backwards compatibility). */
@@ -1743,6 +1749,14 @@ await micropip.install(["sigima", "guidata"])
     inverted = false,
   ): Promise<void> {
     await this.callPy("set_colormap", { oid, name, inverted });
+  }
+
+  /** Persist the display resampling method (``"nearest"`` | ``"max"`` |
+   *  ``"mean"``) on image *oid*.  Pass ``null`` to clear the override.
+   *  Only affects the downsampled display bitmap, never profiles or
+   *  statistics. */
+  async setResampleMethod(oid: string, method: string | null): Promise<void> {
+    await this.callPy("set_resample_method", { oid, method });
   }
 
   // ------------------------------------------------------------------
