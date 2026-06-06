@@ -20,7 +20,7 @@ pre-commit>=3.7
 
 # Sigima (= computation engine) and its mandatory dependencies.
 # Pinning floors only — exact versions come from each project's pyproject.
-sigima>=1.1.2
+sigima>=1.1.4
 guidata>=3.13.4
 numpy>=1.22
 scipy>=1.10.1

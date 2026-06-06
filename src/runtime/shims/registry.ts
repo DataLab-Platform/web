@@ -119,24 +119,6 @@ export const SHIM_REGISTRY: ShimDescriptor[] = [
     upstreamRef: "guidata/guidata/dataset/jsonschema.py",
     loadedBy: ["src/runtime/runtime.ts", "src/runtime/macroWorker.ts"],
   },
-  {
-    id: "sigima-custom-signal-xyarray",
-    summary:
-      "Restores user-edited CustomSignalParam.xyarray after generate_1d_data " +
-      "regenerates it (Sigima 1.1.2 bug).",
-    kind: "backport",
-    targetPackage: "sigima",
-    files: [],
-    block: {
-      file: "src/runtime/bootstrap.py",
-      startMarker: "# TEMPORARY SHIM",
-      endMarker: "# END TEMPORARY SHIM",
-    },
-    removableFrom: "1.1.3",
-    upstreamRef:
-      "sigima/sigima/objects/signal/creation.py (xyarray is None guard)",
-    loadedBy: ["src/runtime/runtime.ts"],
-  },
 ];
 
 /**
