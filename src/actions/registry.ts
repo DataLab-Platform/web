@@ -218,6 +218,9 @@ export interface HelpActionCallbacks {
   onOpenWelcome: () => void;
   onStartTour: () => void;
   onShowReleaseNotes: () => void;
+  /** Run a garbage-collection pass to reclaim memory dropped by the
+   *  object model (mirrors clicking the menu-bar memory indicator). */
+  onFreeMemory: () => void;
 }
 
 /** Wire Help / "?" menu actions. */
@@ -287,6 +290,13 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       beginGroup: true,
       enabled: always,
       run: cb.onShowConsole,
+    },
+    {
+      id: "help.freeMemory",
+      label: t("Free memory"),
+      menuPath: "Help/Free memory",
+      enabled: always,
+      run: cb.onFreeMemory,
     },
     {
       id: "help.about",

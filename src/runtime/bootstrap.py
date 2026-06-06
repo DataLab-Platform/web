@@ -2128,6 +2128,63 @@ def reset_all() -> None:
     _NOTEBOOKS.clear()
 
 
+def collect_garbage() -> dict[str, int]:
+    """Run a full garbage-collection pass and report its effect.
+
+    The WASM linear heap never shrinks back to the OS, so this cannot
+    lower the reported heap size. Its purpose is to drop unreachable
+    Python references (e.g. intermediate processing results no longer
+    held by the object model) so subsequent allocations reuse freed
+    heap pages instead of growing the heap further.
+
+    Returns:
+        Mapping with ``collected`` (unreachable objects reclaimed by
+        :func:`gc.collect`), ``objects_before`` and ``objects_after``
+        (length of :func:`gc.get_objects` around the pass). The deltas
+        let the UI and tests measure the reclamation effect.
+    """
+    import gc
+
+    objects_before = len(gc.get_objects())
+    collected = gc.collect()
+    objects_after = len(gc.get_objects())
+    return {
+        "collected": int(collected),
+        "objects_before": int(objects_before),
+        "objects_after": int(objects_after),
+    }
+
+
+def get_data_memory() -> dict[str, int]:
+    """Report the memory held by the in-memory object model's arrays.
+
+    Unlike the WASM linear heap (which Emscripten never returns to the
+    browser until the page is reloaded), this figure tracks the data the
+    user actually controls: the byte size of every signal/image array
+    currently stored in :data:`_MODEL`. It drops immediately when objects
+    are deleted, so the UI can give the user feedback that clearing
+    objects had an effect — even though the engine's reserved heap stays
+    put.
+
+    Returns:
+        Mapping with ``data_bytes`` (summed array byte sizes across all
+        signals and images, both panels) and ``object_count``.
+    """
+    total = 0
+    count = 0
+    for entry in _MODEL._objects.values():  # noqa: SLF001
+        obj = entry.obj
+        count += 1
+        # Images expose ``data``; signals expose ``x``/``y`` plus optional
+        # ``dx``/``dy`` uncertainty arrays. Image ``dx``/``dy`` are scalar
+        # pixel sizes (no ``nbytes``) and are skipped by the guard below.
+        for attr in ("data", "x", "y", "dx", "dy"):
+            nbytes = getattr(getattr(obj, attr, None), "nbytes", None)
+            if isinstance(nbytes, int):
+                total += nbytes
+    return {"data_bytes": int(total), "object_count": int(count)}
+
+
 # Backwards-compatible flat list (used by debug helpers / DevTools console).
 
 

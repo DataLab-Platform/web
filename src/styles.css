@@ -405,6 +405,66 @@ input {
   line-height: 1;
 }
 
+/* Persistent memory-usage indicator — shows the live Pyodide WASM heap
+   size and turns orange/red as it approaches out-of-memory territory.
+   Clicking it runs a garbage-collection pass. Same visual weight as
+   ``.console-status-indicator``. */
+.memory-usage-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  margin-left: 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-usage-indicator:hover:not(:disabled),
+.memory-usage-indicator:focus-visible {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+.memory-usage-indicator:disabled {
+  cursor: default;
+}
+
+.memory-usage-indicator-glyph {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.memory-usage-indicator-value {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.memory-usage-indicator.warn {
+  color: #e1a200;
+}
+
+.memory-usage-indicator.warn:hover:not(:disabled),
+.memory-usage-indicator.warn:focus-visible {
+  color: #e1a200;
+}
+
+.memory-usage-indicator.critical {
+  color: #d63031;
+}
+
+.memory-usage-indicator.critical:hover:not(:disabled),
+.memory-usage-indicator.critical:focus-visible {
+  color: #d63031;
+}
+
 /* Hierarchical menu bar (Phase 3) */
 .menubar-nav {
   display: flex;

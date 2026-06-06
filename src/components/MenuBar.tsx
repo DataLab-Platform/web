@@ -4,9 +4,11 @@ import type { ActionDescriptor, ActionState } from "../actions/types";
 import { buildMenuTree } from "../actions/buildMenu";
 import { MenuDropdown } from "./MenuDropdown";
 import { ConsoleStatusIndicator } from "./ConsoleStatusIndicator";
+import { MemoryUsageIndicator } from "./MemoryUsageIndicator";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
 import { useTranslation } from "../i18n/I18nProvider";
+import type { DataLabRuntime } from "../runtime/runtime";
 
 interface Props {
   status: string;
@@ -19,6 +21,13 @@ interface Props {
   /** Callback invoked when the user clicks the console-status indicator;
    *  typically opens the Help > Browser console log dialog. */
   onOpenConsole?: () => void;
+  /** Live runtime, used by the memory-usage indicator to sample the
+   *  WASM heap. When ``undefined``/``null`` the indicator is hidden. */
+  runtime?: DataLabRuntime | null;
+  /** Invoked when the user clicks the memory indicator to reclaim
+   *  memory (garbage-collection pass). When omitted the indicator is
+   *  shown read-only (no click action). */
+  onFreeMemory?: () => void | Promise<void>;
   /** Current visibility of the AI Assistant panel. When ``undefined``
    *  the toggle button is hidden (used by surfaces that don't expose
    *  the assistant). */
@@ -36,6 +45,8 @@ export function MenuBar(props: Props) {
     actions,
     onShowExperimentalInfo,
     onOpenConsole,
+    runtime,
+    onFreeMemory,
     aiPanelVisible,
     onToggleAIPanel,
   } = props;
@@ -116,6 +127,12 @@ export function MenuBar(props: Props) {
         {status}
       </span>
       {onOpenConsole && <ConsoleStatusIndicator onOpen={onOpenConsole} />}
+      {runtime && (
+        <MemoryUsageIndicator
+          runtime={runtime}
+          onRequestFreeMemory={onFreeMemory}
+        />
+      )}
       {onToggleAIPanel && (
         <AIToggleButton visible={!!aiPanelVisible} onToggle={onToggleAIPanel} />
       )}

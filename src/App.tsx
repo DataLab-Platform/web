@@ -120,6 +120,7 @@ import {
 } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
+import { formatBytes } from "./utils/memory";
 import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
@@ -1404,6 +1405,28 @@ export default function App() {
     },
     [runtime, refreshResults, treeKind, notify],
   );
+
+  const handleFreeMemory = useCallback(async () => {
+    if (!runtime) return;
+    try {
+      const result = await runtime.freeMemory();
+      const after = formatBytes(result.wasmAfter);
+      await notify({
+        kind: "info",
+        title: t("Free memory"),
+        message: t(
+          "Freed {collected} unused objects. The engine still reserves {after}; reload the page to return it to the browser.",
+          { collected: result.collected, after },
+        ),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await notify({
+        kind: "error",
+        message: t("Free memory failed: {message}", { message }),
+      });
+    }
+  }, [runtime, notify]);
 
   const handleAnalysis = useCallback(
     async (funcId: string, hasParams: boolean) => {
@@ -2772,6 +2795,9 @@ export default function App() {
         },
         onStartTour: handleStartTour,
         onShowReleaseNotes: () => setReleaseNotesOpen(true),
+        onFreeMemory: () => {
+          void handleFreeMemory();
+        },
       }),
       ...buildViewActions({
         showResultsOverlay,
@@ -2905,6 +2931,7 @@ export default function App() {
       macroFloating,
       toggleMacroFloating,
       handleStartTour,
+      handleFreeMemory,
     ],
   );
 
@@ -3012,6 +3039,8 @@ export default function App() {
             actions={actions}
             onShowExperimentalInfo={() => setHelpView("about")}
             onOpenConsole={() => setHelpView("console")}
+            runtime={runtime}
+            onFreeMemory={handleFreeMemory}
             aiPanelVisible={aiPanelVisible}
             onToggleAIPanel={toggleAIPanel}
           />

@@ -28,6 +28,12 @@ import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
 // from the React-free ``locale`` module to avoid pulling the provider in.
 import { pyodideLang } from "../i18n/locale";
 import { t } from "../i18n/translate";
+import {
+  readWasmHeapBytes,
+  readJsMemory,
+  type MemoryUsage,
+  type PyodideModuleLike,
+} from "../utils/memory";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
@@ -74,6 +80,10 @@ export interface PyodideAPI {
     writeFile: (path: string, data: string | Uint8Array) => void;
     mkdirTree?: (path: string) => void;
   };
+  /** Emscripten module backing the WASM heap. Used by
+   *  {@link DataLabRuntime.getMemoryUsage} to read the linear-heap size
+   *  (``_module.HEAPU8.length``) for the memory indicator. */
+  _module?: PyodideModuleLike;
   // Pyodide exposes more, but the MVP only needs the above.
 }
 
@@ -768,6 +778,20 @@ function decodeImagePayload<
     rows[j] = view.subarray(j * w, (j + 1) * w);
   }
   return { ...payload, data: rows };
+}
+
+/** Outcome of {@link DataLabRuntime.freeMemory}. */
+export interface FreeMemoryResult {
+  /** Unreachable objects reclaimed by ``gc.collect``. */
+  collected: number;
+  /** Tracked Python objects before the collection pass. */
+  objects_before: number;
+  /** Tracked Python objects after the collection pass. */
+  objects_after: number;
+  /** WASM heap size (bytes) before collection, or ``null`` if unknown. */
+  wasmBefore: number | null;
+  /** WASM heap size (bytes) after collection, or ``null`` if unknown. */
+  wasmAfter: number | null;
 }
 
 export class DataLabRuntime {
@@ -2612,5 +2636,61 @@ _CATALOG.clear()
 _CATALOG.update(dlw_processor.build_signal_catalog())
 `);
     console.info("[runtime] dlw_processor.py reloaded; catalog refreshed");
+  }
+
+  /**
+   * Read the current memory footprint of the runtime.
+   *
+   * The headline figure is the Pyodide **WASM linear-heap** size
+   * (``_module.HEAPU8.length``), available in every browser and the
+   * best predictor of an out-of-memory crash. On Chromium we also
+   * surface the JS heap via ``performance.memory`` (``null`` elsewhere).
+   *
+   * Pure synchronous reads — this does **not** go through the Python
+   * call queue, so it is safe to poll on a timer without serialising
+   * behind in-flight computations.
+   */
+  getMemoryUsage(): MemoryUsage {
+    const wasmBytes = readWasmHeapBytes(this.py._module);
+    const { jsUsedBytes, jsLimitBytes } = readJsMemory();
+    return { wasmBytes, dataBytes: null, jsUsedBytes, jsLimitBytes };
+  }
+
+  /**
+   * Read the total byte size of the signal/image arrays currently held
+   * by the object model. Unlike the WASM heap this responds to deletes,
+   * so the indicator can show the user that clearing objects had an
+   * effect. Routed through the Python call queue (cheap O(n) sum, no
+   * data copy); returns ``null`` if the runtime cannot report it.
+   */
+  async getDataMemoryBytes(): Promise<number | null> {
+    try {
+      const r = (await this.callPy("get_data_memory")) as {
+        data_bytes?: number;
+      };
+      return typeof r?.data_bytes === "number" ? r.data_bytes : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Run a full Python garbage-collection pass and report its effect.
+   *
+   * The WASM heap never shrinks back to the OS, so the goal is not to
+   * lower ``wasmBytes`` but to drop dangling Python references so later
+   * allocations reuse freed heap pages instead of growing the heap.
+   * Returns the WASM heap size before/after plus the object counts and
+   * the number of unreachable objects reclaimed by ``gc.collect``.
+   */
+  async freeMemory(): Promise<FreeMemoryResult> {
+    const wasmBefore = this.getMemoryUsage().wasmBytes;
+    const result = (await this.callPy("collect_garbage")) as {
+      collected: number;
+      objects_before: number;
+      objects_after: number;
+    };
+    const wasmAfter = this.getMemoryUsage().wasmBytes;
+    return { ...result, wasmBefore, wasmAfter };
   }
 }
