@@ -724,6 +724,14 @@ def _get_item(instance: gdt.DataSet, name: str) -> gdt.DataItem:
 # the helpers defined above on the ``guidata.dataset`` namespace so that
 # ``from guidata.dataset import dataset_to_schema_with_values`` works
 # unchanged inside ``bootstrap.py``.
+#
+# We install unconditionally (overriding any same-named attribute already
+# present on ``guidata.dataset``): an in-development ``guidata`` may expose
+# a leaner version of these helpers (e.g. a ``FloatArrayItem`` export
+# without the ``x-guidata-variable-size`` / ``x-guidata-minmax`` hints the
+# browser array editor needs). This backport is the source of truth until
+# a released ``guidata`` reaches parity (see ``removableFrom`` in the shim
+# registry); only then should this whole module be dropped.
 import guidata.dataset as _gds_pkg  # noqa: E402  # late import on purpose
 
 for _name in (
@@ -734,7 +742,6 @@ for _name in (
     "JSON_SCHEMA_DIALECT",
     "SCHEMA_VERSION",
 ):
-    if not hasattr(_gds_pkg, _name):
-        setattr(_gds_pkg, _name, globals()[_name])
+    setattr(_gds_pkg, _name, globals()[_name])
 
 del _gds_pkg, _name

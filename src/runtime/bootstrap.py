@@ -1326,52 +1326,6 @@ def get_creation_param_schema(oid: str) -> dict[str, Any] | None:
     return payload
 
 
-# ===========================================================================
-# TEMPORARY SHIM — REMOVE WHEN Sigima >= 1.1.3 IS THE MINIMUM REQUIREMENT
-# ---------------------------------------------------------------------------
-# @shim-registry: sigima-custom-signal-xyarray
-# Sigima 1.1.2 (the wheel currently installed from PyPI in the browser) has a
-# bug in ``CustomSignalParam.generate_1d_data``: it unconditionally calls
-# ``setup_array()``, which regenerates ``xyarray`` from size/xmin/xmax and thus
-# discards any manual edits the user made in the Creation tab's array editor.
-#
-# The root-cause fix lives in Sigima (``creation.py``: only initialise the grid
-# when ``xyarray is None``) and ships in 1.1.3. Until that wheel is published
-# and pinned here, this shim restores the edited values after the regeneration.
-#
-# Removal checklist once Sigima >= 1.1.3 is pinned in ``requirements-dev.txt``:
-#   1. Delete ``_generate_1d_data_preserving_edits`` below.
-#   2. Inline ``x, y = param.generate_1d_data()`` back into
-#      ``update_signal_creation_params``.
-# ===========================================================================
-def _generate_1d_data_preserving_edits(param: Any) -> tuple[Any, Any]:
-    """Call ``param.generate_1d_data()`` without losing user-edited arrays.
-
-    Works around a Sigima 1.1.2 bug where ``generate_1d_data`` regenerates a
-    user-editable array (``CustomSignalParam.xyarray``) from scratch. When the
-    array is clobbered by the call, the pre-call values are restored so that
-    "Apply" preserves the edits.
-    """
-    edited_array = getattr(param, "xyarray", None)
-    if edited_array is not None:
-        edited_array = np.asarray(edited_array, dtype=float)
-    x, y = param.generate_1d_data()
-    post_array = getattr(param, "xyarray", None)
-    if (
-        edited_array is not None
-        and post_array is not None
-        and not np.array_equal(edited_array, np.asarray(post_array, dtype=float))
-    ):
-        param.xyarray = edited_array
-        x, y = edited_array.T
-    return x, y
-
-
-# ===========================================================================
-# END TEMPORARY SHIM
-# ===========================================================================
-
-
 def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str, Any]:
     """Apply *values* to the cached creation parameters and rebuild *oid*.
 
@@ -1380,6 +1334,7 @@ def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str,
     refreshed too (mirrors desktop behaviour).
     """
     from guidata.dataset import update_dataset
+    from guidata.dataset.dataitems import FloatArrayItem
 
     if hasattr(values, "to_py"):
         values = values.to_py()
@@ -1389,9 +1344,22 @@ def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str,
             f"Object {oid!r} has no cached creation parameters; "
             "use create_signal_typed first."
         )
+    # ``xyarray`` (and any other ``FloatArrayItem``) round-trips through JS as
+    # a nested list.  ``generate_1d_data`` expects a real ``np.ndarray`` (it
+    # does ``self.xyarray.T``), so coerce list values back to ``np.ndarray``
+    # before the update — mirrors ``set_object_property_values``.
+    array_fields = {
+        item.get_name()
+        for item in param.get_items()
+        if isinstance(item, FloatArrayItem)
+    }
+    for name in array_fields & values.keys():
+        value = values[name]
+        if value is not None and not isinstance(value, np.ndarray):
+            values[name] = np.asarray(value)
     update_dataset(param, values)
     obj = _MODEL.get(oid)
-    x, y = _generate_1d_data_preserving_edits(param)
+    x, y = param.generate_1d_data()
     obj.set_xydata(x, y)
     # Mirror ``create_signal_from_param``: if the user kept the default
     # title, regenerate it from ``param.generate_title()``.
