@@ -386,6 +386,57 @@ test.describe("Notebook UI", () => {
     await expect(menu).toContainText("Signal & image processing");
     await expect(menu).toContainText("Proxy methods");
   });
+
+  test("signal+image flow does not call get_image_data on a signal", async ({
+    warmPage: page,
+  }) => {
+    // Smoke coverage for the "Signal & image processing" flow plus a guard
+    // against a fixed race: a fire-and-forget ``refresh()`` for the signal
+    // panel could resolve *after* a proxy call switched the panel to images,
+    // leaving ``currentId`` on a signal oid while ``treeKind`` was "image" —
+    // the central viewer then called ``get_image_data`` on a 1-D SignalObj
+    // (``IndexError: tuple index out of range``). ``refresh`` now drops its
+    // writes when the active panel changed mid-await. The flow below mirrors
+    // the bundled template (create signal → moving average → create image →
+    // FFT) and asserts no such error reaches the console.
+    const imageDataErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.text().includes("get_image_data failed")) {
+        imageDataErrors.push(msg.text());
+      }
+    });
+
+    const editor = page.locator(".nb-cell-editor .cm-content").first();
+    await editor.click();
+    // Single-line statements only — CodeMirror auto-indent never kicks in
+    // (no block colons), so the typed source stays intact.
+    const lines = [
+      "x = np.linspace(-10, 10, 500)",
+      'sig = await proxy.add_signal("sinc", x, np.sin(x))',
+      'await proxy.set_current_panel("signal")',
+      "size = 64",
+      "img2d = np.outer(np.hanning(size), np.hanning(size))",
+      'imgid = await proxy.add_image("win", img2d)',
+      'await proxy.set_current_panel("image")',
+      "fftids = await proxy.calc('image:fft', sources=[imgid])",
+      'print("flow-done", fftids)',
+    ];
+    await page.keyboard.type(lines.join("\n"));
+    await page.keyboard.press("Control+Enter");
+
+    // Wait for the cell to finish (the print lands in stdout).
+    await expect(page.locator(".nb-output-stdout").first()).toContainText(
+      "flow-done",
+      { timeout: 120_000 },
+    );
+    // Let the central-viewer effects settle after the panel switches.
+    await page.waitForTimeout(1_500);
+
+    expect(
+      imageDataErrors,
+      `unexpected get_image_data errors:\n${imageDataErrors.join("\n")}`,
+    ).toHaveLength(0);
+  });
 });
 
 test.describe("Quickstart notebook template", () => {

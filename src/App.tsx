@@ -260,6 +260,12 @@ export default function App() {
   });
   useBeforeUnloadGuard(workspaceDirty);
   const [treeKind, setTreeKind] = useState<PanelKind>("signal");
+  // Live mirror of ``treeKind`` for async guards: a fire-and-forget
+  // ``refresh()`` started for one panel must not write its results after
+  // the user (or a proxy/notebook call) switched to the other panel. See
+  // the staleness check in ``refresh`` below.
+  const treeKindRef = useRef<PanelKind>(treeKind);
+  treeKindRef.current = treeKind;
   const [centralView, setCentralView] = useState<CentralView>("plot");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
@@ -648,7 +654,16 @@ export default function App() {
   const refresh = useCallback(
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
-      const newTree = await runtime.getPanelTree(treeKind);
+      const kind = treeKind;
+      const newTree = await runtime.getPanelTree(kind);
+      // Staleness guard: if the active panel changed while we were
+      // awaiting (e.g. a fire-and-forget ``refresh()`` for the signal
+      // panel resolving after a notebook/proxy call switched to images),
+      // dropping these writes prevents an inconsistent state where
+      // ``currentId`` would point at an object of the *other* kind — which
+      // made the central viewer call ``get_image_data`` on a 1-D
+      // ``SignalObj`` (``IndexError: tuple index out of range``).
+      if (treeKindRef.current !== kind) return;
       setTree(newTree);
       const allIds: string[] = [];
       for (const g of newTree.groups)
