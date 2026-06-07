@@ -24,7 +24,7 @@
  */
 
 import { buildProxyBridge, type BridgeMethod } from "./proxyBridge";
-import type { DataLabRuntime } from "./runtime";
+import type { RuntimeApi } from "./runtime";
 
 export interface RemoteBridgeOptions {
   /** Initial selection / panel callbacks reused from the existing
@@ -169,7 +169,7 @@ export function collectTransferables(value: unknown, depth = 0): ArrayBuffer[] {
  * ``ready`` event).
  */
 export function activateRemoteBridge(
-  runtime: DataLabRuntime,
+  runtime: RuntimeApi,
   options: RemoteBridgeOptions = {},
 ): RemoteBridgeHandle | null {
   const win = options.win ?? (typeof window !== "undefined" ? window : null);

@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DataLabRuntime } from "../runtime/runtime";
+import type { RuntimeApi } from "../runtime/runtime";
 import {
   formatBytes,
   memoryLevel,
@@ -44,7 +44,7 @@ export const MEMORY_POLL_INTERVAL_MS = 2000;
  *  {@link MEMORY_POLL_INTERVAL_MS}.
  */
 export function useMemoryPoll(
-  runtime: DataLabRuntime | null,
+  runtime: RuntimeApi | null,
   intervalMs: number = MEMORY_POLL_INTERVAL_MS,
 ): { usage: MemoryUsage | null; refresh: () => void } {
   const [usage, setUsage] = useState<MemoryUsage | null>(null);
@@ -90,7 +90,7 @@ export function useMemoryPoll(
 
 interface Props {
   /** Live runtime, or ``null`` before boot. */
-  runtime: DataLabRuntime | null;
+  runtime: RuntimeApi | null;
   /** Invoked when the user clicks the indicator to reclaim memory.
    *  Typically wired to ``runtime.freeMemory()`` plus a notification.
    *  The indicator re-samples once the returned promise settles. */

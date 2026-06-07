@@ -15,7 +15,7 @@ import type {
   LastProcessingInfo,
   ObjectStats,
   SchemaWithValues,
-  DataLabRuntime,
+  RuntimeApi,
 } from "../runtime/runtime";
 import { DataSetForm } from "./DataSetForm";
 import { ObjectStatsCard } from "./ObjectStatsCard";
@@ -34,7 +34,7 @@ const RESULTS_ICON = getRootIconUrl("analysis.svg");
 type TabId = "creation" | "properties" | "processing" | "results";
 
 interface Props {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   currentId: string | null;
   /** Which object panel the side panel is currently mirroring.  Lets
    *  panel-specific subviews (e.g. the curve-style editor for signals)
@@ -387,7 +387,7 @@ export function SidePanel(props: Props) {
 // ---------------------------------------------------------------------------
 
 interface SubProps {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   oid: string;
   refreshNonce: number;
   onApplied: () => void;

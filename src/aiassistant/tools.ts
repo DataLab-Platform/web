@@ -9,7 +9,7 @@
  */
 
 import type {
-  DataLabRuntime,
+  RuntimeApi,
   ImageCreationParams,
   ObjectStats,
   SignalCreationParams,
@@ -521,7 +521,7 @@ export function indexTools(tools: Tool[]): Map<string, Tool> {
  *  ``followupMessages`` (e.g. ``capture_view``). */
 export async function callTool(
   tool: Tool,
-  runtime: DataLabRuntime,
+  runtime: RuntimeApi,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   try {

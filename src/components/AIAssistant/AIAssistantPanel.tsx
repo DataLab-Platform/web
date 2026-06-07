@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DataLabRuntime } from "../../runtime/runtime";
+import type { RuntimeApi } from "../../runtime/runtime";
 import { AIController, isAbortError } from "../../aiassistant/controller";
 import {
   fetchDevOpenAIKey,
@@ -47,7 +47,7 @@ import { InputHistory } from "../../aiassistant/inputHistory";
 import { t } from "../../i18n/translate";
 
 interface Props {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   /** Optional callback to collapse the panel into the floating pill. */
   onMinimize?: () => void;
   /** Optional callback to fully hide the panel (same as the View menu
@@ -731,7 +731,7 @@ function TranscriptItem({
   runtime,
 }: {
   entry: TranscriptEntry;
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
 }) {
   const { message } = entry;
   if (message.role === "user") {
@@ -880,7 +880,7 @@ function ToolTranscriptBubble({
   preview: string;
   fullText: string;
   macroToSave: { name: string; code: string } | null;
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
 }) {
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"

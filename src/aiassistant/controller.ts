@@ -14,7 +14,7 @@
  * :type:`ControllerListener` and a :type:`ConfirmToolCallback`.
  */
 
-import type { DataLabRuntime } from "../runtime/runtime";
+import type { RuntimeApi } from "../runtime/runtime";
 import { REMOTE_MODEL_CHANGED_EVENT } from "../runtime/remoteBridge";
 import { chatCompletions } from "./provider";
 import { callTool, indexTools } from "./tools";
@@ -72,7 +72,7 @@ export function isAbortError(err: unknown): boolean {
 }
 
 export interface ControllerOptions {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   tools: Tool[];
   systemPrompt: string;
   /** Resolved at request time, so the user can edit settings between
@@ -88,7 +88,7 @@ export interface ControllerOptions {
 }
 
 export class AIController {
-  private readonly runtime: DataLabRuntime;
+  private readonly runtime: RuntimeApi;
   private readonly tools: Tool[];
   private readonly toolIndex: Map<string, Tool>;
   private readonly getSettings: () => ProviderSettings;

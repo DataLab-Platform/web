@@ -12,7 +12,7 @@
  * this file is the TypeScript port of the dataclasses defined there.
  */
 
-import type { DataLabRuntime } from "../runtime/runtime";
+import type { RuntimeApi } from "../runtime/runtime";
 
 /** Multimodal content part — text or inline image (OpenAI vision format). */
 export type ChatMessageContentPart =
@@ -126,7 +126,7 @@ export interface Tool {
   parameters: Record<string, unknown>;
   readonly: boolean;
   handler: (
-    runtime: DataLabRuntime,
+    runtime: RuntimeApi,
     args: Record<string, unknown>,
   ) => Promise<unknown>;
 }

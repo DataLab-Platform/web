@@ -35,9 +35,17 @@ import {
   type PyodideModuleLike,
 } from "../utils/memory";
 import { OpfsObjectStore } from "../storage/opfsObjectStore";
+import type { ObjectByteStore } from "../storage/opfsObjectStore";
+import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
+
+// Re-export the structural runtime contract so consumers can keep their
+// existing ``from "../runtime/runtime"`` import path while depending on
+// the interface (``RuntimeApi``) instead of the concrete class — the
+// decoupling that lets a worker-backed implementation be swapped in later.
+export type { RuntimeApi } from "./RuntimeApi";
 
 // Bundle the portable ``datalab.*`` shim package — every .py file under
 // src/sigima/dlplugins/ is mirrored to Pyodide's site-packages at startup
@@ -813,6 +821,30 @@ export interface FreeMemoryResult {
  */
 export type StorageMode = "ram" | "disk";
 
+/** Pyodide loader signature — ``window.loadPyodide`` or, in a worker, a
+ *  dynamic-``import()`` wrapper around the ESM Pyodide build. */
+export type PyodideLoader = (opts: { indexURL: string }) => Promise<unknown>;
+
+/**
+ * Options for {@link DataLabRuntime.load}.
+ *
+ * All fields are optional and default to the historical main-thread
+ * behaviour, so existing callers (``DataLabRuntime.load(onProgress)``) are
+ * unaffected. They exist so the same boot sequence can run inside a
+ * Dedicated Web Worker, where there is no ``window``/DOM: the worker injects
+ * a Pyodide ``loader`` and the locale-derived values that the DOM-less
+ * ``i18n`` layer cannot compute on its own.
+ */
+export interface RuntimeLoadOptions {
+  /** Pyodide loader; defaults to ``window.loadPyodide``. */
+  loadPyodide?: PyodideLoader;
+  /** ``LANG`` for the Pyodide environment; defaults to ``pyodideLang()``. */
+  lang?: string;
+  /** Default object/group labels pushed into ``bootstrap.py``; default to
+   *  ``t("Group")`` / ``t("Untitled")`` (English in a DOM-less worker). */
+  labels?: { group: string; untitled: string };
+}
+
 export class DataLabRuntime {
   private constructor(private readonly py: PyodideAPI) {}
 
@@ -938,15 +970,25 @@ export class DataLabRuntime {
 
   static async load(
     onProgress?: (msg: string) => void,
+    opts: RuntimeLoadOptions = {},
   ): Promise<DataLabRuntime> {
-    if (typeof window.loadPyodide !== "function") {
+    // The Pyodide loader is injectable so the runtime can boot both on the
+    // main thread (where ``window.loadPyodide`` is provided by the
+    // index.html <script>) and inside a Dedicated Web Worker (where the
+    // ``kernelWorker`` passes a dynamic-``import()`` loader for the ESM
+    // Pyodide build — there is no ``window`` there). Default preserves the
+    // historical main-thread behaviour exactly.
+    const loadPyodide =
+      opts.loadPyodide ??
+      (typeof window !== "undefined" ? window.loadPyodide : undefined);
+    if (typeof loadPyodide !== "function") {
       throw new Error(
         "Pyodide failed to load from the CDN. Check the browser console " +
           "and your network / Content-Security-Policy settings.",
       );
     }
     onProgress?.(t("Loading Pyodide runtime…"));
-    const py = (await window.loadPyodide!({
+    const py = (await loadPyodide({
       indexURL: PYODIDE_INDEX,
     })) as PyodideAPI;
 
@@ -974,7 +1016,7 @@ export class DataLabRuntime {
     // guidata shims, otherwise the translation object is cached at
     // import time and the language change comes too late.
     // ---------------------------------------------------------------
-    const lang = pyodideLang();
+    const lang = opts.lang ?? pyodideLang();
     await py.runPythonAsync(`
 import os
 os.environ["LANG"] = ${JSON.stringify(lang)}
@@ -1018,10 +1060,14 @@ await micropip.install(["sigima", "guidata"])
     // the "Group" prefix for auto-created groups and the "Untitled" macro
     // /notebook title. Sigima/guidata labels are translated via gettext
     // (``LANG`` above), but ``bootstrap.py`` is our own code, so the React
-    // side owns these translations and pushes them in here.
+    // side owns these translations and pushes them in here. In worker mode
+    // the DOM-less ``t()`` falls back to English, so the labels are passed
+    // in explicitly (computed on the main thread) to keep i18n correct.
+    const groupLabel = opts.labels?.group ?? t("Group");
+    const untitledLabel = opts.labels?.untitled ?? t("Untitled");
     await py.runPythonAsync(
-      `set_default_labels(${JSON.stringify(t("Group"))}, ${JSON.stringify(
-        t("Untitled"),
+      `set_default_labels(${JSON.stringify(groupLabel)}, ${JSON.stringify(
+        untitledLabel,
       )})`,
     );
 
@@ -1125,8 +1171,10 @@ await micropip.install(["sigima", "guidata"])
   /** Active storage mode. ``"ram"`` keeps the legacy behaviour with no
    *  OPFS code path engaged at all (guards below are no-ops). */
   private storageMode: StorageMode = "ram";
-  /** Lazily-created OPFS byte store; only allocated in ``"disk"`` mode. */
-  private opfsStore: OpfsObjectStore | null = null;
+  /** Lazily-created OPFS byte store; only allocated in ``"disk"`` mode.
+   *  Either the async {@link OpfsObjectStore} (main thread) or the faster
+   *  synchronous-handle ``OpfsSyncObjectStore`` (when running in a worker). */
+  private opfsStore: ObjectByteStore | null = null;
   /** JS mirror of bootstrap's ``_SPILLED`` set — object ids whose heavy
    *  array currently lives on disk rather than in the WASM heap. */
   private readonly spilledOids = new Set<string>();
@@ -1309,7 +1357,7 @@ await micropip.install(["sigima", "guidata"])
   // Disk-mode guard (runs inside the serialised section)
   // ------------------------------------------------------------------
 
-  private requireStore(): OpfsObjectStore {
+  private requireStore(): ObjectByteStore {
     if (!this.opfsStore) {
       throw new Error("OPFS store not initialised (storage mode is 'disk')");
     }
@@ -1491,7 +1539,12 @@ await micropip.install(["sigima", "guidata"])
     const run = async (): Promise<void> => {
       if (mode === "disk") {
         if (!this.opfsStore) {
-          this.opfsStore = new OpfsObjectStore();
+          // Prefer the synchronous-handle store when the runtime runs in a
+          // worker (4–7× faster spills, see ``opfs_sync_spike``); fall back
+          // to the async ``createWritable`` store on the main thread.
+          this.opfsStore = OpfsSyncObjectStore.isSupported()
+            ? new OpfsSyncObjectStore()
+            : new OpfsObjectStore();
           await this.opfsStore.init();
         }
         this.storageMode = "disk";

@@ -32,7 +32,7 @@ import {
   useState,
   forwardRef,
 } from "react";
-import type { DataLabRuntime } from "../../runtime/runtime";
+import type { RuntimeApi } from "../../runtime/runtime";
 import { NotebookRuntime } from "../../notebook/NotebookRuntime";
 import {
   emptyCodeCell,
@@ -65,7 +65,7 @@ import { useConfirm, useMessage } from "../ConfirmDialog";
 import { t } from "../../i18n/translate";
 
 interface NotebookPanelProps {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   theme: "light" | "dark";
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];

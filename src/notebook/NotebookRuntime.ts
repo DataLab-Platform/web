@@ -11,7 +11,7 @@
  * one and the user is informed that the namespace was lost.
  */
 
-import type { DataLabRuntime } from "../runtime/runtime";
+import type { RuntimeApi } from "../runtime/runtime";
 import {
   buildProxyBridge,
   type BridgeExternalCallbacks,
@@ -69,7 +69,7 @@ export class NotebookRuntime {
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
-  constructor(private readonly runtime: DataLabRuntime) {}
+  constructor(private readonly runtime: RuntimeApi) {}
 
   // ---------------------------------------------------------------------
   // Public API

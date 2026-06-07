@@ -10,12 +10,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ObjectStats, DataLabRuntime } from "../runtime/runtime";
+import type { ObjectStats, RuntimeApi } from "../runtime/runtime";
 import { t } from "../i18n/translate";
 import { ArrayEditorDialog, MAX_EDITABLE_CELLS } from "./ArrayEditorDialog";
 
 interface Props {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   oid: string;
   stats: ObjectStats;
   refreshNonce: number;
@@ -60,7 +60,7 @@ function SignalArrayPreview({
   refreshNonce,
   onApplied,
 }: {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   oid: string;
   refreshNonce: number;
   onApplied: () => void;
@@ -226,7 +226,7 @@ function ImageArrayPreview({
   stats,
   onApplied,
 }: {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   oid: string;
   stats: Extract<ObjectStats, { kind: "image" }>;
   onApplied: () => void;

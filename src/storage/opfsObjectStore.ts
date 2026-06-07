@@ -26,13 +26,35 @@
  */
 
 /** Directory name under the OPFS root holding the spilled object files. */
-const STORE_DIR = "dlw-object-store";
+export const STORE_DIR = "dlw-object-store";
 
 /** Per-object filename for object id *oid*. */
-function fileName(oid: string): string {
+export function fileName(oid: string): string {
   // Object ids are short opaque tokens (``_new_id``); keep them as-is but
   // guard against any path separator sneaking in.
   return `${oid.replace(/[^A-Za-z0-9_-]/g, "_")}.npy`;
+}
+
+/**
+ * Storage-backend contract for the on-disk (OPFS) spill mechanism.
+ *
+ * The runtime spills/pages object byte payloads through this interface
+ * without caring whether the bytes hit disk via the asynchronous
+ * ``createWritable`` path ({@link OpfsObjectStore}, usable on the main
+ * thread) or the synchronous ``createSyncAccessHandle`` path
+ * (``OpfsSyncObjectStore``, worker-only — markedly faster, see the
+ * ``opfs_sync_spike`` benchmark). All methods are async so both backends
+ * share one shape; the sync backend simply performs the I/O in place.
+ */
+export interface ObjectByteStore {
+  init(): Promise<void>;
+  put(oid: string, bytes: Uint8Array): Promise<void>;
+  get(oid: string): Promise<Uint8Array>;
+  has(oid: string): Promise<boolean>;
+  delete(oid: string): Promise<void>;
+  clear(): Promise<void>;
+  totalBytes(): number;
+  count(): number;
 }
 
 /**
@@ -42,7 +64,7 @@ function fileName(oid: string): string {
  * once before use (idempotent). Not safe for concurrent use across
  * threads on the same directory (one owner per OPFS subtree).
  */
-export class OpfsObjectStore {
+export class OpfsObjectStore implements ObjectByteStore {
   private root: FileSystemDirectoryHandle | null = null;
   private dir: FileSystemDirectoryHandle | null = null;
   /** Tracks the on-disk byte size of each stored object (for totals). */
@@ -84,11 +106,15 @@ export class OpfsObjectStore {
     const handle = await dir.getFileHandle(fileName(oid), { create: true });
     const writable = await handle.createWritable();
     try {
-      // ``write`` accepts a BufferSource; pass the exact byte view.
+      // ``write`` accepts a BufferSource; pass the exact byte view. The
+      // ``as ArrayBuffer`` narrows ``ArrayBufferLike`` (which, under the
+      // TS 5.7+ generic typed-array lib, also admits ``SharedArrayBuffer``)
+      // to the ``ArrayBuffer`` the DOM ``FileSystemWriteChunkType`` wants.
+      // These payloads never come from a shared buffer, so it is sound.
       await writable.write(
-        bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+        (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
           ? bytes.buffer
-          : bytes.slice().buffer,
+          : bytes.slice().buffer) as ArrayBuffer,
       );
     } finally {
       await writable.close();

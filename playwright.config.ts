@@ -44,6 +44,7 @@ export default defineConfig({
       testIgnore: [
         /image_perf\.spec\.ts/,
         /opfs_storage_bench\.spec\.ts/,
+        /opfs_sync_spike\.spec\.ts/,
         /_repro_.*\.spec\.ts/,
         /tests[\\/]benchmark[\\/]/,
       ],
@@ -51,7 +52,11 @@ export default defineConfig({
     {
       name: "perf",
       use: { ...devices["Desktop Chrome"] },
-      testMatch: [/image_perf\.spec\.ts/, /opfs_storage_bench\.spec\.ts/],
+      testMatch: [
+        /image_perf\.spec\.ts/,
+        /opfs_storage_bench\.spec\.ts/,
+        /opfs_sync_spike\.spec\.ts/,
+      ],
       timeout: 600_000,
     },
     {

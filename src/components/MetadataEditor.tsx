@@ -13,12 +13,12 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   MetadataEntry,
   MetadataValueType,
-  DataLabRuntime,
+  RuntimeApi,
 } from "../runtime/runtime";
 import { t } from "../i18n/translate";
 
 interface Props {
-  runtime: DataLabRuntime;
+  runtime: RuntimeApi;
   oid: string;
   /** Bumped by the parent whenever the underlying object changed. */
   refreshNonce: number;

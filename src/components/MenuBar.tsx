@@ -8,7 +8,7 @@ import { MemoryUsageIndicator } from "./MemoryUsageIndicator";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
 import { useTranslation } from "../i18n/I18nProvider";
-import type { DataLabRuntime } from "../runtime/runtime";
+import type { RuntimeApi } from "../runtime/runtime";
 
 interface Props {
   status: string;
@@ -23,7 +23,7 @@ interface Props {
   onOpenConsole?: () => void;
   /** Live runtime, used by the memory-usage indicator to sample the
    *  WASM heap. When ``undefined``/``null`` the indicator is hidden. */
-  runtime?: DataLabRuntime | null;
+  runtime?: RuntimeApi | null;
   /** Invoked when the user clicks the memory indicator to reclaim
    *  memory (garbage-collection pass). When omitted the indicator is
    *  shown read-only (no click action). */

@@ -8,7 +8,7 @@
  * This module is the single source of truth.
  */
 
-import type { DataLabRuntime } from "./runtime";
+import type { RuntimeApi } from "./runtime";
 
 export interface BridgeExternalCallbacks {
   getSelection?: () => string[];
@@ -26,7 +26,7 @@ export interface BridgeExternalCallbacks {
 export type BridgeMethod = (payload: unknown) => Promise<unknown>;
 
 export function buildProxyBridge(
-  s: DataLabRuntime,
+  s: RuntimeApi,
   ext: BridgeExternalCallbacks,
 ): Record<string, BridgeMethod> {
   return {

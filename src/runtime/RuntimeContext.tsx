@@ -1,12 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { DataLabRuntime } from "./runtime";
+import { DataLabRuntime, type RuntimeApi } from "./runtime";
+import { createWorkerRuntime } from "./WorkerRuntimeProxy";
+import { getRuntimeMode } from "./runtimeMode";
 import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
 import { getCurrentPanel, getSelection } from "./selectionState";
 import { t } from "../i18n/translate";
 
 interface RuntimeContextValue {
-  runtime: DataLabRuntime | null;
+  runtime: RuntimeApi | null;
   status: "loading" | "ready" | "error";
   message: string;
   error: string | null;
@@ -15,7 +17,7 @@ interface RuntimeContextValue {
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
-  const [runtime, setRuntime] = useState<DataLabRuntime | null>(null);
+  const [runtime, setRuntime] = useState<RuntimeApi | null>(null);
   const [status, setStatus] =
     useState<RuntimeContextValue["status"]>("loading");
   const [message, setMessage] = useState(t("Initialising…"));
@@ -24,9 +26,17 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let remoteBridgeHandle: RemoteBridgeHandle | null = null;
-    DataLabRuntime.load((msg) => {
+    // Boot the runtime either in-thread (default) or inside a Dedicated
+    // Web Worker (opt-in, see ``getRuntimeMode``). Both resolve to the same
+    // ``RuntimeApi`` façade, so the rest of this effect is mode-agnostic.
+    const onProgress = (msg: string) => {
       if (!cancelled) setMessage(msg);
-    })
+    };
+    const boot =
+      getRuntimeMode() === "worker"
+        ? createWorkerRuntime(onProgress)
+        : DataLabRuntime.load(onProgress);
+    boot
       .then((rt) => {
         if (cancelled) return;
         setRuntime(rt);
@@ -57,7 +67,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
           //   await runtime.runPython("list(_STORE.keys())")
           //   await runtime.listSignals()
           //   await runtime.reloadBootstrap()  // re-run bootstrap.py
-          (window as unknown as { runtime: DataLabRuntime }).runtime = rt;
+          (window as unknown as { runtime: RuntimeApi }).runtime = rt;
           console.info(
             "%c[runtime] ready \u2014 try `await runtime.listSignals()`",
             "color:#0e639c;font-weight:bold",

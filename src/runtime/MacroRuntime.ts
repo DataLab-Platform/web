@@ -7,7 +7,7 @@
  * whitelisted set of :class:`DataLabRuntime` methods.
  */
 
-import type { DataLabRuntime } from "./runtime";
+import type { RuntimeApi } from "./runtime";
 import {
   buildProxyBridge,
   type BridgeExternalCallbacks,
@@ -46,7 +46,7 @@ export class MacroRuntime {
   private currentRun: MacroRunCallbacks | null = null;
   private state: "idle" | "running" | "stopping" = "idle";
 
-  constructor(private readonly runtime: DataLabRuntime) {}
+  constructor(private readonly runtime: RuntimeApi) {}
 
   // ---------------------------------------------------------------------
   // Public API
