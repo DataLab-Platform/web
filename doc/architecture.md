@@ -83,7 +83,7 @@ right.
 flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
     L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
-    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>runtime.ts<br/>(DataLabRuntime + types)<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts<br/>remoteBridge.ts<br/>macroWorker.ts<br/>notebookWorker.ts"]
+    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
     L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_plugins.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 
@@ -92,19 +92,22 @@ flowchart LR
 
 ### Inter-layer contracts
 
-| Boundary    | Contract                                                                           |
-| ----------- | ---------------------------------------------------------------------------------- |
-| L1 → L2     | `useAction(id)` / event handlers; no direct runtime calls from components.         |
-| L2 → L3     | Typed methods on `DataLabRuntime` (`useRuntime()`).                                |
-| L3 → L4     | `pyodide.runPython()` / `pyodide.runPythonAsync()` calling `bootstrap.py` helpers. |
-| L3 ↔ Worker | `postMessage` (`bridge_call` / `bridge_reply` / `stdout` / `stderr` / …).          |
-| L3 ↔ Host   | `postMessage` JSON-RPC (`request` / `response` / `event`) via `remoteBridge`.      |
-| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). Catalog is auto-discovered.   |
+| Boundary    | Contract                                                                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| L1 → L2     | `useAction(id)` / event handlers; no direct runtime calls from components.                                                               |
+| L2 → L3     | Typed methods on the `RuntimeApi` façade (`useRuntime()`); the concrete impl is the in-thread `DataLabRuntime` or a worker-backed proxy. |
+| L3 → L4     | `pyodide.runPython()` / `pyodide.runPythonAsync()` calling `bootstrap.py` helpers.                                                       |
+| L3 ↔ Worker | `postMessage` (`bridge_call` / `bridge_reply` / `stdout` / `stderr` / …).                                                                |
+| L3 ↔ Host   | `postMessage` JSON-RPC (`request` / `response` / `event`) via `remoteBridge`.                                                            |
+| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). Catalog is auto-discovered.                                                         |
 
 ### Hard invariants
 
 - Components **must not** import from `src/runtime/runtime.ts` directly;
-  they consume `useRuntime()` and dispatch through `src/actions/`.
+  they consume `useRuntime()` (typed as the `RuntimeApi` façade) and
+  dispatch through `src/actions/`. Depending on the façade — not the
+  concrete class — is what lets the runtime run either in-thread or in a
+  Dedicated Web Worker without touching any call site.
 - Python helpers return **JSON-friendly dicts / lists** (`tolist()` on
   arrays), never live PyProxies, to keep the bridge cheap.
 - The pinned `PYODIDE_VERSION` in `runtime.ts` and the `<script>` tag in
@@ -264,6 +267,54 @@ flowchart LR
     SDK <-->|postMessage<br/>JSON-RPC| RB
     RB --> RT4
 ```
+
+#### Optional worker-hosted runtime + on-disk storage
+
+Everything above describes the **default** topology, where the main
+runtime runs on the UI thread. The runtime can also be hosted in its own
+Dedicated Web Worker — an **opt-in** mode selected by `runtimeMode.ts`
+(`?runtime=worker`, a `localStorage` key, or the `VITE_RUNTIME_WORKER`
+build flag; the default stays in-thread). Both paths satisfy the same
+`RuntimeApi` façade, so the UI is identical either way.
+
+```mermaid
+flowchart LR
+    subgraph MT3["Main thread"]
+        direction TB
+        RC2["RuntimeContext<br/>(picks the mode)"]
+        WP["WorkerRuntimeProxy.ts<br/>implements RuntimeApi<br/>RPC over postMessage<br/>+ synchronous mirror cache"]
+        RC2 --> WP
+    end
+    subgraph KW["Kernel worker"]
+        direction TB
+        KWp["kernelWorker.ts<br/>Pyodide #0 + DataLabRuntime<br/>+ OpfsSyncObjectStore"]
+    end
+    WP <-->|"workerProtocol.ts<br/>call / result / mirror /<br/>mutation / dialog (transferables)"| KWp
+```
+
+Why this exists:
+
+- **Synchronous OPFS spills.** The on-disk storage mode (`StorageMode =
+"ram" | "disk"`) spills heavy signal/image arrays out of the WASM heap
+  to the Origin Private File System through `src/storage/`. The async
+  `OpfsObjectStore` (`createWritable`) works on the main thread; the
+  faster `OpfsSyncObjectStore` (`createSyncAccessHandle`) is **worker-only
+  by spec**, so it is selected only when the runtime runs in the worker.
+  Either way HDF5 stays the durable source of truth — OPFS is an
+  ephemeral spill cache.
+- **Zero-copy bridge.** `workerProtocol.collectTransferables` passes every
+  `ArrayBuffer` in call arguments and return values as a `postMessage`
+  transferable, so binary payloads (image/signal arrays, file/HDF5 bytes)
+  cross the boundary without a structured-clone copy.
+- **Synchronous accessors** (`getStorageMode`, `getSpilledCount`,
+  `getMemoryUsage`, …) are served from a mirror the worker pushes after
+  every call, preserving their synchronous shape across the boundary.
+
+No COOP/COEP headers are required: the design uses transferables, not
+`SharedArrayBuffer`, so it remains deployable to a plain static host
+(GitHub Pages). Macro / notebook workers are unchanged — their
+`bridge_call`s still route through `proxyBridge` to the (now possibly
+worker-hosted) runtime.
 
 ### 3.4 Python kernel — `src/runtime/*.py`
 

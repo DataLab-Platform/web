@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **On-disk storage mode (experimental)**: a **File → Store data on disk (experimental)** toggle spills heavy signal/image arrays to the browser's Origin Private File System (OPFS) instead of keeping them in the WebAssembly heap, so the working set is bounded by disk quota rather than the ~2 GB wasm32 memory ceiling. The HDF5 workspace remains the durable source of truth; the on-disk store is an ephemeral cache. Available only in secure contexts that support OPFS; the default stays in-memory.
+- **Optional worker-hosted runtime** (developer-facing, opt-in via `?runtime=worker`): the Pyodide runtime can run in a Dedicated Web Worker behind a typed `RuntimeApi` façade, moving computation off the UI thread and enabling synchronous OPFS spills. The default remains the in-thread runtime, so end-user behaviour is unchanged.
+
 ## [0.4.0] - 2026-06-01
 
 ### Added
