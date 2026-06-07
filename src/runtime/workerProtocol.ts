@@ -156,3 +156,46 @@ export const CALLBACK_METHODS = [
   "setDialogHandler",
   "onWorkspaceMutation",
 ] as const;
+
+/**
+ * Walk an arbitrary value and collect every distinct ``ArrayBuffer``
+ * reachable through ``TypedArray.buffer`` (or a bare ``ArrayBuffer``).
+ *
+ * Used to populate the ``transfer`` list of ``postMessage`` so binary
+ * payloads cross the worker boundary **zero-copy** (transferred, not
+ * structured-cloned) — the latency lever the definitive on-disk benchmark
+ * identified, since cloning an 8–32 MiB image array dominates the call.
+ *
+ * Buffers are de-duplicated (``postMessage`` throws on a duplicate
+ * transferable) and ``SharedArrayBuffer`` is never collected (it is not
+ * transferable, and not used here). Depth is capped to avoid cycles.
+ *
+ * NOTE: transferring detaches the buffer on the sender side. Callers that
+ * pass binary inputs to the runtime (image/signal arrays, file bytes) are
+ * expected to relinquish them — they are conceptually *moved* into the
+ * model, not kept.
+ */
+export function collectTransferables(value: unknown): ArrayBuffer[] {
+  const seen = new Set<ArrayBuffer>();
+  const walk = (v: unknown, depth: number): void => {
+    if (depth > 8 || v == null || typeof v !== "object") return;
+    if (v instanceof ArrayBuffer) {
+      seen.add(v);
+      return;
+    }
+    if (ArrayBuffer.isView(v)) {
+      const buf = (v as ArrayBufferView).buffer;
+      if (buf instanceof ArrayBuffer) seen.add(buf);
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item, depth + 1);
+      return;
+    }
+    for (const inner of Object.values(v as Record<string, unknown>)) {
+      walk(inner, depth + 1);
+    }
+  };
+  walk(value, 0);
+  return Array.from(seen);
+}

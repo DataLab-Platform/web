@@ -23,14 +23,16 @@ import type {
 /** A controllable in-memory stand-in for a ``Worker``. */
 class FakeWorker implements WorkerLike {
   readonly sent: KernelRequest[] = [];
+  readonly transfers: (Transferable[] | undefined)[] = [];
   terminated = false;
   private listener: ((ev: { data: unknown }) => void) | null = null;
   private errorListener:
     | ((ev: { message?: string; filename?: string }) => void)
     | null = null;
 
-  postMessage(message: unknown): void {
+  postMessage(message: unknown, transfer?: Transferable[]): void {
     this.sent.push(message as KernelRequest);
+    this.transfers.push(transfer);
   }
 
   addEventListener(
@@ -155,6 +157,31 @@ describe("WorkerRuntimeProxy", () => {
       method: "renameObject",
       args: ["oid-1", "New name"],
     });
+  });
+
+  it("transfers ArrayBuffers in the arguments instead of cloning them", () => {
+    const { worker, runtime } = setup();
+    const data = new Float64Array([1, 2, 3, 4]);
+    void (
+      runtime.addImageFromArray as (p: {
+        title: string;
+        data: Float64Array;
+        width: number;
+        height: number;
+        dtype: string;
+      }) => Promise<string>
+    )({ title: "t", data, width: 2, height: 2, dtype: "float64" });
+    // The call's transfer list must carry the array's underlying buffer so
+    // postMessage moves it zero-copy rather than structured-cloning it.
+    const transfer = worker.transfers[worker.transfers.length - 1];
+    expect(transfer).toContain(data.buffer);
+  });
+
+  it("passes no transferables for argument-free calls", () => {
+    const { worker, runtime } = setup();
+    void (runtime.listSignals as () => Promise<unknown>)();
+    const transfer = worker.transfers[worker.transfers.length - 1];
+    expect(transfer).toEqual([]);
   });
 
   it("rejects the call promise when the worker reports an error", async () => {

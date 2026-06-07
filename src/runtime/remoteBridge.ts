@@ -24,6 +24,7 @@
  */
 
 import { buildProxyBridge, type BridgeMethod } from "./proxyBridge";
+import { collectTransferables } from "./workerProtocol";
 import type { RuntimeApi } from "./runtime";
 
 export interface RemoteBridgeOptions {
@@ -133,33 +134,13 @@ function isOriginAllowed(origin: string, allowed: readonly string[]): boolean {
 
 /**
  * Walk an arbitrary value and collect every ``ArrayBuffer`` reachable
- * through ``TypedArray.buffer``. Used to populate the second argument of
- * ``postMessage`` so binary payloads transfer zero-copy.
+ * through ``TypedArray.buffer``, so binary payloads transfer zero-copy.
  *
- * Caps the depth at 8 to avoid blowing the stack on cyclic structures.
+ * Re-exported from {@link workerProtocol} (the single shared implementation,
+ * also used by the worker runtime proxy). Kept on this module's public
+ * surface for the existing import sites and tests.
  */
-export function collectTransferables(value: unknown, depth = 0): ArrayBuffer[] {
-  if (depth > 8 || value == null || typeof value !== "object") return [];
-  const out: ArrayBuffer[] = [];
-  if (value instanceof ArrayBuffer) {
-    out.push(value);
-    return out;
-  }
-  if (ArrayBuffer.isView(value)) {
-    const buf = (value as ArrayBufferView).buffer;
-    if (buf instanceof ArrayBuffer) out.push(buf);
-    return out;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value)
-      out.push(...collectTransferables(item, depth + 1));
-    return out;
-  }
-  for (const v of Object.values(value as Record<string, unknown>)) {
-    out.push(...collectTransferables(v, depth + 1));
-  }
-  return out;
-}
+export { collectTransferables };
 
 /**
  * Activate the remote bridge.

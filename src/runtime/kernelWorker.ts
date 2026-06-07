@@ -21,6 +21,7 @@
  */
 import { DataLabRuntime, type PyodideLoader } from "./runtime";
 import { PYODIDE_INDEX } from "./workerBase";
+import { collectTransferables } from "./workerProtocol";
 import type {
   KernelEvent,
   KernelMirror,
@@ -127,7 +128,11 @@ async function handleCall(
     // accessors (getSpilledCount, getMemoryUsage, …) consistent with the
     // value just returned, rather than lagging one round-trip behind.
     post({ type: "mirror", mirror: snapshot(runtime) });
-    post({ type: "result", id, ok: true, value });
+    // Transfer (not clone) any ArrayBuffers in the return value: binary
+    // payloads (image/signal bytes, HDF5 workspace, …) are freshly built
+    // by the runtime (Python ``.tobytes()`` → a new JS ArrayBuffer), so
+    // moving them back to the main thread zero-copy is always safe.
+    post({ type: "result", id, ok: true, value }, collectTransferables(value));
   } catch (err) {
     post({ type: "mirror", mirror: snapshot(runtime) });
     post({ type: "result", id, ok: false, error: errMessage(err) });

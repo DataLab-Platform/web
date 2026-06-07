@@ -24,6 +24,7 @@ import type { RuntimeApi } from "./runtime";
 import {
   INITIAL_MIRROR,
   SYNC_MIRROR_METHODS,
+  collectTransferables,
   type KernelEvent,
   type KernelMirror,
   type KernelRequest,
@@ -195,9 +196,14 @@ export class WorkerRuntimeProxy {
 
   private call(method: string, args: unknown[]): Promise<unknown> {
     const id = this.nextCallId++;
+    // Transfer (not clone) any ArrayBuffers in the arguments: binary inputs
+    // (image/signal arrays, file bytes) are moved into the runtime, so this
+    // avoids the structured-clone copy the benchmark showed dominates the
+    // call. The buffers are detached on this side afterwards.
+    const transfer = collectTransferables(args);
     return new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.post({ type: "call", id, method, args });
+      this.post({ type: "call", id, method, args }, transfer);
     });
   }
 
