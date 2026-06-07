@@ -34,6 +34,20 @@ When you need a perf or budget-style probe, mark it with
 `test.skip(!process.env.PERF, "...")` or move the spec under the
 `perf` project's `testMatch` glob (currently `image_perf.spec.ts`).
 
+### Worker-mode coverage
+
+The runtime can also run inside a Dedicated Web Worker (opt-in via
+`?runtime=worker`; see [architecture.md](architecture.md) §3.3 and DEW
+ADR #2). That path has its own failure surface — Pyodide boot in a
+module worker, the `postMessage` RPC bridge, transferable buffers, the
+synchronous mirror, and workspace-mutation events crossing back to the
+main thread — which unit tests cannot reach. `tests/e2e/worker_mode.spec.ts`
+is the **permanent** regression suite that exercises it in the default
+`chromium` project, so it runs on every CI build. It boots the worker
+runtime **once** (`describe.serial` + `beforeAll`) and shares the page
+across assertions to amortise the cold boot. This suite is the gate for
+ever promoting worker mode to the default execution mode.
+
 ## Decision tree for a bug fix
 
 1. **Reproduce the bug with the cheapest possible probe.**
