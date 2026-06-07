@@ -24,6 +24,7 @@
     "bench:report": "python tests/benchmark/shared/report.py",
     "bench:wheels": "node tests/benchmark/scripts/build_wheels.mjs",
     "bench:opfs": "playwright test --project=perf tests/e2e/opfs_storage_bench.spec.ts --reporter=list",
+    "bench:opfs-worker": "playwright test --project=perf tests/e2e/opfs_worker_bench.spec.ts --reporter=list",
     "spike:opfs-sync": "playwright test --project=perf tests/e2e/opfs_sync_spike.spec.ts --reporter=list",
     "sdk:build": "npm --prefix packages/sdk run build",
     "sdk:pack": "node scripts/pack-sdk.mjs",
