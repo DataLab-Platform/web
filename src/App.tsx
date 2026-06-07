@@ -3008,6 +3008,12 @@ export default function App() {
         onExportMetadata: handleExportMetadata,
         onDeleteMetadata: handleDeleteMetadata,
         panel: treeKind,
+        storeOnDisk,
+        storageBusy,
+        diskStorageSupported: DataLabRuntime.isDiskStorageSupported(),
+        onToggleStoreOnDisk: () => {
+          void handleToggleStoreOnDisk();
+        },
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -3035,12 +3041,6 @@ export default function App() {
         onToggleNotebookFloating: toggleNotebookFloating,
         macroFloating,
         onToggleMacroFloating: toggleMacroFloating,
-        storeOnDisk,
-        storageBusy,
-        diskStorageSupported: DataLabRuntime.isDiskStorageSupported(),
-        onToggleStoreOnDisk: () => {
-          void handleToggleStoreOnDisk();
-        },
       }),
       ...buildAIAssistantActions({
         visible: aiPanelVisible,
