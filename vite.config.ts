@@ -77,6 +77,15 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
+  // Build Web Workers as ES modules. The kernel worker
+  // (``src/runtime/kernelWorker.ts``) imports the full ``DataLabRuntime``,
+  // whose dynamic ``import()`` calls force code-splitting — incompatible
+  // with Vite's default ``iife`` worker format. We already instantiate
+  // every worker with ``{ type: "module" }``, so an ES worker bundle is
+  // the matching (and only valid) output format.
+  worker: {
+    format: "es",
+  },
   // Make Python source files importable as raw strings.
   assetsInclude: ["**/*.py"],
 });
