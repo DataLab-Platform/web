@@ -15,6 +15,7 @@ environment** and a few UI surfaces, not about the science.
 | Multi-threading | Native threads / processes | Web Workers (one per macro / notebook)            |
 | File system     | Native I/O                 | Browser file picker, drag-and-drop, OPFS          |
 | Persistence     | HDF5 on disk               | HDF5 download / upload, IndexedDB workspace cache |
+| Memory          | System RAM (64-bit)        | ~2 GB wasm32 heap, optional OPFS on-disk spill    |
 | Remote control  | XML-RPC, FastAPI Web API   | In-browser proxy, optional postMessage SDK        |
 
 The first load downloads Pyodide (~10 MB) and installs Sigima via
@@ -52,6 +53,19 @@ from the browser cache.
 - **HDF5 workspace files** are interoperable: a workspace saved in
   desktop DataLab can be opened in DataLab-Web (and vice versa, within
   the limits of available processings).
+
+## Memory and on-disk storage
+
+This is a concept **exclusive to DataLab-Web** with no desktop equivalent. Desktop DataLab runs on 64-bit system CPython and is limited only by the machine's RAM. DataLab-Web runs on Pyodide, a 32-bit (`wasm32`) WebAssembly build whose linear heap is capped at roughly **2 GB** in practice — and, because Emscripten never returns freed memory to the browser, that heap only ever grows during a session (a page reload resets it). Loading several large images (2048²+ float64) can therefore exhaust the tab where the desktop app would not even notice.
+
+To lift that ceiling, DataLab-Web offers an opt-in **on-disk storage mode**, toggled from **File → Store data on disk (experimental)**:
+
+- When enabled, the heavy NumPy array of every signal and image is **spilled out of the WebAssembly heap to disk** — specifically to the browser's [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) (OPFS), a sandboxed, origin-scoped, browser-managed filesystem. The object model keeps only metadata resident; each array is paged back in just for the duration of the operation that needs it.
+- The result is that the working set is bounded by **disk quota instead of the ~2 GB RAM ceiling**, so you can work with datasets far larger than the heap would otherwise allow. The trade-off is a small per-operation latency for the disk round-trip.
+- The OPFS store is an **ephemeral cache, not a save format**: the HDF5 workspace remains the single durable source of truth, exactly as in RAM mode. The store is cleared if you clear the site's data, and it is independent of the **File → Save HDF5 workspace…** action you use to persist your work.
+- The toggle is only available in **secure contexts that support OPFS** (modern Chromium / Firefox / Safari over `https://` or `localhost`); when unavailable, it is disabled and the app stays in the default in-memory mode.
+
+The desktop application has no analogue because it never hits a memory wall of this kind: this feature exists purely to work around the browser's WebAssembly memory model.
 
 ## Plugins
 
