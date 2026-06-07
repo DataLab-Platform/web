@@ -23,6 +23,7 @@
     "bench:run": "node tests/benchmark/scripts/run_all.mjs",
     "bench:report": "python tests/benchmark/shared/report.py",
     "bench:wheels": "node tests/benchmark/scripts/build_wheels.mjs",
+    "bench:opfs": "playwright test --project=perf tests/e2e/opfs_storage_bench.spec.ts --reporter=list",
     "sdk:build": "npm --prefix packages/sdk run build",
     "sdk:pack": "node scripts/pack-sdk.mjs",
     "app:pack": "node scripts/pack-app.mjs",

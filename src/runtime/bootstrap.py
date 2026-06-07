@@ -2286,6 +2286,7 @@ def delete_object(oid: str) -> None:
     _MODEL.delete_object(oid)
     _LAST_PROCESSING.pop(oid, None)
     _CREATION_PARAMS.pop(oid, None)
+    _SPILLED.pop(oid, None)
 
 
 def delete_all_objects(kind: str = "signal") -> None:
@@ -2303,6 +2304,7 @@ def delete_all_objects(kind: str = "signal") -> None:
         _MODEL.delete_object(oid)
         _LAST_PROCESSING.pop(oid, None)
         _CREATION_PARAMS.pop(oid, None)
+        _SPILLED.pop(oid, None)
     panel = _MODEL.panel(kind)
     panel.groups.clear()
     panel.ensure_default_group()
@@ -2474,6 +2476,181 @@ def get_data_memory() -> dict[str, int]:
             if isinstance(nbytes, int):
                 total += nbytes
     return {"data_bytes": int(total), "object_count": int(count)}
+
+
+# ---------------------------------------------------------------------------
+# On-disk storage mode — array spill / page-in primitives
+# ---------------------------------------------------------------------------
+#
+# These synchronous helpers move an object's single heavy NumPy payload out
+# of (and back into) the WASM heap. They never touch OPFS themselves: the JS
+# runtime owns the asynchronous OPFS I/O (``createWritable`` / ``getFile``)
+# and uses these primitives to (de)serialise the bytes it persists. Keeping
+# the file I/O on the JS side means the Python layer stays fully synchronous
+# and the existing in-RAM behaviour is byte-for-byte unchanged whenever the
+# "data on disk" mode is off (nothing here runs).
+#
+# Each object carries exactly one heavy array:
+#   * image  -> ``obj.data``   (2-D)
+#   * signal -> ``obj.xydata`` (2-D: rows x, y[, dx, dy])
+# When spilled, that array is replaced by a tiny same-dtype placeholder so
+# the object stays structurally valid (and ``get_data_memory`` stops
+# counting it) until it is paged back in.
+
+# Maps oid -> {"kind", "attr", "shape", "dtype"} for every spilled object.
+_SPILLED: dict[str, dict[str, Any]] = {}
+
+
+def _heavy_attr(kind: str) -> str:
+    """Return the attribute name holding *kind*'s single heavy array."""
+    return "data" if kind == "image" else "xydata"
+
+
+def detach_object_array(oid: str) -> bytes:
+    """Serialise *oid*'s heavy array to ``.npy`` bytes and drop it from RAM.
+
+    The resident array is replaced by a 1-element placeholder of the same
+    dtype, and *oid* is recorded in :data:`_SPILLED`. Returns the raw
+    ``.npy`` payload for the JS runtime to persist to OPFS. Idempotent:
+    re-detaching an already-spilled object returns ``b""``.
+
+    Args:
+        oid: object identifier in :data:`_MODEL`.
+
+    Returns:
+        The little-endian ``.npy`` encoding of the detached array (empty
+        when the object is already spilled or unknown).
+    """
+    import io
+
+    if oid in _SPILLED or oid not in _MODEL._objects:  # noqa: SLF001
+        return b""
+    entry = _MODEL._objects[oid]  # noqa: SLF001
+    attr = _heavy_attr(entry.kind)
+    arr = np.asarray(getattr(entry.obj, attr))
+    buf = io.BytesIO()
+    np.save(buf, arr, allow_pickle=False)
+    payload = buf.getvalue()
+    _SPILLED[oid] = {
+        "kind": entry.kind,
+        "attr": attr,
+        "shape": tuple(int(s) for s in arr.shape),
+        "dtype": str(arr.dtype),
+    }
+    # Replace with a minimal valid placeholder so the object stays usable
+    # for metadata access until it is paged back in.
+    if entry.kind == "image":
+        placeholder = np.zeros((1, 1), dtype=arr.dtype)
+    else:  # signal xydata keeps its row count (x, y[, dx, dy])
+        placeholder = np.zeros((arr.shape[0], 1), dtype=arr.dtype)
+    setattr(entry.obj, attr, placeholder)
+    return payload
+
+
+def attach_object_array(oid: str, payload: bytes) -> bool:
+    """Restore *oid*'s heavy array from ``.npy`` *payload* (page-in).
+
+    Args:
+        oid: object identifier in :data:`_MODEL`.
+        payload: the ``.npy`` bytes previously returned by
+         :func:`detach_object_array` (read back from OPFS by JS).
+
+    Returns:
+        ``True`` when the array was restored, ``False`` when *oid* was not
+        spilled or is unknown.
+    """
+    import io
+
+    if oid not in _SPILLED or oid not in _MODEL._objects:  # noqa: SLF001
+        return False
+    entry = _MODEL._objects[oid]  # noqa: SLF001
+    # ``payload`` may arrive as Python ``bytes`` or, when handed straight
+    # from JS through ``callKwargs``, as a JsBuffer proxy. Coerce both to
+    # raw bytes before decoding the ``.npy`` stream.
+    if isinstance(payload, (bytes, bytearray, memoryview)):
+        data = bytes(payload)
+    elif hasattr(payload, "to_bytes"):
+        data = payload.to_bytes()  # pyodide JsBuffer
+    elif hasattr(payload, "to_py"):
+        data = bytes(payload.to_py())
+    else:
+        data = bytes(payload)
+    arr = np.load(io.BytesIO(data), allow_pickle=False)
+    setattr(entry.obj, _SPILLED[oid]["attr"], arr)
+    _SPILLED.pop(oid, None)
+    return True
+
+
+def release_object_array(oid: str) -> bool:
+    """Re-spill a resident object *without* re-serialising it.
+
+    Used after a read-only page-in: the object's OPFS copy is still
+    current, so the heavy array can simply be dropped (replaced by a
+    placeholder) and *oid* re-marked spilled. This keeps the WASM heap
+    flat — an object stays resident only for the duration of the call
+    that needed it — at no I/O cost.
+
+    Args:
+        oid: object identifier in :data:`_MODEL`.
+
+    Returns:
+        ``True`` when the array was released, ``False`` when *oid* is
+        already spilled or unknown.
+    """
+    if oid in _SPILLED or oid not in _MODEL._objects:  # noqa: SLF001
+        return False
+    entry = _MODEL._objects[oid]  # noqa: SLF001
+    attr = _heavy_attr(entry.kind)
+    arr = np.asarray(getattr(entry.obj, attr))
+    _SPILLED[oid] = {
+        "kind": entry.kind,
+        "attr": attr,
+        "shape": tuple(int(s) for s in arr.shape),
+        "dtype": str(arr.dtype),
+    }
+    if entry.kind == "image":
+        placeholder = np.zeros((1, 1), dtype=arr.dtype)
+    else:
+        placeholder = np.zeros((arr.shape[0], 1), dtype=arr.dtype)
+    setattr(entry.obj, attr, placeholder)
+    return True
+
+
+def is_object_spilled(oid: str) -> bool:
+    """Return True when *oid*'s heavy array currently lives on disk."""
+    return oid in _SPILLED
+
+
+def spilled_object_ids() -> list[str]:
+    """Return the ids of every currently spilled object."""
+    return list(_SPILLED.keys())
+
+
+def spillable_objects() -> list[dict[str, Any]]:
+    """Return resident objects worth spilling, largest heavy array first.
+
+    Used by the JS eviction loop to pick eviction candidates under heap
+    pressure. Excludes already-spilled objects.
+
+    Returns:
+        A list of ``{"oid", "kind", "nbytes"}`` mappings sorted by
+        ``nbytes`` descending.
+    """
+    out: list[dict[str, Any]] = []
+    for oid, entry in _MODEL._objects.items():  # noqa: SLF001
+        if oid in _SPILLED:
+            continue
+        attr = _heavy_attr(entry.kind)
+        nbytes = getattr(getattr(entry.obj, attr, None), "nbytes", None)
+        if isinstance(nbytes, int) and nbytes > 0:
+            out.append({"oid": oid, "kind": entry.kind, "nbytes": int(nbytes)})
+    out.sort(key=lambda d: d["nbytes"], reverse=True)
+    return out
+
+
+def forget_spilled(oid: str) -> None:
+    """Drop *oid*'s spill bookkeeping (called when a spilled object is deleted)."""
+    _SPILLED.pop(oid, None)
 
 
 # Backwards-compatible flat list (used by debug helpers / DevTools console).

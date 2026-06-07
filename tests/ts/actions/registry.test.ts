@@ -273,11 +273,15 @@ describe("buildViewActions", () => {
       onToggleNotebookFloating: vi.fn(),
       macroFloating: false,
       onToggleMacroFloating: vi.fn(),
+      storeOnDisk: false,
+      storageBusy: false,
+      diskStorageSupported: true,
+      onToggleStoreOnDisk: vi.fn(),
       ...over,
     };
   }
 
-  it("exposes one popout entry and four checkable toggles", () => {
+  it("exposes one popout entry and five checkable toggles", () => {
     const actions = buildViewActions(makeViewCallbacks());
     expect(actions.map((a) => a.id)).toEqual([
       "view.open_separate_view",
@@ -285,6 +289,7 @@ describe("buildViewActions", () => {
       "view.show_graphical_titles",
       "view.notebook_floating",
       "view.macro_floating",
+      "view.store_on_disk",
     ]);
   });
 
@@ -339,6 +344,24 @@ describe("buildViewActions", () => {
     expect(
       popout.enabled(makeState({ currentId: "x", selectedIds: ["x"] })),
     ).toBe(true);
+  });
+
+  it("disables on-disk storage when unsupported or busy", () => {
+    const disk = (over: Partial<Parameters<typeof buildViewActions>[0]>) =>
+      buildViewActions(makeViewCallbacks(over)).find(
+        (a) => a.id === "view.store_on_disk",
+      )!;
+    expect(disk({ diskStorageSupported: true }).enabled(makeState({}))).toBe(
+      true,
+    );
+    expect(disk({ diskStorageSupported: false }).enabled(makeState({}))).toBe(
+      false,
+    );
+    expect(
+      disk({ diskStorageSupported: true, storageBusy: true }).enabled(
+        makeState({}),
+      ),
+    ).toBe(false);
   });
 
   it("toggles trigger their callbacks", () => {

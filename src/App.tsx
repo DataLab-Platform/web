@@ -9,6 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
+import { DataLabRuntime } from "./runtime/runtime";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
@@ -1453,6 +1454,43 @@ export default function App() {
       });
     }
   }, [runtime, notify]);
+
+  // View > "Store data on disk" toggle. When on, the runtime spills
+  // each object's heavy array to the browser's Origin Private File
+  // System and keeps it resident only for the duration of a referencing
+  // computation, so the WASM heap stays flat regardless of the number of
+  // objects. Off by default (RAM mode); unavailable in insecure
+  // contexts or engines without OPFS.
+  const [storeOnDisk, setStoreOnDisk] = useState(false);
+  const [storageBusy, setStorageBusy] = useState(false);
+  const handleToggleStoreOnDisk = useCallback(async () => {
+    if (!runtime || storageBusy) return;
+    const next = !storeOnDisk;
+    setStorageBusy(true);
+    try {
+      await runtime.setStorageMode(next ? "disk" : "ram");
+      setStoreOnDisk(next);
+      await notify({
+        kind: "info",
+        title: t("Data storage"),
+        message: next
+          ? t(
+              "On-disk storage enabled. Object data is kept on disk and loaded only when needed, keeping memory usage low.",
+            )
+          : t("On-disk storage disabled. Object data is kept in memory."),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await notify({
+        kind: "error",
+        message: t("Could not switch data storage mode: {message}", {
+          message,
+        }),
+      });
+    } finally {
+      setStorageBusy(false);
+    }
+  }, [runtime, storeOnDisk, storageBusy, notify]);
 
   const handleAnalysis = useCallback(
     async (funcId: string, hasParams: boolean) => {
@@ -2997,6 +3035,12 @@ export default function App() {
         onToggleNotebookFloating: toggleNotebookFloating,
         macroFloating,
         onToggleMacroFloating: toggleMacroFloating,
+        storeOnDisk,
+        storageBusy,
+        diskStorageSupported: DataLabRuntime.isDiskStorageSupported(),
+        onToggleStoreOnDisk: () => {
+          void handleToggleStoreOnDisk();
+        },
       }),
       ...buildAIAssistantActions({
         visible: aiPanelVisible,
@@ -3124,6 +3168,9 @@ export default function App() {
       toggleNotebookFloating,
       macroFloating,
       toggleMacroFloating,
+      storeOnDisk,
+      storageBusy,
+      handleToggleStoreOnDisk,
       handleStartTour,
       handleFreeMemory,
     ],

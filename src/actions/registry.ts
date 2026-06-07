@@ -410,6 +410,16 @@ export interface ViewActionCallbacks {
   macroFloating: boolean;
   /** Toggle the Macro panel placement (tab ⇄ floating). */
   onToggleMacroFloating: () => void;
+  /** Current value of the "store data on disk" preference. */
+  storeOnDisk: boolean;
+  /** True while a storage-mode switch is in progress (disables the
+   *  toggle to prevent re-entrancy). */
+  storageBusy: boolean;
+  /** Whether the on-disk storage mode is available in this browser /
+   *  context (OPFS + secure context). When false the item is disabled. */
+  diskStorageSupported: boolean;
+  /** Toggle on-disk storage mode (spill arrays to OPFS ⇄ keep in RAM). */
+  onToggleStoreOnDisk: () => void;
 }
 
 /** Wire View menu actions (UI preferences only). */
@@ -423,6 +433,7 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   const titlesPrefix = checkPrefix(cb.showGraphicalTitles);
   const notebookPrefix = checkPrefix(cb.notebookFloating);
   const macroPrefix = checkPrefix(cb.macroFloating);
+  const diskPrefix = checkPrefix(cb.storeOnDisk);
   return [
     {
       id: "view.open_separate_view",
@@ -464,6 +475,14 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       menuPath: `View/${macroPrefix}Detach Macros panel`,
       enabled: always,
       run: cb.onToggleMacroFloating,
+    },
+    {
+      id: "view.store_on_disk",
+      label: `${diskPrefix}${t("Store data on disk (experimental)")}`,
+      menuPath: `View/${diskPrefix}Store data on disk (experimental)`,
+      beginGroup: true,
+      enabled: () => cb.diskStorageSupported && !cb.storageBusy,
+      run: cb.onToggleStoreOnDisk,
     },
   ];
 }

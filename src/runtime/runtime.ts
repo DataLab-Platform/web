@@ -34,6 +34,7 @@ import {
   type MemoryUsage,
   type PyodideModuleLike,
 } from "../utils/memory";
+import { OpfsObjectStore } from "../storage/opfsObjectStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
@@ -800,6 +801,18 @@ export interface FreeMemoryResult {
   wasmAfter: number | null;
 }
 
+/**
+ * Runtime storage mode.
+ *
+ * ``"ram"`` (default) keeps every signal/image array resident in the
+ * Pyodide WASM heap — fastest, but the working set is capped by the
+ * ~2 GB wasm32 ceiling. ``"disk"`` spills each object's heavy array to
+ * the Origin Private File System and pages it back in only for the
+ * duration of the call that needs it, so the heap stays flat and the
+ * dataset is bounded by disk quota instead of RAM.
+ */
+export type StorageMode = "ram" | "disk";
+
 export class DataLabRuntime {
   private constructor(private readonly py: PyodideAPI) {}
 
@@ -1105,63 +1118,403 @@ await micropip.install(["sigima", "guidata"])
    */
   private _queue: Promise<unknown> = Promise.resolve();
 
-  /** Call a Python function declared in bootstrap.py with keyword args. */
+  // ------------------------------------------------------------------
+  // On-disk storage mode state (OPFS spill / page-in)
+  // ------------------------------------------------------------------
+
+  /** Active storage mode. ``"ram"`` keeps the legacy behaviour with no
+   *  OPFS code path engaged at all (guards below are no-ops). */
+  private storageMode: StorageMode = "ram";
+  /** Lazily-created OPFS byte store; only allocated in ``"disk"`` mode. */
+  private opfsStore: OpfsObjectStore | null = null;
+  /** JS mirror of bootstrap's ``_SPILLED`` set — object ids whose heavy
+   *  array currently lives on disk rather than in the WASM heap. */
+  private readonly spilledOids = new Set<string>();
+
+  /** kwarg keys carrying a single object id referenced by a call. */
+  private static readonly OID_KEYS: readonly string[] = [
+    "oid",
+    "id",
+    "operand_id",
+    "source_id",
+  ];
+  /** kwarg keys carrying a list of object ids referenced by a call. */
+  private static readonly OIDS_KEYS: readonly string[] = [
+    "oids",
+    "ids",
+    "source_ids",
+  ];
+  /** Calls that delete their referenced objects — never page those in. */
+  private static readonly DELETES_OBJECTS: ReadonlySet<string> = new Set([
+    "delete_object",
+    "delete_all_objects",
+  ]);
+  /** Calls that iterate the *whole* model and need every array resident
+   *  (e.g. workspace serialisation). */
+  private static readonly NEEDS_ALL_RESIDENT: ReadonlySet<string> = new Set([
+    "save_workspace_to_bytes",
+  ]);
+  /** Calls that replace the whole model with freshly-loaded objects, so
+   *  the on-disk store must be reset and every new object re-spilled. */
+  private static readonly REPLACES_MODEL: ReadonlySet<string> = new Set([
+    "open_workspace_from_bytes",
+    "reset_all",
+  ]);
+  /** Calls that mutate an existing object's heavy array **in place**, so
+   *  a paged-in operand must be re-serialised (not just released). */
+  private static readonly MUTATES_HEAVY: ReadonlySet<string> = new Set([
+    "set_image_data",
+    "set_signal_xydata",
+    "reapply_last_processing",
+    "update_image_creation_params",
+    "update_signal_creation_params",
+  ]);
+  /** Calls whose return value is one or more freshly-produced object ids
+   *  that must be spilled to disk afterwards (in disk mode). */
+  private static readonly PRODUCES_OBJECTS: ReadonlySet<string> = new Set([
+    "add_image_from_array",
+    "add_signal_from_arrays",
+    "create_signal",
+    "create_image",
+    "create_signal_typed",
+    "create_image_typed",
+    "duplicate_object",
+    "apply_processing",
+    "apply_feature",
+    "extract_image_rois",
+    "erase_image_area",
+    "commit_interactive_fit",
+    "add_object_pickled",
+  ]);
+
+  /** Collect the object ids referenced by *kwargs* (single + list keys). */
+  private static referencedOids(kwargs: Record<string, unknown>): string[] {
+    const out: string[] = [];
+    for (const k of DataLabRuntime.OID_KEYS) {
+      const v = kwargs[k];
+      if (typeof v === "string") out.push(v);
+    }
+    for (const k of DataLabRuntime.OIDS_KEYS) {
+      const v = kwargs[k];
+      if (Array.isArray(v)) {
+        for (const x of v) if (typeof x === "string") out.push(x);
+      }
+    }
+    return out;
+  }
+
+  /** Normalise a call's return value into a flat list of object ids. */
+  private static producedOids(value: unknown): string[] {
+    if (typeof value === "string") return [value];
+    if (Array.isArray(value)) {
+      return value.filter((x): x is string => typeof x === "string");
+    }
+    return [];
+  }
+
+  /**
+   * Invoke a bootstrap.py callable **without** queueing.
+   *
+   * This is the raw Pyodide call (kwargs marshalling, coroutine await,
+   * ``toJs`` conversion, mutation-listener notification). It must only
+   * be called from within the serialised section (see {@link callPy})
+   * or from the disk-mode guard, which already runs inside it.
+   */
+  private async invokePy<T = unknown>(
+    name: string,
+    kwargs: Record<string, unknown> = {},
+    options: { silent?: boolean } = {},
+  ): Promise<T> {
+    const fn = this.py.globals.get(name);
+    if (!fn) {
+      throw new Error(`Python function not found: ${name}`);
+    }
+    if (typeof fn.callKwargs !== "function") {
+      fn.destroy?.();
+      throw new Error(
+        `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
+      );
+    }
+    try {
+      // In Pyodide, callKwargs must receive the kwargs dict as its LAST
+      // argument.  All our helpers in bootstrap.py are called with kwargs
+      // only, so the kwargs dict is also the only argument.
+      const result = fn.callKwargs(kwargs);
+      // ``result`` may be: (a) a plain JS value, (b) a JS Promise, or
+      // (c) a Pyodide PyProxy of a coroutine (when the bootstrap
+      // function is ``async def``).  The latter is "thenable" but is
+      // **not** an ``instanceof Promise``, so we must detect it via
+      // duck typing on ``.then`` to await it correctly — otherwise we
+      // end up running ``toJs`` on the live coroutine proxy, which
+      // gets destroyed mid-conversion and throws "Object has already
+      // been destroyed".
+      const isThenable =
+        result != null &&
+        (result instanceof Promise ||
+          typeof (result as { then?: unknown }).then === "function");
+      const awaited = isThenable ? await result : result;
+      const value = toJs(awaited) as T;
+      // Notify workspace-mutation listeners *after* the Python side
+      // returns successfully — failed mutations don't dirty the
+      // workspace. ``silent`` lets panel bootstrap code seed default
+      // content without surfacing it as a user edit.
+      if (!options.silent && DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)) {
+        this.emitWorkspaceMutation(name);
+      }
+      return value;
+    } catch (err) {
+      if (!options.silent) {
+        console.error(`[runtime] ${name} failed`, err);
+      }
+      throw err;
+    } finally {
+      fn.destroy?.();
+    }
+  }
+
+  /** Call a Python function declared in bootstrap.py with keyword args.
+   *
+   *  Serialised through {@link _queue} so the single-threaded Python
+   *  side observes a strict request order. In disk mode the call is
+   *  wrapped by a page-in/spill guard so referenced objects are made
+   *  resident for its duration and dropped again afterwards. */
   private async callPy<T = unknown>(
     name: string,
     kwargs: Record<string, unknown> = {},
     options: { silent?: boolean } = {},
   ): Promise<T> {
     const doCall = async (): Promise<T> => {
-      const fn = this.py.globals.get(name);
-      if (!fn) {
-        throw new Error(`Python function not found: ${name}`);
+      if (this.storageMode !== "disk") {
+        return this.invokePy<T>(name, kwargs, options);
       }
-      if (typeof fn.callKwargs !== "function") {
-        fn.destroy?.();
-        throw new Error(
-          `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
-        );
-      }
+      const pagedIn = await this.diskGuardBefore(name, kwargs);
+      let value: T;
       try {
-        // In Pyodide, callKwargs must receive the kwargs dict as its LAST
-        // argument.  All our helpers in bootstrap.py are called with kwargs
-        // only, so the kwargs dict is also the only argument.
-        const result = fn.callKwargs(kwargs);
-        // ``result`` may be: (a) a plain JS value, (b) a JS Promise, or
-        // (c) a Pyodide PyProxy of a coroutine (when the bootstrap
-        // function is ``async def``).  The latter is "thenable" but is
-        // **not** an ``instanceof Promise``, so we must detect it via
-        // duck typing on ``.then`` to await it correctly — otherwise we
-        // end up running ``toJs`` on the live coroutine proxy, which
-        // gets destroyed mid-conversion and throws "Object has already
-        // been destroyed".
-        const isThenable =
-          result != null &&
-          (result instanceof Promise ||
-            typeof (result as { then?: unknown }).then === "function");
-        const awaited = isThenable ? await result : result;
-        const value = toJs(awaited) as T;
-        // Notify workspace-mutation listeners *after* the Python side
-        // returns successfully — failed mutations don't dirty the
-        // workspace. ``silent`` lets panel bootstrap code seed default
-        // content without surfacing it as a user edit.
-        if (!options.silent && DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)) {
-          this.emitWorkspaceMutation(name);
-        }
-        return value;
-      } catch (err) {
-        if (!options.silent) {
-          console.error(`[runtime] ${name} failed`, err);
-        }
-        throw err;
+        value = await this.invokePy<T>(name, kwargs, options);
       } finally {
-        fn.destroy?.();
+        // Re-spill anything we paged in even when the call throws, so a
+        // failed op never leaves the heap inflated.
+        await this.diskGuardReleaseFailsafe(name, pagedIn);
       }
+      await this.diskGuardAfter(name, kwargs, value, pagedIn);
+      return value;
     };
     const next = this._queue.then(doCall, doCall);
     // Keep the chain alive even if this call rejects.
     this._queue = next.catch(() => undefined);
     return next;
+  }
+
+  // ------------------------------------------------------------------
+  // Disk-mode guard (runs inside the serialised section)
+  // ------------------------------------------------------------------
+
+  private requireStore(): OpfsObjectStore {
+    if (!this.opfsStore) {
+      throw new Error("OPFS store not initialised (storage mode is 'disk')");
+    }
+    return this.opfsStore;
+  }
+
+  /** Page object *oid* back into the heap (direct, unqueued). */
+  private async pageInDirect(oid: string): Promise<void> {
+    if (!this.spilledOids.has(oid)) return;
+    const bytes = await this.requireStore().get(oid);
+    await this.invokePy("attach_object_array", { oid, payload: bytes });
+    this.spilledOids.delete(oid);
+  }
+
+  /** Spill object *oid* to disk, serialising it afresh (direct, unqueued). */
+  private async spillDirect(oid: string): Promise<boolean> {
+    if (this.spilledOids.has(oid)) return false;
+    const bytes = (await this.invokePy("detach_object_array", {
+      oid,
+    })) as Uint8Array | null;
+    if (!bytes || bytes.byteLength === 0) return false;
+    await this.requireStore().put(oid, bytes);
+    this.spilledOids.add(oid);
+    return true;
+  }
+
+  /** Drop a resident object's array without rewriting its (current) OPFS
+   *  copy — used to re-spill read-only page-ins at no I/O cost. */
+  private async releaseDirect(oid: string): Promise<void> {
+    const released = (await this.invokePy("release_object_array", {
+      oid,
+    })) as boolean;
+    if (released) this.spilledOids.add(oid);
+  }
+
+  /** Make referenced (or all) objects resident before the call. Returns
+   *  the ids that were actually paged in, so they can be re-spilled. */
+  private async diskGuardBefore(
+    name: string,
+    kwargs: Record<string, unknown>,
+  ): Promise<string[]> {
+    if (DataLabRuntime.DELETES_OBJECTS.has(name)) return [];
+    let targets: string[];
+    if (DataLabRuntime.NEEDS_ALL_RESIDENT.has(name)) {
+      targets = Array.from(this.spilledOids);
+    } else {
+      targets = DataLabRuntime.referencedOids(kwargs).filter((oid) =>
+        this.spilledOids.has(oid),
+      );
+    }
+    const pagedIn: string[] = [];
+    for (const oid of targets) {
+      await this.pageInDirect(oid);
+      pagedIn.push(oid);
+    }
+    return pagedIn;
+  }
+
+  /** Re-spill paged-in operands and spill freshly-produced results. */
+  private async diskGuardAfter(
+    name: string,
+    _kwargs: Record<string, unknown>,
+    value: unknown,
+    pagedIn: string[],
+  ): Promise<void> {
+    if (DataLabRuntime.DELETES_OBJECTS.has(name)) {
+      await this.reconcileDeletedSpills();
+      return;
+    }
+    if (DataLabRuntime.REPLACES_MODEL.has(name)) {
+      // The model was replaced wholesale: forget the old store and
+      // spill every freshly-loaded object.
+      this.spilledOids.clear();
+      await this.requireStore().clear();
+      await this.spillAllResidentDirect();
+      return;
+    }
+    const mutated = DataLabRuntime.MUTATES_HEAVY.has(name);
+    for (const oid of pagedIn) {
+      if (mutated) {
+        // Data changed in place → rewrite the on-disk copy.
+        await this.spillDirect(oid);
+      } else {
+        // Read-only access → drop the array, keep the existing file.
+        await this.releaseDirect(oid);
+      }
+    }
+    if (DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
+      for (const oid of DataLabRuntime.producedOids(value)) {
+        await this.spillDirect(oid);
+      }
+    }
+    // Reclaim heap pages freed by the placeholders so later allocations
+    // reuse them instead of growing the heap.
+    if (pagedIn.length || DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
+      await this.invokePy("collect_garbage");
+    }
+  }
+
+  /** Best-effort re-spill on the error path (never throws). */
+  private async diskGuardReleaseFailsafe(
+    name: string,
+    pagedIn: string[],
+  ): Promise<void> {
+    void name;
+    for (const oid of pagedIn) {
+      if (this.spilledOids.has(oid)) continue;
+      try {
+        await this.releaseDirect(oid);
+      } catch {
+        // Swallow — we're already on an error path.
+      }
+    }
+  }
+
+  /** Spill every resident object (direct, unqueued). */
+  private async spillAllResidentDirect(): Promise<void> {
+    const candidates = (await this.invokePy("spillable_objects")) as Array<{
+      oid: string;
+    }>;
+    let any = false;
+    for (const c of candidates) {
+      if (await this.spillDirect(c.oid)) any = true;
+    }
+    if (any) await this.invokePy("collect_garbage");
+  }
+
+  /** Page every spilled object back in (direct, unqueued). */
+  private async pageInAllDirect(): Promise<void> {
+    for (const oid of Array.from(this.spilledOids)) {
+      await this.pageInDirect(oid);
+    }
+  }
+
+  /** After a delete, drop the OPFS files of objects no longer present in
+   *  bootstrap's ``_SPILLED`` set, and sync the JS mirror. */
+  private async reconcileDeletedSpills(): Promise<void> {
+    const remaining = new Set(
+      (await this.invokePy("spilled_object_ids")) as string[],
+    );
+    for (const oid of Array.from(this.spilledOids)) {
+      if (!remaining.has(oid)) {
+        await this.requireStore().delete(oid);
+        this.spilledOids.delete(oid);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // On-disk storage mode — public API
+  // ------------------------------------------------------------------
+
+  /** Whether the on-disk storage mode can be enabled in this context. */
+  static isDiskStorageSupported(): boolean {
+    return OpfsObjectStore.isSupported();
+  }
+
+  /** Return the active storage mode. */
+  getStorageMode(): StorageMode {
+    return this.storageMode;
+  }
+
+  /**
+   * Switch the runtime storage mode.
+   *
+   * ``"disk"`` spills every resident array to OPFS (keeping only
+   * metadata in the heap); ``"ram"`` pages every spilled array back in
+   * and clears the on-disk store. Both transitions are queued so they
+   * never interleave with in-flight Python calls. No-op when already in
+   * the requested mode.
+   */
+  async setStorageMode(mode: StorageMode): Promise<void> {
+    if (mode === this.storageMode) return;
+    if (mode === "disk" && !OpfsObjectStore.isSupported()) {
+      throw new Error(
+        "on-disk storage mode is unavailable in this browser/context",
+      );
+    }
+    const run = async (): Promise<void> => {
+      if (mode === "disk") {
+        if (!this.opfsStore) {
+          this.opfsStore = new OpfsObjectStore();
+          await this.opfsStore.init();
+        }
+        this.storageMode = "disk";
+        await this.spillAllResidentDirect();
+      } else {
+        await this.pageInAllDirect();
+        this.storageMode = "ram";
+        if (this.opfsStore) await this.opfsStore.clear();
+      }
+    };
+    const next = this._queue.then(run, run);
+    this._queue = next.catch(() => undefined);
+    return next as Promise<void>;
+  }
+
+  /** Total bytes currently spilled to the OPFS store (0 in RAM mode). */
+  getDiskStoreBytes(): number {
+    return this.opfsStore?.totalBytes() ?? 0;
+  }
+
+  /** Number of objects whose array currently lives on disk. */
+  getSpilledCount(): number {
+    return this.spilledOids.size;
   }
 
   async createSignal(params: SignalCreationParams): Promise<string> {

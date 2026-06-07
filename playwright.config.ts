@@ -43,6 +43,7 @@ export default defineConfig({
       // excluded so a forgotten reproduction probe never lands in CI.
       testIgnore: [
         /image_perf\.spec\.ts/,
+        /opfs_storage_bench\.spec\.ts/,
         /_repro_.*\.spec\.ts/,
         /tests[\\/]benchmark[\\/]/,
       ],
@@ -50,7 +51,7 @@ export default defineConfig({
     {
       name: "perf",
       use: { ...devices["Desktop Chrome"] },
-      testMatch: [/image_perf\.spec\.ts/],
+      testMatch: [/image_perf\.spec\.ts/, /opfs_storage_bench\.spec\.ts/],
       timeout: 600_000,
     },
     {
