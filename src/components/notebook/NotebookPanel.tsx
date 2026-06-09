@@ -197,17 +197,44 @@ export const NotebookPanel = forwardRef<
     onCountChanged?.(notebooks.length);
   }, [notebooks.length, onCountChanged]);
 
+  // Keep the latest host callbacks in a ref so the NotebookRuntime
+  // (created once and reused across renders) always reaches *fresh*
+  // closures. Capturing them directly at creation time froze the
+  // first-render values: when a "Run all" switched panels mid-run
+  // (signal → image via ``set_current_panel`` / ``add_image`` / a
+  // cross-kind ``calc``), the stale ``onSetCurrentPanel`` /
+  // ``selectObjects`` left the host in an inconsistent state where
+  // ``treeKind`` was "image" while ``currentId`` still pointed at a 1-D
+  // signal — the central viewer then called ``get_image_data`` on it,
+  // raising ``IndexError: tuple index out of range`` on the Python side.
+  const callbacksRef = useRef({
+    getSelection,
+    getCurrentPanel,
+    onSetCurrentPanel,
+    selectObjects,
+    onModelChanged,
+  });
+  callbacksRef.current = {
+    getSelection,
+    getCurrentPanel,
+    onSetCurrentPanel,
+    selectObjects,
+    onModelChanged,
+  };
+
   // -- One NotebookRuntime instance shared across notebooks ------------
   const ntbRuntimeRef = useRef<NotebookRuntime | null>(null);
   const getNbRuntime = useCallback((): NotebookRuntime => {
     if (!ntbRuntimeRef.current) {
       const r = new NotebookRuntime(runtime);
       r.externalCallbacks = {
-        getSelection,
-        getCurrentPanel,
-        setCurrentPanel: onSetCurrentPanel,
-        selectObjects,
-        onModelChanged,
+        getSelection: () => callbacksRef.current.getSelection(),
+        getCurrentPanel: () => callbacksRef.current.getCurrentPanel(),
+        setCurrentPanel: (panel) =>
+          callbacksRef.current.onSetCurrentPanel(panel),
+        selectObjects: (ids, panel) =>
+          callbacksRef.current.selectObjects(ids, panel),
+        onModelChanged: (panel) => callbacksRef.current.onModelChanged(panel),
         callMethod: async () => {
           throw new Error("call_method bridge not wired in notebook MVP");
         },
@@ -215,14 +242,7 @@ export const NotebookPanel = forwardRef<
       ntbRuntimeRef.current = r;
     }
     return ntbRuntimeRef.current;
-  }, [
-    runtime,
-    getSelection,
-    getCurrentPanel,
-    onSetCurrentPanel,
-    selectObjects,
-    onModelChanged,
-  ]);
+  }, [runtime]);
 
   // Preload kernel + restore last-open notebooks on first mount.
   // Guarded with a ref so React 18 StrictMode (which runs effects twice
