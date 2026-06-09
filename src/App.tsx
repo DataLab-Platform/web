@@ -2018,11 +2018,16 @@ export default function App() {
       if (!runtime || !currentId) return;
       await runtime.setObjectMeta(currentId, values);
       setEditingMeta(null);
-      const updated = await runtime.getSignalData(currentId);
-      setData(updated);
+      if (treeKind === "image") {
+        const updated = await runtime.getImageData(currentId);
+        setImageData(updated);
+      } else {
+        const updated = await runtime.getSignalData(currentId);
+        setData(updated);
+      }
       await refresh(currentId);
     },
-    [runtime, currentId, refresh],
+    [runtime, currentId, treeKind, refresh],
   );
 
   const handleAnnotationsChange = useCallback(
