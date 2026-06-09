@@ -1,17 +1,19 @@
 /** ROI icon registry — mirrors createIcons / analysisIcons.
- *  Vite eagerly bundles every SVG so the URL is available synchronously
- *  for the menu builder. */
+ *  Vite eagerly bundles every SVG as inline ``data:`` URLs so they are
+ *  available synchronously for the menu builder, with no per-icon request. */
+
+import { svgToDataUrl } from "./svgInline";
 
 const icons = import.meta.glob("../assets/icons/roi/*.svg", {
-  query: "?url",
+  query: "?raw",
   import: "default",
   eager: true,
 }) as Record<string, string>;
 
 const byName: Record<string, string> = {};
-for (const [path, url] of Object.entries(icons)) {
+for (const [path, raw] of Object.entries(icons)) {
   const m = path.match(/\/([^/]+)\.svg$/);
-  if (m) byName[m[1]] = url;
+  if (m) byName[m[1]] = svgToDataUrl(raw);
 }
 
 export function getRoiIconUrl(

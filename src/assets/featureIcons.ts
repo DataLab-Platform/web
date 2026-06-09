@@ -11,25 +11,27 @@
  * mirrors the way DataLab desktop's :func:`get_icon` resolves icon names.
  */
 
+import { svgToDataUrl } from "./svgInline";
+
 const operations = import.meta.glob<string>(
   "../assets/icons/operations/*.svg",
-  { eager: true, query: "?url", import: "default" },
+  { eager: true, query: "?raw", import: "default" },
 );
 const processing = import.meta.glob<string>(
   "../assets/icons/processing/*.svg",
-  { eager: true, query: "?url", import: "default" },
+  { eager: true, query: "?raw", import: "default" },
 );
 const fit = import.meta.glob<string>("../assets/icons/fit/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?raw",
   import: "default",
 });
 
 const byName: Record<string, string> = {};
 for (const modules of [operations, processing, fit]) {
-  for (const [path, url] of Object.entries(modules)) {
+  for (const [path, raw] of Object.entries(modules)) {
     const name = path.split("/").pop() ?? path;
-    byName[name] = url;
+    byName[name] = svgToDataUrl(raw);
   }
 }
 

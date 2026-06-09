@@ -3,19 +3,21 @@
  *
  * Mirrors :mod:`createIcons` so the Python backend can return bare
  * filenames (``"h5group.svg"``) and the React layer resolves them to
- * deployable URLs.
+ * inline ``data:`` URLs.
  */
+
+import { svgToDataUrl } from "./svgInline";
 
 const modules = import.meta.glob<string>("../assets/icons/h5/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?raw",
   import: "default",
 });
 
 const byName: Record<string, string> = {};
-for (const [path, url] of Object.entries(modules)) {
+for (const [path, raw] of Object.entries(modules)) {
   const name = path.split("/").pop() ?? path;
-  byName[name] = url;
+  byName[name] = svgToDataUrl(raw);
 }
 
 export function getH5IconUrl(name: string | undefined): string | undefined {

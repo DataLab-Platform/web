@@ -1,22 +1,24 @@
 /**
  * Bundle-time index of every Create-menu SVG icon.
  *
- * Vite's :func:`import.meta.glob` (with ``eager: true``, ``query: "?url"``)
- * returns a map ``{ "/abs/path/sine.svg": url, ... }``.  We re-key it by
+ * Vite's :func:`import.meta.glob` (with ``eager: true``, ``query: "?raw"``)
+ * returns a map ``{ "/abs/path/sine.svg": "<svg…>", ... }``.  We re-key it by
  * the bare filename so the Python catalogue can return ``"sine.svg"`` and
- * the React layer can resolve it to a deployable URL.
+ * the React layer can resolve it to an inline ``data:`` URL.
  */
+
+import { svgToDataUrl } from "./svgInline";
 
 const modules = import.meta.glob<string>("../assets/icons/create/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?raw",
   import: "default",
 });
 
 const byName: Record<string, string> = {};
-for (const [path, url] of Object.entries(modules)) {
+for (const [path, raw] of Object.entries(modules)) {
   const name = path.split("/").pop() ?? path;
-  byName[name] = url;
+  byName[name] = svgToDataUrl(raw);
 }
 
 export function getCreateIconUrl(name: string | undefined): string | undefined {

@@ -1,15 +1,17 @@
 /** Bundle-time index of File-menu (I/O) SVG icons. */
 
+import { svgToDataUrl } from "./svgInline";
+
 const modules = import.meta.glob<string>("../assets/icons/io/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?raw",
   import: "default",
 });
 
 const byName: Record<string, string> = {};
-for (const [path, url] of Object.entries(modules)) {
+for (const [path, raw] of Object.entries(modules)) {
   const name = path.split("/").pop() ?? path;
-  byName[name] = url;
+  byName[name] = svgToDataUrl(raw);
 }
 
 export function getIoIconUrl(

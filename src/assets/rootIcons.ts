@@ -1,16 +1,18 @@
 /** Bundle-time index of root-level (uncategorised) SVG icons:
  *  ``properties.svg``, ``new_window.svg`` and other one-offs. */
 
+import { svgToDataUrl } from "./svgInline";
+
 const modules = import.meta.glob<string>("../assets/icons/*.svg", {
   eager: true,
-  query: "?url",
+  query: "?raw",
   import: "default",
 });
 
 const byName: Record<string, string> = {};
-for (const [path, url] of Object.entries(modules)) {
+for (const [path, raw] of Object.entries(modules)) {
   const name = path.split("/").pop() ?? path;
-  byName[name] = url;
+  byName[name] = svgToDataUrl(raw);
 }
 
 export function getRootIconUrl(
