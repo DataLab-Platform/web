@@ -358,14 +358,23 @@ class ObjectModel:
 
 
 def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
-    """Return JSON-friendly metadata for *entry*."""
+    """Return JSON-friendly metadata for *entry*.
+
+    When *entry* is currently spilled to disk (on-disk storage mode), its
+    resident heavy array is a 1-element placeholder, so its real shape is
+    read back from the :data:`_SPILLED` registry instead of the object —
+    otherwise the panel would report every spilled object as ``1 pt``.
+    """
     obj = entry.obj
+    spilled = _SPILLED.get(entry.oid)
     if entry.kind == "signal":
+        # ``xydata`` shape is ``(nrows, npoints)``; size = number of points.
+        size = int(spilled["shape"][1]) if spilled else int(obj.x.size)
         return {
             "kind": "signal",
             "uuid": getattr(obj, "uuid", None),
             "title": obj.title,
-            "size": int(obj.x.size),
+            "size": size,
             "xlabel": obj.xlabel or "",
             "ylabel": obj.ylabel or "",
             "xunit": obj.xunit or "",
@@ -373,7 +382,8 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
             "style": _signal_style(obj),
         }
     if entry.kind == "image":
-        h, w = obj.data.shape[:2]
+        # ``data`` shape is ``(height, width[, ...])``.
+        h, w = spilled["shape"][:2] if spilled else obj.data.shape[:2]
         return {
             "kind": "image",
             "uuid": getattr(obj, "uuid", None),

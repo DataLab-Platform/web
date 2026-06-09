@@ -101,3 +101,38 @@ def test_get_data_memory_tracks_image_arrays(fresh_bootstrap):
     after = bs.get_data_memory()
     assert after["object_count"] == 0
     assert after["data_bytes"] == 0
+
+
+def test_panel_tree_reports_real_size_when_spilled(fresh_bootstrap):
+    """Spilled objects must keep their real size in the panel tree.
+
+    In on-disk storage mode the heavy array is swapped for a 1-element
+    placeholder, so reading the size from the resident object would report
+    every object as ``1 pt``. ``_object_meta`` must instead read the shape
+    back from the ``_SPILLED`` registry.
+    """
+    bs = fresh_bootstrap
+    sig_oid = bs.add_signal_from_arrays("sig", np.linspace(0, 1, 500), np.zeros(500))
+    img_oid = bs.add_image_from_array("img", np.zeros((128, 96), dtype=np.float64))
+
+    # Spill both objects (simulates switching to on-disk storage mode).
+    sig_payload = bs.detach_object_array(sig_oid)
+    img_payload = bs.detach_object_array(img_oid)
+    assert sig_payload != b""
+    assert img_payload != b""
+
+    sig_tree = bs.get_panel_tree("signal")
+    sig_meta = sig_tree["groups"][0]["objects"][0]
+    assert sig_meta["size"] == 500
+
+    img_tree = bs.get_panel_tree("image")
+    img_meta = img_tree["groups"][0]["objects"][0]
+    assert img_meta["width"] == 96
+    assert img_meta["height"] == 128
+    assert img_meta["size"] == 128 * 96
+
+    # Paging back in (switching to RAM mode) keeps the correct size.
+    assert bs.attach_object_array(sig_oid, sig_payload)
+    assert bs.attach_object_array(img_oid, img_payload)
+    assert bs.get_panel_tree("signal")["groups"][0]["objects"][0]["size"] == 500
+    assert bs.get_panel_tree("image")["groups"][0]["objects"][0]["size"] == 128 * 96
