@@ -3187,10 +3187,12 @@ def extract_image_rois(oid: str, merged: bool) -> list[str]:
     out_ids: list[str] = []
     if merged:
         result = sipi.extract_rois(obj, params)
+        patch_title_with_ids(result, [oid])
         out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
     else:
         for p in params:
             result = sipi.extract_roi(obj, p)
+            patch_title_with_ids(result, [oid])
             out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
     return out_ids
 
@@ -3229,6 +3231,7 @@ def erase_image_area(oid: str, segments: list[dict[str, Any]] | None) -> str:
     except Exception:
         src_group_id = None
     result = sipi.erase(obj, params)
+    patch_title_with_ids(result, [oid])
     return _MODEL.add_object("image", result, group_id=src_group_id)
 
 
@@ -3490,10 +3493,12 @@ def extract_signal_rois(oid: str, merged: bool) -> list[str]:
     out_ids: list[str] = []
     if merged:
         result = sips.extract_rois(obj, params)
+        patch_title_with_ids(result, [oid])
         out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
     else:
         for p in params:
             result = sips.extract_roi(obj, p)
+            patch_title_with_ids(result, [oid])
             out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
     return out_ids
 

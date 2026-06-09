@@ -150,3 +150,51 @@ def test_apply_n_to_1_title_embeds_all_source_oids(fresh_bootstrap):
     b = bs.add_signal_from_arrays("b", x, np.ones_like(x) * 2)
     new_oid = bs.apply_feature("average", [a, b])[0]
     _assert_title_resolved(bs.get_object_meta(new_oid)["title"], a, b)
+
+
+# ---------------------------------------------------------------------------
+# ROI extraction & erase — these go through dedicated bootstrap helpers
+# (``extract_signal_rois`` / ``extract_image_rois`` / ``erase_image_area``)
+# rather than ``apply_feature``, so they must also resolve the ``{n}``
+# placeholders emitted by Sigima's ``PlaceholderTitleFormatter``.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("merged", [False, True])
+def test_extract_signal_rois_title_resolves_placeholder(fresh_bootstrap, merged):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 10, 128)
+    src = bs.add_signal_from_arrays("raw", x, np.sin(x))
+    bs.set_signal_roi(src, [{"xmin": 1.0, "xmax": 4.0}, {"xmin": 6.0, "xmax": 9.0}])
+    out_ids = bs.extract_signal_rois(src, merged)
+    assert out_ids
+    for oid in out_ids:
+        _assert_title_resolved(bs.get_object_meta(oid)["title"], src)
+
+
+@pytest.mark.parametrize("merged", [False, True])
+def test_extract_image_rois_title_resolves_placeholder(fresh_bootstrap, merged):
+    bs = fresh_bootstrap
+    data = np.arange(64 * 64, dtype=float).reshape(64, 64)
+    src = bs.add_image_from_array("img", data, width=64, height=64)
+    bs.set_image_roi(
+        src,
+        [
+            {"geometry": "rectangle", "x0": 4, "y0": 4, "dx": 20, "dy": 20},
+            {"geometry": "rectangle", "x0": 32, "y0": 32, "dx": 20, "dy": 20},
+        ],
+    )
+    out_ids = bs.extract_image_rois(src, merged)
+    assert out_ids
+    for oid in out_ids:
+        _assert_title_resolved(bs.get_object_meta(oid)["title"], src)
+
+
+def test_erase_image_area_title_resolves_placeholder(fresh_bootstrap):
+    bs = fresh_bootstrap
+    data = np.arange(64 * 64, dtype=float).reshape(64, 64)
+    src = bs.add_image_from_array("img", data, width=64, height=64)
+    new_oid = bs.erase_image_area(
+        src, [{"geometry": "rectangle", "x0": 8, "y0": 8, "dx": 16, "dy": 16}]
+    )
+    _assert_title_resolved(bs.get_object_meta(new_oid)["title"], src)
