@@ -22,12 +22,23 @@ interface Props {
     itemName: string,
     currentValues: Record<string, unknown>,
   ) => Promise<DynamicChoice[]>;
+  resolveCallbacks?: (
+    itemName: string,
+    currentValues: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   onCancel: () => void;
 }
 
 export function DataSetDialog(props: Props) {
-  const { title, payload, resolveChoices, onSubmit, onCancel } = props;
+  const {
+    title,
+    payload,
+    resolveChoices,
+    resolveCallbacks,
+    onSubmit,
+    onCancel,
+  } = props;
   const [values, setValues] = useState<Record<string, unknown>>(payload.values);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +74,7 @@ export function DataSetDialog(props: Props) {
           values={values}
           onChange={setValues}
           resolveChoices={resolveChoices}
+          resolveCallbacks={resolveCallbacks}
         />
         {error && <div className="error">{error}</div>}
         <div className="actions">

@@ -15,7 +15,7 @@
  * Falls back to a flat property order when that key is missing.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 import { t } from "../../i18n/translate";
@@ -45,6 +45,14 @@ export interface DataSetFormProps {
     itemName: string,
     currentValues: Values,
   ) => Promise<DynamicChoice[]>;
+  /** Resolver for guidata ``display`` callbacks (when a property carries
+   *  ``x-guidata-has-callback``).  Runs the callback Python-side and
+   *  returns the recomputed values for every item, mirroring the Qt
+   *  ``update_widgets`` cascade (e.g. ``ArithmeticParam.operation``). */
+  resolveCallbacks?: (
+    itemName: string,
+    currentValues: Values,
+  ) => Promise<Values>;
 }
 
 // Layout node as emitted by the Python side. Either a property name
@@ -62,18 +70,37 @@ type LayoutNode = LayoutLeaf | LayoutContainer;
 // ---------------------------------------------------------------------------
 
 export function DataSetForm(props: DataSetFormProps) {
-  const { schema, values, onChange, resolveChoices } = props;
-  const properties = (schema.properties as Record<string, JsonSchema>) ?? {};
+  const { schema, values, onChange, resolveChoices, resolveCallbacks } = props;
+  const properties = useMemo(
+    () => (schema.properties as Record<string, JsonSchema>) ?? {},
+    [schema],
+  );
   const layout =
     (schema["x-guidata-layout"] as LayoutNode[] | undefined) ??
     (schema["x-guidata-property-order"] as string[] | undefined) ??
     Object.keys(properties);
 
+  // Monotonic counter guarding against out-of-order callback responses:
+  // the last edit wins, so a slow Python round-trip can never clobber a
+  // newer one (cf. the ``cancelled`` flag in ``useChoices``).
+  const callbackSeq = useRef(0);
+
   const setValue = useCallback(
     (name: string, value: unknown) => {
-      onChange({ ...values, [name]: value });
+      const newValues = { ...values, [name]: value };
+      onChange(newValues);
+      const prop = properties[name];
+      if (prop?.["x-guidata-has-callback"] === true && resolveCallbacks) {
+        const seq = ++callbackSeq.current;
+        resolveCallbacks(name, newValues).then((updated) => {
+          if (seq !== callbackSeq.current) return;
+          if (updated && Object.keys(updated).length > 0) {
+            onChange({ ...newValues, ...updated });
+          }
+        });
+      }
     },
-    [onChange, values],
+    [onChange, values, properties, resolveCallbacks],
   );
 
   return (
@@ -224,7 +251,10 @@ function FieldRow(props: FieldRowProps) {
   const label = (prop["x-guidata-label"] as string | undefined) ?? name;
   const help = prop.description as string | undefined;
   const unit = prop["x-guidata-unit"] as string | undefined;
-  const readOnly = prop.readOnly === true;
+  // An item is non-editable when it is read-only (e.g. ``set_computed``)
+  // or when its ``display.active`` resolved to ``False`` (e.g.
+  // ``ArithmeticParam.operation``, a preview field updated by callbacks).
+  const readOnly = prop.readOnly === true || prop["x-guidata-active"] === false;
   return (
     <div className="dataset-form-row">
       <label

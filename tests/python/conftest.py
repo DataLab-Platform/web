@@ -66,9 +66,9 @@ if "pyodide" not in sys.modules:
 # ---------------------------------------------------------------------------
 
 # Importing the JSON-schema shim installs ``dataset_to_schema_with_values``,
-# ``resolve_dynamic_choices`` and ``resolve_dataset_active`` on
-# ``guidata.dataset`` as a side effect. This MUST run before ``processor``
-# is imported (which pulls those names).
+# ``resolve_dynamic_choices``, ``resolve_dataset_callbacks`` and
+# ``resolve_dataset_active`` on ``guidata.dataset`` as a side effect. This
+# MUST run before ``processor`` is imported (which pulls those names).
 importlib.import_module("_guidata_jsonschema_shim")
 
 if "dlw_processor" not in sys.modules:

@@ -3954,6 +3954,19 @@ def resolve_feature_choices(
     )
 
 
+def resolve_feature_callbacks(
+    feature_id: str, item_name: str, values: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Run *item_name*'s display callback for *feature_id*.
+
+    Returns the recomputed values for every parameter so the frontend can
+    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``).
+    """
+    return _proc.resolve_callbacks(
+        _full_catalog_with_plugins(), feature_id, item_name, values
+    )
+
+
 def patch_title_with_ids(dst: Any, src_oids: list[str]) -> None:
     """Substitute placeholders in ``dst.title`` with source short IDs.
 

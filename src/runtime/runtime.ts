@@ -2541,6 +2541,18 @@ await micropip.install(["sigima", "guidata"])
     })) as DynamicChoice[];
   }
 
+  async resolveFeatureCallbacks(
+    featureId: string,
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return (await this.callPy("resolve_feature_callbacks", {
+      feature_id: featureId,
+      item_name: itemName,
+      values,
+    })) as Record<string, unknown>;
+  }
+
   async applyFeature(
     featureId: string,
     sourceIds: string[],

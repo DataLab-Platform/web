@@ -33,6 +33,7 @@ from typing import Any, Callable
 import guidata.dataset as gds
 from guidata.dataset import (
     dataset_to_schema_with_values,
+    resolve_dataset_callbacks,
     resolve_dynamic_choices,
     update_dataset,
 )
@@ -1298,6 +1299,26 @@ def resolve_choices(
     return resolve_dynamic_choices(instance, item_name)
 
 
+def resolve_callbacks(
+    catalog: dict[str, FeatureSpec],
+    feature_id: str,
+    item_name: str,
+    values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run *item_name*'s display callback for *feature_id* given *values*.
+
+    Returns the post-callback values for every item so the frontend can
+    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``).
+    """
+    spec = catalog[feature_id]
+    if spec.paramclass is None:
+        raise ValueError(f"Feature {feature_id!r} has no parameters.")
+    instance = spec.paramclass()
+    if values:
+        update_dataset(instance, values)
+    return resolve_dataset_callbacks(instance, item_name)
+
+
 __all__ = [
     "ApplyContext",
     "ApplyResult",
@@ -1311,6 +1332,7 @@ __all__ = [
     "build_signal_catalog",
     "get_schema",
     "merge_plugin_features",
+    "resolve_callbacks",
     "resolve_choices",
     "serialize_catalog",
 ]

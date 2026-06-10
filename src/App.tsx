@@ -3684,6 +3684,13 @@ export default function App() {
                 currentValues,
               )
             }
+            resolveCallbacks={(itemName, currentValues) =>
+              runtime.resolveFeatureCallbacks(
+                pending.feature.id,
+                itemName,
+                currentValues,
+              )
+            }
             onSubmit={handleSubmitParams}
             onCancel={() => setPending(null)}
           />
@@ -3701,6 +3708,13 @@ export default function App() {
             imageData={pendingProfile.imageData}
             resolveChoices={(itemName, currentValues) =>
               runtime.resolveFeatureChoices(
+                pendingProfile.feature.id,
+                itemName,
+                currentValues,
+              )
+            }
+            resolveCallbacks={(itemName, currentValues) =>
+              runtime.resolveFeatureCallbacks(
                 pendingProfile.feature.id,
                 itemName,
                 currentValues,
