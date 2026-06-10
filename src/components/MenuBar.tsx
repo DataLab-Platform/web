@@ -24,10 +24,22 @@ interface Props {
   /** Live runtime, used by the memory-usage indicator to sample the
    *  WASM heap. When ``undefined``/``null`` the indicator is hidden. */
   runtime?: RuntimeApi | null;
-  /** Invoked when the user clicks the memory indicator to reclaim
-   *  memory (garbage-collection pass). When omitted the indicator is
-   *  shown read-only (no click action). */
+  /** Invoked when the user picks "Free memory" in the indicator's
+   *  dropdown to reclaim memory (garbage-collection pass). When omitted
+   *  the menu item is shown read-only (no action). */
   onFreeMemory?: () => void | Promise<void>;
+  /** Current value of the "store data on disk" preference (checkmark on
+   *  the indicator's dropdown toggle). */
+  storeOnDisk?: boolean;
+  /** True while a storage-mode switch is in progress (disables the
+   *  toggle item). */
+  storageBusy?: boolean;
+  /** Whether the on-disk storage mode is available (OPFS + secure
+   *  context). When false the toggle item is disabled. */
+  diskStorageSupported?: boolean;
+  /** Toggle on-disk storage mode. When omitted the toggle item is
+   *  hidden. */
+  onToggleStoreOnDisk?: () => void | Promise<void>;
   /** Current visibility of the AI Assistant panel. When ``undefined``
    *  the toggle button is hidden (used by surfaces that don't expose
    *  the assistant). */
@@ -47,6 +59,10 @@ export function MenuBar(props: Props) {
     onOpenConsole,
     runtime,
     onFreeMemory,
+    storeOnDisk,
+    storageBusy,
+    diskStorageSupported,
+    onToggleStoreOnDisk,
     aiPanelVisible,
     onToggleAIPanel,
   } = props;
@@ -131,6 +147,10 @@ export function MenuBar(props: Props) {
         <MemoryUsageIndicator
           runtime={runtime}
           onRequestFreeMemory={onFreeMemory}
+          storeOnDisk={storeOnDisk}
+          storageBusy={storageBusy}
+          diskStorageSupported={diskStorageSupported}
+          onToggleStoreOnDisk={onToggleStoreOnDisk}
         />
       )}
       {onToggleAIPanel && (

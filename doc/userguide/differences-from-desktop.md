@@ -58,7 +58,7 @@ from the browser cache.
 
 This is a concept **exclusive to DataLab-Web** with no desktop equivalent. Desktop DataLab runs on 64-bit system CPython and is limited only by the machine's RAM. DataLab-Web runs on Pyodide, a 32-bit (`wasm32`) WebAssembly build whose linear heap is capped at roughly **2 GB** in practice — and, because Emscripten never returns freed memory to the browser, that heap only ever grows during a session (a page reload resets it). Loading several large images (2048²+ float64) can therefore exhaust the tab where the desktop app would not even notice.
 
-To lift that ceiling, DataLab-Web offers an opt-in **on-disk storage mode**, toggled from **File → Store data on disk (experimental)**:
+To lift that ceiling, DataLab-Web offers an opt-in **on-disk storage mode**, toggled from the **Store data on disk** entry in the menu opened by clicking the menu-bar memory indicator:
 
 - When enabled, the heavy NumPy array of every signal and image is **spilled out of the WebAssembly heap to disk** — specifically to the browser's [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) (OPFS), a sandboxed, origin-scoped, browser-managed filesystem. The object model keeps only metadata resident; each array is paged back in just for the duration of the operation that needs it.
 - The result is that the working set is bounded by **disk quota instead of the ~2 GB RAM ceiling**, so you can work with datasets far larger than the heap would otherwise allow. The trade-off is a small per-operation latency for the disk round-trip.

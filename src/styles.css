@@ -465,6 +465,94 @@ input {
   color: #d63031;
 }
 
+/* Dropdown menu opened by clicking the memory-usage indicator. Gathers
+   the memory-related actions ("Store data on disk", "Free memory").
+   Mirrors the look of ``.menubar-language-menu``. */
+.memory-usage-indicator-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.memory-usage-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  z-index: 1000;
+  min-width: 200px;
+}
+
+.memory-usage-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 3px;
+  text-align: left;
+}
+
+.memory-usage-menu-item:hover:not(:disabled),
+.memory-usage-menu-item:focus {
+  background: var(--panel-alt);
+  outline: none;
+}
+
+.memory-usage-menu-item:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* Leading slot shared by the checkbox glyph and the action icon, so both
+   rows align their labels to the same left edge. */
+.memory-usage-menu-checkbox,
+.memory-usage-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  flex: 0 0 auto;
+}
+
+/* Option row: an always-visible checkbox glyph (☐ / ☑) so the persistent
+   on/off nature is obvious even when unchecked. */
+.memory-usage-menu-checkbox {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-dim);
+}
+
+.memory-usage-menu-checkbox--checked {
+  color: var(--accent, var(--text));
+}
+
+/* Action row: a broom icon marks "Free memory" as a one-shot command,
+   visually distinct from the option's checkbox. */
+.memory-usage-menu-icon {
+  color: var(--text-dim);
+}
+
+.memory-usage-menu-item--action:hover:not(:disabled) .memory-usage-menu-icon {
+  color: var(--text);
+}
+
+/* Divider between the persistent option and the one-shot action. */
+.memory-usage-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
 /* Hierarchical menu bar (Phase 3) */
 .menubar-nav {
   display: flex;

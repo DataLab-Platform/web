@@ -88,11 +88,145 @@ describe("MemoryUsageIndicator", () => {
     expect(screen.getByRole("button")).toHaveClass("critical");
   });
 
-  it("is disabled when no free-memory handler is supplied", () => {
+  it("disables the Free memory menu item when no handler is supplied", () => {
     const holder = { usage: usage(512 * 1024 * 1024) };
     const { runtime } = fakeRuntime(holder);
     render(<MemoryUsageIndicator runtime={runtime} />);
-    expect(screen.getByRole("button")).toBeDisabled();
+    const indicator = screen.getByRole("button");
+    // The indicator itself stays clickable (it opens the menu).
+    expect(indicator).not.toBeDisabled();
+    act(() => {
+      indicator.click();
+    });
+    expect(
+      screen.getByRole("menuitem", { name: /Free memory/ }),
+    ).toBeDisabled();
+  });
+
+  it("opens a dropdown menu listing the memory actions on click", () => {
+    const holder = { usage: usage(512 * 1024 * 1024) };
+    const { runtime } = fakeRuntime(holder);
+    render(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onRequestFreeMemory={vi.fn()}
+        onToggleStoreOnDisk={vi.fn()}
+        diskStorageSupported
+      />,
+    );
+    // No menu until the indicator is clicked.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    act(() => {
+      screen.getByRole("button").click();
+    });
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: /Free memory/ }),
+    ).toBeInTheDocument();
+    // The persistent option and the one-shot action are visually
+    // separated, so they don't read as two identical rows. The divider
+    // is decorative (``aria-hidden``), hence the ``hidden`` query option.
+    expect(screen.getByRole("separator", { hidden: true })).toBeInTheDocument();
+  });
+
+  it("hides the store-on-disk item when no toggle handler is supplied", () => {
+    const holder = { usage: usage(512 * 1024 * 1024) };
+    const { runtime } = fakeRuntime(holder);
+    render(
+      <MemoryUsageIndicator runtime={runtime} onRequestFreeMemory={vi.fn()} />,
+    );
+    act(() => {
+      screen.getByRole("button").click();
+    });
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("checkmarks the store-on-disk item only when enabled", () => {
+    const holder = { usage: usage(512 * 1024 * 1024) };
+    const { runtime } = fakeRuntime(holder);
+    const { rerender } = render(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onToggleStoreOnDisk={vi.fn()}
+        diskStorageSupported
+        storeOnDisk={false}
+      />,
+    );
+    act(() => {
+      screen.getByRole("button").click();
+    });
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).toHaveAttribute("aria-checked", "false");
+    rerender(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onToggleStoreOnDisk={vi.fn()}
+        diskStorageSupported
+        storeOnDisk
+      />,
+    );
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("disables the store-on-disk item when unsupported or busy", () => {
+    const holder = { usage: usage(512 * 1024 * 1024) };
+    const { runtime } = fakeRuntime(holder);
+    const { rerender } = render(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onToggleStoreOnDisk={vi.fn()}
+        diskStorageSupported={false}
+      />,
+    );
+    act(() => {
+      screen.getByRole("button").click();
+    });
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).toBeDisabled();
+    rerender(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onToggleStoreOnDisk={vi.fn()}
+        diskStorageSupported
+        storageBusy
+      />,
+    );
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Store data on disk/ }),
+    ).toBeDisabled();
+  });
+
+  it("invokes the store-on-disk toggle when the item is clicked", async () => {
+    const holder = { usage: usage(512 * 1024 * 1024) };
+    const { runtime } = fakeRuntime(holder);
+    const onToggleStoreOnDisk = vi.fn();
+    render(
+      <MemoryUsageIndicator
+        runtime={runtime}
+        onToggleStoreOnDisk={onToggleStoreOnDisk}
+        diskStorageSupported
+      />,
+    );
+    act(() => {
+      screen.getByRole("button").click();
+    });
+    await act(async () => {
+      screen
+        .getByRole("menuitemcheckbox", { name: /Store data on disk/ })
+        .click();
+    });
+    expect(onToggleStoreOnDisk).toHaveBeenCalledTimes(1);
+    // The menu closes after the action.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("invokes the free-memory handler and re-samples on click", async () => {
@@ -110,11 +244,14 @@ describe("MemoryUsageIndicator", () => {
         onRequestFreeMemory={onRequestFreeMemory}
       />,
     );
-    const button = screen.getByRole("button");
-    expect(button).toHaveClass("critical");
+    const indicator = screen.getByRole("button");
+    expect(indicator).toHaveClass("critical");
+    act(() => {
+      indicator.click();
+    });
 
     await act(async () => {
-      button.click();
+      screen.getByRole("menuitem", { name: /Free memory/ }).click();
     });
 
     expect(onRequestFreeMemory).toHaveBeenCalledTimes(1);

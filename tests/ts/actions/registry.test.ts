@@ -51,10 +51,6 @@ function makeStaticCallbacks() {
     onExportMetadata: vi.fn(),
     onDeleteMetadata: vi.fn(),
     panel: "signal" as const,
-    storeOnDisk: false,
-    storageBusy: false,
-    diskStorageSupported: true,
-    onToggleStoreOnDisk: vi.fn(),
   };
 }
 
@@ -115,47 +111,10 @@ describe("buildStaticActions", () => {
       false,
     );
   });
-
-  it("exposes the on-disk storage toggle in the File menu", () => {
-    const actions = buildStaticActions(makeStaticCallbacks());
-    const disk = actions.find((a) => a.id === "file.store_on_disk")!;
-    expect(disk.menuPath.startsWith("File/")).toBe(true);
-    expect(disk.label).toMatch(/Store data on disk/);
-  });
-
-  it("checkmarks the on-disk toggle only when enabled", () => {
-    const off = buildStaticActions(makeStaticCallbacks()).find(
-      (a) => a.id === "file.store_on_disk",
-    )!;
-    const on = buildStaticActions({
-      ...makeStaticCallbacks(),
-      storeOnDisk: true,
-    }).find((a) => a.id === "file.store_on_disk")!;
-    expect(off.label).not.toMatch(/^\u2713/);
-    expect(on.label).toMatch(/^\u2713 /);
-  });
-
-  it("disables on-disk storage when unsupported or busy", () => {
-    const disk = (over: Partial<ReturnType<typeof makeStaticCallbacks>>) =>
-      buildStaticActions({ ...makeStaticCallbacks(), ...over }).find(
-        (a) => a.id === "file.store_on_disk",
-      )!;
-    expect(disk({ diskStorageSupported: true }).enabled(makeState())).toBe(
-      true,
-    );
-    expect(disk({ diskStorageSupported: false }).enabled(makeState())).toBe(
-      false,
-    );
-    expect(
-      disk({ diskStorageSupported: true, storageBusy: true }).enabled(
-        makeState(),
-      ),
-    ).toBe(false);
-  });
 });
 
 describe("buildHelpActions", () => {
-  it("provides nine entries always enabled", () => {
+  it("provides eight entries always enabled", () => {
     const actions = buildHelpActions({
       onShowAbout: vi.fn(),
       onShowShortcuts: vi.fn(),
@@ -164,9 +123,8 @@ describe("buildHelpActions", () => {
       onOpenWelcome: vi.fn(),
       onStartTour: vi.fn(),
       onShowReleaseNotes: vi.fn(),
-      onFreeMemory: vi.fn(),
     });
-    expect(actions).toHaveLength(9);
+    expect(actions).toHaveLength(8);
     for (const a of actions) {
       expect(a.enabled(makeState({ status: "loading" }))).toBe(true);
     }

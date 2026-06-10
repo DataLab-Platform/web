@@ -3028,12 +3028,6 @@ export default function App() {
         onExportMetadata: handleExportMetadata,
         onDeleteMetadata: handleDeleteMetadata,
         panel: treeKind,
-        storeOnDisk,
-        storageBusy,
-        diskStorageSupported: DataLabRuntime.isDiskStorageSupported(),
-        onToggleStoreOnDisk: () => {
-          void handleToggleStoreOnDisk();
-        },
       }),
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
@@ -3046,9 +3040,6 @@ export default function App() {
         },
         onStartTour: handleStartTour,
         onShowReleaseNotes: () => setReleaseNotesOpen(true),
-        onFreeMemory: () => {
-          void handleFreeMemory();
-        },
       }),
       ...buildViewActions({
         showResultsOverlay,
@@ -3188,11 +3179,7 @@ export default function App() {
       toggleNotebookFloating,
       macroFloating,
       toggleMacroFloating,
-      storeOnDisk,
-      storageBusy,
-      handleToggleStoreOnDisk,
       handleStartTour,
-      handleFreeMemory,
     ],
   );
 
@@ -3302,6 +3289,12 @@ export default function App() {
             onOpenConsole={() => setHelpView("console")}
             runtime={runtime}
             onFreeMemory={handleFreeMemory}
+            storeOnDisk={storeOnDisk}
+            storageBusy={storageBusy}
+            diskStorageSupported={DataLabRuntime.isDiskStorageSupported()}
+            onToggleStoreOnDisk={() => {
+              void handleToggleStoreOnDisk();
+            }}
             aiPanelVisible={aiPanelVisible}
             onToggleAIPanel={toggleAIPanel}
           />

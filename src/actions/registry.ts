@@ -60,16 +60,6 @@ export interface StaticActionCallbacks {
   /** Active object kind — drives the wording of File menu entries
    *  ("Open signal…" vs "Open image…", etc.). */
   panel: "signal" | "image";
-  /** Current value of the "store data on disk" preference. */
-  storeOnDisk: boolean;
-  /** True while a storage-mode switch is in progress (disables the
-   *  toggle to prevent re-entrancy). */
-  storageBusy: boolean;
-  /** Whether the on-disk storage mode is available in this browser /
-   *  context (OPFS + secure context). When false the item is disabled. */
-  diskStorageSupported: boolean;
-  /** Toggle on-disk storage mode (spill arrays to OPFS ⇄ keep in RAM). */
-  onToggleStoreOnDisk: () => void;
 }
 
 /** Wire static actions (File / Edit) ----------------------------------- */
@@ -161,18 +151,6 @@ export function buildStaticActions(
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       enabled: ready,
       run: cb.onImportHdf5,
-    },
-    {
-      id: "file.store_on_disk",
-      label: `${cb.storeOnDisk ? "\u2713 " : "    "}${t(
-        "Store data on disk (experimental)",
-      )}`,
-      menuPath: `File/${
-        cb.storeOnDisk ? "\u2713 " : "    "
-      }Store data on disk (experimental)`,
-      beginGroup: true,
-      enabled: () => cb.diskStorageSupported && !cb.storageBusy,
-      run: cb.onToggleStoreOnDisk,
     },
     // Edit menu — order mirrors DataLab Qt's Edit menu (New group first,
     // then per-object actions).
@@ -316,9 +294,6 @@ export interface HelpActionCallbacks {
   onOpenWelcome: () => void;
   onStartTour: () => void;
   onShowReleaseNotes: () => void;
-  /** Run a garbage-collection pass to reclaim memory dropped by the
-   *  object model (mirrors clicking the menu-bar memory indicator). */
-  onFreeMemory: () => void;
 }
 
 /** Wire Help / "?" menu actions. */
@@ -388,13 +363,6 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       beginGroup: true,
       enabled: always,
       run: cb.onShowConsole,
-    },
-    {
-      id: "help.freeMemory",
-      label: t("Free memory"),
-      menuPath: "Help/Free memory",
-      enabled: always,
-      run: cb.onFreeMemory,
     },
     {
       id: "help.about",
