@@ -15,9 +15,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **On-disk storage mode**: a **Store data on disk** toggle (in the menu opened from the menu-bar memory indicator) spills heavy signal/image arrays to the browser's Origin Private File System (OPFS) instead of keeping them in the WebAssembly heap, so the working set is bounded by disk quota rather than the ~2 GB wasm32 memory ceiling. The HDF5 workspace remains the durable source of truth; the on-disk store is an ephemeral cache. Available only in secure contexts that support OPFS; the default stays in-memory.
 - **Optional worker-hosted runtime** (developer-facing, opt-in via `?runtime=worker`): the Pyodide runtime can run in a Dedicated Web Worker behind a typed `RuntimeApi` façade, moving computation off the UI thread and enabling synchronous OPFS spills (binary payloads cross the worker boundary zero-copy). The default remains the in-thread runtime, so end-user behaviour is unchanged.
 
+### Changed
+
+- Menu and toolbar icons are now embedded directly in the bundle instead of being fetched as separate files, so they appear instantly on first paint without a brief flicker and without extra network round-trips.
+
 ### Fixed
 
 - Fixed spurious `get_image_data failed` console errors when a script or notebook creates a signal and then an image in quick succession (e.g. the **Signal & image processing** notebook template): a panel refresh could briefly leave the image viewer pointed at a signal object. The processing results were unaffected; only the stray errors are gone.
+- Running a notebook that switches between the signal and image panels mid-run (e.g. **Run all** on a template that creates a signal and then an image) no longer leaves the central viewer pointed at the wrong object kind or raises stray errors.
+- Editing an image's properties (title, labels, units…) no longer triggers a console error; image metadata edits now refresh the image view correctly instead of attempting to read it as a signal.
+- In **Store data on disk** mode, the object tree now reports each object's real size (number of points, width × height) instead of showing "1 pt" for every object whose data has been spilled to disk.
+- Region-of-interest extraction (signal and image) and the image **Erase area** action now produce fully resolved result titles, instead of leaving unresolved placeholders such as `extract_roi({0})`.
 - Deleting an image group no longer fails with an "Unknown group" error.
 - Auto-generated parameter dialogs now show the correct heading, taken from the dataset's own title.
 - Updated the Microsoft Edge "slow load" hint: it now points at Edge's secure-mode site settings and explains how to allow DataLab-Web to run at full speed.
