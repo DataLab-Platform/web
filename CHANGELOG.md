@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- Changing a displayed object's properties (title, axis labels/units…) from a macro, notebook, remote-control call or the AI assistant now refreshes the central plot immediately, instead of updating only the object tree and leaving stale axis titles/units on the graph.
 - Fixed spurious `get_image_data failed` console errors when a script or notebook creates a signal and then an image in quick succession (e.g. the **Signal & image processing** notebook template): a panel refresh could briefly leave the image viewer pointed at a signal object. The processing results were unaffected; only the stray errors are gone.
 - Running a notebook that switches between the signal and image panels mid-run (e.g. **Run all** on a template that creates a signal and then an image) no longer leaves the central viewer pointed at the wrong object kind or raises stray errors.
 - Editing an image's properties (title, labels, units…) no longer triggers a console error; image metadata edits now refresh the image view correctly instead of attempting to read it as a signal.
