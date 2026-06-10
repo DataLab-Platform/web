@@ -1322,7 +1322,7 @@ input {
 .tree-kind-switcher {
   display: flex;
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--panel-alt);
 }
 
 .tree-kind-switcher-tab {
@@ -1357,12 +1357,13 @@ input {
 }
 
 .tree-kind-switcher-tab:hover:not(:disabled) {
+  background: var(--panel);
   color: var(--text);
 }
 
 .tree-kind-switcher-tab.active {
   color: var(--text);
-  background: var(--panel-alt);
+  background: var(--panel);
   font-weight: 600;
   border-bottom: 2px solid var(--accent, #4a8cff);
   margin-bottom: -1px;
