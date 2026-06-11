@@ -61,4 +61,68 @@ test.describe("Internationalisation (French locale)", () => {
     await expect(page.getByText("Pour commencer")).toBeVisible();
     await expect(page.getByText("Suivre la visite guidée")).toBeVisible();
   });
+
+  test("translates Processing submenus and key feature labels", async ({
+    page,
+  }) => {
+    await page.goto("/?lang=fr");
+    await waitForRuntimeReady(page);
+
+    const menubar = page.locator("[role=menubar]");
+    await menubar.getByText("Traitement", { exact: true }).click();
+
+    // Regression coverage for previously untranslated folders.
+    await expect(
+      page.getByRole("menuitem", { name: /^Filtres fréquentiels\s*›?$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /^Analyse de stabilité\s*›?$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /^Ajustement de niveau\s*›?$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /^Addition de bruit\s*›?$/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /^Réduction de bruit\s*›?$/ }),
+    ).toBeVisible();
+
+    // One level deeper: assert translated feature labels under
+    // Frequency filters and Fitting.
+    const freqFilters = page.getByRole("menuitem", {
+      name: /^Filtres fréquentiels\s*›?$/,
+    });
+    await freqFilters.hover();
+    await expect(
+      page.getByRole("menuitem", { name: "Filtre passe-bas…" }),
+    ).toBeVisible();
+
+    const fitting = page.getByRole("menuitem", {
+      name: /^Ajustement\s*›?$/,
+    });
+    await fitting.hover();
+    await expect(
+      page.getByRole("menuitem", { name: "Ajustement linéaire" }),
+    ).toBeVisible();
+
+    // Analysis entries coming from Sigima runtime labels should also be
+    // translated in French.
+    const analysisTop = menubar.getByText("Analyse", { exact: true });
+    await analysisTop.click();
+    if ((await analysisTop.getAttribute("aria-expanded")) !== "true") {
+      await analysisTop.click();
+    }
+    await expect(
+      page.getByRole("menuitem", { name: "Largeur à mi-hauteur…" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", {
+        name: "Première abscisse à y=……",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Ordonnée à x=……" }),
+    ).toBeVisible();
+  });
 });
