@@ -1152,6 +1152,19 @@ await micropip.install(["sigima", "guidata"])
     this.dialogHandler = handler;
   }
 
+  /** Evaluate ``display.active`` for the dataset currently shown by the
+   *  bridge ``edit_dataset`` dialog (macros / plugins / remote control /
+   *  interactive flows). Returns ``{itemName: boolean}`` so the bridge form
+   *  greys out widgets whose enabling condition is unmet, mirroring the Qt
+   *  UI; returns ``{}`` when no bridge dialog is open. */
+  async resolveBridgeActive(
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_bridge_active", {
+      values,
+    })) as Record<string, boolean>;
+  }
+
   /**
    * Serialisation queue for all Pyodide calls.
    *
@@ -2553,6 +2566,35 @@ await micropip.install(["sigima", "guidata"])
     })) as Record<string, unknown>;
   }
 
+  /** Evaluate ``display.active`` for every parameter of *featureId* given
+   *  the current *values*. Returns ``{itemName: boolean}`` so the form can
+   *  grey out widgets whose enabling condition is unmet (e.g. the
+   *  blob-detection ``min_circularity`` gated by ``filter_by_circularity``),
+   *  mirroring the Qt UI. */
+  async resolveFeatureActive(
+    featureId: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_feature_active", {
+      feature_id: featureId,
+      values,
+    })) as Record<string, boolean>;
+  }
+
+  /** Counterpart of {@link resolveFeatureActive} for Analysis-menu
+   *  features (1→0), which live in a separate Python catalogue. */
+  async resolveAnalysisActive(
+    kind: "signal" | "image",
+    funcId: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_analysis_active", {
+      kind,
+      func_id: funcId,
+      values,
+    })) as Record<string, boolean>;
+  }
+
   async applyFeature(
     featureId: string,
     sourceIds: string[],
@@ -2577,6 +2619,16 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy(
       "get_image_grid_param_schema",
     )) as SchemaWithValues;
+  }
+
+  /** Evaluate ``display.active`` for ``GridParam`` items (cols/rows are
+   *  gated by the direction radio choice). */
+  async resolveImageGridActive(
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_image_grid_active", {
+      values,
+    })) as Record<string, boolean>;
   }
 
   /** Lay out *sourceIds* images side-by-side on a grid (in place). */

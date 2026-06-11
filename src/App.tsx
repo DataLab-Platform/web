@@ -159,6 +159,7 @@ interface PendingAnalysis {
   funcId: string;
   label: string;
   schema: SchemaWithValues;
+  kind: "signal" | "image";
 }
 
 /** Persist a numeric layout dimension to localStorage so it survives a
@@ -1538,6 +1539,7 @@ export default function App() {
         funcId,
         label: entry?.label ?? funcId,
         schema: schema as SchemaWithValues,
+        kind: treeKind === "image" ? "image" : "signal",
       });
     },
     [
@@ -3691,6 +3693,9 @@ export default function App() {
                 currentValues,
               )
             }
+            resolveActive={(currentValues) =>
+              runtime.resolveFeatureActive(pending.feature.id, currentValues)
+            }
             onSubmit={handleSubmitParams}
             onCancel={() => setPending(null)}
           />
@@ -3720,6 +3725,12 @@ export default function App() {
                 currentValues,
               )
             }
+            resolveActive={(currentValues) =>
+              runtime.resolveFeatureActive(
+                pendingProfile.feature.id,
+                currentValues,
+              )
+            }
             onSubmit={handleSubmitProfile}
             onCancel={() => setPendingProfile(null)}
           />
@@ -3730,6 +3741,16 @@ export default function App() {
             payload={pendingAnalysis.schema}
             onSubmit={handleSubmitAnalysisParams}
             onCancel={() => setPendingAnalysis(null)}
+            resolveActive={
+              runtime
+                ? (currentValues) =>
+                    runtime.resolveAnalysisActive(
+                      pendingAnalysis.kind,
+                      pendingAnalysis.funcId,
+                      currentValues,
+                    )
+                : undefined
+            }
           />
         )}
         {pendingImageGrid && (
@@ -3738,6 +3759,12 @@ export default function App() {
             payload={pendingImageGrid.schema}
             onSubmit={handleSubmitImageGrid}
             onCancel={() => setPendingImageGrid(null)}
+            resolveActive={
+              runtime
+                ? (currentValues) =>
+                    runtime.resolveImageGridActive(currentValues)
+                : undefined
+            }
           />
         )}
         {pendingRoiGrid && imageData && (

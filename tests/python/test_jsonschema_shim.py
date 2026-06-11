@@ -84,3 +84,41 @@ def test_display_callback_flag_and_resolution():
 
     # An item without a callback is a no-op (empty mapping).
     assert gds.resolve_dataset_callbacks(_DS(), "operation") == {}
+
+
+def test_store_gated_active_state():
+    """A ``store``/``ValueProp`` group greys out its members off-GUI.
+
+    Mirrors ``BlobOpenCVParam.filter_by_circularity`` gating
+    ``min_circularity``: in Qt the checkbox widget pushes its value into the
+    shared ``ValueProp`` (``do_store``), and the gated items resolve their
+    ``active`` against it.  Headless schema generation never builds the
+    widget, so the shim must replay that ``do_store`` step before resolving
+    ``active`` — otherwise the gated fields never grey out.
+    """
+    prop = gds.ValueProp(False)
+
+    class _DS(gds.DataSet):
+        enable = gds.BoolItem("Enable", default=False).set_prop("display", store=prop)
+        gated = gds.FloatItem("Gated", default=1.0).set_prop("display", active=prop)
+
+    # The gated item carries a dynamic-active marker (frontend must
+    # re-resolve on edit) and is baked inactive on open (default disabled).
+    payload = gds.dataset_to_schema_with_values(_DS())
+    props = payload["schema"]["properties"]
+    assert props["gated"]["x-guidata-active-dynamic"] is True
+    assert props["gated"]["x-guidata-active"] is False
+
+    # Off by default -> gated item inactive.
+    assert gds.resolve_dataset_active(_DS()) == {"enable": True, "gated": False}
+
+    # Toggling the controlling boolean enables the gated item, even though
+    # the value only ever flows through ``update_dataset`` (no Qt widget).
+    instance = _DS()
+    gds.update_dataset(instance, {"enable": True})
+    active = gds.resolve_dataset_active(instance)
+    assert active["gated"] is True
+
+    # ...and toggling it back disables the gated item again (no stale store).
+    gds.update_dataset(instance, {"enable": False})
+    assert gds.resolve_dataset_active(instance)["gated"] is False

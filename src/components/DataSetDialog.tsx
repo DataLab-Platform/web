@@ -26,6 +26,9 @@ interface Props {
     itemName: string,
     currentValues: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  resolveActive?: (
+    currentValues: Record<string, unknown>,
+  ) => Promise<Record<string, boolean>>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -36,6 +39,7 @@ export function DataSetDialog(props: Props) {
     payload,
     resolveChoices,
     resolveCallbacks,
+    resolveActive,
     onSubmit,
     onCancel,
   } = props;
@@ -75,6 +79,7 @@ export function DataSetDialog(props: Props) {
           onChange={setValues}
           resolveChoices={resolveChoices}
           resolveCallbacks={resolveCallbacks}
+          resolveActive={resolveActive}
         />
         {error && <div className="error">{error}</div>}
         <div className="actions">

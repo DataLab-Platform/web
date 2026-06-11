@@ -33,6 +33,7 @@ from typing import Any, Callable
 import guidata.dataset as gds
 from guidata.dataset import (
     dataset_to_schema_with_values,
+    resolve_dataset_active,
     resolve_dataset_callbacks,
     resolve_dynamic_choices,
     update_dataset,
@@ -1319,6 +1320,26 @@ def resolve_callbacks(
     return resolve_dataset_callbacks(instance, item_name)
 
 
+def resolve_active(
+    catalog: dict[str, FeatureSpec],
+    feature_id: str,
+    values: dict[str, Any] | None = None,
+) -> dict[str, bool]:
+    """Evaluate ``display.active`` for every item of *feature_id* given *values*.
+
+    Returns ``{item_name: bool}`` so the frontend can grey out widgets whose
+    enabling condition (e.g. ``BlobOpenCVParam.filter_by_circularity`` gating
+    ``min_circularity``) is currently unmet, mirroring the Qt UI.
+    """
+    spec = catalog[feature_id]
+    if spec.paramclass is None:
+        return {}
+    instance = spec.paramclass()
+    if values:
+        update_dataset(instance, values)
+    return resolve_dataset_active(instance)
+
+
 __all__ = [
     "ApplyContext",
     "ApplyResult",
@@ -1332,6 +1353,7 @@ __all__ = [
     "build_signal_catalog",
     "get_schema",
     "merge_plugin_features",
+    "resolve_active",
     "resolve_callbacks",
     "resolve_choices",
     "serialize_catalog",

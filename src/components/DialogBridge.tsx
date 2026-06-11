@@ -66,6 +66,11 @@ export function DialogBridge() {
         payload={payload}
         onSubmit={(values) => finish(values)}
         onCancel={() => finish(null)}
+        resolveActive={
+          runtime
+            ? (currentValues) => runtime.resolveBridgeActive(currentValues)
+            : undefined
+        }
       />
     );
   }

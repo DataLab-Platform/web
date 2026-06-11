@@ -15,7 +15,15 @@
  * Falls back to a flat property order when that key is missing.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import DOMPurify from "dompurify";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 import { t } from "../../i18n/translate";
@@ -26,6 +34,13 @@ import { ArrayEditorDialog, normalizeToMatrix } from "../ArrayEditorDialog";
 // ---------------------------------------------------------------------------
 
 type Values = Record<string, unknown>;
+
+/** Live ``display.active`` overrides keyed by item name. Populated by
+ *  ``resolveActive`` round-trips when the form contains items whose active
+ *  state is dynamic (``x-guidata-active-dynamic``). An entry of ``false``
+ *  greys out the corresponding field; ``true`` re-enables it; a missing
+ *  entry falls back to the static ``x-guidata-active`` baked in the schema. */
+const ActiveOverridesContext = createContext<Record<string, boolean>>({});
 
 /** Sanitise a guidata label before injecting it as HTML. Labels may
  *  legitimately carry simple inline markup (``<b>``, ``<sub>``, units
@@ -53,6 +68,13 @@ export interface DataSetFormProps {
     itemName: string,
     currentValues: Values,
   ) => Promise<Values>;
+  /** Resolver for guidata ``display.active`` props (when the form has at
+   *  least one item carrying ``x-guidata-active-dynamic``).  Runs the
+   *  ``active`` callables Python-side and returns ``{itemName: boolean}``
+   *  for every item, mirroring the Qt ``update_widgets`` enable/disable
+   *  cascade (e.g. ``BlobOpenCVParam.filter_by_circularity`` gating
+   *  ``min_circularity``). */
+  resolveActive?: (currentValues: Values) => Promise<Record<string, boolean>>;
 }
 
 // Layout node as emitted by the Python side. Either a property name
@@ -71,6 +93,7 @@ type LayoutNode = LayoutLeaf | LayoutContainer;
 
 export function DataSetForm(props: DataSetFormProps) {
   const { schema, values, onChange, resolveChoices, resolveCallbacks } = props;
+  const { resolveActive } = props;
   const properties = useMemo(
     () => (schema.properties as Record<string, JsonSchema>) ?? {},
     [schema],
@@ -80,10 +103,43 @@ export function DataSetForm(props: DataSetFormProps) {
     (schema["x-guidata-property-order"] as string[] | undefined) ??
     Object.keys(properties);
 
+  // Whether any item's ``active`` state is dynamic. When true, every edit
+  // may flip a sibling's enabled state (e.g. toggling
+  // ``filter_by_circularity`` enables ``min_circularity``), so we re-run the
+  // ``active`` callables Python-side after each change.
+  const hasDynamicActive = useMemo(
+    () =>
+      Object.values(properties).some(
+        (p) => p["x-guidata-active-dynamic"] === true,
+      ),
+    [properties],
+  );
+
+  // Live ``display.active`` overrides keyed by item name (see context doc).
+  const [activeOverrides, setActiveOverrides] = useState<
+    Record<string, boolean>
+  >({});
+
   // Monotonic counter guarding against out-of-order callback responses:
   // the last edit wins, so a slow Python round-trip can never clobber a
   // newer one (cf. the ``cancelled`` flag in ``useChoices``).
   const callbackSeq = useRef(0);
+  const activeSeq = useRef(0);
+
+  // Resolve the initial active state once (covers dynamic items whose
+  // default state depends on sibling defaults). Subsequent edits refresh it
+  // through ``setValue`` below.
+  useEffect(() => {
+    if (!hasDynamicActive || !resolveActive) return;
+    const seq = ++activeSeq.current;
+    resolveActive(values).then((map) => {
+      if (seq !== activeSeq.current) return;
+      if (map) setActiveOverrides(map);
+    });
+    // Run only on mount / when the resolver or schema shape changes; per-edit
+    // refresh is handled in ``setValue``.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDynamicActive, resolveActive]);
 
   const setValue = useCallback(
     (name: string, value: unknown) => {
@@ -99,23 +155,39 @@ export function DataSetForm(props: DataSetFormProps) {
           }
         });
       }
+      if (hasDynamicActive && resolveActive) {
+        const seq = ++activeSeq.current;
+        resolveActive(newValues).then((map) => {
+          if (seq !== activeSeq.current) return;
+          if (map) setActiveOverrides(map);
+        });
+      }
     },
-    [onChange, values, properties, resolveCallbacks],
+    [
+      onChange,
+      values,
+      properties,
+      resolveCallbacks,
+      hasDynamicActive,
+      resolveActive,
+    ],
   );
 
   return (
-    <div className="dataset-form">
-      {layout.map((node, idx) => (
-        <LayoutNodeView
-          key={idx}
-          node={node}
-          properties={properties}
-          values={values}
-          setValue={setValue}
-          resolveChoices={resolveChoices}
-        />
-      ))}
-    </div>
+    <ActiveOverridesContext.Provider value={activeOverrides}>
+      <div className="dataset-form">
+        {layout.map((node, idx) => (
+          <LayoutNodeView
+            key={idx}
+            node={node}
+            properties={properties}
+            values={values}
+            setValue={setValue}
+            resolveChoices={resolveChoices}
+          />
+        ))}
+      </div>
+    </ActiveOverridesContext.Provider>
   );
 }
 
@@ -251,12 +323,25 @@ function FieldRow(props: FieldRowProps) {
   const label = (prop["x-guidata-label"] as string | undefined) ?? name;
   const help = prop.description as string | undefined;
   const unit = prop["x-guidata-unit"] as string | undefined;
+  const activeOverrides = useContext(ActiveOverridesContext);
   // An item is non-editable when it is read-only (e.g. ``set_computed``)
   // or when its ``display.active`` resolved to ``False`` (e.g.
-  // ``ArithmeticParam.operation``, a preview field updated by callbacks).
-  const readOnly = prop.readOnly === true || prop["x-guidata-active"] === false;
+  // ``ArithmeticParam.operation``, a preview field updated by callbacks, or
+  // ``BlobOpenCVParam.min_circularity`` while its filter group is off). A
+  // live override (from ``resolveActive``) wins over the static schema flag.
+  const override = activeOverrides[name];
+  const readOnly =
+    prop.readOnly === true ||
+    override === false ||
+    (override === undefined && prop["x-guidata-active"] === false);
   return (
-    <div className="dataset-form-row">
+    <div
+      className={
+        readOnly
+          ? "dataset-form-row dataset-form-row-disabled"
+          : "dataset-form-row"
+      }
+    >
       <label
         className="dataset-form-label"
         title={help}

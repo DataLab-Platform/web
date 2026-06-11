@@ -2226,6 +2226,22 @@ input {
   align-items: center;
 }
 
+/* Greyed-out rows: items whose guidata ``display.active`` resolved to
+   False (e.g. blob-detection min/max circularity while the matching
+   filter checkbox is off), mirroring the Qt disabled look. */
+.dataset-form-row-disabled .dataset-form-label {
+  color: var(--text-dim);
+}
+
+.dataset-form-row-disabled input:disabled,
+.dataset-form-row-disabled select:disabled,
+.dataset-form-row-disabled textarea:disabled {
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .dataset-form-label {
   font-size: 12px;
   color: var(--text);

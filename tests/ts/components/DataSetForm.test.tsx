@@ -106,3 +106,156 @@ describe("DataSetForm display callbacks", () => {
     expect(resolveCallbacks).not.toHaveBeenCalled();
   });
 });
+
+// A blob-detection-like schema: a controlling ``enable`` checkbox gates a
+// dynamic-active ``gated`` field (``x-guidata-active-dynamic``). Mirrors
+// ``BlobOpenCVParam.filter_by_circularity`` gating ``min_circularity``.
+const GATED_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    enable: {
+      type: "boolean",
+      "x-guidata-kind": "bool",
+      "x-guidata-label": "Enable",
+      "x-guidata-name": "enable",
+    },
+    gated: {
+      type: "number",
+      "x-guidata-kind": "float",
+      "x-guidata-label": "Gated",
+      "x-guidata-name": "gated",
+      // Inactive on open (default disabled) but dynamically re-evaluated.
+      "x-guidata-active": false,
+      "x-guidata-active-dynamic": true,
+    },
+  },
+  "x-guidata-property-order": ["enable", "gated"],
+};
+
+function GatedForm(props: {
+  resolveActive: (
+    values: Record<string, unknown>,
+  ) => Promise<Record<string, boolean>>;
+}) {
+  const [values, setValues] = useState<Record<string, unknown>>({
+    enable: false,
+    gated: 1,
+  });
+  return (
+    <DataSetForm
+      schema={GATED_SCHEMA}
+      values={values}
+      onChange={setValues}
+      resolveActive={props.resolveActive}
+    />
+  );
+}
+
+describe("DataSetForm dynamic active state", () => {
+  it("greys out a dynamic-active field and re-enables it on toggle", async () => {
+    const resolveActive = vi.fn(async (vals: Record<string, unknown>) => ({
+      enable: true,
+      gated: vals.enable === true,
+    }));
+
+    render(<GatedForm resolveActive={resolveActive} />);
+
+    // Initially disabled (baked ``x-guidata-active: false``); the mount
+    // resolution confirms it.
+    const gated = screen.getByDisplayValue("1") as HTMLInputElement;
+    expect(gated.disabled).toBe(true);
+    await waitFor(() => expect(resolveActive).toHaveBeenCalled());
+    expect(gated.disabled).toBe(true);
+
+    // Toggling the controlling checkbox re-resolves active and enables it.
+    const checkbox = screen.getByRole("checkbox") as HTMLInputElement;
+    fireEvent.click(checkbox);
+    expect(resolveActive).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enable: true }),
+    );
+    await waitFor(() => expect(gated.disabled).toBe(false));
+  });
+});
+
+// Blob-detection-exact schema: a controlling ``create_rois`` BoolItem gates a
+// ``roi_geometry`` ChoiceItem, both nested inside a ``BeginGroup``. This locks
+// in that the dynamic-active overrides reach fields rendered inside a group
+// ``<fieldset>`` (the override flows through React context, not props).
+const GROUPED_GATED_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    create_rois: {
+      type: "boolean",
+      "x-guidata-kind": "bool",
+      "x-guidata-label": "Create regions of interest",
+      "x-guidata-name": "create_rois",
+    },
+    roi_geometry: {
+      type: "string",
+      "x-guidata-kind": "choice",
+      "x-guidata-label": "ROI geometry",
+      "x-guidata-name": "roi_geometry",
+      enum: ["rectangle", "circle"],
+      "x-guidata-choices": [
+        { value: "rectangle", label: "Rectangle" },
+        { value: "circle", label: "Circle" },
+      ],
+      "x-guidata-active": false,
+      "x-guidata-active-dynamic": true,
+    },
+  },
+  "x-guidata-property-order": ["create_rois", "roi_geometry"],
+  "x-guidata-layout": [
+    {
+      kind: "group",
+      label: "Regions of interest",
+      items: ["create_rois", "roi_geometry"],
+    },
+  ],
+};
+
+function GroupedGatedForm(props: {
+  resolveActive: (
+    values: Record<string, unknown>,
+  ) => Promise<Record<string, boolean>>;
+}) {
+  const [values, setValues] = useState<Record<string, unknown>>({
+    create_rois: false,
+    roi_geometry: "rectangle",
+  });
+  return (
+    <DataSetForm
+      schema={GROUPED_GATED_SCHEMA}
+      values={values}
+      onChange={setValues}
+      resolveActive={props.resolveActive}
+    />
+  );
+}
+
+describe("DataSetForm dynamic active inside a group", () => {
+  it("greys/ungreys a gated field nested in a group when toggling the BoolItem", async () => {
+    const resolveActive = vi.fn(async (vals: Record<string, unknown>) => ({
+      create_rois: true,
+      roi_geometry: vals.create_rois === true,
+    }));
+
+    render(<GroupedGatedForm resolveActive={resolveActive} />);
+
+    // The gated ChoiceItem lives inside a <fieldset> group and starts
+    // disabled (baked ``x-guidata-active: false``).
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    expect(select.closest("fieldset")).not.toBeNull();
+    expect(select.disabled).toBe(true);
+    await waitFor(() => expect(resolveActive).toHaveBeenCalled());
+    expect(select.disabled).toBe(true);
+
+    // Checking ``create_rois`` re-enables the nested gated field.
+    fireEvent.click(screen.getByRole("checkbox"));
+    await waitFor(() => expect(select.disabled).toBe(false));
+
+    // Unchecking it disables the nested field again.
+    fireEvent.click(screen.getByRole("checkbox"));
+    await waitFor(() => expect(select.disabled).toBe(true));
+  });
+});

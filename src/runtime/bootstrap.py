@@ -717,6 +717,11 @@ def _full_catalog_with_plugins() -> dict[str, _proc.FeatureSpec]:
 # Signature: ``async (kind: str, payload: dict) -> Any``.
 _DIALOG_BRIDGE: Any = globals().get("_DIALOG_BRIDGE", None)
 
+# Live DataSet currently shown by the bridge ``edit_dataset`` dialog, used by
+# ``resolve_bridge_active`` to re-evaluate ``display.active`` on toggle. Only
+# one bridge dialog is open at a time, so a single reference is enough.
+_BRIDGE_EDIT_INSTANCE: Any = globals().get("_BRIDGE_EDIT_INSTANCE", None)
+
 
 def set_dialog_bridge(bridge: Any) -> None:
     """Install the JS bridge used by async guidata/datalab dialogs."""
@@ -761,13 +766,42 @@ async def _async_edit_dataset(
     bridge = _require_bridge("edit_dataset_async")
     payload = dataset_to_schema_with_values(instance)
     payload["title"] = instance.get_title()
-    result = await bridge("edit_dataset", _to_js_payload(payload))
+    global _BRIDGE_EDIT_INSTANCE  # pylint: disable=global-statement
+    _BRIDGE_EDIT_INSTANCE = instance
+    try:
+        result = await bridge("edit_dataset", _to_js_payload(payload))
+    finally:
+        _BRIDGE_EDIT_INSTANCE = None
     if hasattr(result, "to_py"):
         result = result.to_py()
     if not result:
         return False
     update_dataset(instance, result)
     return True
+
+
+def resolve_bridge_active(values: dict[str, Any] | None = None) -> dict[str, bool]:
+    """Evaluate ``display.active`` for the dataset currently shown by the
+    JS dialog bridge (``DataSet.edit_async`` from macros / plugins / remote
+    control / interactive flows).
+
+    Counterpart of :func:`resolve_feature_active` for the generic
+    bridge-driven edit dialog: only one such dialog is open at a time, so a
+    single module-level reference to the live instance is enough.  A fresh
+    copy of its class is used so resolution never mutates the instance
+    before the user submits.  Returns ``{}`` when no bridge dialog is open.
+    """
+    from guidata.dataset import resolve_dataset_active, update_dataset
+
+    instance = _BRIDGE_EDIT_INSTANCE
+    if instance is None:
+        return {}
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    probe = type(instance)()
+    if values:
+        update_dataset(probe, values)
+    return resolve_dataset_active(probe)
 
 
 async def _async_show_message(
@@ -3967,6 +4001,19 @@ def resolve_feature_callbacks(
     )
 
 
+def resolve_feature_active(
+    feature_id: str, values: dict[str, Any] | None = None
+) -> dict[str, bool]:
+    """Evaluate ``display.active`` for every parameter of *feature_id*.
+
+    Returns ``{item_name: bool}`` so the frontend can grey out widgets
+    whose enabling condition is currently unmet (e.g. the blob-detection
+    ``min_circularity`` gated by ``filter_by_circularity``), mirroring the
+    Qt UI.
+    """
+    return _proc.resolve_active(_full_catalog_with_plugins(), feature_id, values)
+
+
 def patch_title_with_ids(dst: Any, src_oids: list[str]) -> None:
     """Substitute placeholders in ``dst.title`` with source short IDs.
 
@@ -4206,6 +4253,22 @@ def get_image_grid_param_schema() -> dict[str, Any]:
     from sigima.proc.image import GridParam
 
     return dataset_to_schema_with_values(GridParam())
+
+
+def resolve_image_grid_active(values: dict[str, Any] | None = None) -> dict[str, bool]:
+    """Evaluate ``display.active`` for ``GridParam`` items given *values*.
+
+    ``cols`` / ``rows`` are gated by the ``direction`` radio choice.
+    """
+    from guidata.dataset import resolve_dataset_active, update_dataset
+    from sigima.proc.image import GridParam
+
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    instance = GridParam()
+    if values:
+        update_dataset(instance, values)
+    return resolve_dataset_active(instance)
 
 
 def _image_extent(obj: Any) -> tuple[float, float, float, float]:
@@ -4668,6 +4731,33 @@ def _get_analysis_param_schema(
     if param is None:
         return None
     return dataset_to_schema_with_values(param)
+
+
+def resolve_analysis_active(
+    kind: str, func_id: str, values: dict[str, Any] | None = None
+) -> dict[str, bool]:
+    """Evaluate ``display.active`` for every parameter of analysis *func_id*.
+
+    Counterpart of :func:`resolve_feature_active` for the Analysis menu
+    (1→0 features live in ``_ANALYSIS_CATALOG``, not the processing
+    catalog).  Returns ``{item_name: bool}`` so the frontend can grey out
+    widgets whose enabling condition is currently unmet, e.g. the
+    blob-detection ``min_circularity`` gated by ``filter_by_circularity``.
+    """
+    from guidata.dataset import resolve_dataset_active, update_dataset
+
+    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    if func_id not in catalog:
+        raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
+    paramclass = catalog[func_id]["paramclass"]
+    if paramclass is None:
+        return {}
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    instance = paramclass()
+    if values:
+        update_dataset(instance, values)
+    return resolve_dataset_active(instance)
 
 
 def _result_metadata_key(result: Any) -> str:
@@ -5485,6 +5575,7 @@ __all__ = [
     "distribute_images_on_grid",
     "reset_image_positions",
     "get_roi_grid_param_schema",
+    "resolve_image_grid_active",
     "create_image_roi_grid",
     "list_interactive_fits",
     "init_interactive_fit",
@@ -5493,6 +5584,7 @@ __all__ = [
     "commit_interactive_fit",
     "list_signal_analysis",
     "get_signal_analysis_param_schema",
+    "resolve_analysis_active",
     "run_signal_analysis",
     "list_signal_results",
     "clear_signal_results",
@@ -5502,6 +5594,7 @@ __all__ = [
     "list_image_results",
     "clear_image_results",
     "set_dialog_bridge",
+    "resolve_bridge_active",
     "load_plugin_source",
     "load_plugin_file",
     "unload_plugin",

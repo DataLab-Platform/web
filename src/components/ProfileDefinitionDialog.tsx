@@ -52,6 +52,9 @@ interface Props {
     itemName: string,
     currentValues: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  resolveActive?: (
+    currentValues: Record<string, unknown>,
+  ) => Promise<Record<string, boolean>>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -259,6 +262,7 @@ export function ProfileDefinitionDialog(props: Props) {
     imageData,
     resolveChoices,
     resolveCallbacks,
+    resolveActive,
     onSubmit,
     onCancel,
   } = props;
@@ -394,6 +398,7 @@ export function ProfileDefinitionDialog(props: Props) {
               onChange={setValues}
               resolveChoices={resolveChoices}
               resolveCallbacks={resolveCallbacks}
+              resolveActive={resolveActive}
             />
           </div>
         </div>
