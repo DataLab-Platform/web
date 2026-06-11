@@ -622,10 +622,16 @@ function buildAnalysisActions(
     // sub-menu separator. Visually identical. ``t()`` is a safe
     // pass-through for Sigima-owned labels already localised by ``.mo``.
     const safeLabel = t(e.label).replace(/\//g, "\u2215");
+    // Group related analyses under a submenu folder (e.g. the four blob
+    // detectors live under "Analysis/Blob detection", mirroring the
+    // desktop app). Folder labels are translated by ``buildMenuTree``.
+    const menuPath = e.submenu
+      ? `Analysis/${e.submenu}/${safeLabel}`
+      : `Analysis/${safeLabel}`;
     return {
       id: `analysis.${kind}.${e.id}`,
       label: e.has_params ? `${safeLabel}…` : safeLabel,
-      menuPath: `Analysis/${safeLabel}`,
+      menuPath,
       iconUrl: getAnalysisIconUrl(e.icon),
       beginGroup: e.separator_before,
       enabled: (s) => s.status === "ready" && !s.busy && s.currentId !== null,

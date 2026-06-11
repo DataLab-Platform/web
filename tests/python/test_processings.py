@@ -112,6 +112,18 @@ def test_list_processings_returns_signal_only(bootstrap_module):
         assert "id" in p and "label" in p
 
 
+def test_image_analysis_blob_detectors_share_submenu(bootstrap_module):
+    bs = bootstrap_module
+    entries = {e["id"]: e for e in bs.list_image_analysis()}
+    # The four blob detectors are grouped under a "Blob detection" submenu
+    # to mirror the DataLab desktop "Analysis > Blob detection" sub-menu.
+    for fid in ("blob_dog", "blob_doh", "blob_log", "blob_opencv"):
+        assert fid in entries, f"{fid!r} missing from image-analysis catalogue"
+        assert entries[fid]["submenu"] == "Blob detection"
+    # Non-blob analyses stay at the top level (no submenu).
+    assert entries["centroid"]["submenu"] is None
+
+
 # ---------------------------------------------------------------------------
 # Title placeholder substitution — mirrors the DataLab desktop behaviour
 # (Sigima's ``PlaceholderTitleFormatter`` + ``patch_title_with_ids``).

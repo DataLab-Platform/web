@@ -637,6 +637,9 @@ export interface SignalAnalysisDescriptor {
   separator_before: boolean;
   /** ``true`` when the analysis exposes a parameter DataSet. */
   has_params: boolean;
+  /** Optional submenu (folder) this entry belongs to, e.g. ``"Blob
+   *  detection"``; ``null``/absent for top-level Analysis entries. */
+  submenu?: string | null;
 }
 
 /** Optional plot overlay attached to a result (currently only emitted

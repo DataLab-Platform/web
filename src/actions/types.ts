@@ -50,6 +50,10 @@ export interface MenuNode {
   action?: ActionDescriptor;
   /** Present when the node has child entries (submenu). */
   children?: MenuNode[];
+  /** Insert a separator *before* this node when rendered. For folders
+   *  this is propagated from the ``beginGroup`` of the first child leaf
+   *  (leaves carry it directly via their {@link ActionDescriptor}). */
+  beginGroup?: boolean;
   /** Optional icon URL shown next to the label. */
   iconUrl?: string;
 }

@@ -4604,6 +4604,7 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "func": sipi.blob_dog,
             "paramclass": sipi.BlobDOGParam,
             "separator_before": True,
+            "submenu": "Blob detection",
         },
         {
             "id": "blob_doh",
@@ -4612,6 +4613,7 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "func": sipi.blob_doh,
             "paramclass": sipi.BlobDOHParam,
             "separator_before": False,
+            "submenu": "Blob detection",
         },
         {
             "id": "blob_log",
@@ -4620,6 +4622,7 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "func": sipi.blob_log,
             "paramclass": sipi.BlobLOGParam,
             "separator_before": False,
+            "submenu": "Blob detection",
         },
         {
             "id": "blob_opencv",
@@ -4628,6 +4631,7 @@ def _build_image_analysis_catalog() -> "list[dict[str, Any]]":
             "func": sipi.blob_opencv,
             "paramclass": sipi.BlobOpenCVParam,
             "separator_before": False,
+            "submenu": "Blob detection",
             # ``cv2`` is not loaded by the bootstrap; ``_run_analysis``
             # micropip-installs ``opencv-python`` lazily on first use so
             # the cold-start cost (~12 MB) only hits users who actually
@@ -4688,6 +4692,7 @@ def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
             "icon": e["icon"],
             "separator_before": e["separator_before"],
             "has_params": e["paramclass"] is not None,
+            "submenu": e.get("submenu"),
         }
         for e in catalog.values()
     ]

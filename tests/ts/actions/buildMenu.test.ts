@@ -8,6 +8,21 @@ function action(id: string, menuPath: string): ActionDescriptor {
   return { id, label: id, menuPath, enabled: () => true, run: noop };
 }
 
+function actionWithGroup(
+  id: string,
+  menuPath: string,
+  beginGroup: boolean,
+): ActionDescriptor {
+  return {
+    id,
+    label: id,
+    menuPath,
+    beginGroup,
+    enabled: () => true,
+    run: noop,
+  };
+}
+
 describe("buildMenuTree", () => {
   it("returns an empty list for no actions", () => {
     expect(buildMenuTree([])).toEqual([]);
@@ -57,5 +72,26 @@ describe("buildMenuTree", () => {
   it("ignores empty path segments", () => {
     const tree = buildMenuTree([action("nope", "")]);
     expect(tree).toEqual([]);
+  });
+
+  it("propagates the first child leaf's beginGroup to its folder", () => {
+    const tree = buildMenuTree([
+      action("centroid", "Analysis/Centroid"),
+      actionWithGroup("dog", "Analysis/Blob detection/DOG", true),
+      actionWithGroup("doh", "Analysis/Blob detection/DOH", false),
+    ]);
+    const analysis = tree.find((n) => n.label === "Analysis");
+    const blob = analysis?.children?.find((c) => c.label === "Blob detection");
+    expect(blob?.beginGroup).toBe(true);
+    expect(blob?.children).toHaveLength(2);
+  });
+
+  it("leaves folder beginGroup unset when the first child has none", () => {
+    const tree = buildMenuTree([
+      actionWithGroup("dog", "Analysis/Blob detection/DOG", false),
+    ]);
+    const analysis = tree.find((n) => n.label === "Analysis");
+    const blob = analysis?.children?.find((c) => c.label === "Blob detection");
+    expect(blob?.beginGroup).toBeFalsy();
   });
 });

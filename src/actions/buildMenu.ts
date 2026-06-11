@@ -24,7 +24,11 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
     children: [],
   };
 
-  const findOrCreateFolder = (parent: MenuNode, label: string): MenuNode => {
+  const findOrCreateFolder = (
+    parent: MenuNode,
+    label: string,
+    beginGroup?: boolean,
+  ): MenuNode => {
     parent.children = parent.children ?? [];
     let node = parent.children.find(
       (c) => c.label === label && c.children !== undefined,
@@ -37,6 +41,10 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
         path,
         children: [],
         iconUrl: resolveSubmenuIcon(path),
+        // Propagate the separator request from the first child leaf that
+        // creates this folder, so a folder can open a new group just like
+        // a leaf does (mirrors DataLab desktop sub-menu separators).
+        beginGroup,
       };
       parent.children.push(node);
     }
@@ -48,7 +56,14 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
     if (parts.length === 0) continue;
     let parent = root;
     for (let i = 0; i < parts.length - 1; i++) {
-      parent = findOrCreateFolder(parent, parts[i]);
+      // The folder directly containing the leaf inherits the leaf's
+      // ``beginGroup`` (only when it is first created).
+      const isLeafParent = i === parts.length - 2;
+      parent = findOrCreateFolder(
+        parent,
+        parts[i],
+        isLeafParent ? action.beginGroup : undefined,
+      );
     }
     parent.children = parent.children ?? [];
     parent.children.push({

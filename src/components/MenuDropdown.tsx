@@ -21,7 +21,7 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
     <ul className="menu-dropdown" role="menu">
       {nodes.map((node, idx) => {
         const sep =
-          node.action?.beginGroup && idx > 0 ? (
+          (node.action?.beginGroup || node.beginGroup) && idx > 0 ? (
             <li
               key={node.path + ":sep"}
               className="menu-separator"
