@@ -2676,12 +2676,14 @@ await micropip.install(["sigima", "guidata"])
     sourceIds: string[],
     operandId: string | null = null,
     params: Record<string, unknown> | null = null,
+    groupIds: string[] = [],
   ): Promise<string[]> {
     return (await this.callPy("apply_feature", {
       feature_id: featureId,
       source_ids: sourceIds,
       operand_id: operandId,
       params,
+      group_ids: groupIds,
     })) as string[];
   }
 

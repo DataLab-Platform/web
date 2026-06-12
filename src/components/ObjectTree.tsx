@@ -17,8 +17,15 @@ const DELETE_ICON_URL = getEditIconUrl("delete.svg");
 interface Props {
   tree: PanelTree | null;
   selectedIds: string[];
+  /** Explicitly selected group ids (group-exclusive selection). Used to
+   *  highlight group headers; mirrors DataLab desktop. */
+  selectedGroupIds?: string[];
   currentId: string | null;
-  onSelectionChange: (ids: string[], current: string | null) => void;
+  onSelectionChange: (
+    ids: string[],
+    current: string | null,
+    groupIds?: string[],
+  ) => void;
   onRenameObject: (oid: string, name: string) => void;
   onRenameGroup: (gid: string, name: string) => void;
   onDeleteGroup: (gid: string) => void;
@@ -70,6 +77,7 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
     const {
       tree,
       selectedIds,
+      selectedGroupIds,
       currentId,
       onSelectionChange,
       onRenameObject,
@@ -127,11 +135,29 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
     );
 
     const handleGroupClick = useCallback(
-      (group: GroupNode) => {
-        const ids = group.objects.map((o) => o.id);
-        onSelectionChange(ids, ids[0] ?? null);
+      (group: GroupNode, evt: React.MouseEvent) => {
+        // Plain click: select this group alone (objects XOR groups, like
+        // desktop). Ctrl/Cmd-click: toggle this group in the selection,
+        // so a processing can aggregate several groups (e.g. average).
+        const multi = evt.ctrlKey || evt.metaKey;
+        if (!multi || !tree) {
+          const ids = group.objects.map((o) => o.id);
+          onSelectionChange(ids, ids[0] ?? null, [group.gid]);
+          return;
+        }
+        const current = new Set(selectedGroupIds ?? []);
+        if (current.has(group.gid)) current.delete(group.gid);
+        else current.add(group.gid);
+        const nextGids = tree.groups
+          .map((g) => g.gid)
+          .filter((gid) => current.has(gid));
+        const ids: string[] = [];
+        for (const g of tree.groups) {
+          if (current.has(g.gid)) for (const o of g.objects) ids.push(o.id);
+        }
+        onSelectionChange(ids, ids[ids.length - 1] ?? null, nextGids);
       },
-      [onSelectionChange],
+      [onSelectionChange, selectedGroupIds, tree],
     );
 
     const toggleCollapsed = useCallback((gid: string) => {
@@ -258,8 +284,10 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
         {tree.groups.map((group) => {
           const isCollapsed = collapsed.has(group.gid);
           const groupZone: DropZone = { kind: "group", gid: group.gid };
+          const isGroupSelected = (selectedGroupIds ?? []).includes(group.gid);
           const headerCls = [
             "object-tree-group-header",
+            isGroupSelected ? "selected" : "",
             draggedOids && isZone(groupZone) ? "drop-target" : "",
           ]
             .filter(Boolean)
@@ -268,7 +296,7 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
             <div key={group.gid} className="object-tree-group">
               <div
                 className={headerCls}
-                onClick={() => handleGroupClick(group)}
+                onClick={(e) => handleGroupClick(group, e)}
                 onDoubleClick={() =>
                   startEdit({ kind: "group", id: group.gid }, group.name)
                 }
@@ -314,7 +342,9 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="object-tree-group-name">{group.name}</span>
+                  <span className="object-tree-group-name">
+                    <TitleWithLinks title={group.name} />
+                  </span>
                 )}
                 <span className="object-tree-count">
                   {group.objects.length}

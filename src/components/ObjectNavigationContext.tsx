@@ -26,6 +26,12 @@ export interface OidLookupEntry {
   node: ObjectNode;
 }
 
+/** Resolution of a group-id lookup. */
+export interface GroupLookupEntry {
+  kind: PanelKind;
+  name: string;
+}
+
 export interface ObjectNavigationContextValue {
   /** Returns the owning panel + node for *oid*, or ``null`` when the
    *  id isn't a real object id in either panel. Constant-time. */
@@ -33,6 +39,12 @@ export interface ObjectNavigationContextValue {
   /** Selects *oid* (and switches panels when needed). No-op when the
    *  id is unknown. */
   navigateToOid: (oid: string) => void;
+  /** Returns the owning panel + name for group *gid*, or ``null`` when
+   *  the id isn't a real group id in either panel. */
+  lookupGroup: (gid: string) => GroupLookupEntry | null;
+  /** Selects the group *gid* (and switches panels when needed). No-op
+   *  when the id is unknown. */
+  navigateToGroup: (gid: string) => void;
 }
 
 const ObjectNavigationContext =
@@ -42,20 +54,31 @@ interface ProviderProps {
   /** Pre-built oid → entry map. Callers should memoise it. */
   oidIndex: ReadonlyMap<string, OidLookupEntry>;
   navigateToOid: (oid: string) => void;
+  /** Pre-built group-id → entry map. Callers should memoise it.
+   *  Optional: defaults to an empty map (no group links). */
+  groupIndex?: ReadonlyMap<string, GroupLookupEntry>;
+  navigateToGroup?: (gid: string) => void;
   children: ReactNode;
 }
+
+const EMPTY_GROUP_INDEX: ReadonlyMap<string, GroupLookupEntry> = new Map();
+const NOOP = () => {};
 
 export function ObjectNavigationProvider({
   oidIndex,
   navigateToOid,
+  groupIndex = EMPTY_GROUP_INDEX,
+  navigateToGroup = NOOP,
   children,
 }: ProviderProps) {
   const value = useMemo<ObjectNavigationContextValue>(
     () => ({
       lookupOid: (oid) => oidIndex.get(oid) ?? null,
       navigateToOid,
+      lookupGroup: (gid) => groupIndex.get(gid) ?? null,
+      navigateToGroup,
     }),
-    [oidIndex, navigateToOid],
+    [oidIndex, navigateToOid, groupIndex, navigateToGroup],
   );
   return (
     <ObjectNavigationContext.Provider value={value}>

@@ -4103,6 +4103,7 @@ def apply_feature(
     source_ids: list[str],
     operand_id: str | None = None,
     params: dict[str, Any] | None = None,
+    group_ids: list[str] | None = None,
 ) -> list[str]:
     """Apply *feature_id* to *source_ids* and return the new object ids.
 
@@ -4110,6 +4111,14 @@ def apply_feature(
         * ``1_to_1`` / ``2_to_1``: each result goes into the same group as its
           source object.
         * ``n_to_1``: the single result goes into the group of the first source.
+
+    Group-exclusive selection:
+        When *group_ids* is provided (the user selected one or more groups
+        rather than individual objects) and the processing keeps results in
+        the same panel, the whole group(s) are processed and the results are
+        routed into freshly-created result group(s) titled after the
+        processing — mirroring DataLab desktop. See
+        :func:`_apply_feature_grouped`.
     """
     catalog = _full_catalog_with_plugins()
     spec = catalog.get(feature_id)
@@ -4119,11 +4128,26 @@ def apply_feature(
         raise ValueError("apply_feature requires at least one source")
     if hasattr(params, "to_py"):
         params = params.to_py()
+    if hasattr(group_ids, "to_py"):
+        group_ids = group_ids.to_py()
     sources = [_MODEL.get(oid) for oid in source_ids]
     operand = _MODEL.get(operand_id) if operand_id else None
     src_panel = _MODEL.panel(spec.object_kind)
     cross_kind = spec.output_kind != spec.object_kind
     dst_panel = _MODEL.panel(spec.output_kind) if cross_kind else src_panel
+    # Group-exclusive path (mirrors DataLab desktop): process whole groups
+    # and create new result group(s).  Cross-kind results have no meaningful
+    # source-group mapping, so they keep the default-group behaviour below.
+    if group_ids and not cross_kind:
+        return _apply_feature_grouped(
+            spec,
+            feature_id,
+            list(source_ids),
+            list(group_ids),
+            operand_id,
+            operand,
+            params,
+        )
     # Snapshot the source ID list *before* running the computation so
     # title patching is robust against any concurrent model mutation.
     src_ids_snapshot = list(source_ids)
@@ -4163,6 +4187,94 @@ def apply_feature(
             "operand_id": operand_id,
             "params": dict(params) if params else {},
         }
+    return new_ids
+
+
+def _apply_feature_grouped(
+    spec: Any,
+    feature_id: str,
+    source_ids: list[str],
+    group_ids: list[str],
+    operand_id: str | None,
+    operand: Any,
+    params: dict[str, Any] | None,
+) -> list[str]:
+    """Apply *spec* group-wise, routing results into new result group(s).
+
+    Mirrors DataLab desktop's group-exclusive processing
+    (``datalab/gui/processor/base.py``): when groups are selected, each
+    source group is processed as a whole and the results land in
+    freshly-created group(s) titled after the processing function:
+
+        * ``1_to_1`` / ``2_to_1``: one result group per source group, titled
+          ``"<func>(<src_gid>)"``, holding the per-object results.
+        * ``n_to_1``: a single result group titled ``"<func>(<g1>,<g2>,…)"``
+          holding one aggregated result per source group.
+
+    The result-group title embeds the *source* group id(s) so the front-end
+    can render them as clickable links back to the originating group(s)
+    (see ``TitleWithLinks.tsx``).
+    """
+    src_panel = _MODEL.panel(spec.object_kind)
+    func_name = getattr(spec.func, "__name__", feature_id)
+    selected = set(source_ids)
+    new_ids: list[str] = []
+
+    def _members(gid: str) -> list[str]:
+        """Return the *gid* group's object ids that are part of the selection."""
+        group = src_panel.find_group(gid)
+        return [oid for oid in group.object_ids if oid in selected]
+
+    def _place(
+        source_oid: str | None, dst: Any, n_src_ids: list[str], gid: str
+    ) -> None:
+        """Patch the result title, add it to group *gid*, and record it."""
+        if source_oid is None:
+            patch_oids = n_src_ids
+        elif spec.pattern == "2_to_1" and operand_id is not None:
+            patch_oids = [source_oid, operand_id]
+        else:
+            patch_oids = [source_oid]
+        patch_title_with_ids(dst, patch_oids)
+        new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=gid)
+        new_ids.append(new_oid)
+        _LAST_PROCESSING[new_oid] = {
+            "feature_id": feature_id,
+            "source_ids": [source_oid] if source_oid is not None else list(n_src_ids),
+            "operand_id": operand_id,
+            "params": dict(params) if params else {},
+        }
+
+    if spec.pattern == "n_to_1":
+        # One destination group; aggregate each source group separately.
+        dst_gid = _MODEL.create_group(
+            spec.object_kind, name=f"{func_name}({','.join(group_ids)})"
+        )
+        for gid in group_ids:
+            member_ids = _members(gid)
+            if not member_ids:
+                continue
+            member_objs = [_MODEL.get(oid) for oid in member_ids]
+            ctx = _proc.ApplyContext(
+                feature=spec, sources=member_objs, operand=operand, params=params
+            )
+            result = _PROCESSOR.apply(ctx, member_ids)
+            for source_oid, dst in result.items:
+                _place(source_oid, dst, member_ids, dst_gid)
+    else:
+        # 1_to_1 / 2_to_1: one result group per source group.
+        for gid in group_ids:
+            member_ids = _members(gid)
+            if not member_ids:
+                continue
+            member_objs = [_MODEL.get(oid) for oid in member_ids]
+            ctx = _proc.ApplyContext(
+                feature=spec, sources=member_objs, operand=operand, params=params
+            )
+            result = _PROCESSOR.apply(ctx, member_ids)
+            dst_gid = _MODEL.create_group(spec.object_kind, name=f"{func_name}({gid})")
+            for source_oid, dst in result.items:
+                _place(source_oid, dst, member_ids, dst_gid)
     return new_ids
 
 

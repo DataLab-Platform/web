@@ -1438,6 +1438,10 @@ input {
   background: var(--hover-bg);
 }
 
+.object-tree-group-header.selected {
+  background: rgba(14, 99, 156, 0.45);
+}
+
 .object-tree-toggle {
   background: transparent;
   border: none;

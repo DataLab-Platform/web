@@ -51,6 +51,7 @@ import type { ObjectTreeHandle } from "./components/ObjectTree";
 import {
   ObjectNavigationProvider,
   type OidLookupEntry,
+  type GroupLookupEntry,
 } from "./components/ObjectNavigationContext";
 import { ContextMenu } from "./components/ContextMenu";
 import { buildObjectContextMenu } from "./actions/buildMenu";
@@ -143,6 +144,9 @@ interface PendingFeature {
   sourceIds: string[];
   operandId: string | null;
   schema: SchemaWithValues | null;
+  /** Selected source group ids (group-exclusive processing); ``[]`` when
+   *  individual objects were selected. */
+  groupIds: string[];
 }
 
 /** Image features whose parameters are also editable graphically through
@@ -553,6 +557,10 @@ export default function App() {
     [],
   );
   const [currentId, setCurrentId] = useState<string | null>(null);
+  /** Explicitly selected GROUP ids (group-exclusive selection, mirroring
+   *  DataLab desktop). Empty when individual objects are selected. When
+   *  non-empty, applying a processing creates new result group(s). */
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [data, setData] = useState<SignalData | null>(null);
   /** Other signals selected alongside ``currentId`` — overlaid on top
    *  of ``data`` in :class:`SignalPlot` to mirror DataLab desktop's
@@ -603,10 +611,12 @@ export default function App() {
     sourceIds: string[];
     schema: SchemaWithValues;
     imageData: ImageData;
+    groupIds: string[];
   } | null>(null);
   const [pendingOperand, setPendingOperand] = useState<{
     feature: FeatureDescriptor;
     sourceIds: string[];
+    groupIds: string[];
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
@@ -751,6 +761,8 @@ export default function App() {
       // ``SignalObj`` (``IndexError: tuple index out of range``).
       if (treeKindRef.current !== kind) return;
       setTree(newTree);
+      // A model mutation invalidates any prior group-exclusive selection.
+      setSelectedGroupIds([]);
       const allIds: string[] = [];
       for (const g of newTree.groups)
         for (const o of g.objects) allIds.push(o.id);
@@ -788,6 +800,7 @@ export default function App() {
       // AttributeError when an ImageObj reached the signal fetcher).
       setCurrentId(null);
       setSelectedIds([]);
+      setSelectedGroupIds([]);
       const newTree = await runtime.getPanelTree(kind);
       setTree(newTree);
       const allIds: string[] = [];
@@ -1098,7 +1111,7 @@ export default function App() {
   }, [runtime, currentId, treeKind, selectedIds, plotRefreshNonce]);
 
   const handleSelectionChange = useCallback(
-    (ids: string[], current: string | null) => {
+    (ids: string[], current: string | null, groupIds?: string[]) => {
       // If the user clicks on a signal/image in the (always visible)
       // ObjectTree while the central view is showing a macro or
       // notebook editor, snap the central view back to the plot so
@@ -1109,6 +1122,9 @@ export default function App() {
       }
       setSelectedIds(ids);
       setCurrentId(current);
+      // Objects XOR groups (mirrors desktop): a group click passes the
+      // selected group ids; any other selection clears the group selection.
+      setSelectedGroupIds(groupIds ?? []);
     },
     [centralView, setSelectedIds],
   );
@@ -1238,8 +1254,19 @@ export default function App() {
     return map;
   }, [tree, inactiveTree]);
 
-  /** Select the source object behind a hex short id. Switches panels
-   *  (signal ↔ image) when the source lives in the inactive panel. */
+  /** Group-id index across both panels, parallel to {@link oidIndex}.
+   *  Lets :class:`TitleWithLinks` resolve the source-group tokens that
+   *  appear in result-group titles (``fft(g3f5b2c1)``). */
+  const groupIndex = useMemo<Map<string, GroupLookupEntry>>(() => {
+    const map = new Map<string, GroupLookupEntry>();
+    for (const t of [tree, inactiveTree]) {
+      if (!t) continue;
+      for (const g of t.groups) {
+        map.set(g.gid, { kind: t.kind, name: g.name });
+      }
+    }
+    return map;
+  }, [tree, inactiveTree]);
   const navigateToOid = useCallback(
     (oid: string) => {
       const entry = oidIndex.get(oid);
@@ -1253,6 +1280,40 @@ export default function App() {
       }
     },
     [oidIndex, treeKind, centralView, refreshPanelKind, setSelectedIds],
+  );
+
+  /** Select the source group behind a group token in a result title.
+   *  Switches panels when the group lives in the inactive panel. */
+  const navigateToGroup = useCallback(
+    (gid: string) => {
+      const entry = groupIndex.get(gid);
+      if (!entry) return;
+      const selectGroup = (t: PanelTree | null) => {
+        const grp = t?.groups.find((g) => g.gid === gid);
+        if (!grp) return;
+        const ids = grp.objects.map((o) => o.id);
+        if (centralView !== "plot") setCentralView("plot");
+        setSelectedIds(ids);
+        setCurrentId(ids[0] ?? null);
+        setSelectedGroupIds([gid]);
+      };
+      if (entry.kind !== treeKind) {
+        void refreshPanelKind(entry.kind).then(async () => {
+          selectGroup((await runtime?.getPanelTree(entry.kind)) ?? null);
+        });
+      } else {
+        selectGroup(tree);
+      }
+    },
+    [
+      groupIndex,
+      treeKind,
+      tree,
+      centralView,
+      refreshPanelKind,
+      setSelectedIds,
+      runtime,
+    ],
   );
 
   /** Resolve the group id hosting the currently-selected object in the
@@ -1354,12 +1415,22 @@ export default function App() {
     [selectedIds, currentId],
   );
 
+  /** Group ids to process group-wise: the explicit group selection,
+   *  filtered to groups still present in the active panel tree. Empty
+   *  when the user selected individual objects (object-exclusive). */
+  const effectiveGroupIds = useCallback((): string[] => {
+    if (selectedGroupIds.length === 0 || !tree) return [];
+    const present = new Set(tree.groups.map((g) => g.gid));
+    return selectedGroupIds.filter((gid) => present.has(gid));
+  }, [selectedGroupIds, tree]);
+
   const runFeature = useCallback(
     async (
       feature: FeatureDescriptor,
       sourceIds: string[],
       operandId: string | null,
       values: Record<string, unknown> | null,
+      groupIds: string[] = [],
     ) => {
       if (!runtime) return;
       setBusy(true);
@@ -1369,6 +1440,7 @@ export default function App() {
           sourceIds,
           operandId,
           values,
+          groupIds,
         );
         const lastId = newIds[newIds.length - 1] ?? null;
         if (feature.output_kind !== feature.object_kind) {
@@ -1439,13 +1511,14 @@ export default function App() {
       if (!feature) return;
       const sourceIds = sourcesFor(feature);
       if (sourceIds.length === 0) return;
+      const groupIds = effectiveGroupIds();
       if (feature.pattern === "n_to_1" && sourceIds.length < 2) {
         // n_to_1 needs at least 2 sources to be meaningful; let it through
         // if Sigima accepts a single-element list, otherwise the error
         // surfaces in the console.
       }
       if (feature.pattern === "2_to_1") {
-        setPendingOperand({ feature, sourceIds });
+        setPendingOperand({ feature, sourceIds, groupIds });
         return;
       }
       if (feature.has_params) {
@@ -1466,6 +1539,7 @@ export default function App() {
                 sourceIds,
                 schema,
                 imageData: imgData,
+                groupIds,
               });
               return;
             } catch (err) {
@@ -1474,28 +1548,28 @@ export default function App() {
               // type values manually.
             }
           }
-          setPending({ feature, sourceIds, operandId: null, schema });
+          setPending({ feature, sourceIds, operandId: null, schema, groupIds });
           return;
         }
       }
-      await runFeature(feature, sourceIds, null, null);
+      await runFeature(feature, sourceIds, null, null, groupIds);
     },
-    [runtime, features, sourcesFor, runFeature],
+    [runtime, features, sourcesFor, runFeature, effectiveGroupIds],
   );
 
   const handleOperandChosen = useCallback(
     async (operandId: string) => {
       if (!runtime || !pendingOperand) return;
-      const { feature, sourceIds } = pendingOperand;
+      const { feature, sourceIds, groupIds } = pendingOperand;
       setPendingOperand(null);
       if (feature.has_params) {
         const schema = await runtime.getFeatureSchema(feature.id);
         if (schema) {
-          setPending({ feature, sourceIds, operandId, schema });
+          setPending({ feature, sourceIds, operandId, schema, groupIds });
           return;
         }
       }
-      await runFeature(feature, sourceIds, operandId, null);
+      await runFeature(feature, sourceIds, operandId, null, groupIds);
     },
     [runtime, pendingOperand, runFeature],
   );
@@ -1503,9 +1577,9 @@ export default function App() {
   const handleSubmitParams = useCallback(
     async (values: Record<string, unknown>) => {
       if (!pending) return;
-      const { feature, sourceIds, operandId } = pending;
+      const { feature, sourceIds, operandId, groupIds } = pending;
       setPending(null);
-      await runFeature(feature, sourceIds, operandId, values);
+      await runFeature(feature, sourceIds, operandId, values, groupIds);
     },
     [pending, runFeature],
   );
@@ -1513,9 +1587,9 @@ export default function App() {
   const handleSubmitProfile = useCallback(
     async (values: Record<string, unknown>) => {
       if (!pendingProfile) return;
-      const { feature, sourceIds } = pendingProfile;
+      const { feature, sourceIds, groupIds } = pendingProfile;
       setPendingProfile(null);
-      await runFeature(feature, sourceIds, null, values);
+      await runFeature(feature, sourceIds, null, values, groupIds);
     },
     [pendingProfile, runFeature],
   );
@@ -3530,7 +3604,12 @@ export default function App() {
   );
 
   return (
-    <ObjectNavigationProvider oidIndex={oidIndex} navigateToOid={navigateToOid}>
+    <ObjectNavigationProvider
+      oidIndex={oidIndex}
+      navigateToOid={navigateToOid}
+      groupIndex={groupIndex}
+      navigateToGroup={navigateToGroup}
+    >
       <div className="app" data-runtime-status={status}>
         {/*
           Notebook and Macro panels are mounted exactly once (when the
@@ -3670,6 +3749,7 @@ export default function App() {
                 ref={objectTreeRef}
                 tree={tree}
                 selectedIds={selectedIds}
+                selectedGroupIds={selectedGroupIds}
                 currentId={currentId}
                 onSelectionChange={handleSelectionChange}
                 onRenameObject={handleRenameObject}

@@ -10,6 +10,7 @@ import { TitleWithLinks } from "../../../src/components/TitleWithLinks";
 import {
   ObjectNavigationProvider,
   type OidLookupEntry,
+  type GroupLookupEntry,
 } from "../../../src/components/ObjectNavigationContext";
 import type { ObjectNode } from "../../../src/runtime/runtime";
 
@@ -112,5 +113,49 @@ describe("TitleWithLinks", () => {
     );
     expect(container.textContent).toBe("normalize(a3f5b2c1)");
     expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("turns a known group id into a button that triggers navigateToGroup", () => {
+    const navigateToGroup = vi.fn();
+    const oidIndex = new Map<string, OidLookupEntry>();
+    const groupIndex = new Map<string, GroupLookupEntry>([
+      ["ga3f5b2c1", { kind: "signal", name: "Group 1" }],
+    ]);
+    render(
+      <ObjectNavigationProvider
+        oidIndex={oidIndex}
+        navigateToOid={() => {}}
+        groupIndex={groupIndex}
+        navigateToGroup={navigateToGroup}
+      >
+        <TitleWithLinks title="fft(ga3f5b2c1)" />
+      </ObjectNavigationProvider>,
+    );
+    const btn = screen.getByRole("button", { name: "Go to Group 1" });
+    expect(btn).toHaveTextContent("ga3f5b2c1");
+    expect(btn).toHaveAttribute("title", "Group 1 · signal");
+    fireEvent.click(btn);
+    expect(navigateToGroup).toHaveBeenCalledWith("ga3f5b2c1");
+  });
+
+  it("renders multiple group ids (n_to_1 result group) in order", () => {
+    const groupIndex = new Map<string, GroupLookupEntry>([
+      ["ga3f5b2c1", { kind: "signal", name: "G1" }],
+      ["gb9e2d104", { kind: "signal", name: "G2" }],
+    ]);
+    render(
+      <ObjectNavigationProvider
+        oidIndex={new Map()}
+        navigateToOid={() => {}}
+        groupIndex={groupIndex}
+        navigateToGroup={() => {}}
+      >
+        <TitleWithLinks title="average(ga3f5b2c1,gb9e2d104)" />
+      </ObjectNavigationProvider>,
+    );
+    const buttons = screen.getAllByRole("button");
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]).toHaveTextContent("ga3f5b2c1");
+    expect(buttons[1]).toHaveTextContent("gb9e2d104");
   });
 });

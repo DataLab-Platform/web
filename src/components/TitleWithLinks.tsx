@@ -25,9 +25,12 @@ interface Props {
   className?: string;
 }
 
-/** Match an isolated 8-char lowercase hex token. ``\b`` keeps us from
- *  splitting longer hex words (long uuids, sha-prefixed strings…). */
-const SHORT_ID_RE = /\b[a-f0-9]{8}\b/g;
+/** Match an isolated 8-char lowercase hex token (object short id) or a
+ *  ``g``-prefixed 9-char group id (``g`` + 8 hex). ``\b`` keeps us from
+ *  splitting longer hex words (long uuids, sha-prefixed strings…). The
+ *  group alternative is tried first so a group id is never mis-read as a
+ *  bare object id. */
+const TOKEN_RE = /\b(?:g[a-f0-9]{8}|[a-f0-9]{8})\b/g;
 
 export function TitleWithLinks({ title, className }: Props) {
   const nav = useObjectNavigation();
@@ -40,20 +43,40 @@ export function TitleWithLinks({ title, className }: Props) {
     let cursor = 0;
     // ``matchAll`` returns the matches in order with their indices,
     // which is what we need to preserve the original ordering.
-    for (const match of title.matchAll(SHORT_ID_RE)) {
-      const oid = match[0];
+    for (const match of title.matchAll(TOKEN_RE)) {
+      const token = match[0];
       const start = match.index ?? 0;
       if (start > cursor) {
         out.push(title.slice(cursor, start));
       }
-      const entry = nav.lookupOid(oid);
-      if (entry) {
+      const isGroup = token.length === 9 && token.startsWith("g");
+      const groupEntry = isGroup ? nav.lookupGroup(token) : null;
+      const entry = isGroup ? null : nav.lookupOid(token);
+      if (groupEntry) {
+        const kindLabel = groupEntry.kind === "signal" ? "signal" : "image";
+        const tooltip = `${groupEntry.name} · ${kindLabel}`;
+        out.push(
+          <button
+            key={`gid-${start}-${token}`}
+            type="button"
+            className="title-oid-link"
+            title={tooltip}
+            aria-label={`Go to ${groupEntry.name}`}
+            onClick={(e: MouseEvent<HTMLButtonElement>) => {
+              e.stopPropagation();
+              nav.navigateToGroup(token);
+            }}
+          >
+            {token}
+          </button>,
+        );
+      } else if (entry) {
         const sourceTitle = entry.node.title;
         const kindLabel = entry.kind === "signal" ? "signal" : "image";
         const tooltip = `${sourceTitle} · ${kindLabel}`;
         out.push(
           <button
-            key={`oid-${start}-${oid}`}
+            key={`oid-${start}-${token}`}
             type="button"
             className="title-oid-link"
             title={tooltip}
@@ -63,16 +86,16 @@ export function TitleWithLinks({ title, className }: Props) {
               // selects rows on plain click — clicking a hex link
               // should select the *source*, not the host row).
               e.stopPropagation();
-              nav.navigateToOid(oid);
+              nav.navigateToOid(token);
             }}
           >
-            {oid}
+            {token}
           </button>,
         );
       } else {
-        out.push(oid);
+        out.push(token);
       }
-      cursor = start + oid.length;
+      cursor = start + token.length;
     }
     if (cursor < title.length) {
       out.push(title.slice(cursor));

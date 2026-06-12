@@ -165,6 +165,109 @@ def test_apply_n_to_1_title_embeds_all_source_oids(fresh_bootstrap):
 
 
 # ---------------------------------------------------------------------------
+# Group-exclusive processing — mirrors DataLab desktop: selecting group(s)
+# and applying a processing creates new result group(s) titled after the
+# processing, holding the per-object (or per-group aggregated) results.
+# ---------------------------------------------------------------------------
+
+
+def _groups_by_gid(bs, kind="signal"):
+    return {g["gid"]: g for g in bs.get_panel_tree(kind)["groups"]}
+
+
+def _result_group(bs, new_ids, kind="signal"):
+    """Return the single group whose objects are exactly *new_ids*."""
+    matches = [
+        g
+        for g in bs.get_panel_tree(kind)["groups"]
+        if {o["id"] for o in g["objects"]} == set(new_ids)
+    ]
+    assert len(matches) == 1, f"expected one result group, got {len(matches)}"
+    return matches[0]
+
+
+def test_apply_1_to_1_on_group_creates_result_group(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    g1 = bs.create_group("signal", "G1")
+    a = bs.add_signal_from_arrays("a", x, np.linspace(0, 10, 32), group_id=g1)
+    b = bs.add_signal_from_arrays("b", x, np.linspace(0, 5, 32), group_id=g1)
+    new_ids = bs.apply_feature("normalize", [a, b], group_ids=[g1])
+    assert len(new_ids) == 2
+    # Source group is untouched...
+    assert len(_groups_by_gid(bs)[g1]["objects"]) == 2
+    # ...and a new result group holds both results, titled after the
+    # processing function with the source gid embedded (clickable link).
+    rg = _result_group(bs, new_ids)
+    assert rg["gid"] != g1
+    assert rg["name"].startswith("normalize(")
+    assert g1 in rg["name"]
+
+
+def test_apply_1_to_1_on_multiple_groups_creates_one_group_each(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    g1 = bs.create_group("signal", "G1")
+    a = bs.add_signal_from_arrays("a", x, np.linspace(0, 10, 32), group_id=g1)
+    g2 = bs.create_group("signal", "G2")
+    b = bs.add_signal_from_arrays("b", x, np.linspace(0, 5, 32), group_id=g2)
+    new_ids = bs.apply_feature("normalize", [a, b], group_ids=[g1, g2])
+    assert len(new_ids) == 2
+    groups = {g["name"]: g for g in bs.get_panel_tree("signal")["groups"]}
+    assert f"normalize({g1})" in groups
+    assert f"normalize({g2})" in groups
+    assert len(groups[f"normalize({g1})"]["objects"]) == 1
+    assert len(groups[f"normalize({g2})"]["objects"]) == 1
+
+
+def test_apply_n_to_1_on_groups_aggregates_per_group(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 50)
+    g1 = bs.create_group("signal", "G1")
+    bs.add_signal_from_arrays("a1", x, np.zeros_like(x), group_id=g1)
+    bs.add_signal_from_arrays("a2", x, np.ones_like(x) * 2, group_id=g1)
+    g2 = bs.create_group("signal", "G2")
+    bs.add_signal_from_arrays("b1", x, np.ones_like(x) * 4, group_id=g2)
+    bs.add_signal_from_arrays("b2", x, np.ones_like(x) * 6, group_id=g2)
+    src_ids = [
+        o["id"] for g in bs.get_panel_tree("signal")["groups"] for o in g["objects"]
+    ]
+    new_ids = bs.apply_feature("average", src_ids, group_ids=[g1, g2])
+    # One aggregated result per source group, in a single result group.
+    assert len(new_ids) == 2
+    rg = _result_group(bs, new_ids)
+    assert rg["name"].startswith("average(")
+    assert g1 in rg["name"] and g2 in rg["name"]
+    means = sorted(float(np.mean(bs.get_signal_xy(oid)["y"])) for oid in new_ids)
+    np.testing.assert_allclose(means, [1.0, 5.0])
+
+
+def test_apply_2_to_1_on_group_creates_result_group(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    g1 = bs.create_group("signal", "G1")
+    a = bs.add_signal_from_arrays("a", x, np.ones_like(x), group_id=g1)
+    b = bs.add_signal_from_arrays("b", x, np.ones_like(x) * 3, group_id=g1)
+    operand = bs.add_signal_from_arrays("op", x, np.ones_like(x))
+    new_ids = bs.apply_feature("difference", [a, b], operand_id=operand, group_ids=[g1])
+    assert len(new_ids) == 2
+    rg = _result_group(bs, new_ids)
+    assert rg["name"].startswith("difference(")
+    assert g1 in rg["name"]
+
+
+def test_apply_on_group_falls_back_when_group_ids_empty(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    g1 = bs.create_group("signal", "G1")
+    a = bs.add_signal_from_arrays("a", x, np.linspace(0, 10, 32), group_id=g1)
+    # No group_ids → legacy behaviour: result lands in the source group.
+    new_ids = bs.apply_feature("normalize", [a])
+    assert len(new_ids) == 1
+    assert new_ids[0] in {o["id"] for o in _groups_by_gid(bs)[g1]["objects"]}
+
+
+# ---------------------------------------------------------------------------
 # ROI extraction & erase — these go through dedicated bootstrap helpers
 # (``extract_signal_rois`` / ``extract_image_rois`` / ``erase_image_area``)
 # rather than ``apply_feature``, so they must also resolve the ``{n}``
