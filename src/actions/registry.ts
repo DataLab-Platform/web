@@ -683,6 +683,10 @@ export function buildRoiActions(
   const ready = (s: ActionState) =>
     s.status === "ready" && !s.busy && s.currentId !== null;
   const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
+  // "Remove all" mirrors desktop's ``SelectCond.with_roi``: enabled when
+  // *any* selected object has a ROI, even if the displayed one has none.
+  const readyWithSelectionRoi = (s: ActionState) =>
+    ready(s) && (roi.length > 0 || s.selectionHasRoi);
   const out: ActionDescriptor[] = [
     {
       id: "roi.edit_graphical",
@@ -740,7 +744,7 @@ export function buildRoiActions(
     menuPath: "ROI/Remove/Remove all",
     iconUrl: getRoiIconUrl("roi_delete"),
     beginGroup: roi.length > 0,
-    enabled: readyWithRoi,
+    enabled: readyWithSelectionRoi,
     run: cb.onRemoveAll,
   });
   return out;
@@ -778,6 +782,10 @@ export function buildImageRoiActions(
   const ready = (s: ActionState) =>
     s.status === "ready" && !s.busy && s.currentId !== null;
   const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
+  // "Remove all" mirrors desktop's ``SelectCond.with_roi``: enabled when
+  // *any* selected object has a ROI, even if the displayed one has none.
+  const readyWithSelectionRoi = (s: ActionState) =>
+    ready(s) && (roi.length > 0 || s.selectionHasRoi);
   const out: ActionDescriptor[] = [
     {
       id: "image_roi.edit_graphical",
@@ -860,7 +868,7 @@ export function buildImageRoiActions(
     menuPath: "ROI/Remove/Remove all",
     iconUrl: getRoiIconUrl("roi_delete"),
     beginGroup: roi.length > 0,
-    enabled: readyWithRoi,
+    enabled: readyWithSelectionRoi,
     run: cb.onRemoveAll,
   });
   return out;

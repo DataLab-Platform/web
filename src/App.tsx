@@ -711,6 +711,11 @@ export default function App() {
   // this counter changes — mirroring DataLab desktop's "refresh the
   // selected object's plot after a metadata action".
   const [plotRefreshNonce, setPlotRefreshNonce] = useState(0);
+  // ``true`` when at least one selected object has a ROI.  Drives the
+  // enablement of the ROI "Remove all" action so it matches DataLab
+  // desktop's ``SelectCond.with_roi`` (enabled when *any* selected
+  // object carries a ROI, not only the displayed one).
+  const [selectionHasRoi, setSelectionHasRoi] = useState(false);
   const [pendingImageGrid, setPendingImageGrid] = useState<{
     sourceIds: string[];
     schema: SchemaWithValues;
@@ -1107,6 +1112,35 @@ export default function App() {
     },
     [centralView, setSelectedIds],
   );
+
+  // Track whether *any* selected object has a ROI, so the ROI "Remove
+  // all" action can be enabled for the whole selection (and not only
+  // when the displayed object has a ROI), mirroring DataLab desktop's
+  // ``SelectCond.with_roi``.  Recomputed on selection changes and after
+  // plot-affecting metadata mutations (``plotRefreshNonce``).
+  useEffect(() => {
+    if (!runtime) {
+      setSelectionHasRoi(false);
+      return;
+    }
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) {
+      setSelectionHasRoi(false);
+      return;
+    }
+    let cancelled = false;
+    runtime
+      .objectsHaveRoi(ids)
+      .then((has) => {
+        if (!cancelled) setSelectionHasRoi(has);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectionHasRoi(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, selectedIds, currentId, plotRefreshNonce]);
 
   // Publish selection / panel snapshots to non-React consumers (the
   // iframe-embedded remote bridge in particular, so host pages can
@@ -1810,14 +1844,45 @@ export default function App() {
   const handleClearResults = useCallback(
     async (key: string | null) => {
       if (!runtime || !currentId) return;
-      if (treeKind === "image") {
-        await runtime.clearImageResults(currentId, key ?? undefined);
-      } else {
-        await runtime.clearSignalResults(currentId, key ?? undefined);
+      // "Clear all" (key === null) clears results on every selected
+      // object, mirroring DataLab desktop's ``delete_results``; removing
+      // a single result (key !== null) stays on the displayed object,
+      // like the desktop per-result entry.
+      const ids =
+        key === null
+          ? selectedIds.length
+            ? selectedIds
+            : [currentId]
+          : [currentId];
+      setBusy(true);
+      try {
+        for (const oid of ids) {
+          if (treeKind === "image") {
+            await runtime.clearImageResults(oid, key ?? undefined);
+          } else {
+            await runtime.clearSignalResults(oid, key ?? undefined);
+          }
+        }
+        await refreshResults(currentId);
+        if (treeKind !== "image") {
+          const extraIds = ids.filter((id) => id !== currentId);
+          if (extraIds.length > 0) {
+            try {
+              const lists = await Promise.all(
+                extraIds.map((id) => runtime.listSignalResults(id)),
+              );
+              setExtraResults(lists.flat());
+            } catch {
+              /* non-fatal: overlays just won't refresh */
+            }
+          }
+        }
+        setSideRefreshNonce((n) => n + 1);
+      } finally {
+        setBusy(false);
       }
-      await refreshResults(currentId);
     },
-    [runtime, currentId, refreshResults, treeKind],
+    [runtime, currentId, selectedIds, refreshResults, treeKind],
   );
 
   const deleteObjects = useCallback(
@@ -2328,10 +2393,22 @@ export default function App() {
   );
 
   const handleRoiRemoveAll = useCallback(async () => {
-    if (!runtime || !currentId) return;
-    await runtime.setSignalRoi(currentId, []);
-    setRoi([]);
-  }, [runtime, currentId]);
+    if (!runtime) return;
+    // Clear ROIs on every selected signal (falling back to the current
+    // one), mirroring DataLab desktop's ``delete_regions_of_interest``.
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      for (const oid of ids) {
+        await runtime.setSignalRoi(oid, []);
+      }
+      setRoi([]);
+      setPlotRefreshNonce((n) => n + 1);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId]);
 
   const handleRoiExtractEach = useCallback(async () => {
     if (!runtime || !currentId) return;
@@ -2447,10 +2524,22 @@ export default function App() {
   );
 
   const handleImageRoiRemoveAll = useCallback(async () => {
-    if (!runtime || !currentId) return;
-    await runtime.setImageRoi(currentId, []);
-    setImageRoi([]);
-  }, [runtime, currentId]);
+    if (!runtime) return;
+    // Clear ROIs on every selected image (falling back to the current
+    // one), mirroring DataLab desktop's ``delete_regions_of_interest``.
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      for (const oid of ids) {
+        await runtime.setImageRoi(oid, []);
+      }
+      setImageRoi([]);
+      setPlotRefreshNonce((n) => n + 1);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId]);
 
   const handleImageRoiExtractEach = useCallback(async () => {
     if (!runtime || !currentId) return;
@@ -3225,6 +3314,7 @@ export default function App() {
       hasMacros: macroCount > 0,
       hasNotebooks: notebookCount > 0,
       hasMetadataClipboard,
+      selectionHasRoi,
     }),
     [
       status,
@@ -3235,6 +3325,7 @@ export default function App() {
       macroCount,
       notebookCount,
       hasMetadataClipboard,
+      selectionHasRoi,
     ],
   );
 

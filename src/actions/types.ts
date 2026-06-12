@@ -20,6 +20,11 @@ export interface ActionState {
   /** ``true`` when the metadata clipboard holds a payload that
    *  "Paste metadata" can apply. */
   hasMetadataClipboard: boolean;
+  /** ``true`` when at least one currently selected object has a region
+   *  of interest.  Mirrors DataLab desktop's ``SelectCond.with_roi``,
+   *  which enables the ROI "Remove all" action whenever *any* selected
+   *  object carries a ROI (not only the displayed one). */
+  selectionHasRoi: boolean;
 }
 
 export interface ActionDescriptor {

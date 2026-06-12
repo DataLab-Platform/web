@@ -22,6 +22,7 @@ function makeState(over: Partial<ActionState> = {}): ActionState {
     hasMacros: false,
     hasNotebooks: false,
     hasMetadataClipboard: false,
+    selectionHasRoi: false,
     ...over,
   };
 }
