@@ -3973,31 +3973,50 @@ def list_features() -> list[dict[str, Any]]:
     return _proc.serialize_catalog(_full_catalog_with_plugins())
 
 
-def get_feature_schema(feature_id: str) -> dict[str, Any] | None:
+def get_feature_schema(
+    feature_id: str, source_oid: str | None = None
+) -> dict[str, Any] | None:
     """Return ``{schema, values}`` for *feature_id* or ``None`` if it is
-    parameterless."""
-    return _proc.get_schema(_full_catalog_with_plugins(), feature_id)
+    parameterless.
+
+    When *source_oid* is given, the source object is bound to the parameter
+    instance (via ``update_from_obj``) before serialisation so params that
+    derive defaults from the source (e.g. ``RadialProfileParam`` pre-filling
+    ``x0``/``y0`` with the image centre) match DataLab desktop.
+    """
+    source_obj = _MODEL.get(source_oid) if source_oid else None
+    return _proc.get_schema(_full_catalog_with_plugins(), feature_id, source_obj)
 
 
 def resolve_feature_choices(
-    feature_id: str, item_name: str, values: dict[str, Any] | None = None
+    feature_id: str,
+    item_name: str,
+    values: dict[str, Any] | None = None,
+    source_oid: str | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve a dynamic ChoiceItem for *feature_id*."""
+    source_obj = _MODEL.get(source_oid) if source_oid else None
     return _proc.resolve_choices(
-        _full_catalog_with_plugins(), feature_id, item_name, values
+        _full_catalog_with_plugins(), feature_id, item_name, values, source_obj
     )
 
 
 def resolve_feature_callbacks(
-    feature_id: str, item_name: str, values: dict[str, Any] | None = None
+    feature_id: str,
+    item_name: str,
+    values: dict[str, Any] | None = None,
+    source_oid: str | None = None,
 ) -> dict[str, Any]:
     """Run *item_name*'s display callback for *feature_id*.
 
     Returns the recomputed values for every parameter so the frontend can
-    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``).
+    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``,
+    or ``RadialProfileParam``'s ``x0``/``y0`` recomputed from the chosen
+    centre mode when *source_oid* is provided).
     """
+    source_obj = _MODEL.get(source_oid) if source_oid else None
     return _proc.resolve_callbacks(
-        _full_catalog_with_plugins(), feature_id, item_name, values
+        _full_catalog_with_plugins(), feature_id, item_name, values, source_obj
     )
 
 

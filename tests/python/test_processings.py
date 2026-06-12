@@ -210,3 +210,61 @@ def test_erase_image_area_title_resolves_placeholder(fresh_bootstrap):
         src, [{"geometry": "rectangle", "x0": 8, "y0": 8, "dx": 16, "dy": 16}]
     )
     _assert_title_resolved(bs.get_object_meta(new_oid)["title"], src)
+
+
+# ---------------------------------------------------------------------------
+# Radial profile — the parameter dialog must bind to the source image so the
+# centre coordinates pre-fill and recompute exactly like DataLab desktop's
+# ``RadialProfileParam`` (no graphical preview; plain DataSet dialog).
+# ---------------------------------------------------------------------------
+
+
+def test_radial_profile_schema_binds_source_object(fresh_bootstrap):
+    """``get_feature_schema`` with a source oid binds the image so the
+    centre coordinates derive from it (``RadialProfileParam.update_from_obj``
+    + the default ``"centroid"`` callback), matching DataLab desktop.
+    """
+    bs = fresh_bootstrap
+    data = np.zeros((64, 48), dtype=float)
+    # Off-centre bright blob so the centroid is well-defined and non-zero.
+    data[10:16, 4:10] = 1000.0
+    src = bs.add_image_from_array("img", data, width=48, height=64)
+    # Without binding: the callback no-ops, so x0/y0 stay at their defaults.
+    bare = bs.get_feature_schema("image:radial_profile")
+    assert bare["values"]["x0"] == 0.0
+    assert bare["values"]["y0"] == 0.0
+    # With binding: the default "centroid" mode resolves to the blob centroid.
+    bound = bs.get_feature_schema("image:radial_profile", src)
+    assert bound["values"]["x0"] > 0.0
+    assert bound["values"]["y0"] > 0.0
+    assert bound["values"]["x0"] < 24.0  # left of the geometric centre
+    assert bound["values"]["y0"] < 32.0  # above the geometric centre
+
+
+def test_radial_profile_callback_recomputes_centre(fresh_bootstrap):
+    """Switching the centre mode recomputes ``x0``/``y0`` via the bound
+    source object, mirroring ``RadialProfileParam.choice_callback``.
+    """
+    bs = fresh_bootstrap
+    data = np.zeros((64, 48), dtype=float)
+    # Off-centre bright blob so the centroid differs from the geometric centre.
+    data[10:16, 4:10] = 1000.0
+    src = bs.add_image_from_array("img", data, width=48, height=64)
+    # "center" mode resets x0/y0 to the geometric centre even from stale 0,0.
+    centred = bs.resolve_feature_callbacks(
+        "image:radial_profile",
+        "center",
+        {"center": "center", "x0": 0.0, "y0": 0.0},
+        src,
+    )
+    assert centred["x0"] == pytest.approx(24.0)
+    assert centred["y0"] == pytest.approx(32.0)
+    # "centroid" mode computes the intensity centroid (near the blob).
+    centroid = bs.resolve_feature_callbacks(
+        "image:radial_profile",
+        "center",
+        {"center": "centroid", "x0": 0.0, "y0": 0.0},
+        src,
+    )
+    assert centroid["x0"] < 24.0
+    assert centroid["y0"] < 32.0

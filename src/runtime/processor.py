@@ -1274,14 +1274,35 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
     ]
 
 
+def _bind_source_obj(instance: Any, source_obj: Any | None) -> None:
+    """Bind *source_obj* to *instance* if the param class supports it.
+
+    Mirrors DataLab desktop, where the processor calls
+    ``param.update_from_obj(obj)`` before showing the dialog so parameters
+    that derive defaults from the source object (e.g.
+    ``RadialProfileParam`` pre-filling ``x0``/``y0`` with the image centre
+    and recomputing them in its ``choice_callback``) behave correctly.
+    No-op for parameter classes without ``update_from_obj``.
+    """
+    if source_obj is None:
+        return
+    update_from_obj = getattr(instance, "update_from_obj", None)
+    if callable(update_from_obj):
+        update_from_obj(source_obj)
+
+
 def get_schema(
-    catalog: dict[str, FeatureSpec], feature_id: str
+    catalog: dict[str, FeatureSpec],
+    feature_id: str,
+    source_obj: Any | None = None,
 ) -> dict[str, Any] | None:
     """Return the JSON schema for the parameters of *feature_id* (or ``None``)."""
     spec = catalog[feature_id]
     if spec.paramclass is None:
         return None
-    return dataset_to_schema_with_values(spec.paramclass())
+    instance = spec.paramclass()
+    _bind_source_obj(instance, source_obj)
+    return dataset_to_schema_with_values(instance)
 
 
 def resolve_choices(
@@ -1289,12 +1310,14 @@ def resolve_choices(
     feature_id: str,
     item_name: str,
     values: dict[str, Any] | None = None,
+    source_obj: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve dynamic choices for *item_name* of *feature_id* given *values*."""
     spec = catalog[feature_id]
     if spec.paramclass is None:
         raise ValueError(f"Feature {feature_id!r} has no parameters.")
     instance = spec.paramclass()
+    _bind_source_obj(instance, source_obj)
     if values:
         update_dataset(instance, values)
     return resolve_dynamic_choices(instance, item_name)
@@ -1305,16 +1328,20 @@ def resolve_callbacks(
     feature_id: str,
     item_name: str,
     values: dict[str, Any] | None = None,
+    source_obj: Any | None = None,
 ) -> dict[str, Any]:
     """Run *item_name*'s display callback for *feature_id* given *values*.
 
     Returns the post-callback values for every item so the frontend can
-    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``).
+    refresh read-only computed fields (e.g. ``ArithmeticParam.operation``,
+    or ``RadialProfileParam``'s ``x0``/``y0`` recomputed from the chosen
+    centre mode).
     """
     spec = catalog[feature_id]
     if spec.paramclass is None:
         raise ValueError(f"Feature {feature_id!r} has no parameters.")
     instance = spec.paramclass()
+    _bind_source_obj(instance, source_obj)
     if values:
         update_dataset(instance, values)
     return resolve_dataset_callbacks(instance, item_name)

@@ -154,7 +154,6 @@ const PROFILE_FEATURE_IDS = new Set<string>([
   "image:line_profile",
   "image:segment_profile",
   "image:average_profile",
-  "image:radial_profile",
 ]);
 
 /** Pending parametric analysis waiting for the user's parameter input. */
@@ -1397,7 +1396,7 @@ export default function App() {
         return;
       }
       if (feature.has_params) {
-        const schema = await runtime.getFeatureSchema(featureId);
+        const schema = await runtime.getFeatureSchema(featureId, sourceIds[0]);
         if (schema) {
           // Image → signal profile features get a richer dialog with an
           // interactive shape overlay on the source image, mirroring
@@ -3867,6 +3866,7 @@ export default function App() {
                 pending.feature.id,
                 itemName,
                 currentValues,
+                pending.sourceIds[0],
               )
             }
             resolveCallbacks={(itemName, currentValues) =>
@@ -3874,6 +3874,7 @@ export default function App() {
                 pending.feature.id,
                 itemName,
                 currentValues,
+                pending.sourceIds[0],
               )
             }
             resolveActive={(currentValues) =>

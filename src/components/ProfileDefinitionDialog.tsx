@@ -14,9 +14,7 @@
  * * editing values in the form moves the shape;
  * * dragging the shape on the plot updates the matching values
  *   (``row``/``col`` for ``line_profile``, ``row1``/``col1``/``row2``/
- *   ``col2`` for ``segment_profile`` and ``average_profile``,
- *   ``x0``/``y0`` for ``radial_profile`` — switching ``center`` to
- *   ``"user"`` automatically when the user starts dragging).
+ *   ``col2`` for ``segment_profile`` and ``average_profile``).
  *
  * On ``OK`` the dialog returns the same ``Record<string, unknown>`` of
  * values that :class:`DataSetDialog` would, so the surrounding
@@ -36,8 +34,7 @@ import type {
 export type ProfileFeatureId =
   | "line_profile"
   | "segment_profile"
-  | "average_profile"
-  | "radial_profile";
+  | "average_profile";
 
 interface Props {
   title: string;
@@ -86,11 +83,6 @@ const SHAPE_LINE = {
 const SHAPE_RECT = {
   line: { color: "#ff8800", width: 2 },
   fillcolor: "rgba(255,136,0,0.10)",
-  editable: true,
-} as const;
-const SHAPE_MARKER = {
-  line: { color: "#ff8800", width: 2 },
-  fillcolor: "rgba(255,136,0,0.50)",
   editable: true,
 } as const;
 
@@ -166,21 +158,7 @@ function buildShape(
       ...SHAPE_RECT,
     };
   }
-  // radial_profile — small square marker around (x0, y0)
-  const x0 = Number(values.x0 ?? (xMin + xMax) / 2);
-  const y0 = Number(values.y0 ?? (yMin + yMax) / 2);
-  const sx = Math.max(img.dx, (xMax - xMin) * 0.04);
-  const sy = Math.max(img.dy, (yMax - yMin) * 0.04);
-  return {
-    type: "rect",
-    xref: "x",
-    yref: "y",
-    x0: x0 - sx,
-    y0: y0 - sy,
-    x1: x0 + sx,
-    y1: y0 + sy,
-    ...SHAPE_MARKER,
-  };
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,14 +218,7 @@ function shapeToValues(
       col2: Math.max(col1, col2),
     };
   }
-  // radial_profile — center is the rectangle's centre.  Switch to
-  // "user" mode so subsequent renders honour the dragged x0/y0.
-  return {
-    ...values,
-    center: "user",
-    x0: (x0 + x1) / 2,
-    y0: (y0 + y1) / 2,
-  };
+  return null;
 }
 
 // ---------------------------------------------------------------------------

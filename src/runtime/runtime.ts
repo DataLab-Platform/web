@@ -2591,9 +2591,13 @@ await micropip.install(["sigima", "guidata"])
     return (await this.callPy("list_features")) as FeatureDescriptor[];
   }
 
-  async getFeatureSchema(featureId: string): Promise<SchemaWithValues | null> {
+  async getFeatureSchema(
+    featureId: string,
+    sourceOid?: string,
+  ): Promise<SchemaWithValues | null> {
     return (await this.callPy("get_feature_schema", {
       feature_id: featureId,
+      source_oid: sourceOid ?? null,
     })) as SchemaWithValues | null;
   }
 
@@ -2601,11 +2605,13 @@ await micropip.install(["sigima", "guidata"])
     featureId: string,
     itemName: string,
     values: Record<string, unknown>,
+    sourceOid?: string,
   ): Promise<DynamicChoice[]> {
     return (await this.callPy("resolve_feature_choices", {
       feature_id: featureId,
       item_name: itemName,
       values,
+      source_oid: sourceOid ?? null,
     })) as DynamicChoice[];
   }
 
@@ -2613,11 +2619,13 @@ await micropip.install(["sigima", "guidata"])
     featureId: string,
     itemName: string,
     values: Record<string, unknown>,
+    sourceOid?: string,
   ): Promise<Record<string, unknown>> {
     return (await this.callPy("resolve_feature_callbacks", {
       feature_id: featureId,
       item_name: itemName,
       values,
+      source_oid: sourceOid ?? null,
     })) as Record<string, unknown>;
   }
 
