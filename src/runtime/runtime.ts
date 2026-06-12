@@ -679,8 +679,15 @@ export interface GeometryAnalysisResult extends AnalysisResultBase {
   category: "geometry";
   /** ``"point" | "marker" | "segment" | "rectangle" | "circle" | "ellipse" | "polygon"``. */
   kind: string;
-  /** N×K array of physical coordinates (K depends on ``kind``). */
+  /** N×K array of physical coordinates (K depends on ``kind``).  Used to
+   *  draw the plot overlays (segments, markers, …) — not shown verbatim
+   *  in the results table. */
   coords: number[][];
+  /** Displayed table rows, aligned with ``headers``.  Mirrors DataLab
+   *  desktop (Qt): a segment collapses to a single Δx / Δy / length
+   *  column rather than the four raw x0/y0/x1/y1 coordinates.  Falls
+   *  back to ``coords`` when absent (legacy payloads). */
+  data?: (number | string | null)[][];
 }
 
 export interface TableAnalysisResult extends AnalysisResultBase {

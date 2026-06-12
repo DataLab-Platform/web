@@ -922,6 +922,13 @@ function ResultCard({
   result: AnalysisResult;
   onRemove: () => void;
 }) {
+  // Both categories now render the same way: a header row + one data row
+  // per coordinate / table row, with an optional leading ROI column.
+  // Geometry results expose their Qt-aligned displayed values in
+  // ``data`` (e.g. a single Δx column for a segment); fall back to the
+  // raw ``coords`` for legacy payloads that predate that field.
+  const rows: (number | string | null)[][] =
+    result.category === "table" ? result.data : (result.data ?? result.coords);
   return (
     <div className="result-card">
       <div className="result-card-header">
@@ -939,35 +946,25 @@ function ResultCard({
       <table className="result-card-table">
         <thead>
           <tr>
-            {result.category === "table" && result.roi_indices && <th>ROI</th>}
+            {result.roi_indices && <th>ROI</th>}
             {result.headers.map((h, i) => (
               <th key={i}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {result.category === "table"
-            ? result.data.map((row, ri) => (
-                <tr key={ri}>
-                  {result.roi_indices && (
-                    <td>
-                      {result.roi_indices[ri] === -1
-                        ? "—"
-                        : result.roi_indices[ri]}
-                    </td>
-                  )}
-                  {row.map((cell, ci) => (
-                    <td key={ci}>{formatCell(cell)}</td>
-                  ))}
-                </tr>
-              ))
-            : result.coords.map((row, ri) => (
-                <tr key={ri}>
-                  {row.map((cell, ci) => (
-                    <td key={ci}>{formatCell(cell)}</td>
-                  ))}
-                </tr>
+          {rows.map((row, ri) => (
+            <tr key={ri}>
+              {result.roi_indices && (
+                <td>
+                  {result.roi_indices[ri] === -1 ? "—" : result.roi_indices[ri]}
+                </td>
+              )}
+              {row.map((cell, ci) => (
+                <td key={ci}>{formatCell(cell)}</td>
               ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

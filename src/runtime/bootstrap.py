@@ -4936,6 +4936,23 @@ def _build_pulse_overlays(result: Any, obj: Any) -> list[dict[str, Any]]:
     return overlays
 
 
+def _coerce_json_scalar(v: Any) -> Any:
+    """Coerce a single table / dataframe cell to a JSON-friendly scalar."""
+    if isinstance(v, (bytes, bytearray)):
+        return v.decode("utf-8", errors="replace")
+    if isinstance(v, float) and v != v:  # NaN → null for clean JSON
+        return None
+    if hasattr(v, "item"):
+        try:
+            value = v.item()
+        except (TypeError, ValueError):
+            return str(v)
+        if isinstance(value, float) and value != value:
+            return None
+        return value
+    return v
+
+
 def _serialize_result(result: Any, key: str, obj: Any | None = None) -> dict[str, Any]:
     """Build a JSON-friendly payload describing one analysis result."""
     from sigima.objects.scalar import GeometryResult, TableResult
@@ -4948,11 +4965,32 @@ def _serialize_result(result: Any, key: str, obj: Any | None = None) -> dict[str
     if isinstance(result, GeometryResult):
         payload["category"] = "geometry"
         payload["kind"] = result.kind.value
+        # Raw coordinates are kept for the plot overlays (segments,
+        # markers, …); they are never shown verbatim in the table.
         payload["coords"] = result.coords.tolist()
-        payload["headers"] = list(result.headers)
         payload["roi_indices"] = (
             None if result.roi_indices is None else result.roi_indices.tolist()
         )
+        # Displayed table view: mirror DataLab desktop (Qt) by deferring
+        # to Sigima's ``to_dataframe(visible_only=True)`` — e.g. a segment
+        # collapses to a single Δx / Δy / length column instead of the
+        # four raw x0/y0/x1/y1 coordinates.  ``coords`` above stays raw so
+        # the plot overlays keep their geometry.
+        try:
+            df = result.to_dataframe(visible_only=True)
+            if "roi_index" in df.columns:
+                # ROI is surfaced via ``roi_indices`` / a dedicated column
+                # in the UI, not as a data column.
+                df = df.drop(columns=["roi_index"])
+            payload["headers"] = [str(c) for c in df.columns]
+            payload["data"] = [
+                [_coerce_json_scalar(v) for v in row] for row in df.values.tolist()
+            ]
+        except Exception:  # pragma: no cover — defensive fallback
+            payload["headers"] = list(result.headers)
+            payload["data"] = [
+                [_coerce_json_scalar(v) for v in row] for row in result.coords.tolist()
+            ]
     elif isinstance(result, TableResult):
         payload["category"] = "table"
         payload["kind"] = (
@@ -4960,21 +4998,7 @@ def _serialize_result(result: Any, key: str, obj: Any | None = None) -> dict[str
         )
         payload["headers"] = list(result.headers)
         # Coerce numpy scalars to plain floats / ints for JSON.
-        rows: list[list[Any]] = []
-        for row in result.data:
-            new_row: list[Any] = []
-            for v in row:
-                if isinstance(v, (bytes, bytearray)):
-                    new_row.append(v.decode("utf-8", errors="replace"))
-                elif hasattr(v, "item"):
-                    try:
-                        new_row.append(v.item())
-                    except (TypeError, ValueError):
-                        new_row.append(str(v))
-                else:
-                    new_row.append(v)
-            rows.append(new_row)
-        payload["data"] = rows
+        payload["data"] = [[_coerce_json_scalar(v) for v in row] for row in result.data]
         payload["roi_indices"] = (
             None if result.roi_indices is None else list(result.roi_indices)
         )
