@@ -697,6 +697,12 @@ export default function App() {
   const [pendingPlotResults, setPendingPlotResults] =
     useState<PendingPlotResults | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
+  /** Analysis results attached to the other selected signals (excluding
+   *  ``currentId``).  Merged with ``results`` in :class:`SignalPlot` so
+   *  geometry overlays (FWHM segments, peak markers, …) are drawn for
+   *  every selected signal, not just the displayed one.  The right-hand
+   *  Results panel keeps showing ``currentId``'s results only. */
+  const [extraResults, setExtraResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   // Bumped after any action that mutates the *current* object's
   // metadata (paste / add / delete / import metadata).  Metadata can
@@ -952,6 +958,7 @@ export default function App() {
       setImageRoi([]);
       setImageLutRange(null);
       setResults([]);
+      setExtraResults([]);
       return;
     }
     let cancelled = false;
@@ -959,6 +966,7 @@ export default function App() {
       // Image panel: viewer + ROI + analysis results.
       setData(null);
       setExtraSignals([]);
+      setExtraResults([]);
       setAnnotations({ shapes: [], annotations: [] });
       setRoi([]);
       setImageLutRange(null);
@@ -1034,6 +1042,7 @@ export default function App() {
     const extraIds = selectedIds.filter((id) => id !== currentId);
     if (extraIds.length === 0) {
       setExtraSignals([]);
+      setExtraResults([]);
     } else {
       runtime
         .getSignalsData(extraIds)
@@ -1042,6 +1051,16 @@ export default function App() {
         })
         .catch(() => {
           if (!cancelled) setExtraSignals([]);
+        });
+      // Also fetch their analysis results so geometry overlays (FWHM
+      // segments, peak markers, …) are drawn for every selected signal,
+      // not only the displayed one.
+      Promise.all(extraIds.map((id) => runtime.listSignalResults(id)))
+        .then((lists) => {
+          if (!cancelled) setExtraResults(lists.flat());
+        })
+        .catch(() => {
+          if (!cancelled) setExtraResults([]);
         });
     }
     runtime
@@ -1483,16 +1502,31 @@ export default function App() {
     async (
       funcId: string,
       params: Record<string, unknown> | null,
-      oid: string,
+      oids: string[],
     ) => {
-      if (!runtime) return;
+      if (!runtime || oids.length === 0) return;
       setBusy(true);
       try {
-        const result =
-          treeKind === "image"
-            ? await runtime.runImageAnalysis(oid, funcId, params)
-            : await runtime.runSignalAnalysis(oid, funcId, params);
-        if (result === null) {
+        let anyResult = false;
+        let currentRoiModified = false;
+        // Run the analysis on every selected object, not just the
+        // displayed one, mirroring DataLab desktop's behaviour.
+        for (const oid of oids) {
+          const result =
+            treeKind === "image"
+              ? await runtime.runImageAnalysis(oid, funcId, params)
+              : await runtime.runSignalAnalysis(oid, funcId, params);
+          if (result !== null) {
+            anyResult = true;
+            if (
+              oid === currentId &&
+              (result as { roi_modified?: boolean }).roi_modified
+            ) {
+              currentRoiModified = true;
+            }
+          }
+        }
+        if (!anyResult) {
           await notify({
             kind: "info",
             message:
@@ -1500,20 +1534,34 @@ export default function App() {
               "(e.g. FWHM on a flat curve, or no peak detected).",
           });
         }
-        await refreshResults(oid);
+        // Refresh the displayed object's results (right-hand panel) and,
+        // for the signal panel, the overlay results of the other selected
+        // signals so geometry markers are drawn for the whole selection.
+        if (currentId) {
+          await refreshResults(currentId);
+          if (treeKind !== "image") {
+            const extraIds = oids.filter((id) => id !== currentId);
+            if (extraIds.length > 0) {
+              try {
+                const lists = await Promise.all(
+                  extraIds.map((id) => runtime.listSignalResults(id)),
+                );
+                setExtraResults(lists.flat());
+              } catch {
+                /* non-fatal: overlays just won't refresh */
+              }
+            }
+          }
+        }
         setPreferredSideTab("results");
         setSideRefreshNonce((n) => n + 1);
         // Detection analyses (peak / blob / hough / contour) may have
-        // attached new ROIs to the source image when ``create_rois`` is
-        // ticked.  Re-fetch the ROI list so the plot overlay updates
+        // attached new ROIs to the displayed image when ``create_rois``
+        // is ticked.  Re-fetch the ROI list so the plot overlay updates
         // immediately, mirroring DataLab desktop's behaviour.
-        if (
-          treeKind === "image" &&
-          result !== null &&
-          (result as { roi_modified?: boolean }).roi_modified
-        ) {
+        if (treeKind === "image" && currentRoiModified && currentId) {
           try {
-            const segs = await runtime.getImageRoi(oid);
+            const segs = await runtime.getImageRoi(currentId);
             setImageRoi(segs);
           } catch {
             /* non-fatal */
@@ -1529,7 +1577,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refreshResults, treeKind, notify],
+    [runtime, refreshResults, treeKind, notify, currentId],
   );
 
   const handleFreeMemory = useCallback(async () => {
@@ -1594,8 +1642,11 @@ export default function App() {
   const handleAnalysis = useCallback(
     async (funcId: string, hasParams: boolean) => {
       if (!runtime || !currentId) return;
+      // Target every selected object (falling back to the current one),
+      // so the analysis is computed for the whole selection.
+      const targetIds = selectedIds.length > 0 ? selectedIds : [currentId];
       if (!hasParams) {
-        await runAnalysis(funcId, null, currentId);
+        await runAnalysis(funcId, null, targetIds);
         return;
       }
       const schema =
@@ -1603,7 +1654,7 @@ export default function App() {
           ? await runtime.getImageAnalysisParamSchema(currentId, funcId)
           : await runtime.getSignalAnalysisParamSchema(currentId, funcId);
       if (!schema) {
-        await runAnalysis(funcId, null, currentId);
+        await runAnalysis(funcId, null, targetIds);
         return;
       }
       const catalog =
@@ -1619,6 +1670,7 @@ export default function App() {
     [
       runtime,
       currentId,
+      selectedIds,
       analysisEntries,
       imageAnalysisEntries,
       treeKind,
@@ -1631,9 +1683,10 @@ export default function App() {
       if (!pendingAnalysis || !currentId) return;
       const { funcId } = pendingAnalysis;
       setPendingAnalysis(null);
-      await runAnalysis(funcId, values, currentId);
+      const targetIds = selectedIds.length > 0 ? selectedIds : [currentId];
+      await runAnalysis(funcId, values, targetIds);
     },
-    [pendingAnalysis, currentId, runAnalysis],
+    [pendingAnalysis, currentId, selectedIds, runAnalysis],
   );
 
   // "Analysis ▸ Plot results": aggregate the numeric analysis results
@@ -3704,6 +3757,7 @@ export default function App() {
                 showResultsOverlay={showResultsOverlay}
                 showGraphicalTitles={showGraphicalTitles}
                 extraSignals={extraSignals}
+                extraResults={extraResults}
               />
             )}
             {centralView === "plot" &&

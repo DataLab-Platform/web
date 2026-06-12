@@ -34,6 +34,11 @@ interface Props {
   onRoiChange?: (segments: SignalRoiSegment[]) => void;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
+  /** Analysis results attached to the other selected signals, merged with
+   *  ``results`` to draw geometry overlays (FWHM segments, peak markers,
+   *  …) for every selected signal — not just the displayed one.  These
+   *  feed the plot overlays only; the side Results panel is unaffected. */
+  extraResults?: AnalysisResult[];
   /** When true, append a paper-coords summary annotation listing
    *  TableAnalysisResult values in the top-right corner. Defaults
    *  to ``false`` since the right-hand Results panel already shows
@@ -58,6 +63,7 @@ export function SignalPlot({
   roiEditMode = false,
   onRoiChange,
   results = [],
+  extraResults = [],
   showResultsOverlay = false,
   showGraphicalTitles = true,
   extraSignals = [],
@@ -288,9 +294,16 @@ export function SignalPlot({
   // Convert each GeometryResult into Plotly shapes + a marker scatter trace
   // + textual annotations.  TableResults are *not* drawn here — they go to
   // the side panel.  Mirrors DataLab desktop's PlotPy overlay behaviour.
+  // ``results`` (displayed signal) and ``extraResults`` (other selected
+  // signals) are merged so overlays appear for the whole selection; the
+  // geometry ``coords`` are absolute physical x/y, so they combine safely.
+  const overlayResults = useMemo(
+    () => [...results, ...extraResults],
+    [results, extraResults],
+  );
   const { resultShapes, resultAnnotations, resultTraces } = useMemo(
-    () => buildGeometryOverlays(results, showGraphicalTitles),
-    [results, showGraphicalTitles],
+    () => buildGeometryOverlays(overlayResults, showGraphicalTitles),
+    [overlayResults, showGraphicalTitles],
   );
   // Top-right paper-coords summary box for TableAnalysisResult rows
   // (FWHM, centroid, peaks, …).  Mirrors PlotPy's "computing results"
