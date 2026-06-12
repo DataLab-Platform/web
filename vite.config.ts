@@ -76,6 +76,40 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Split the heaviest third-party libraries into their own
+        // vendor chunks. They change far less often than application
+        // code, so isolating them maximises long-term browser caching:
+        // shipping a new app build no longer re-invalidates the ~3.5 MB
+        // Plotly bundle or the CodeMirror editor stack. The CodeMirror
+        // chunk is additionally loaded on demand (the Macro / Notebook
+        // panels are ``React.lazy``-imported), so it stays out of the
+        // initial download for users who never open an editor.
+        manualChunks(id) {
+          if (
+            id.includes("/node_modules/plotly.js") ||
+            id.includes("/node_modules/react-plotly.js/")
+          ) {
+            return "plotly";
+          }
+          if (
+            id.includes("/node_modules/@codemirror/") ||
+            id.includes("/node_modules/@lezer/")
+          ) {
+            return "codemirror";
+          }
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/scheduler/")
+          ) {
+            return "react-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   // Build Web Workers as ES modules. The kernel worker
   // (``src/runtime/kernelWorker.ts``) imports the full ``DataLabRuntime``,

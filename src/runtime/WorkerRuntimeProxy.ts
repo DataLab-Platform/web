@@ -29,6 +29,8 @@ import {
   type KernelMirror,
   type KernelRequest,
 } from "./workerProtocol";
+import { pyodideLang } from "../i18n/locale";
+import { t } from "../i18n/translate";
 
 /** The slice of the ``Worker`` API the client needs — narrowed so unit
  *  tests can inject a fake transport without a real Worker. */
@@ -311,8 +313,6 @@ export async function createWorkerRuntime(
   const proxy = new WorkerRuntimeProxy(worker, onProgress);
   // Compute locale-derived values on the main thread (the DOM-less worker
   // cannot) and pass them to the kernel boot.
-  const { pyodideLang } = await import("../i18n/locale");
-  const { t } = await import("../i18n/translate");
   const lang = deps?.lang ?? pyodideLang();
   const labels = deps?.labels ?? { group: t("Group"), untitled: t("Untitled") };
   await proxy.init(lang, labels);

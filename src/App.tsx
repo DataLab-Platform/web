@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -118,11 +120,8 @@ import { AISettingsDialog } from "./components/AIAssistant/AISettingsDialog";
 import { Splitter } from "./components/Splitter";
 import { FloatingDockStack } from "./components/FloatingDock";
 import { DraggableFloating } from "./components/DraggableFloating";
-import { MacroPanel, type MacroPanelHandle } from "./components/MacroPanel";
-import {
-  NotebookPanel,
-  type NotebookPanelHandle,
-} from "./components/notebook/NotebookPanel";
+import { type MacroPanelHandle } from "./components/MacroPanel";
+import { type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
 import { formatBytes } from "./utils/memory";
@@ -138,6 +137,21 @@ import type {
   SignalCreationType,
   SignalRoiSegment,
 } from "./runtime/runtime";
+
+// The Macro and Notebook panels pull in the CodeMirror editor stack (and,
+// transitively, the macro/notebook worker glue). They are mounted only
+// once the runtime is ready — i.e. after the 30-60 s Pyodide boot — so
+// loading their chunk lazily keeps CodeMirror out of the initial bundle
+// at no perceived cost: the chunk is fetched during/after boot, well
+// before the user can open an editor.
+const MacroPanel = lazy(() =>
+  import("./components/MacroPanel").then((m) => ({ default: m.MacroPanel })),
+);
+const NotebookPanel = lazy(() =>
+  import("./components/notebook/NotebookPanel").then((m) => ({
+    default: m.NotebookPanel,
+  })),
+);
 
 interface PendingFeature {
   feature: FeatureDescriptor;
@@ -3636,83 +3650,87 @@ export default function App() {
         {runtime &&
           notebookPortalEl &&
           createPortal(
-            <NotebookPanel
-              key={`nb-${workspaceVersion}`}
-              ref={notebookPanelRef}
-              runtime={runtime}
-              theme={theme}
-              onCountChanged={setNotebookCount}
-              placement={notebookFloating ? "floating" : "tab"}
-              onTogglePlacement={toggleNotebookFloating}
-              onSetCurrentPanel={(panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleTreeKindChange(panel);
-                  setCentralView("plot");
-                }
-              }}
-              getSelection={() => selectedIds}
-              getCurrentPanel={() => treeKind}
-              selectObjects={(ids, panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleTreeKindChange(panel);
-                  setCentralView("plot");
-                }
-                setSelectedIds(ids);
-                setCurrentId(ids[0] ?? null);
-              }}
-              onModelChanged={(panel) => {
-                if (!runtime) return;
-                if (panel && panel !== treeKind) return;
-                void refresh();
-              }}
-              onConvertToMacro={(title, code) => {
-                // Make sure the macro panel is visible (re-dock it if
-                // it was floating, then focus the central tab).
-                if (macroFloating) setMacroFloating(false);
-                setCentralView("macro");
-                void macroPanelRef.current?.importMacro(title, code);
-              }}
-            />,
+            <Suspense fallback={null}>
+              <NotebookPanel
+                key={`nb-${workspaceVersion}`}
+                ref={notebookPanelRef}
+                runtime={runtime}
+                theme={theme}
+                onCountChanged={setNotebookCount}
+                placement={notebookFloating ? "floating" : "tab"}
+                onTogglePlacement={toggleNotebookFloating}
+                onSetCurrentPanel={(panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleTreeKindChange(panel);
+                    setCentralView("plot");
+                  }
+                }}
+                getSelection={() => selectedIds}
+                getCurrentPanel={() => treeKind}
+                selectObjects={(ids, panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleTreeKindChange(panel);
+                    setCentralView("plot");
+                  }
+                  setSelectedIds(ids);
+                  setCurrentId(ids[0] ?? null);
+                }}
+                onModelChanged={(panel) => {
+                  if (!runtime) return;
+                  if (panel && panel !== treeKind) return;
+                  void refresh();
+                }}
+                onConvertToMacro={(title, code) => {
+                  // Make sure the macro panel is visible (re-dock it if
+                  // it was floating, then focus the central tab).
+                  if (macroFloating) setMacroFloating(false);
+                  setCentralView("macro");
+                  void macroPanelRef.current?.importMacro(title, code);
+                }}
+              />
+            </Suspense>,
             notebookPortalEl,
           )}
         {runtime &&
           macroPortalEl &&
           createPortal(
-            <MacroPanel
-              key={`macro-${workspaceVersion}`}
-              ref={macroPanelRef}
-              runtime={runtime}
-              onCountChanged={setMacroCount}
-              placement={macroFloating ? "floating" : "tab"}
-              onTogglePlacement={toggleMacroFloating}
-              onSetCurrentPanel={(panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleTreeKindChange(panel);
-                  setCentralView("plot");
-                }
-              }}
-              getSelection={() => selectedIds}
-              getCurrentPanel={() => treeKind}
-              selectObjects={(ids, panel) => {
-                if (panel === "signal" || panel === "image") {
-                  handleTreeKindChange(panel);
-                  setCentralView("plot");
-                }
-                setSelectedIds(ids);
-                setCurrentId(ids[0] ?? null);
-              }}
-              onModelChanged={(panel) => {
-                if (!runtime) return;
-                if (panel && panel !== treeKind) return;
-                void refresh();
-              }}
-              onConvertToNotebook={(title, code) => {
-                if (notebookFloating) setNotebookFloating(false);
-                setCentralView("notebook");
-                notebookPanelRef.current?.importMacroAsNotebook(title, code);
-              }}
-              theme={theme}
-            />,
+            <Suspense fallback={null}>
+              <MacroPanel
+                key={`macro-${workspaceVersion}`}
+                ref={macroPanelRef}
+                runtime={runtime}
+                onCountChanged={setMacroCount}
+                placement={macroFloating ? "floating" : "tab"}
+                onTogglePlacement={toggleMacroFloating}
+                onSetCurrentPanel={(panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleTreeKindChange(panel);
+                    setCentralView("plot");
+                  }
+                }}
+                getSelection={() => selectedIds}
+                getCurrentPanel={() => treeKind}
+                selectObjects={(ids, panel) => {
+                  if (panel === "signal" || panel === "image") {
+                    handleTreeKindChange(panel);
+                    setCentralView("plot");
+                  }
+                  setSelectedIds(ids);
+                  setCurrentId(ids[0] ?? null);
+                }}
+                onModelChanged={(panel) => {
+                  if (!runtime) return;
+                  if (panel && panel !== treeKind) return;
+                  void refresh();
+                }}
+                onConvertToNotebook={(title, code) => {
+                  if (notebookFloating) setNotebookFloating(false);
+                  setCentralView("notebook");
+                  notebookPanelRef.current?.importMacroAsNotebook(title, code);
+                }}
+                theme={theme}
+              />
+            </Suspense>,
             macroPortalEl,
           )}
         <div data-tour="menubar">
