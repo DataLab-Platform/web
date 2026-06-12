@@ -19,6 +19,7 @@
     "audit:shims": "vitest run --config vitest.audit.config.ts tests/ts/shims/shim-audit.spec.ts",
     "i18n:extract": "node scripts/i18n-extract.mjs",
     "i18n:check": "node scripts/i18n-extract.mjs --check",
+    "gen:colormaps": "node scripts/gen-colormaps.mjs",
     "changelog:extract": "node scripts/extract-changelog.mjs",
     "bench:run": "node tests/benchmark/scripts/run_all.mjs",
     "bench:report": "python tests/benchmark/shared/report.py",

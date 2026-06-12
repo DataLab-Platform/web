@@ -8,7 +8,11 @@
  * colormap names fall back gracefully.
  */
 import { describe, it, expect } from "vitest";
-import { paintImageData } from "../../../src/utils/colormap";
+import {
+  SUPPORTED_COLORMAPS,
+  buildColorscale,
+  paintImageData,
+} from "../../../src/utils/colormap";
 
 /** Minimal stand-in for ``CanvasRenderingContext2D.createImageData``
  *  so the helper runs under jsdom (which lacks the 2D context). */
@@ -93,5 +97,45 @@ describe("paintImageData", () => {
     const unknown = paintImageData(ctx, z, 2, 1, 0, 1, "NotAColormap", false);
     const viridis = paintImageData(ctx, z, 2, 1, 0, 1, "Viridis", false);
     expect(Array.from(unknown.data)).toEqual(Array.from(viridis.data));
+  });
+});
+
+describe("PlotPy default colormaps", () => {
+  it("exposes the full PlotPy default set", () => {
+    // A representative sample of PlotPy's default colormaps that were not
+    // supported before (only 8 hand-coded maps existed).
+    for (const name of ["turbo", "jet", "gist_earth", "rainbow", "bone"]) {
+      expect(SUPPORTED_COLORMAPS).toContain(name);
+    }
+    // PlotPy ships ~70 default colormaps.
+    expect(SUPPORTED_COLORMAPS.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it("renders every supported colormap with opaque pixels", () => {
+    const ctx = fakeCtx();
+    const z = new Float32Array([0, 0.5, 1]);
+    for (const name of SUPPORTED_COLORMAPS) {
+      const img = paintImageData(ctx, z, 3, 1, 0, 1, name, false);
+      expect(img.data[3]).toBe(255);
+      expect(img.data[7]).toBe(255);
+      expect(img.data[11]).toBe(255);
+    }
+  });
+
+  it("matches PlotPy's data-derived endpoints (turbo)", () => {
+    const ctx = fakeCtx();
+    const z = new Float32Array([0, 1]);
+    const img = paintImageData(ctx, z, 2, 1, 0, 1, "turbo", false);
+    // turbo first/last stops from PlotPy: (48,18,59) → (122,4,3).
+    expect(Array.from(img.data.slice(0, 3))).toEqual([48, 18, 59]);
+    expect(Array.from(img.data.slice(4, 7))).toEqual([122, 4, 3]);
+  });
+
+  it("buildColorscale spans 0..1 for an arbitrary colormap", () => {
+    const scale = buildColorscale("jet", false, 8);
+    expect(scale).toHaveLength(8);
+    expect(scale[0][0]).toBe(0);
+    expect(scale[scale.length - 1][0]).toBe(1);
+    expect(scale[0][1]).toMatch(/^rgb\(\d+,\d+,\d+\)$/);
   });
 });

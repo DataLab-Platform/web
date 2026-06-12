@@ -199,8 +199,8 @@ function ramp4(): number[][] {
   ];
 }
 
-/** Decode the red channel of every output cell (Greys maps value → grey, so
- *  R = round((v - zmin)/(zmax - zmin) * 255)). */
+/** Decode the red channel of every output cell (the 'gray' colormap maps
+ *  value → grey linearly, so R = round((v - zmin)/(zmax - zmin) * 255)). */
 function reds(img: ImageData): number[] {
   const out: number[] = [];
   for (let p = 0; p < img.data.length; p += 4) out.push(img.data[p]);
@@ -217,7 +217,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 4, ch: 4, strideX: 1, strideY: 1 },
       0,
       15,
-      "Greys",
+      "gray",
       false,
       "nearest",
     );
@@ -238,7 +238,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 2, ch: 2, strideX: 2, strideY: 2 },
       0,
       15,
-      "Greys",
+      "gray",
       false,
       "nearest",
     );
@@ -257,7 +257,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 2, ch: 2, strideX: 2, strideY: 2 },
       0,
       15,
-      "Greys",
+      "gray",
       false,
       "max",
     );
@@ -276,7 +276,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 2, ch: 2, strideX: 2, strideY: 2 },
       0,
       15,
-      "Greys",
+      "gray",
       false,
       "mean",
     );
@@ -301,7 +301,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 2, ch: 2, strideX: 2, strideY: 2 },
       0,
       10,
-      "Greys",
+      "gray",
       false,
       "mean",
     );
@@ -326,7 +326,7 @@ describe("paintImageWindow", () => {
       { i0: 0, j0: 0, cw: 1, ch: 1, strideX: 2, strideY: 2 },
       0,
       1,
-      "Greys",
+      "gray",
       false,
       "max",
     );

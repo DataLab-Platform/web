@@ -8,8 +8,9 @@ import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
 import {
-  SUPPORTED_COLORMAPS,
+  COLORMAP_CATEGORIES,
   buildColorscale,
+  colormapLabel,
   paintImageWindow,
 } from "../utils/colormap";
 import {
@@ -31,6 +32,28 @@ import type {
 
 /** Pure-visualization tools available in the image viewer toolbar. */
 type ImageTool = "profiles" | "contrast" | "stats" | null;
+
+/** Localised label for a colormap category.  The ``t("…")`` calls use
+ *  literals so the i18n extractor picks them up automatically; the
+ *  category strings themselves come from the generated colormap data. */
+function colormapCategoryLabel(label: string): string {
+  switch (label) {
+    case "Perceptually uniform":
+      return t("Perceptually uniform");
+    case "Sequential":
+      return t("Sequential");
+    case "Diverging":
+      return t("Diverging");
+    case "Cyclic":
+      return t("Cyclic");
+    case "Qualitative":
+      return t("Qualitative");
+    case "Miscellaneous":
+      return t("Miscellaneous");
+    default:
+      return label;
+  }
+}
 
 interface ImagePlotProps {
   data: ImageData;
@@ -118,14 +141,16 @@ export function ImagePlot({
   const [draftLut, setDraftLut] = useState<[number, number] | null>(null);
   // Local colormap state, initialised from the image's metadata and
   // resync'd whenever it changes upstream (e.g. after switching images).
+  // Names are normalised to lowercase so the controlled <select> value
+  // matches its (lowercase) options regardless of metadata casing.
   const [colormapName, setColormapName] = useState<string>(
-    data.colormap || "Viridis",
+    (data.colormap || "viridis").toLowerCase(),
   );
   const [colormapInverted, setColormapInverted] = useState<boolean>(
     Boolean(data.invert_colormap),
   );
   useEffect(() => {
-    setColormapName(data.colormap || "Viridis");
+    setColormapName((data.colormap || "viridis").toLowerCase());
     setColormapInverted(Boolean(data.invert_colormap));
   }, [data.id, data.colormap, data.invert_colormap]);
   // Display resampling method (downsampled large images only). Resync'd
@@ -1291,10 +1316,14 @@ function ImageToolbar({
           value={colormap}
           onChange={(e) => onColormapChange(e.target.value)}
         >
-          {COLORMAP_CHOICES.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
+          {COLORMAP_CATEGORIES.map((cat) => (
+            <optgroup key={cat.label} label={colormapCategoryLabel(cat.label)}>
+              {cat.names.map((name) => (
+                <option key={name} value={name}>
+                  {colormapLabel(name)}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </label>
@@ -1331,12 +1360,6 @@ function ImageToolbar({
     </div>
   );
 }
-
-/** Colormaps offered in the toolbar.  Restricted to the lookup tables
- *  natively supported by :func:`paintImageData` / :func:`buildColorscale`
- *  so the rasterised image and the colorbar always match.  ``Viridis``
- *  is the default to match DataLab Qt. */
-const COLORMAP_CHOICES = SUPPORTED_COLORMAPS;
 
 // ---------------------------------------------------------------------------
 // Contrast panel — histogram + dual range slider + Auto.
