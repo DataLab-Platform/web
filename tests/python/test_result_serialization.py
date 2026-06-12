@@ -48,3 +48,20 @@ def test_fwhm_result_shows_single_delta_column(fresh_bootstrap):
     # full segment [x0, y0, x1, y1].
     assert len(res["coords"]) == 1
     assert len(res["coords"][0]) == 4
+
+
+def test_fwhm_plot_results_exposes_delta_column(fresh_bootstrap):
+    """The "Plot results" feature must expose only the derived Δx column
+    for a FWHM (segment) result — consistent with the results table — not
+    the raw x0/y0/x1/y1 coordinates."""
+    bs = fresh_bootstrap
+    oid = _make_gaussian(bs)
+    asyncio.run(bs.run_signal_analysis(oid, "fwhm"))
+
+    schemas = bs.get_plot_results_schemas([oid])
+    assert len(schemas) == 1
+    entry = schemas[0]
+    assert entry["is_geometry"] is True
+    # Only Δx (the derived segment length) is offered as a Y-axis choice;
+    # the raw coordinates are not exposed here.
+    assert entry["numeric_headers"] == ["Δx"]

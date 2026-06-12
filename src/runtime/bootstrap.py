@@ -5731,8 +5731,14 @@ def _normalize_plot_result(result: Any, oid: str) -> dict[str, Any] | None:
         category = result.title
         is_geometry = False
     elif isinstance(result, GeometryResult):
-        headers = list(result.headers)
-        rows = [list(row) for row in result.coords.tolist()]
+        # Use the *visible* displayed columns (e.g. a segment's derived Δx /
+        # Δy / length instead of the raw x0/y0/x1/y1 coordinates), keeping
+        # the "Plot results" axis choices consistent with the results table.
+        df = result.to_dataframe(visible_only=True)
+        if "roi_index" in df.columns:
+            df = df.drop(columns=["roi_index"])
+        headers = [str(c) for c in df.columns]
+        rows = [list(row) for row in df.values.tolist()]
         roi_indices = None if result.roi_indices is None else list(result.roi_indices)
         kind = result.kind.value
         category = f"shape_{kind}"
