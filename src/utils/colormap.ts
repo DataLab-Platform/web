@@ -109,7 +109,7 @@ export function paintImageData(
   colormap: string,
   inverted: boolean,
 ): ImageData {
-  const sample = resolveColormap(colormap);
+  const lut = getLut(colormap);
   const range = zmax > zmin ? zmax - zmin : 1;
   const img = ctx.createImageData(w, h);
   const buf = img.data;
@@ -134,10 +134,14 @@ export function paintImageData(
         if (t < 0) t = 0;
         else if (t > 1) t = 1;
         if (inverted) t = 1 - t;
-        const [r, g, b] = sample(t);
-        buf[p] = Math.round(r * 255);
-        buf[p + 1] = Math.round(g * 255);
-        buf[p + 2] = Math.round(b * 255);
+        // Index the cached LUT directly: avoids allocating an RGB array
+        // per pixel and the redundant /255 then *255 round-trip.
+        let idx = (t * 255 + 0.5) | 0;
+        if (idx > 255) idx = 255;
+        const o = idx * 3;
+        buf[p] = lut[o];
+        buf[p + 1] = lut[o + 1];
+        buf[p + 2] = lut[o + 2];
         buf[p + 3] = 255;
       }
       p += 4;
@@ -187,7 +191,7 @@ export function paintImageWindow(
   inverted: boolean,
   method: ResampleMethod,
 ): ImageData {
-  const sample = resolveColormap(colormap);
+  const lut = getLut(colormap);
   const range = zmax > zmin ? zmax - zmin : 1;
   const { i0, j0, cw, ch, strideX, strideY } = plan;
   const img = ctx.createImageData(cw, ch);
@@ -217,10 +221,13 @@ export function paintImageWindow(
         if (t < 0) t = 0;
         else if (t > 1) t = 1;
         if (inverted) t = 1 - t;
-        const [rr, gg, bb] = sample(t);
-        buf[p] = Math.round(rr * 255);
-        buf[p + 1] = Math.round(gg * 255);
-        buf[p + 2] = Math.round(bb * 255);
+        // Index the cached LUT directly (see paintImageData).
+        let idx = (t * 255 + 0.5) | 0;
+        if (idx > 255) idx = 255;
+        const o = idx * 3;
+        buf[p] = lut[o];
+        buf[p + 1] = lut[o + 1];
+        buf[p + 2] = lut[o + 2];
         buf[p + 3] = 255;
       }
       p += 4;

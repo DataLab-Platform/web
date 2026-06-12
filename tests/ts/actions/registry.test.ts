@@ -116,7 +116,7 @@ describe("buildStaticActions", () => {
 });
 
 describe("buildHelpActions", () => {
-  it("provides eight entries always enabled", () => {
+  it("exposes the expected help entries, always enabled", () => {
     const actions = buildHelpActions({
       onShowAbout: vi.fn(),
       onShowShortcuts: vi.fn(),
@@ -126,7 +126,20 @@ describe("buildHelpActions", () => {
       onStartTour: vi.fn(),
       onShowReleaseNotes: vi.fn(),
     });
-    expect(actions).toHaveLength(8);
+    // Assert the stable set of entries (robust to reordering) rather
+    // than a brittle total count that breaks on any new help item.
+    expect(actions.map((a) => a.id)).toEqual(
+      expect.arrayContaining([
+        "help.welcome",
+        "help.tour",
+        "help.userguide",
+        "help.releaseNotes",
+        "help.documentation",
+        "help.shortcuts",
+        "help.console",
+        "help.about",
+      ]),
+    );
     for (const a of actions) {
       expect(a.enabled(makeState({ status: "loading" }))).toBe(true);
     }

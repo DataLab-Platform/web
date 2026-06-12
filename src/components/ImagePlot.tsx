@@ -1138,7 +1138,7 @@ export function ImagePlot({
                 />
               ) : (
                 <div className="image-plot-hint">
-                  Hover the image to update profiles
+                  {t("Hover the image to update profiles")}
                 </div>
               )}
             </div>

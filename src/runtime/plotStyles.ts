@@ -161,8 +161,8 @@ export interface CurveTracePartial {
 /** Build the Plotly trace fragment for one curve, given its raw data
  *  arrays, the resolved color/width/dash and the normalised display mode. */
 export function buildCurveTrace(
-  x: readonly number[],
-  y: readonly number[],
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
   color: string,
   width: number,
   dash: string,

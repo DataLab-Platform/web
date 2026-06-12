@@ -27,6 +27,17 @@ interface Props {
 const HEAD_ROWS = 5;
 const TAIL_ROWS = 5;
 
+/** Build a CSV string from X / Y arrays via index access so it works
+ *  on both ``Float64Array`` (the bytes-encoded payload) and plain
+ *  ``number[]`` (the legacy list encoding). */
+function buildCsv(x: ArrayLike<number>, y: ArrayLike<number>): string {
+  const lines = ["x,y"];
+  for (let i = 0; i < x.length; i += 1) {
+    lines.push(`${x[i]},${y[i]}`);
+  }
+  return lines.join("\n");
+}
+
 export function ArrayPreview({
   runtime,
   oid,
@@ -65,7 +76,10 @@ function SignalArrayPreview({
   refreshNonce: number;
   onApplied: () => void;
 }) {
-  const [data, setData] = useState<{ x: number[]; y: number[] } | null>(null);
+  const [data, setData] = useState<{
+    x: ArrayLike<number>;
+    y: ArrayLike<number>;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
@@ -88,9 +102,7 @@ function SignalArrayPreview({
 
   const handleCopyCsv = useCallback(async () => {
     if (!data) return;
-    const csv = ["x,y", ...data.x.map((xi, i) => `${xi},${data.y[i]}`)].join(
-      "\n",
-    );
+    const csv = buildCsv(data.x, data.y);
     try {
       await navigator.clipboard.writeText(csv);
     } catch {
@@ -100,9 +112,7 @@ function SignalArrayPreview({
 
   const handleDownload = useCallback(() => {
     if (!data) return;
-    const csv = ["x,y", ...data.x.map((xi, i) => `${xi},${data.y[i]}`)].join(
-      "\n",
-    );
+    const csv = buildCsv(data.x, data.y);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -196,7 +206,10 @@ function SignalArrayPreview({
       </div>
       {editing && (
         <ArrayEditorDialog
-          value={data.x.map((xi, i) => [xi, data.y[i]])}
+          value={Array.from({ length: data.x.length }, (_, i) => [
+            data.x[i],
+            data.y[i],
+          ])}
           format="%g"
           onCancel={() => setEditing(false)}
           onSubmit={(next) => {

@@ -136,8 +136,12 @@ export interface SignalStyle {
 }
 
 export interface SignalData extends SignalMeta {
-  x: number[];
-  y: number[];
+  /** X / Y samples.  The front-end requests the ``bytes`` encoding, so
+   *  these are normally zero-copy ``Float64Array`` views over a single
+   *  buffer shipped across the Pyodide bridge.  The legacy ``list``
+   *  encoding (Python tests, notebook display) yields plain arrays. */
+  x: Float64Array | number[];
+  y: Float64Array | number[];
   style?: SignalStyle;
 }
 
@@ -824,6 +828,39 @@ function decodeImagePayload<
   return { ...payload, data: rows };
 }
 
+/**
+ * Decode the ``bytes`` encoding of ``get_signal_xy`` into zero-copy
+ * ``Float64Array`` views.  The Python helper ships the X / Y arrays as
+ * raw little-endian ``float64`` byte strings (a single ``Uint8Array``
+ * memcpy across the Pyodide bridge) instead of marshalling every sample
+ * as a JSON number, which is one to two orders of magnitude cheaper for
+ * large signals.  Payloads already in the legacy ``list`` form (Python
+ * tests, notebook display) are returned unchanged.
+ */
+function decodeSignalPayload(
+  payload: SignalData & {
+    encoding?: string;
+    x_bytes?: ArrayBufferView | ArrayBuffer;
+    y_bytes?: ArrayBufferView | ArrayBuffer;
+  },
+): SignalData {
+  if (payload.encoding !== "f64") return payload;
+  const toF64 = (raw: ArrayBufferView | ArrayBuffer): Float64Array =>
+    raw instanceof ArrayBuffer
+      ? new Float64Array(raw)
+      : new Float64Array(
+          raw.buffer,
+          raw.byteOffset,
+          raw.byteLength / Float64Array.BYTES_PER_ELEMENT,
+        );
+  const { x_bytes, y_bytes, ...rest } = payload;
+  return {
+    ...rest,
+    x: x_bytes ? toF64(x_bytes) : payload.x,
+    y: y_bytes ? toF64(y_bytes) : payload.y,
+  };
+}
+
 /** Outcome of {@link DataLabRuntime.freeMemory}. */
 export interface FreeMemoryResult {
   /** Unreachable objects reclaimed by ``gc.collect``. */
@@ -1407,12 +1444,28 @@ await micropip.install(["sigima", "guidata"])
     return this.opfsStore;
   }
 
-  /** Page object *oid* back into the heap (direct, unqueued). */
-  private async pageInDirect(oid: string): Promise<void> {
-    if (!this.spilledOids.has(oid)) return;
-    const bytes = await this.requireStore().get(oid);
-    await this.invokePy("attach_object_array", { oid, payload: bytes });
-    this.spilledOids.delete(oid);
+  /** Page a batch of spilled objects back into the heap.
+   *
+   *  The OPFS reads run in parallel (I/O bound, independent files);
+   *  the ``attach_object_array`` calls stay strictly sequential because
+   *  the Python heap is single-threaded.  Returns the ids actually
+   *  paged in, so they can be re-spilled afterwards (direct, unqueued). */
+  private async pageInBatch(oids: string[]): Promise<string[]> {
+    const targets = oids.filter((oid) => this.spilledOids.has(oid));
+    if (targets.length === 0) return [];
+    const store = this.requireStore();
+    const buffers = await Promise.all(targets.map((oid) => store.get(oid)));
+    const pagedIn: string[] = [];
+    for (let i = 0; i < targets.length; i += 1) {
+      const oid = targets[i];
+      await this.invokePy("attach_object_array", {
+        oid,
+        payload: buffers[i],
+      });
+      this.spilledOids.delete(oid);
+      pagedIn.push(oid);
+    }
+    return pagedIn;
   }
 
   /** Spill object *oid* to disk, serialising it afresh (direct, unqueued). */
@@ -1451,12 +1504,7 @@ await micropip.install(["sigima", "guidata"])
         this.spilledOids.has(oid),
       );
     }
-    const pagedIn: string[] = [];
-    for (const oid of targets) {
-      await this.pageInDirect(oid);
-      pagedIn.push(oid);
-    }
-    return pagedIn;
+    return this.pageInBatch(targets);
   }
 
   /** Re-spill paged-in operands and spill freshly-produced results. */
@@ -1530,9 +1578,7 @@ await micropip.install(["sigima", "guidata"])
 
   /** Page every spilled object back in (direct, unqueued). */
   private async pageInAllDirect(): Promise<void> {
-    for (const oid of Array.from(this.spilledOids)) {
-      await this.pageInDirect(oid);
-    }
+    await this.pageInBatch(Array.from(this.spilledOids));
   }
 
   /** After a delete, drop the OPFS files of objects no longer present in
@@ -2041,7 +2087,11 @@ await micropip.install(["sigima", "guidata"])
   }
 
   async getSignalData(id: string): Promise<SignalData> {
-    return (await this.callPy("get_signal_xy", { oid: id })) as SignalData;
+    const raw = (await this.callPy("get_signal_xy", {
+      oid: id,
+      encoding: "bytes",
+    })) as SignalData & { encoding?: string };
+    return decodeSignalPayload(raw);
   }
 
   /** Overwrite the X / Y arrays of signal *id* with edited values
@@ -2065,9 +2115,11 @@ await micropip.install(["sigima", "guidata"])
    *  resolved id (unknown ids are silently skipped server-side). */
   async getSignalsData(ids: string[]): Promise<SignalData[]> {
     if (ids.length === 0) return [];
-    return (await this.callPy("get_signals_xy", {
+    const raw = (await this.callPy("get_signals_xy", {
       oids: ids,
-    })) as SignalData[];
+      encoding: "bytes",
+    })) as Array<SignalData & { encoding?: string }>;
+    return raw.map(decodeSignalPayload);
   }
 
   /** Persist per-curve render style on a signal.  Each field follows

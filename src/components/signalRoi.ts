@@ -13,7 +13,11 @@ import type { SignalRoiSegment } from "../runtime/runtime";
 /** Linear interpolation of *y* at coordinate *xq*, assuming *x* is
  *  monotonically increasing.  Falls back to nearest-edge values when
  *  *xq* sits outside the array. */
-export function interpY(x: number[], y: number[], xq: number): number {
+export function interpY(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  xq: number,
+): number {
   const n = x.length;
   if (n === 0) return 0;
   if (xq <= x[0]) return y[0];
@@ -42,8 +46,8 @@ export function interpY(x: number[], y: number[], xq: number): number {
 export function buildRoiAreaTrace(
   seg: SignalRoiSegment,
   index: number,
-  x: number[],
-  y: number[],
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
 ): Record<string, unknown> | null {
   const n = x.length;
   if (n === 0) return null;

@@ -35,8 +35,8 @@ function summariseSignal(
     xlabel: string;
     ylabel: string;
   },
-  x: number[],
-  y: number[],
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
   stats: Extract<ObjectStats, { kind: "signal" }>,
 ): Record<string, unknown> {
   const n = y.length;
@@ -44,6 +44,17 @@ function summariseSignal(
     return { ...meta, n: 0 };
   }
   const previewN = Math.min(8, n);
+  const head = (a: ArrayLike<number>, count: number): number[] => {
+    const out: number[] = [];
+    for (let i = 0; i < Math.min(count, a.length); i += 1) out.push(a[i]);
+    return out;
+  };
+  const tail = (a: ArrayLike<number>, count: number): number[] => {
+    const out: number[] = [];
+    for (let i = Math.max(0, a.length - count); i < a.length; i += 1)
+      out.push(a[i]);
+    return out;
+  };
   return {
     ...meta,
     n,
@@ -54,10 +65,10 @@ function summariseSignal(
     y_mean: stats.y_mean,
     y_std: stats.y_std,
     y_median: stats.y_median,
-    first_x: x.slice(0, previewN),
-    first_y: y.slice(0, previewN),
-    last_x: x.slice(Math.max(0, n - previewN)),
-    last_y: y.slice(Math.max(0, n - previewN)),
+    first_x: head(x, previewN),
+    first_y: head(y, previewN),
+    last_x: tail(x, previewN),
+    last_y: tail(y, previewN),
   };
 }
 

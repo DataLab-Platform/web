@@ -1105,17 +1105,18 @@ def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
     return payload
 
 
-def get_signals_xy(oids: list[str]) -> list[dict[str, Any]]:
+def get_signals_xy(oids: list[str], encoding: str = "list") -> list[dict[str, Any]]:
     """Batched variant of :func:`get_signal_xy`.
 
     Used by the front-end when several signals are selected so they can
     be overlaid on a single plot in one round-trip across the Pyodide
-    bridge.  Unknown ids are silently skipped.
+    bridge.  Unknown ids are silently skipped.  ``encoding`` is forwarded
+    to :func:`get_signal_xy` (the front-end requests ``"bytes"``).
     """
     out: list[dict[str, Any]] = []
     for oid in oids:
         try:
-            out.append(get_signal_xy(oid))
+            out.append(get_signal_xy(oid, encoding=encoding))
         except KeyError:
             continue
     return out

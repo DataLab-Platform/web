@@ -276,7 +276,9 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
     };
 
     if (!tree || tree.groups.length === 0) {
-      return <div className="object-tree-empty">No signals yet.</div>;
+      const emptyLabel =
+        tree?.kind === "image" ? t("No images yet.") : t("No signals yet.");
+      return <div className="object-tree-empty">{emptyLabel}</div>;
     }
 
     return (
