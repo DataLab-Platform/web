@@ -638,6 +638,11 @@ export function ImagePlot({
         range: yRange,
         autorange: false as const,
       },
+      // Stats tool mirrors PlotPy's ``ImageStatsTool``: activating it
+      // immediately puts the plot into rectangle-drawing mode so the user
+      // can drag out a region right away (instead of having to pick the
+      // ``drawrect`` modebar button first — otherwise dragging just zooms).
+      dragmode: tool === "stats" ? ("drawrect" as const) : undefined,
       // Legend positioned to the right of the colorbar (paper coords),
       // outside the plot area, so it never overlaps the image or the
       // colorbar. The right margin is widened above to make room.
