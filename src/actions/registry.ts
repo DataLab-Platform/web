@@ -610,6 +610,24 @@ export function buildImageAnalysisActions(
   return buildAnalysisActions("image", entries, onRun);
 }
 
+/** Wire the single "Plot results" entry at the bottom of the Analysis
+ *  menu (mirrors DataLab desktop).  Aggregates the analysis results
+ *  stored on the selected objects into new result signals. */
+export function buildPlotResultsAction(
+  kind: "signal" | "image",
+  onPlotResults: () => void,
+): ActionDescriptor {
+  return {
+    id: `analysis.${kind}.plot_results`,
+    label: `${t("Plot results")}\u2026`,
+    menuPath: `Analysis/${t("Plot results")}\u2026`,
+    iconUrl: getAnalysisIconUrl("plot_results.svg"),
+    beginGroup: true,
+    enabled: (s) => s.status === "ready" && !s.busy && s.selectedIds.length > 0,
+    run: onPlotResults,
+  };
+}
+
 function buildAnalysisActions(
   kind: "signal" | "image",
   entries: SignalAnalysisDescriptor[],

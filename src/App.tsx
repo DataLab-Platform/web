@@ -20,8 +20,10 @@ import type {
   H5BrowserNode,
   ImageData,
   InteractiveFitInfo,
+  JsonSchema,
   PanelTree,
   PluginMenuAction,
+  PlotResultsSchemaEntry,
   SchemaWithValues,
   SignalData,
 } from "./runtime/runtime";
@@ -37,6 +39,7 @@ import {
   buildImageEraseActions,
   buildInteractiveFitActions,
   buildPluginActions,
+  buildPlotResultsAction,
   buildRoiActions,
   buildSignalAnalysisActions,
   buildSignalCreationActions,
@@ -160,6 +163,76 @@ interface PendingAnalysis {
   label: string;
   schema: SchemaWithValues;
   kind: "signal" | "image";
+}
+
+/** Sequential "Plot results" dialog state: one dialog per result category
+ *  found across the selected objects (mirrors DataLab desktop, which loops
+ *  over result categories). */
+interface PendingPlotResults {
+  /** Snapshot of the source object ids at invocation time. */
+  ids: string[];
+  /** Title of the (get-or-create) "Results" signal group. */
+  groupName: string;
+  /** One entry per plottable result category. */
+  entries: PlotResultsSchemaEntry[];
+  /** Index of the category currently shown in the dialog. */
+  index: number;
+  /** Ids of every result signal created so far across categories. */
+  createdIds: string[];
+}
+
+/** Build the (hand-made, fully localised) DataSet schema for one
+ *  "Plot results" category dialog.  Mirrors DataLab desktop's
+ *  ``__create_plot_result_param_class``: a plot-kind choice plus X / Y
+ *  axis choices populated from the result's numeric columns. */
+function buildPlotResultsSchema(
+  entry: PlotResultsSchemaEntry,
+): SchemaWithValues {
+  const xChoices = [
+    { value: "indices", label: t("Indices") },
+    ...entry.numeric_headers.map((h) => ({ value: h, label: h })),
+  ];
+  const yChoices = entry.numeric_headers.map((h) => ({ value: h, label: h }));
+  const properties: Record<string, JsonSchema> = {
+    kind: {
+      "x-guidata-kind": "choice",
+      "x-guidata-label": t("Plot kind"),
+      "x-guidata-choices": [
+        {
+          value: "one_curve_per_object",
+          label: t("One curve per object (or ROI) and per result title"),
+        },
+        {
+          value: "one_curve_per_title",
+          label: t("One curve per result title"),
+        },
+      ],
+    },
+    xaxis: {
+      "x-guidata-kind": "choice",
+      "x-guidata-label": t("X axis"),
+      "x-guidata-choices": xChoices,
+    },
+    yaxis: {
+      "x-guidata-kind": "choice",
+      "x-guidata-label": t("Y axis"),
+      "x-guidata-choices": yChoices,
+    },
+  };
+  const schema: JsonSchema = {
+    type: "object",
+    properties,
+    "x-guidata-property-order": ["kind", "xaxis", "yaxis"],
+    description: t("Plot results obtained from previous analyses."),
+  };
+  return {
+    schema,
+    values: {
+      kind: entry.default_kind,
+      xaxis: "indices",
+      yaxis: yChoices[0]?.value ?? "",
+    },
+  };
 }
 
 /** Persist a numeric layout dimension to localStorage so it survives a
@@ -622,6 +695,8 @@ export default function App() {
   >([]);
   const [pendingAnalysis, setPendingAnalysis] =
     useState<PendingAnalysis | null>(null);
+  const [pendingPlotResults, setPendingPlotResults] =
+    useState<PendingPlotResults | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   // Bumped after any action that mutates the *current* object's
@@ -1561,6 +1636,108 @@ export default function App() {
     },
     [pendingAnalysis, currentId, runAnalysis],
   );
+
+  // "Analysis ▸ Plot results": aggregate the numeric analysis results
+  // stored on the selected objects into new result signals. Opens one
+  // dialog per result category (mirrors DataLab desktop).
+  const handlePlotResults = useCallback(async () => {
+    if (!runtime) return;
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      const entries = await runtime.getPlotResultsSchemas(ids);
+      if (entries.length === 0) {
+        await notify({
+          kind: "info",
+          title: t("Plot results"),
+          message: t(
+            "No analysis results to plot. Run an Analysis feature first.",
+          ),
+        });
+        return;
+      }
+      setPendingPlotResults({
+        ids,
+        groupName: t("Results"),
+        entries,
+        index: 0,
+        createdIds: [],
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await notify({
+        kind: "error",
+        message: t("Plot results failed: {message}", { message }),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, notify]);
+
+  // Close the dialog queue: when the last category is done, switch to the
+  // signal panel and reveal the new result signals (if any were created).
+  const finishOrAdvancePlotResults = useCallback(
+    async (next: PendingPlotResults) => {
+      if (next.index < next.entries.length) {
+        setPendingPlotResults(next);
+        return;
+      }
+      setPendingPlotResults(null);
+      if (next.createdIds.length > 0) {
+        await refreshPanelKind("signal", next.createdIds[0]);
+        setPreferredSideTab("results");
+        setSideRefreshNonce((n) => n + 1);
+      }
+    },
+    [refreshPanelKind],
+  );
+
+  const handleSubmitPlotResults = useCallback(
+    async (values: Record<string, unknown>) => {
+      if (!runtime || !pendingPlotResults) return;
+      const { ids, groupName, entries, index, createdIds } = pendingPlotResults;
+      const entry = entries[index];
+      setBusy(true);
+      try {
+        const newIds = await runtime.plotResults({
+          ids,
+          category: entry.category,
+          kind: String(values.kind),
+          xaxis: String(values.xaxis),
+          yaxis: String(values.yaxis),
+          groupName,
+        });
+        await finishOrAdvancePlotResults({
+          ...pendingPlotResults,
+          index: index + 1,
+          createdIds: [...createdIds, ...newIds],
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await notify({
+          kind: "error",
+          message: t("Plot results failed: {message}", { message }),
+        });
+        // Mirror desktop's warn-and-continue: skip this category.
+        await finishOrAdvancePlotResults({
+          ...pendingPlotResults,
+          index: index + 1,
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime, pendingPlotResults, finishOrAdvancePlotResults, notify],
+  );
+
+  const handleCancelPlotResults = useCallback(() => {
+    if (!pendingPlotResults) return;
+    void finishOrAdvancePlotResults({
+      ...pendingPlotResults,
+      index: pendingPlotResults.index + 1,
+    });
+  }, [pendingPlotResults, finishOrAdvancePlotResults]);
 
   const handleLaunchInteractiveFit = useCallback(
     (fit: InteractiveFitInfo) => {
@@ -3091,6 +3268,7 @@ export default function App() {
       ...(treeKind === "signal"
         ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
+      buildPlotResultsAction(treeKind, handlePlotResults),
       ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, {
             onToggleEditMode: handleToggleRoiEditMode,
@@ -3131,6 +3309,7 @@ export default function App() {
       handleCreateTyped,
       handleCreateImageTyped,
       handleAnalysis,
+      handlePlotResults,
       handleNewGroup,
       handleDelete,
       handleDeleteAll,
@@ -3753,6 +3932,21 @@ export default function App() {
             }
           />
         )}
+        {pendingPlotResults &&
+          (() => {
+            const entry = pendingPlotResults.entries[pendingPlotResults.index];
+            return (
+              <DataSetDialog
+                // Remount per category so the form resets its internal
+                // values when advancing through the dialog queue.
+                key={entry.category}
+                title={`${t("Plot results")} — ${entry.label}`}
+                payload={buildPlotResultsSchema(entry)}
+                onSubmit={handleSubmitPlotResults}
+                onCancel={handleCancelPlotResults}
+              />
+            );
+          })()}
         {pendingImageGrid && (
           <DataSetDialog
             title={t("Distribute on a grid")}

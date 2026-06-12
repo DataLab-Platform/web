@@ -7,6 +7,7 @@ import {
   buildSignalCreationActions,
   buildImageCreationActions,
   buildViewActions,
+  buildPlotResultsAction,
   isFeatureActionEnabled,
 } from "../../../src/actions/registry";
 import type { ActionState } from "../../../src/actions/types";
@@ -128,6 +129,34 @@ describe("buildHelpActions", () => {
     for (const a of actions) {
       expect(a.enabled(makeState({ status: "loading" }))).toBe(true);
     }
+  });
+});
+
+describe("buildPlotResultsAction", () => {
+  it("sits under the Analysis menu and needs at least one selection", () => {
+    const onPlotResults = vi.fn();
+    const action = buildPlotResultsAction("signal", onPlotResults);
+    expect(action.id).toBe("analysis.signal.plot_results");
+    expect(action.menuPath.startsWith("Analysis/")).toBe(true);
+    expect(action.beginGroup).toBe(true);
+    // Disabled with no selection, enabled once something is selected.
+    expect(action.enabled(makeState())).toBe(false);
+    expect(action.enabled(makeState({ selectedIds: ["s1"] }))).toBe(true);
+    // Disabled while busy or not ready.
+    expect(action.enabled(makeState({ selectedIds: ["s1"], busy: true }))).toBe(
+      false,
+    );
+    expect(
+      action.enabled(makeState({ selectedIds: ["s1"], status: "loading" })),
+    ).toBe(false);
+    action.run();
+    expect(onPlotResults).toHaveBeenCalledTimes(1);
+  });
+
+  it("namespaces its id per panel kind", () => {
+    expect(buildPlotResultsAction("image", vi.fn()).id).toBe(
+      "analysis.image.plot_results",
+    );
   });
 });
 

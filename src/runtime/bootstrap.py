@@ -5471,6 +5471,338 @@ def h5_browser_import(
     return {"oids": oids, "uint32_clipped": bool(result["uint32_clipped"])}
 
 
+# ---------------------------------------------------------------------------
+# Plot results (browser counterpart of DataLab desktop's
+# "Analysis ▸ Plot results").  Aggregates the numeric analysis results
+# (table + geometry) stored on the selected objects into new signals,
+# grouped in a dedicated "Results" group.  Mirrors
+# :meth:`datalab.gui.panel.base.BasePanel.plot_results` and its private
+# ``__plot_result`` helper.
+# ---------------------------------------------------------------------------
+
+#: Sentinel ROI index meaning "no ROI" (mirrors DataLab desktop's ``NO_ROI``).
+_NO_ROI = -1
+
+
+def _plot_result_scalar(value: Any) -> Any:
+    """Coerce a numpy scalar / bytes cell to a plain JSON-friendly value."""
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except (TypeError, ValueError):
+            return str(value)
+    return value
+
+
+def _normalize_plot_result(result: Any, oid: str) -> dict[str, Any] | None:
+    """Return a normalised mapping for *result* (``TableResult`` /
+    ``GeometryResult``), or ``None`` for unsupported types.
+
+    The mapping unifies both result kinds into ``headers`` + ``rows`` (one
+    row per feature / point) + ``roi_indices`` (one per row, ``-1`` when no
+    ROI), so the aggregation logic can stay agnostic of the result type.
+    """
+    from sigima.objects.scalar import GeometryResult, TableResult
+
+    if isinstance(result, TableResult):
+        headers = list(result.headers)
+        rows = [list(row) for row in result.data]
+        roi_indices = None if result.roi_indices is None else list(result.roi_indices)
+        kind = result.kind.value if hasattr(result.kind, "value") else result.kind
+        category = result.title
+        is_geometry = False
+    elif isinstance(result, GeometryResult):
+        headers = list(result.headers)
+        rows = [list(row) for row in result.coords.tolist()]
+        roi_indices = None if result.roi_indices is None else list(result.roi_indices)
+        kind = result.kind.value
+        category = f"shape_{kind}"
+        is_geometry = True
+    else:
+        return None
+    return {
+        "category": category,
+        "kind": kind,
+        "is_geometry": is_geometry,
+        "title": result.title,
+        "func_name": getattr(result, "func_name", None),
+        "headers": headers,
+        "rows": [[_plot_result_scalar(v) for v in row] for row in rows],
+        "roi_indices": roi_indices,
+        "oid": oid,
+    }
+
+
+def _collect_plot_results(oids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Return ``{category: [normalised_result, ...]}`` for every analysis
+    result (geometry + table) stored on the objects *oids*.
+
+    Results are appended in object order so that ``results[i]`` can be
+    paired with the object that produced it (mirrors DataLab desktop's
+    :func:`create_resultdata_dict`).
+    """
+    from sigima.objects.scalar import GeometryResult, TableResult
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for oid in oids:
+        if not _MODEL.has(oid):
+            continue
+        obj = _MODEL.get(oid)
+        # Geometry first, then table, matching DataLab desktop's ordering.
+        for prefix, cls in (("Geometry_", GeometryResult), ("Table_", TableResult)):
+            for key, value in obj.metadata.items():
+                if not (
+                    isinstance(value, dict)
+                    and key.startswith(prefix)
+                    and key.endswith("_dict")
+                ):
+                    continue
+                try:
+                    result = cls.from_dict(value)
+                except Exception:  # pragma: no cover — malformed metadata
+                    continue
+                norm = _normalize_plot_result(result, oid)
+                if norm is not None:
+                    out.setdefault(norm["category"], []).append(norm)
+    return out
+
+
+def _plot_result_unique_roi_indices(res: dict[str, Any]) -> list[int]:
+    """Return the sorted unique ROI indices of *res* (``[-1]`` when none)."""
+    rois = res["roi_indices"]
+    if not rois:
+        return [_NO_ROI] if res["rows"] else []
+    return sorted({int(r) for r in rois})
+
+
+def _plot_result_numeric_headers(res: dict[str, Any]) -> list[str]:
+    """Return the headers of *res* whose first value is numeric."""
+    rows = res["rows"]
+    if not rows:
+        return []
+    first = rows[0]
+    out: list[str] = []
+    for i, header in enumerate(res["headers"]):
+        if i >= len(first):
+            continue
+        value = first[i]
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            out.append(header)
+    return out
+
+
+def _plot_category_numeric_headers(results: list[dict[str, Any]]) -> list[str]:
+    """Return the numeric headers shared by every result of a category.
+
+    Numeric-ness is decided from the first result (mirrors DataLab desktop),
+    then intersected with the header sets of the remaining results.
+    """
+    numeric = _plot_result_numeric_headers(results[0])
+    if len(results) > 1:
+        common = set(results[0]["headers"])
+        for res in results[1:]:
+            common.intersection_update(res["headers"])
+        numeric = [header for header in numeric if header in common]
+    return numeric
+
+
+def _plot_result_column(
+    res: dict[str, Any], header: str, roi_index: int | None = None
+) -> list[Any]:
+    """Return the values of *header* in *res*, optionally filtered by ROI."""
+    idx = res["headers"].index(header)
+    rois = res["roi_indices"]
+    out: list[Any] = []
+    for i, row in enumerate(res["rows"]):
+        if (
+            roi_index is not None
+            and roi_index != _NO_ROI
+            and rois is not None
+            and int(rois[i]) != roi_index
+        ):
+            continue
+        out.append(row[idx] if idx < len(row) else None)
+    return out
+
+
+def _plot_result_roi_rows(res: dict[str, Any], roi_index: int) -> list[list[Any]]:
+    """Return the rows of *res* belonging to *roi_index* (all when no ROI)."""
+    rois = res["roi_indices"]
+    if roi_index == _NO_ROI or not rois:
+        return list(res["rows"])
+    return [row for i, row in enumerate(res["rows"]) if int(rois[i]) == roi_index]
+
+
+def _ensure_named_signal_group(name: str) -> str:
+    """Return the id of the signal group named *name*, creating it if absent."""
+    panel = _MODEL.panel("signal")
+    for group in panel.groups:
+        if group.name == name:
+            return group.gid
+    return _MODEL.create_group("signal", name)
+
+
+def _plot_result_source_label(oids: list[str]) -> str:
+    """Build a compact source-object label (max three titles, then "…")."""
+    titles = [_MODEL.get(o).title for o in oids if _MODEL.has(o)]
+    max_show = 3
+    if len(titles) <= max_show:
+        return ", ".join(titles)
+    return ", ".join(titles[: max_show - 1]) + ", ..., " + titles[-1]
+
+
+def _add_plot_result_signal(
+    x: Any,
+    y: Any,
+    title: str,
+    xaxis: str,
+    yaxis: str,
+    group_id: str | None,
+) -> str:
+    """Create and store a result signal (mirrors ``__add_result_signal``)."""
+    xdata = np.asarray(x, dtype=float)
+    ydata = np.asarray(y, dtype=float)
+    obj: SignalObj = sigima.create_signal(
+        title=f"{title}: {yaxis} = f({xaxis})", x=xdata, y=ydata
+    )
+    obj.xlabel = xaxis
+    obj.ylabel = yaxis
+    return _MODEL.add_object("signal", obj, group_id=group_id)
+
+
+def get_plot_results_schemas(oids: Any) -> list[dict[str, Any]]:
+    """Describe the plottable analysis-result categories across *oids*.
+
+    Returns one entry per result category that exposes at least one numeric
+    column, each with the data the front-end needs to build the "Plot
+    results" dialog (numeric column names, default plot kind, …).  Returns
+    an empty list when the selection carries no plottable result.
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    results_by_category = _collect_plot_results(list(oids))
+    out: list[dict[str, Any]] = []
+    for category, results in results_by_category.items():
+        numeric_headers = _plot_category_numeric_headers(results)
+        if not numeric_headers:
+            continue
+        default_kind = (
+            "one_curve_per_object"
+            if any(len(res["rows"]) > 1 for res in results)
+            else "one_curve_per_title"
+        )
+        out.append(
+            {
+                "category": category,
+                "kind": results[0]["kind"],
+                "is_geometry": results[0]["is_geometry"],
+                "label": results[0]["title"],
+                "numeric_headers": numeric_headers,
+                "default_kind": default_kind,
+            }
+        )
+    return out
+
+
+def plot_results(
+    oids: Any,
+    category: str,
+    kind: str,
+    xaxis: str,
+    yaxis: str,
+    group_name: str = "Results",
+) -> list[str]:
+    """Aggregate analysis results of *category* into new result signals.
+
+    Ports :meth:`datalab.gui.panel.base.BasePanel.plot_results` /
+    ``__plot_result``.  Result signals are always created in the signal
+    panel, inside a single group named *group_name* (created on demand).
+
+    Args:
+        oids: Source object ids (signals or images).
+        category: Result category key (see :func:`get_plot_results_schemas`).
+        kind: ``"one_curve_per_object"`` or ``"one_curve_per_title"``.
+        xaxis: Column name for the X axis, or ``"indices"``.
+        yaxis: Column name for the Y axis.
+        group_name: Title of the (get-or-create) signal group.
+
+    Returns:
+        Ids of the newly created result signals.
+
+    Raises:
+        ValueError: In ``one_curve_per_title`` mode, when the selected
+         objects do not share the same ROIs.
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    results = _collect_plot_results(list(oids)).get(category)
+    if not results:
+        return []
+
+    group_id = _ensure_named_signal_group(group_name)
+
+    # Group results by their ``title`` (a category can hold several titles,
+    # e.g. distinct geometry shapes sharing the same kind).
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for res in results:
+        grouped.setdefault(res["title"], []).append(res)
+
+    new_ids: list[str] = []
+    if kind == "one_curve_per_title":
+        # One curve per ROI (if any) and per result title, aggregating the
+        # first value of each object's result.
+        all_roi = [_plot_result_unique_roi_indices(res) for res in results]
+        if len({tuple(indices) for indices in all_roi}) > 1:
+            raise ValueError(
+                "All objects associated with results must have the same "
+                "regions of interest (ROIs) to plot results together."
+            )
+        source_label = _plot_result_source_label([res["oid"] for res in results])
+        for i_roi in all_roi[0]:
+            roi_suffix = f"|ROI{int(i_roi) + 1}" if i_roi >= 0 else ""
+            for title, res_list in grouped.items():
+                xvals: list[Any] = []
+                yvals: list[Any] = []
+                for index, res in enumerate(res_list):
+                    if xaxis == "indices":
+                        xvals.append(index)
+                    else:
+                        xvals.append(_plot_result_column(res, xaxis, i_roi)[0])
+                    yvals.append(_plot_result_column(res, yaxis, i_roi)[0])
+                stitle = f"{title} ({source_label}){roi_suffix}"
+                new_ids.append(
+                    _add_plot_result_signal(
+                        xvals, yvals, stitle, xaxis, yaxis, group_id
+                    )
+                )
+    else:
+        # One curve per result title, per object and per ROI.
+        for title, res_list in grouped.items():
+            for res in res_list:
+                shid = _MODEL.get(res["oid"]).title if _MODEL.has(res["oid"]) else ""
+                for i_roi in _plot_result_unique_roi_indices(res):
+                    roi_suffix = f"|ROI{int(i_roi) + 1}" if i_roi >= 0 else ""
+                    rows = _plot_result_roi_rows(res, i_roi)
+                    if xaxis == "indices":
+                        xvals = list(range(len(rows)))
+                    else:
+                        xi = res["headers"].index(xaxis)
+                        xvals = [row[xi] for row in rows]
+                    yi = res["headers"].index(yaxis)
+                    yvals = [row[yi] for row in rows]
+                    stitle = f"{title} ({shid}){roi_suffix}"
+                    new_ids.append(
+                        _add_plot_result_signal(
+                            xvals, yvals, stitle, xaxis, yaxis, group_id
+                        )
+                    )
+    return new_ids
+
+
 __all__ = [
     "ObjectModel",
     "create_signal",
@@ -5598,6 +5930,8 @@ __all__ = [
     "run_image_analysis",
     "list_image_results",
     "clear_image_results",
+    "get_plot_results_schemas",
+    "plot_results",
     "set_dialog_bridge",
     "resolve_bridge_active",
     "load_plugin_source",

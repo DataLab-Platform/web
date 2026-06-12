@@ -691,6 +691,25 @@ export interface TableAnalysisResult extends AnalysisResultBase {
 
 export type AnalysisResult = GeometryAnalysisResult | TableAnalysisResult;
 
+/** One plottable analysis-result category, returned by
+ *  :meth:`DataLabRuntime.getPlotResultsSchemas`.  Describes the data the
+ *  "Plot results" dialog needs to let the user pick X/Y columns. */
+export interface PlotResultsSchemaEntry {
+  /** Result category key (e.g. ``"fwhm"`` or ``"shape_circle"``). */
+  category: string;
+  /** Result kind value (e.g. ``"fwhm"``, ``"circle"``). */
+  kind: string;
+  /** ``true`` for geometry results, ``false`` for table results. */
+  is_geometry: boolean;
+  /** Human-readable result title (Sigima-localised). */
+  label: string;
+  /** Numeric column names selectable for the X / Y axes. */
+  numeric_headers: string[];
+  /** Default plot kind (``"one_curve_per_object"`` when any result holds
+   *  more than one row, otherwise ``"one_curve_per_title"``). */
+  default_kind: "one_curve_per_object" | "one_curve_per_title";
+}
+
 export interface SignalCreationParams {
   kind: "sine" | "cosine" | "gauss" | "noise";
   title: string;
@@ -1249,6 +1268,7 @@ await micropip.install(["sigima", "guidata"])
     "erase_image_area",
     "commit_interactive_fit",
     "add_object_pickled",
+    "plot_results",
   ]);
 
   /** Collect the object ids referenced by *kwargs* (single + list keys). */
@@ -1951,6 +1971,38 @@ await micropip.install(["sigima", "guidata"])
       oid: id,
       metadata_key: metadataKey ?? null,
     })) as number;
+  }
+
+  /** Describe the plottable analysis-result categories shared by *ids*
+   *  (mirrors DataLab desktop's "Analysis ▸ Plot results").  Returns an
+   *  empty list when the selection carries no plottable result. */
+  async getPlotResultsSchemas(
+    ids: string[],
+  ): Promise<PlotResultsSchemaEntry[]> {
+    return (await this.callPy("get_plot_results_schemas", {
+      oids: ids,
+    })) as PlotResultsSchemaEntry[];
+  }
+
+  /** Aggregate analysis results of *category* across *ids* into new result
+   *  signals (placed in a get-or-create signal group *groupName*) and
+   *  return the ids of the created signals. */
+  async plotResults(params: {
+    ids: string[];
+    category: string;
+    kind: string;
+    xaxis: string;
+    yaxis: string;
+    groupName: string;
+  }): Promise<string[]> {
+    return (await this.callPy("plot_results", {
+      oids: params.ids,
+      category: params.category,
+      kind: params.kind,
+      xaxis: params.xaxis,
+      yaxis: params.yaxis,
+      group_name: params.groupName,
+    })) as string[];
   }
 
   async listSignals(): Promise<SignalMeta[]> {
