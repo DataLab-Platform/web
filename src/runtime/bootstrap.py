@@ -3191,43 +3191,63 @@ def delete_image_roi_at(oid: str, index: int) -> None:
         obj.roi = new_roi
 
 
-def extract_image_rois(oid: str, merged: bool) -> list[str]:
-    """Extract the ROIs of image *oid* into one or several new images.
+def extract_image_rois(oids, merged: bool) -> list[str]:
+    """Extract the ROIs of one or several images into new images.
+
+    The ROI definition is taken from the *first* object in *oids* and
+    applied to every listed object, mirroring DataLab desktop's
+    ``compute_roi_extraction`` ("if multiple objs are selected, apply the
+    first obj ROI to all").
 
     Args:
-        oid: Source image id.
-        merged: When ``True`` produce a single output image containing the
-            union of all ROIs (``sipi.extract_rois``).
-            When ``False`` produce one image per ROI (``sipi.extract_roi``
-            applied to each :class:`ROI2DParam`).
+        oids: A single source image id, or a list of selected image ids.
+            The first id provides the ROI that is applied to every object.
+        merged: When ``True`` produce a single output image per source
+            containing the union of all ROIs (``sipi.extract_rois``).
+            When ``False`` produce one image per ROI per source
+            (``sipi.extract_roi`` applied to each :class:`ROI2DParam`).
 
     Returns:
-        Ids of the newly created images (in source order).  Empty when the
-        source has no ROI.
+        Ids of the newly created images (each placed beside its own
+        source).  Empty when the ROI source has no ROI.
     """
-    obj = _MODEL.get(oid)
-    roi = obj.roi
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if isinstance(oids, str):
+        oids = [oids]
+    if not oids:
+        return []
+    roi_src = _MODEL.get(oids[0])
+    roi = roi_src.roi
     if roi is None or not roi.single_rois:
         return []
     import sigima.proc.image as sipi
 
     panel = _MODEL._panels["image"]  # noqa: SLF001
-    src_group_id: str | None = None
-    try:
-        src_group_id = panel.find_group_of(oid).gid
-    except Exception:
-        src_group_id = None
-    params = [single.to_param(obj, i) for i, single in enumerate(roi.single_rois)]
     out_ids: list[str] = []
-    if merged:
-        result = sipi.extract_rois(obj, params)
-        patch_title_with_ids(result, [oid])
-        out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
-    else:
-        for p in params:
-            result = sipi.extract_roi(obj, p)
-            patch_title_with_ids(result, [oid])
+    for target_oid in oids:
+        obj = _MODEL.get(target_oid)
+        src_group_id: str | None = None
+        try:
+            src_group_id = panel.find_group_of(target_oid).gid
+        except Exception:
+            src_group_id = None
+        # Rebuild params from the ROI source for each target so no param
+        # object is shared across extraction calls.
+        params = [
+            single.to_param(roi_src, i) for i, single in enumerate(roi.single_rois)
+        ]
+        if merged:
+            result = sipi.extract_rois(obj, params)
+            patch_title_with_ids(result, [target_oid])
             out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
+        else:
+            for p in params:
+                result = sipi.extract_roi(obj, p)
+                patch_title_with_ids(result, [target_oid])
+                out_ids.append(
+                    _MODEL.add_object("image", result, group_id=src_group_id)
+                )
     return out_ids
 
 
@@ -3496,44 +3516,65 @@ def delete_signal_roi_at(oid: str, index: int) -> None:
         obj.roi = new_roi
 
 
-def extract_signal_rois(oid: str, merged: bool) -> list[str]:
-    """Extract the ROIs of signal *oid* into one or several new signals.
+def extract_signal_rois(oids, merged: bool) -> list[str]:
+    """Extract the ROIs of one or several signals into new signals.
+
+    The ROI definition is taken from the *first* object in *oids* and
+    applied to every listed object, mirroring DataLab desktop's
+    ``compute_roi_extraction`` ("if multiple objs are selected, apply the
+    first obj ROI to all").
 
     Args:
-        oid: Source signal id.
-        merged: When ``True`` produce a *single* output signal containing the
-            concatenation of all ROIs (``sips.extract_rois``).
-            When ``False`` produce *one signal per ROI* (``sips.extract_roi``
-            applied to each ``ROI1DParam``).
+        oids: A single source signal id, or a list of selected signal ids.
+            The first id provides the ROI that is applied to every object.
+        merged: When ``True`` produce a *single* output signal per source
+            containing the concatenation of all ROIs (``sips.extract_rois``).
+            When ``False`` produce *one signal per ROI* per source
+            (``sips.extract_roi`` applied to each ``ROI1DParam``).
 
     Returns:
-        Ids of the newly created signals (in source order).  Empty list if
-        the source has no ROI.
+        Ids of the newly created signals (each placed beside its own
+        source).  Empty list if the ROI source has no ROI.
     """
-    obj = _MODEL.get(oid)
-    roi = obj.roi
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if isinstance(oids, str):
+        oids = [oids]
+    if not oids:
+        return []
+    roi_src = _MODEL.get(oids[0])
+    roi = roi_src.roi
     if roi is None or not roi.single_rois:
         return []
     import sigima.proc.signal as sips
 
-    # Keep the source group so the extracted children land beside their parent.
+    # Keep each source's group so the extracted children land beside their
+    # respective parent.
     panel = _MODEL._panels["signal"]  # noqa: SLF001
-    src_group_id: str | None = None
-    try:
-        src_group_id = panel.find_group_of(oid).gid
-    except Exception:
-        src_group_id = None
-    params = [single.to_param(obj, i) for i, single in enumerate(roi.single_rois)]
     out_ids: list[str] = []
-    if merged:
-        result = sips.extract_rois(obj, params)
-        patch_title_with_ids(result, [oid])
-        out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
-    else:
-        for p in params:
-            result = sips.extract_roi(obj, p)
-            patch_title_with_ids(result, [oid])
+    for target_oid in oids:
+        obj = _MODEL.get(target_oid)
+        src_group_id: str | None = None
+        try:
+            src_group_id = panel.find_group_of(target_oid).gid
+        except Exception:
+            src_group_id = None
+        # Rebuild params from the ROI source for each target so no param
+        # object is shared across extraction calls.
+        params = [
+            single.to_param(roi_src, i) for i, single in enumerate(roi.single_rois)
+        ]
+        if merged:
+            result = sips.extract_rois(obj, params)
+            patch_title_with_ids(result, [target_oid])
             out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
+        else:
+            for p in params:
+                result = sips.extract_roi(obj, p)
+                patch_title_with_ids(result, [target_oid])
+                out_ids.append(
+                    _MODEL.add_object("signal", result, group_id=src_group_id)
+                )
     return out_ids
 
 

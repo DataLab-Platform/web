@@ -103,3 +103,27 @@ def test_extract_image_rois_separated(fresh_bootstrap):
     )
     new_ids = bs.extract_image_rois(oid, merged=False)
     assert len(new_ids) == 2
+
+
+def test_extract_image_rois_applies_first_roi_to_all_selected(fresh_bootstrap):
+    """The ROI of the first image is applied to every selected image.
+
+    Mirrors DataLab desktop's ``compute_roi_extraction`` ("if multiple
+    objs are selected, apply the first obj ROI to all").
+    """
+    bs = fresh_bootstrap
+    a = bs.add_image_from_array("A", np.arange(400, dtype=float).reshape(20, 20))
+    b = bs.add_image_from_array("B", np.ones((20, 20), dtype=float))
+    # Only A has a ROI; B has none.
+    bs.set_image_roi(
+        a,
+        [
+            {"geometry": "rectangle", "x0": 0.0, "y0": 0.0, "dx": 5.0, "dy": 5.0},
+            {"geometry": "rectangle", "x0": 10.0, "y0": 10.0, "dx": 4.0, "dy": 4.0},
+        ],
+    )
+    new_ids = bs.extract_image_rois([a, b], merged=False)
+    # 2 images x 2 ROIs = 4 extracted images.
+    assert len(new_ids) == 4
+    # B itself must be left untouched (its ROI is still empty).
+    assert bs.get_image_roi(b) == []

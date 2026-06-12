@@ -2414,25 +2414,30 @@ export default function App() {
     if (!runtime || !currentId) return;
     setBusy(true);
     try {
-      const ids = await runtime.extractSignalRois(currentId, false);
+      // Apply the current signal's ROI to every selected signal
+      // (current first), mirroring DataLab desktop's
+      // ``compute_roi_extraction``.
+      const ids = [currentId, ...selectedIds.filter((id) => id !== currentId)];
+      const newIds = await runtime.extractSignalRois(ids, false);
       await refresh();
-      if (ids.length > 0) setCurrentId(ids[ids.length - 1]);
+      if (newIds.length > 0) setCurrentId(newIds[newIds.length - 1]);
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, refresh]);
+  }, [runtime, currentId, selectedIds, refresh]);
 
   const handleRoiExtractMerged = useCallback(async () => {
     if (!runtime || !currentId) return;
     setBusy(true);
     try {
-      const ids = await runtime.extractSignalRois(currentId, true);
+      const ids = [currentId, ...selectedIds.filter((id) => id !== currentId)];
+      const newIds = await runtime.extractSignalRois(ids, true);
       await refresh();
-      if (ids.length > 0) setCurrentId(ids[0]);
+      if (newIds.length > 0) setCurrentId(newIds[0]);
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, refresh]);
+  }, [runtime, currentId, selectedIds, refresh]);
 
   // ------------------------------------------------------------------
   // Image ROI handlers (Phase 13)
@@ -2545,25 +2550,29 @@ export default function App() {
     if (!runtime || !currentId) return;
     setBusy(true);
     try {
-      const ids = await runtime.extractImageRois(currentId, false);
+      // Apply the current image's ROI to every selected image (current
+      // first), mirroring DataLab desktop's ``compute_roi_extraction``.
+      const ids = [currentId, ...selectedIds.filter((id) => id !== currentId)];
+      const newIds = await runtime.extractImageRois(ids, false);
       await refresh();
-      if (ids.length > 0) setCurrentId(ids[ids.length - 1]);
+      if (newIds.length > 0) setCurrentId(newIds[newIds.length - 1]);
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, refresh]);
+  }, [runtime, currentId, selectedIds, refresh]);
 
   const handleImageRoiExtractMerged = useCallback(async () => {
     if (!runtime || !currentId) return;
     setBusy(true);
     try {
-      const ids = await runtime.extractImageRois(currentId, true);
+      const ids = [currentId, ...selectedIds.filter((id) => id !== currentId)];
+      const newIds = await runtime.extractImageRois(ids, true);
       await refresh();
-      if (ids.length > 0) setCurrentId(ids[0]);
+      if (newIds.length > 0) setCurrentId(newIds[0]);
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, refresh]);
+  }, [runtime, currentId, selectedIds, refresh]);
 
   /** Open the ROI dialog pre-filled with a single centered rectangle, to
    *  let the user define the area to erase. Mirrors DataLab desktop's

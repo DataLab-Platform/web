@@ -2249,9 +2249,12 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("delete_signal_roi_at", { oid, index });
   }
 
-  async extractSignalRois(oid: string, merged: boolean): Promise<string[]> {
+  async extractSignalRois(
+    oids: string | string[],
+    merged: boolean,
+  ): Promise<string[]> {
     return (await this.callPy("extract_signal_rois", {
-      oid,
+      oids,
       merged,
     })) as string[];
   }
@@ -2516,9 +2519,12 @@ await micropip.install(["sigima", "guidata"])
     await this.callPy("delete_image_roi_at", { oid, index });
   }
 
-  async extractImageRois(oid: string, merged: boolean): Promise<string[]> {
+  async extractImageRois(
+    oids: string | string[],
+    merged: boolean,
+  ): Promise<string[]> {
     return (await this.callPy("extract_image_rois", {
-      oid,
+      oids,
       merged,
     })) as string[];
   }

@@ -108,3 +108,51 @@ def test_extract_without_roi_returns_empty(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
     assert bs.extract_signal_rois(oid, merged=False) == []
+
+
+def test_extract_signal_rois_applies_first_roi_to_all_selected(fresh_bootstrap):
+    """The ROI of the first object is applied to every selected object.
+
+    Mirrors DataLab desktop's ``compute_roi_extraction`` ("if multiple
+    objs are selected, apply the first obj ROI to all"): only the first
+    signal carries a ROI, yet both selected signals are extracted.
+    """
+    bs = fresh_bootstrap
+    x = np.linspace(0, 10, 200)
+    a = bs.add_signal_from_arrays("A", x, np.sin(x))
+    b = bs.add_signal_from_arrays("B", x, np.cos(x))
+    # Only A has a ROI; B has none.
+    bs.set_signal_roi(
+        a,
+        [
+            {"xmin": 1.0, "xmax": 3.0},
+            {"xmin": 6.0, "xmax": 8.0},
+        ],
+    )
+    # Pass both ids with A first: A's ROI must be applied to both.
+    new_ids = bs.extract_signal_rois([a, b], merged=False)
+    # 2 objects x 2 ROIs = 4 extracted signals.
+    assert len(new_ids) == 4
+    for child_oid in new_ids:
+        child = bs.get_signal_xy(child_oid)
+        assert len(child["x"]) < len(x)
+    # B itself must be left untouched (its ROI is still empty).
+    assert bs.get_signal_roi(b) == []
+
+
+def test_extract_signal_rois_merged_all_selected(fresh_bootstrap):
+    """Merged extraction over a multi-selection yields one signal per source."""
+    bs = fresh_bootstrap
+    x = np.linspace(0, 10, 200)
+    a = bs.add_signal_from_arrays("A", x, np.sin(x))
+    b = bs.add_signal_from_arrays("B", x, np.cos(x))
+    bs.set_signal_roi(
+        a,
+        [
+            {"xmin": 1.0, "xmax": 2.0},
+            {"xmin": 5.0, "xmax": 6.0},
+        ],
+    )
+    new_ids = bs.extract_signal_rois([a, b], merged=True)
+    # 2 objects x 1 merged output = 2 extracted signals.
+    assert len(new_ids) == 2
