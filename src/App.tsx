@@ -3068,7 +3068,7 @@ export default function App() {
       return;
     }
     if (!picked) return;
-    if (picked.length === 0) {
+    if (picked.files.length === 0) {
       await notify({
         kind: "info",
         title: "Open from directory",
@@ -3079,8 +3079,12 @@ export default function App() {
       });
       return;
     }
-    const folders = groupByFolder(picked);
+    const folders = groupByFolder(picked.files);
     if (folders.length === 0) return;
+    // Files sitting directly in the picked root have an empty
+    // ``relativeDir``; name their group after the picked folder, mirroring
+    // DataLab Qt's ``osp.basename(path)`` fallback in load_from_directory.
+    const rootLabel = picked.rootName || t("(root)");
     setBusy(true);
     let lastId: string | null = null;
     let totalObjects = 0;
@@ -3095,7 +3099,7 @@ export default function App() {
         step: async (i, { setLabel, signal }) => {
           if (signal.aborted) return;
           const folder = folders[i];
-          const label = folder.relativeDir || "(root)";
+          const label = folder.relativeDir || rootLabel;
           setLabel(`${i + 1} / ${folders.length} — ${label}`);
           // Read every file's bytes before crossing the Pyodide bridge:
           // ``File.arrayBuffer()`` is async and cheap, the Python call

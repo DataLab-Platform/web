@@ -26,6 +26,16 @@ export interface PickedFile {
   file: File;
 }
 
+export interface PickedDirectory {
+  /** Basename of the folder the user picked. Used to name the group that
+   *  holds files sitting directly in the root, mirroring DataLab Qt's
+   *  ``load_from_directory`` (which falls back to ``osp.basename(path)``
+   *  when the relative path is ``"."``). */
+  rootName: string;
+  /** Flat list of files found by walking the picked folder recursively. */
+  files: PickedFile[];
+}
+
 interface DirectoryHandleLike {
   values(): AsyncIterable<FileSystemHandle>;
 }
@@ -50,7 +60,7 @@ async function walkDirectoryHandle(
   }
 }
 
-async function pickViaFileSystemAccess(): Promise<PickedFile[] | null> {
+async function pickViaFileSystemAccess(): Promise<PickedDirectory | null> {
   const win = window as unknown as {
     showDirectoryPicker?: (opts?: {
       mode?: "read" | "readwrite";
@@ -78,10 +88,10 @@ async function pickViaFileSystemAccess(): Promise<PickedFile[] | null> {
   console.info(
     `[pickDirectory] FSA walked '${dirHandle.name}': ${out.length} file(s)`,
   );
-  return out;
+  return { rootName: dirHandle.name, files: out };
 }
 
-async function pickViaInputElement(): Promise<PickedFile[] | null> {
+async function pickViaInputElement(): Promise<PickedDirectory | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -109,20 +119,22 @@ async function pickViaInputElement(): Promise<PickedFile[] | null> {
           return;
         }
         const out: PickedFile[] = [];
+        let rootName = "";
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           // ``webkitRelativePath`` includes the picked folder name as
           // its first segment — strip it so paths are relative to the
-          // root the user actually chose.
+          // root the user actually chose, but keep it as the root name.
           const rel = file.webkitRelativePath || file.name;
           const parts = rel.split("/");
-          parts.shift(); // root folder name
+          const first = parts.shift(); // root folder name
+          if (first && !rootName) rootName = first;
           const name = parts.pop() ?? file.name;
           const relativeDir = parts.join("/");
           out.push({ relativeDir, name, file });
         }
         cleanup();
-        resolve(out);
+        resolve({ rootName, files: out });
       } catch (err) {
         cleanup();
         reject(err);
@@ -139,7 +151,7 @@ async function pickViaInputElement(): Promise<PickedFile[] | null> {
 }
 
 /** Open a directory picker and recursively walk the selected folder. */
-export async function pickDirectoryRecursive(): Promise<PickedFile[] | null> {
+export async function pickDirectoryRecursive(): Promise<PickedDirectory | null> {
   const win = window as unknown as { showDirectoryPicker?: unknown };
   if (typeof win.showDirectoryPicker === "function") {
     // FSA available: use it exclusively. Falling back to the
