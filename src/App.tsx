@@ -544,7 +544,18 @@ export default function App() {
   const setSelectedIds = useCallback(
     (arg: string[] | ((prev: string[]) => string[])) => {
       _setSelectedIdsRaw((prev) => {
-        const next = typeof arg === "function" ? arg(prev) : arg;
+        const raw = typeof arg === "function" ? arg(prev) : arg;
+        // Normalise to unique ids (keep first occurrence, preserve order).
+        // Group navigation builds the selection from a group's object
+        // list (`grp.objects.map(o => o.id)`); a duplicate there would
+        // otherwise reach `MultiImagePlot`, whose cells are keyed by
+        // object id, producing React "duplicate key" warnings and the
+        // ensuing reconciliation loop. Deduping centrally protects every
+        // consumer (multi-image grid, ROI checks, processing sources).
+        const next =
+          raw.length > 1 && new Set(raw).size !== raw.length
+            ? [...new Set(raw)]
+            : raw;
         if (
           next === prev ||
           (next.length === prev.length && next.every((id, i) => id === prev[i]))

@@ -92,6 +92,26 @@ def _new_id(prefix: str = "") -> str:
     return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
+def _dedupe_preserve_order(oids: list[str]) -> list[str]:
+    """Return *oids* with duplicates removed, keeping first occurrence.
+
+    Object ids are unique per object, so a group should never list the same
+    id twice. A duplicate would surface in the front-end as two tree rows /
+    grid cells sharing the same React key (keyed by object id), triggering a
+    "duplicate key" warning and a render loop. Guarding the read path keeps
+    the UI robust against any corrupt-state path that might re-insert an id.
+    """
+    if len(oids) < 2:
+        return oids
+    seen: set[str] = set()
+    out: list[str] = []
+    for oid in oids:
+        if oid not in seen:
+            seen.add(oid)
+            out.append(oid)
+    return out
+
+
 # Locale-aware default labels. Unlike sigima/guidata strings (translated via
 # gettext, see the locale note above), bootstrap.py is DataLab-Web's own code,
 # so its few user-facing defaults — the "Group" prefix for auto-created groups
@@ -342,7 +362,7 @@ class ObjectModel:
                     "name": g.name,
                     "objects": [
                         {"id": oid, **_object_meta(self._objects[oid])}
-                        for oid in g.object_ids
+                        for oid in _dedupe_preserve_order(g.object_ids)
                         if oid in self._objects
                     ],
                 }

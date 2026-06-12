@@ -57,6 +57,17 @@ export function MultiImagePlot({ images, totalSelected }: Props) {
     );
   }
   const omitted = Math.max(0, totalSelected - images.length);
+  // Defensive dedupe: cells are keyed by object id, so any duplicate id
+  // in the incoming list would trigger React "duplicate key" warnings and
+  // a reconciliation loop. The selection state is deduped upstream
+  // (`setSelectedIds` in App), but guard here too so the grid stays
+  // robust regardless of caller.
+  const uniqueImages =
+    new Set(images.map((img) => img.id)).size === images.length
+      ? images
+      : images.filter(
+          (img, i) => images.findIndex((o) => o.id === img.id) === i,
+        );
   return (
     <div className="multi-image-area">
       {omitted > 0 && (
@@ -66,7 +77,7 @@ export function MultiImagePlot({ images, totalSelected }: Props) {
         </div>
       )}
       <div className="multi-image-grid">
-        {images.map((img) => (
+        {uniqueImages.map((img) => (
           <MiniImage key={img.id} image={img} />
         ))}
       </div>

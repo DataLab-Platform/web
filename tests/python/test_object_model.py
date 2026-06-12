@@ -86,6 +86,22 @@ def test_delete_unknown_object_is_noop(fresh_bootstrap):
     bs.delete_object("does-not-exist")  # must not raise
 
 
+def test_panel_tree_dedupes_duplicate_object_ids(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    group = bs._MODEL.panel("signal").groups[0]
+    # Simulate a corrupt-state path that re-inserted the same id into a
+    # group. The read path must surface each object once so the front-end
+    # never renders two tree rows / grid cells sharing a React key (keyed
+    # by object id), which triggered a "duplicate key" warning + render
+    # loop in the multi-image grid.
+    group.object_ids.append(oid)
+    assert group.object_ids == [oid, oid]
+    tree = bs.get_panel_tree("signal")
+    ids = [o["id"] for o in tree["groups"][0]["objects"]]
+    assert ids == [oid]
+
+
 def test_move_object_with_target_index(fresh_bootstrap):
     bs = fresh_bootstrap
     oids = [bs.add_signal_from_arrays(name, [0, 1], [0, 0]) for name in ("A", "B", "C")]
