@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-12
+
 ### Added
 
 - **Large-image level-of-detail (LOD) rendering**: the single-image viewer now rasterises only the visible viewport at a stride matched to the current zoom, so panning and zooming very large images (4096²+) stays responsive instead of re-rendering the full array on every interaction. Profiles, statistics, histograms and hover read-outs continue to read the full-resolution data, so accuracy is unchanged.
@@ -143,7 +145,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/DataLab-Platform/web/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/DataLab-Platform/web/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DataLab-Platform/web/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/DataLab-Platform/web/compare/v0.1.0...v0.2.0
