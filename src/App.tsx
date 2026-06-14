@@ -69,6 +69,7 @@ import {
   MULTI_IMAGE_LIMIT,
   MULTI_IMAGE_MAX_SIZE,
 } from "./components/MultiImagePlot";
+import { MultiImageSpatialPlot } from "./components/MultiImageSpatialPlot";
 import { DataSetDialog } from "./components/DataSetDialog";
 import {
   ProfileDefinitionDialog,
@@ -284,6 +285,9 @@ function usePersistedSize(
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
 const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
+// Multi-image view mode: ``false`` = read-only CSS grid (default),
+// ``true`` = spatial overlay honouring each image's x0/y0/dx/dy.
+const MULTI_IMAGE_SPATIAL_KEY = "datalab-web.multi-image-spatial";
 
 function collectSupportedH5NodeIds(
   node: H5BrowserNode,
@@ -596,6 +600,14 @@ export default function App() {
    *  read-only grid in :class:`MultiImagePlot` to mirror DataLab
    *  desktop's multi-image viewer. */
   const [extraImages, setExtraImages] = useState<ImageData[]>([]);
+  /** Multi-image view mode: ``false`` = thumbnail grid (default),
+   *  ``true`` = spatial overlay honouring each image's origin so the
+   *  "Distribute on a grid" / "Reset positions" geometry tools are
+   *  observable.  Persisted across reloads. */
+  const [spatialMultiImage, setSpatialMultiImage] = usePersistedBool(
+    MULTI_IMAGE_SPATIAL_KEY,
+    false,
+  );
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
   /** Live counts of macros / notebooks reported by their panels.
@@ -2745,13 +2757,26 @@ export default function App() {
       setBusy(true);
       try {
         await runtime.distributeImagesOnGrid(sourceIds, values);
+        // The geometry tools only move images in the shared coordinate
+        // space; that is invisible in the thumbnail grid, so surface the
+        // result by switching the multi-image view to spatial overlay.
+        if (sourceIds.length > 1) setSpatialMultiImage(true);
         await reloadCurrentImage();
-        await refresh(currentId);
+        // Refresh WITHOUT a preferred id so the existing multi-selection
+        // is preserved (passing ``currentId`` would collapse it to a
+        // single image and hide the spatial overlay we just enabled).
+        await refresh();
       } finally {
         setBusy(false);
       }
     },
-    [runtime, pendingImageGrid, reloadCurrentImage, refresh, currentId],
+    [
+      runtime,
+      pendingImageGrid,
+      reloadCurrentImage,
+      refresh,
+      setSpatialMultiImage,
+    ],
   );
 
   const handleResetImagePositions = useCallback(async () => {
@@ -2761,12 +2786,21 @@ export default function App() {
     setBusy(true);
     try {
       await runtime.resetImagePositions(ids);
+      // Make the repositioning observable (see handleSubmitImageGrid).
+      if (ids.length > 1) setSpatialMultiImage(true);
       await reloadCurrentImage();
-      await refresh(currentId);
+      // Preserve the multi-selection (see handleSubmitImageGrid).
+      await refresh();
     } finally {
       setBusy(false);
     }
-  }, [runtime, imageLayoutSourceIds, reloadCurrentImage, refresh, currentId]);
+  }, [
+    runtime,
+    imageLayoutSourceIds,
+    reloadCurrentImage,
+    refresh,
+    setSpatialMultiImage,
+  ]);
 
   const handleCreateRoiGrid = useCallback(async () => {
     if (!runtime || !currentId) return;
@@ -3973,10 +4007,39 @@ export default function App() {
               treeKind === "image" &&
               imageData &&
               extraImages.length > 0 && (
-                <MultiImagePlot
-                  images={[imageData, ...extraImages]}
-                  totalSelected={selectedIds.length}
-                />
+                <div className="multi-image-host">
+                  <div className="multi-image-modebar">
+                    <button
+                      type="button"
+                      className={`multi-image-modebtn${spatialMultiImage ? "" : " active"}`}
+                      onClick={() => setSpatialMultiImage(false)}
+                      title={t("Thumbnail grid (each image independent)")}
+                    >
+                      {t("Grid")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`multi-image-modebtn${spatialMultiImage ? " active" : ""}`}
+                      onClick={() => setSpatialMultiImage(true)}
+                      title={t(
+                        "Spatial overlay (honours image positions and the grid distribution tools)",
+                      )}
+                    >
+                      {t("Spatial")}
+                    </button>
+                  </div>
+                  {spatialMultiImage ? (
+                    <MultiImageSpatialPlot
+                      images={[imageData, ...extraImages]}
+                      totalSelected={selectedIds.length}
+                    />
+                  ) : (
+                    <MultiImagePlot
+                      images={[imageData, ...extraImages]}
+                      totalSelected={selectedIds.length}
+                    />
+                  )}
+                </div>
               )}
             {centralView === "plot" &&
               treeKind === "image" &&

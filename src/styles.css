@@ -3470,6 +3470,47 @@ input {
   min-height: 0;
 }
 
+/* Spatial overlay view: a single Plotly plot filling the area, with the
+ * shared hover tooltip positioned over it. */
+.multi-image-spatial-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+/* Host wrapping the grid/spatial view plus the mode toggle. */
+.multi-image-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.multi-image-modebar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.multi-image-modebtn {
+  font-size: 12px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.multi-image-modebtn.active {
+  background: var(--accent, #0a6cff);
+  border-color: var(--accent, #0a6cff);
+  color: #fff;
+}
+
 /* Canvas-based thumbnail wrapper.  ``aspect-ratio`` (set inline on
  * the wrapper) preserves the image's physical proportions so non-
  * square images render correctly without stretching. */
