@@ -366,7 +366,20 @@ export function SignalPlot({
           xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
           yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
           showlegend: resultTraces.length > 0 || extraSignals.length > 0,
-          legend: { ...plotlyTheme.legend, orientation: "h", y: -0.2 },
+          // Legend inside the plot, anchored top-right, mirroring the
+          // DataLab desktop layout. A semi-transparent background keeps it
+          // readable when it overlaps the curves.
+          legend: {
+            ...plotlyTheme.legend,
+            x: 1,
+            y: 1,
+            xanchor: "right",
+            yanchor: "top",
+            bgcolor:
+              theme === "dark" ? "rgba(30,30,30,0.7)" : "rgba(255,255,255,0.7)",
+            bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
+            borderwidth: 1,
+          },
           // In ROI edit mode, the newshape default uses the next ROI's
           // color so the freshly drawn rectangle matches its position in
           // the cycling palette as soon as it is committed.
