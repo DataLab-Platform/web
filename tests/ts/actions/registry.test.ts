@@ -305,6 +305,8 @@ describe("buildViewActions", () => {
     over: Partial<Parameters<typeof buildViewActions>[0]> = {},
   ) {
     return {
+      showToolbar: true,
+      onToggleToolbar: vi.fn(),
       showResultsOverlay: false,
       onToggleResultsOverlay: vi.fn(),
       showGraphicalTitles: true,
@@ -319,10 +321,11 @@ describe("buildViewActions", () => {
     };
   }
 
-  it("exposes one popout entry and four checkable toggles", () => {
+  it("exposes one popout entry and five checkable toggles", () => {
     const actions = buildViewActions(makeViewCallbacks());
     expect(actions.map((a) => a.id)).toEqual([
       "view.open_separate_view",
+      "view.show_toolbar",
       "view.results_overlay",
       "view.show_graphical_titles",
       "view.notebook_floating",

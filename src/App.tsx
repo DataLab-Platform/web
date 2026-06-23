@@ -30,6 +30,7 @@ import type {
   SignalData,
 } from "./runtime/runtime";
 import { MenuBar } from "./components/MenuBar";
+import { Toolbar } from "./components/Toolbar";
 import {
   buildAIAssistantActions,
   buildFeatureActions,
@@ -285,6 +286,7 @@ function usePersistedSize(
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
 const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
+const SHOW_TOOLBAR_KEY = "datalab-web.show-toolbar";
 // Multi-image view mode: ``false`` = read-only CSS grid (default),
 // ``true`` = spatial overlay honouring each image's x0/y0/dx/dy.
 const MULTI_IMAGE_SPATIAL_KEY = "datalab-web.multi-image-spatial";
@@ -540,6 +542,16 @@ export default function App() {
   const toggleGraphicalTitles = useCallback(
     () => setShowGraphicalTitles(!showGraphicalTitles),
     [showGraphicalTitles, setShowGraphicalTitles],
+  );
+  // View > "Show toolbar" toggle.  On by default to mirror DataLab
+  // desktop, which always shows its toolbars.
+  const [showToolbar, setShowToolbar] = usePersistedBool(
+    SHOW_TOOLBAR_KEY,
+    true,
+  );
+  const toggleToolbar = useCallback(
+    () => setShowToolbar(!showToolbar),
+    [showToolbar, setShowToolbar],
   );
   // View > "View in a new window…" — opens a full-screen modal hosting
   // the current selection's plot, so the user can see it without the
@@ -3519,6 +3531,8 @@ export default function App() {
         onShowReleaseNotes: () => setReleaseNotesOpen(true),
       }),
       ...buildViewActions({
+        showToolbar,
+        onToggleToolbar: toggleToolbar,
         showResultsOverlay,
         onToggleResultsOverlay: toggleResultsOverlay,
         showGraphicalTitles,
@@ -3634,6 +3648,8 @@ export default function App() {
       handleReloadPlugins,
       interactiveFits,
       handleLaunchInteractiveFit,
+      showToolbar,
+      toggleToolbar,
       showResultsOverlay,
       toggleResultsOverlay,
       showGraphicalTitles,
@@ -3787,6 +3803,7 @@ export default function App() {
             onToggleAIPanel={toggleAIPanel}
           />
         </div>
+        {showToolbar && <Toolbar actions={actions} state={actionState} />}
         {recoveryBanner && (
           <RecoveryBanner
             macroCount={recoveryBanner.macros}

@@ -36,9 +36,32 @@ export interface ActionDescriptor {
   beginGroup?: boolean;
   /** Optional URL to an SVG/PNG icon shown next to the label. */
   iconUrl?: string;
+  /** When ``true`` the action is also surfaced as an icon button in the
+   *  general toolbar (mirrors DataLab desktop's ``PANEL_TOOLBAR``). The
+   *  action keeps its menu entry — the toolbar is an additional view of
+   *  the same registry. */
+  toolbar?: boolean;
+  /** Toolbar group key. Buttons of the same group are kept contiguous and
+   *  a separator is inserted between consecutive groups. Groups are laid
+   *  out following {@link TOOLBAR_GROUP_ORDER}; unknown groups go last. */
+  toolbarGroup?: string;
+  /** Ordering of the button within its {@link toolbarGroup} (ascending).
+   *  Ties keep registry insertion order. */
+  toolbarOrder?: number;
   enabled: (state: ActionState) => boolean;
   run: () => void | Promise<void>;
 }
+
+/** Toolbar item produced by ``buildToolbarItems``: either an action button
+ *  or a separator marker inserted between groups. */
+export type ToolbarItem =
+  | { kind: "action"; action: ActionDescriptor }
+  | { kind: "separator" };
+
+/** Toolbar group ordering, mirroring DataLab desktop's toolbar layout:
+ *  the HDF5 workspace actions (main toolbar) come first, then the
+ *  per-object file / edit / metadata actions (panel toolbar). */
+export const TOOLBAR_GROUP_ORDER = ["file-h5", "file", "edit", "metadata"];
 
 export interface MenuNode {
   /** Canonical English structural label (menu-path segment). Used as a

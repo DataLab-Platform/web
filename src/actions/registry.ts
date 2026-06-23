@@ -12,6 +12,7 @@ import { getAnalysisIconUrl } from "../assets/analysisIcons";
 import { getCreateIconUrl } from "../assets/createIcons";
 import { getEditIconUrl } from "../assets/editIcons";
 import { getFeatureIconUrl } from "../assets/featureIcons";
+import { getH5IconUrl } from "../assets/h5Icons";
 import { getHelpIconUrl } from "../assets/helpIcons";
 import { getIoIconUrl } from "../assets/ioIcons";
 import { getRoiIconUrl } from "../assets/roiIcons";
@@ -90,6 +91,9 @@ export function buildStaticActions(
       label: t(en.open),
       menuPath: `File/${en.open}`,
       iconUrl: getIoIconUrl(`fileopen_${suffix}.svg`),
+      toolbar: true,
+      toolbarGroup: "file",
+      toolbarOrder: 0,
       enabled: ready,
       run: cb.onOpenFile,
     },
@@ -98,6 +102,9 @@ export function buildStaticActions(
       label: t(en.openDir),
       menuPath: `File/${en.openDir}`,
       iconUrl: getIoIconUrl("fileopen_directory.svg"),
+      toolbar: true,
+      toolbarGroup: "file",
+      toolbarOrder: 1,
       enabled: ready,
       run: cb.onOpenDirectory,
     },
@@ -106,6 +113,9 @@ export function buildStaticActions(
       label: t(en.save),
       menuPath: `File/${en.save}`,
       iconUrl: getIoIconUrl(`filesave_${suffix}.svg`),
+      toolbar: true,
+      toolbarGroup: "file",
+      toolbarOrder: 2,
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onSaveFile,
     },
@@ -114,6 +124,9 @@ export function buildStaticActions(
       label: t("Save to directory\u2026"),
       menuPath: "File/Save to directory\u2026",
       iconUrl: getIoIconUrl("save_to_directory.svg"),
+      toolbar: true,
+      toolbarGroup: "file",
+      toolbarOrder: 3,
       enabled: (s) =>
         ready(s) && (s.selectedIds.length > 0 || s.currentId !== null),
       run: cb.onSaveToDirectory,
@@ -132,6 +145,9 @@ export function buildStaticActions(
       menuPath: "File/Open HDF5 files…",
       iconUrl: getIoIconUrl("fileopen_h5.svg"),
       beginGroup: true,
+      toolbar: true,
+      toolbarGroup: "file-h5",
+      toolbarOrder: 0,
       enabled: ready,
       run: cb.onOpenWorkspaceHdf5,
     },
@@ -140,6 +156,9 @@ export function buildStaticActions(
       label: t("Save to HDF5 file…"),
       menuPath: "File/Save to HDF5 file…",
       iconUrl: getIoIconUrl("filesave_h5.svg"),
+      toolbar: true,
+      toolbarGroup: "file-h5",
+      toolbarOrder: 1,
       enabled: (s) =>
         ready(s) && (s.hasObjects || s.hasMacros || s.hasNotebooks),
       run: cb.onSaveWorkspaceHdf5,
@@ -148,7 +167,10 @@ export function buildStaticActions(
       id: "file.import_hdf5",
       label: t("Browse HDF5 file…"),
       menuPath: "File/Browse HDF5 file…",
-      iconUrl: getIoIconUrl("fileopen_h5.svg"),
+      iconUrl: getH5IconUrl("h5browser.svg"),
+      toolbar: true,
+      toolbarGroup: "file-h5",
+      toolbarOrder: 2,
       enabled: ready,
       run: cb.onImportHdf5,
     },
@@ -168,6 +190,9 @@ export function buildStaticActions(
       menuPath: "Edit/Delete selection",
       iconUrl: getEditIconUrl("delete.svg"),
       beginGroup: true,
+      toolbar: true,
+      toolbarGroup: "edit",
+      toolbarOrder: 3,
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
       run: cb.onDeleteSelection,
     },
@@ -176,6 +201,9 @@ export function buildStaticActions(
       label: t("Delete all groups and objects"),
       menuPath: "Edit/Delete all groups and objects",
       iconUrl: getEditIconUrl("delete_all.svg"),
+      toolbar: true,
+      toolbarGroup: "edit",
+      toolbarOrder: 4,
       enabled: (s) => ready(s) && s.hasObjects,
       run: cb.onDeleteAllObjects,
     },
@@ -193,6 +221,9 @@ export function buildStaticActions(
       label: t("Duplicate"),
       menuPath: "Edit/Duplicate",
       iconUrl: getEditIconUrl("duplicate.svg"),
+      toolbar: true,
+      toolbarGroup: "edit",
+      toolbarOrder: 2,
       enabled: (s) => ready(s) && s.selectedIds.length > 0,
       run: cb.onDuplicateSelection,
     },
@@ -201,6 +232,9 @@ export function buildStaticActions(
       label: t("Move up"),
       menuPath: "Edit/Move up",
       iconUrl: getEditIconUrl("move_up.svg"),
+      toolbar: true,
+      toolbarGroup: "edit",
+      toolbarOrder: 0,
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onMoveSelectionUp,
     },
@@ -209,6 +243,9 @@ export function buildStaticActions(
       label: t("Move down"),
       menuPath: "Edit/Move down",
       iconUrl: getEditIconUrl("move_down.svg"),
+      toolbar: true,
+      toolbarGroup: "edit",
+      toolbarOrder: 1,
       enabled: (s) => ready(s) && s.currentId !== null,
       run: cb.onMoveSelectionDown,
     },
@@ -227,6 +264,9 @@ export function buildStaticActions(
       menuPath: "Edit/Metadata/Copy metadata",
       iconUrl: getEditIconUrl("metadata_copy.svg"),
       beginGroup: true,
+      toolbar: true,
+      toolbarGroup: "metadata",
+      toolbarOrder: 0,
       enabled: (s) => ready(s) && s.selectedIds.length === 1,
       run: cb.onCopyMetadata,
     },
@@ -235,6 +275,9 @@ export function buildStaticActions(
       label: t("Paste metadata"),
       menuPath: "Edit/Metadata/Paste metadata",
       iconUrl: getEditIconUrl("metadata_paste.svg"),
+      toolbar: true,
+      toolbarGroup: "metadata",
+      toolbarOrder: 1,
       enabled: (s) =>
         ready(s) && s.hasMetadataClipboard && s.selectedIds.length > 0,
       run: cb.onPasteMetadata,
@@ -377,6 +420,10 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
 }
 
 export interface ViewActionCallbacks {
+  /** Current visibility of the general toolbar. */
+  showToolbar: boolean;
+  /** Toggle the general toolbar visibility (and persist the new value). */
+  onToggleToolbar: () => void;
   /** Current value of the "show results overlay on plot" preference. */
   showResultsOverlay: boolean;
   /** Toggle the preference (and persist the new value). */
@@ -409,6 +456,7 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   // the menu bar otherwise renders flat labels and we don't want to
   // grow the action descriptor schema for toggles.
   const checkPrefix = (on: boolean) => (on ? "\u2713 " : "    ");
+  const toolbarPrefix = checkPrefix(cb.showToolbar);
   const overlayPrefix = checkPrefix(cb.showResultsOverlay);
   const titlesPrefix = checkPrefix(cb.showGraphicalTitles);
   const notebookPrefix = checkPrefix(cb.notebookFloating);
@@ -426,10 +474,17 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       run: cb.onOpenSeparateView,
     },
     {
+      id: "view.show_toolbar",
+      label: `${toolbarPrefix}${t("Show toolbar")}`,
+      menuPath: `View/${toolbarPrefix}Show toolbar`,
+      beginGroup: true,
+      enabled: always,
+      run: cb.onToggleToolbar,
+    },
+    {
       id: "view.results_overlay",
       label: `${overlayPrefix}${t("Show results overlay on plot")}`,
       menuPath: `View/${overlayPrefix}Show results overlay on plot`,
-      beginGroup: true,
       enabled: always,
       run: cb.onToggleResultsOverlay,
     },
