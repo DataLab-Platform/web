@@ -87,3 +87,30 @@ export function buildRoiAreaTrace(
     showlegend: false,
   };
 }
+
+/**
+ * Build the two dashed vertical boundary lines delimiting a single ROI's
+ * X interval.  Each line spans the full plotting area (``yref: "paper"``,
+ * ``0 → 1``) so it reaches the very top of the graph regardless of the
+ * y-axis autorange, mirroring the desktop reference where the ROI edges
+ * span the whole canvas height.  Lines are anchored to the raw
+ * ``xmin``/``xmax`` (not clipped to the data extent) so the true ROI
+ * bounds stay visible even when the interval reaches past the signal.
+ */
+export function buildRoiBoundaryShapes(
+  seg: SignalRoiSegment,
+  index: number,
+): Record<string, unknown>[] {
+  const lineColor = roiLineColor(index);
+  return [seg.xmin, seg.xmax].map((x) => ({
+    type: "line",
+    xref: "x",
+    yref: "paper",
+    x0: x,
+    x1: x,
+    y0: 0,
+    y1: 1,
+    line: { color: lineColor, width: 1, dash: "dash" },
+    layer: "above",
+  }));
+}

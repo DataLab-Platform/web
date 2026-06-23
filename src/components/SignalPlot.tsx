@@ -10,7 +10,7 @@ import {
   plotlyDash,
   roiLineColor,
 } from "../runtime/plotStyles";
-import { buildRoiAreaTrace } from "./signalRoi";
+import { buildRoiAreaTrace, buildRoiBoundaryShapes } from "./signalRoi";
 import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
 import type {
@@ -142,6 +142,10 @@ export function SignalPlot({
       const allEv = event.shapes as Array<Record<string, unknown>>;
       const roiCount = roiShapes.length;
       const resultCount = resultShapes.length;
+      // Dashed boundary lines are injected (view mode only) right after the
+      // ROI block; they are not user-editable and must be skipped when
+      // recovering the trailing free-annotation shapes.
+      const boundaryCount = roiBoundaryShapes.length;
       // First N entries map back to the ROI list.
       if (roiEditMode && onRoiChange) {
         const updated: SignalRoiSegment[] = [];
@@ -193,7 +197,7 @@ export function SignalPlot({
         nextShapes = extras;
         touched = true;
       } else {
-        nextShapes = allEv.slice(roiCount + resultCount);
+        nextShapes = allEv.slice(roiCount + boundaryCount + resultCount);
         touched = true;
       }
     }
@@ -291,6 +295,15 @@ export function SignalPlot({
       .filter((t): t is Record<string, unknown> => t !== null);
   }, [roi, roiEditMode, data.x, data.y]);
 
+  // View-mode dashed vertical boundary lines: two per ROI (at ``xmin`` and
+  // ``xmax``) spanning the full plotting area (``yref: "paper"``) so they
+  // reach the very top of the graph.  Empty in edit mode, where the
+  // draggable rectangles already mark the boundaries.
+  const roiBoundaryShapes = useMemo(() => {
+    if (roiEditMode) return [] as unknown[];
+    return roi.flatMap((seg, i) => buildRoiBoundaryShapes(seg, i));
+  }, [roi, roiEditMode]);
+
   // Convert each GeometryResult into Plotly shapes + a marker scatter trace
   // + textual annotations.  TableResults are *not* drawn here — they go to
   // the side panel.  Mirrors DataLab desktop's PlotPy overlay behaviour.
@@ -318,8 +331,8 @@ export function SignalPlot({
   );
 
   const allShapes = useMemo(
-    () => [...roiShapes, ...resultShapes, ...localShapes],
-    [roiShapes, resultShapes, localShapes],
+    () => [...roiShapes, ...roiBoundaryShapes, ...resultShapes, ...localShapes],
+    [roiShapes, roiBoundaryShapes, resultShapes, localShapes],
   );
   const allAnnotations = useMemo(
     () => [...resultAnnotations, ...resultBoxAnnotations, ...localAnnotations],

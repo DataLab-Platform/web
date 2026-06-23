@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildRoiAreaTrace, interpY } from "../../src/components/signalRoi";
+import {
+  buildRoiAreaTrace,
+  buildRoiBoundaryShapes,
+  interpY,
+} from "../../src/components/signalRoi";
 
 describe("interpY", () => {
   it("returns the nearest edge value when xq is out of range", () => {
@@ -69,5 +73,33 @@ describe("buildRoiAreaTrace", () => {
     expect(t!.name).toBe("Peak A");
     const t2 = buildRoiAreaTrace({ xmin: 0, xmax: 4 }, 2, x, y);
     expect(t2!.name).toBe("ROI3");
+  });
+});
+
+describe("buildRoiBoundaryShapes", () => {
+  it("returns two full-height dashed vertical lines at xmin and xmax", () => {
+    const shapes = buildRoiBoundaryShapes({ xmin: 1, xmax: 3 }, 0);
+    expect(shapes).toHaveLength(2);
+    for (const s of shapes) {
+      expect(s.type).toBe("line");
+      expect(s.xref).toBe("x");
+      // Paper-referenced y so the line spans the whole plotting area.
+      expect(s.yref).toBe("paper");
+      expect(s.y0).toBe(0);
+      expect(s.y1).toBe(1);
+      expect((s.line as { dash: string }).dash).toBe("dash");
+    }
+    // First line at xmin, second at xmax (vertical => x0 === x1).
+    expect(shapes[0].x0).toBe(1);
+    expect(shapes[0].x1).toBe(1);
+    expect(shapes[1].x0).toBe(3);
+    expect(shapes[1].x1).toBe(3);
+  });
+
+  it("colors both boundaries with the same per-ROI palette color", () => {
+    const shapes = buildRoiBoundaryShapes({ xmin: 0, xmax: 2 }, 1);
+    const c0 = (shapes[0].line as { color: string }).color;
+    const c1 = (shapes[1].line as { color: string }).color;
+    expect(c0).toBe(c1);
   });
 });
