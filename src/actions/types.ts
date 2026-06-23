@@ -60,8 +60,18 @@ export type ToolbarItem =
 
 /** Toolbar group ordering, mirroring DataLab desktop's toolbar layout:
  *  the HDF5 workspace actions (main toolbar) come first, then the
- *  per-object file / edit / metadata actions (panel toolbar). */
-export const TOOLBAR_GROUP_ORDER = ["file-h5", "file", "edit", "metadata"];
+ *  per-object file / edit / metadata / ROI actions (panel toolbar). The
+ *  metadata block is split into three sub-groups to reproduce desktop's
+ *  internal separators (copy/paste | add/import/export | delete). */
+export const TOOLBAR_GROUP_ORDER = [
+  "file-h5",
+  "file",
+  "edit",
+  "metadata",
+  "metadata-edit",
+  "metadata-del",
+  "roi",
+];
 
 export interface MenuNode {
   /** Canonical English structural label (menu-path segment). Used as a

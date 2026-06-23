@@ -57,6 +57,23 @@ describe("buildToolbarItems", () => {
     expect(ids(items)).toBe("f,|,e,|,m");
   });
 
+  it("reproduces the full desktop PANEL_TOOLBAR layout", () => {
+    // One representative action per group, shuffled; the helper must
+    // restore the desktop order with a separator between each group,
+    // including the metadata sub-groups (copy/paste | add/import/export |
+    // delete) and the trailing ROI group.
+    const items = buildToolbarItems([
+      action("roi", { toolbar: true, toolbarGroup: "roi" }),
+      action("del", { toolbar: true, toolbarGroup: "metadata-del" }),
+      action("h5", { toolbar: true, toolbarGroup: "file-h5" }),
+      action("meta", { toolbar: true, toolbarGroup: "metadata" }),
+      action("edit", { toolbar: true, toolbarGroup: "edit" }),
+      action("metaedit", { toolbar: true, toolbarGroup: "metadata-edit" }),
+      action("file", { toolbar: true, toolbarGroup: "file" }),
+    ]);
+    expect(ids(items)).toBe("h5,|,file,|,edit,|,meta,|,metaedit,|,del,|,roi");
+  });
+
   it("inserts a separator only between groups (never leading/trailing)", () => {
     const items = buildToolbarItems([
       action("f1", { toolbar: true, toolbarGroup: "file", toolbarOrder: 0 }),
