@@ -1661,6 +1661,15 @@ _METADATA_CLIPBOARD: dict[str, Any] | None = globals().get("_METADATA_CLIPBOARD"
 # Default extension for exported metadata files (matches DataLab desktop).
 METADATA_FILE_EXT = ".dlabmeta"
 
+# Panel ROI clipboard, mirroring DataLab desktop's
+# ``BaseDataPanel.__roi_clipboard``.  Holds ``{"kind": "signal"|"image",
+# "roi": <ROI.to_dict()>}`` and is preserved across HMR re-executions like
+# the rest of the singleton bootstrap state.
+_ROI_CLIPBOARD: dict[str, Any] | None = globals().get("_ROI_CLIPBOARD", None)
+
+# Default extension for exported ROI files (matches DataLab desktop).
+ROI_FILE_EXT = ".dlabroi"
+
 
 def _is_result_key(key: str) -> bool:
     """Return ``True`` for analysis-result metadata keys.
@@ -1947,6 +1956,154 @@ def import_object_metadata_bytes(oid: str, data: Any) -> None:
         with open(path, "wb") as fh:
             fh.write(bytes(data))
         _MODEL.get(oid).metadata = read_metadata(path)
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# ROI clipboard & import/export (mirrors DataLab desktop's ROI menu)
+# ---------------------------------------------------------------------------
+
+
+def has_roi_in_clipboard(kind: str | None = None) -> bool:
+    """Return ``True`` when "Paste ROI" can run for the given panel *kind*.
+
+    When *kind* (``"signal"`` / ``"image"``) is given, the clipboard must hold
+    a ROI of the matching type: signal ROIs cannot be pasted onto images, and
+    vice versa.  With *kind* ``None`` the check only tests for a non-empty
+    clipboard.
+    """
+    if not _ROI_CLIPBOARD:
+        return False
+    if kind is None:
+        return True
+    return _ROI_CLIPBOARD.get("kind") == kind
+
+
+def copy_object_roi(oid: str) -> bool:
+    """Copy *oid*'s ROI into the panel clipboard.
+
+    Mirrors DataLab desktop's ``copy_roi``.  Returns ``False`` (no-op) when
+    the object has no ROI.
+    """
+    import copy
+
+    global _ROI_CLIPBOARD  # noqa: PLW0603  # singleton clipboard
+    from sigima.objects import ImageObj
+
+    obj = _MODEL.get(oid)
+    roi = obj.roi
+    if roi is None or not roi.single_rois:
+        return False
+    kind = "image" if isinstance(obj, ImageObj) else "signal"
+    _ROI_CLIPBOARD = {"kind": kind, "roi": copy.deepcopy(roi.to_dict())}
+    return True
+
+
+def _roi_from_clipboard() -> Any:
+    """Rebuild a fresh ROI object from the clipboard, or ``None`` when empty."""
+    import copy
+
+    if not _ROI_CLIPBOARD:
+        return None
+    from sigima.objects.image.roi import ImageROI
+    from sigima.objects.signal.roi import SignalROI
+
+    roi_cls = ImageROI if _ROI_CLIPBOARD["kind"] == "image" else SignalROI
+    return roi_cls.from_dict(copy.deepcopy(_ROI_CLIPBOARD["roi"]))
+
+
+def paste_object_roi(oids: Any) -> int:
+    """Paste the clipboard ROI onto every object of *oids*.
+
+    The ROI is merged with each object's existing ROI (mirrors desktop's
+    ``paste_roi``), or assigned directly when the object has none.  Returns the
+    number of objects updated.  Raises :class:`TypeError` when the clipboard
+    ROI type does not match an object (e.g. a signal ROI onto an image).
+    """
+    if hasattr(oids, "to_py"):
+        oids = oids.to_py()
+    if isinstance(oids, str):
+        oids = [oids]
+    if not oids or _roi_from_clipboard() is None:
+        return 0
+    count = 0
+    for oid in oids:
+        obj = _MODEL.get(oid)
+        new_roi = _roi_from_clipboard()  # fresh copy per object
+        if obj.roi is None or not obj.roi.single_rois:
+            obj.roi = new_roi
+        else:
+            obj.roi = obj.roi.combine_with(new_roi)
+        count += 1
+    return count
+
+
+def export_object_roi_bytes(oid: str) -> bytes:
+    """Serialise *oid*'s ROI to ``.dlabroi`` (JSON) bytes.
+
+    Uses Sigima's :func:`write_roi`, so the file is bit-compatible with
+    DataLab desktop's "Export ROI" and can be re-imported there.
+    """
+    import os
+    import tempfile
+
+    from sigima.io import write_roi
+
+    obj = _MODEL.get(oid)
+    if obj.roi is None or not obj.roi.single_rois:
+        raise ValueError("Object has no ROI to export")
+    tmpdir = tempfile.mkdtemp(prefix="dlw_roi_save_")
+    path = os.path.join(tmpdir, "roi" + ROI_FILE_EXT)
+    try:
+        write_roi(path, obj.roi)
+        with open(path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+def import_object_roi_bytes(oid: str, data: Any) -> None:
+    """Merge a ``.dlabroi`` (JSON) ROI into object *oid*.
+
+    Uses Sigima's :func:`read_roi`, matching DataLab desktop's "Import ROI".
+    The imported ROI is merged with the object's existing ROI, or assigned
+    when the object has none.  Raises :class:`ValueError` when the ROI file
+    type does not match the target object (signal ROI onto an image, or
+    vice versa).
+    """
+    import os
+    import tempfile
+
+    from sigima.io import read_roi
+    from sigima.objects import ImageObj
+    from sigima.objects.image.roi import ImageROI
+
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        data = bytes(data)
+    obj = _MODEL.get(oid)
+    tmpdir = tempfile.mkdtemp(prefix="dlw_roi_open_")
+    path = os.path.join(tmpdir, "roi" + ROI_FILE_EXT)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(bytes(data))
+        imported = read_roi(path)
+        if isinstance(obj, ImageObj) != isinstance(imported, ImageROI):
+            raise ValueError("ROI file type does not match the target object")
+        if obj.roi is None or not obj.roi.single_rois:
+            obj.roi = imported
+        else:
+            obj.roi = obj.roi.combine_with(imported)
     finally:
         try:
             os.remove(path)

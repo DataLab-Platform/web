@@ -723,6 +723,14 @@ export interface RoiActionCallbacks {
   onExtractEach: () => void;
   /** Extract a single new signal containing the concatenation of all ROIs. */
   onExtractMerged: () => void;
+  /** Copy the displayed signal's ROI into the panel clipboard. */
+  onCopy: () => void;
+  /** Paste the clipboard ROI onto the selected signals. */
+  onPaste: () => void;
+  /** Import a ROI from a ``.dlabroi`` file onto the selected signals. */
+  onImport: () => void;
+  /** Export the displayed signal's ROI to a ``.dlabroi`` file. */
+  onExport: () => void;
   /** Drop a single ROI by index. */
   onRemoveAt: (index: number) => void;
   /** Drop every ROI on the current signal. */
@@ -733,11 +741,13 @@ export interface RoiActionCallbacks {
 export function buildRoiActions(
   roi: SignalRoiSegment[],
   roiEditMode: boolean,
+  hasRoiClipboard: boolean,
   cb: RoiActionCallbacks,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) =>
     s.status === "ready" && !s.busy && s.currentId !== null;
   const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
+  const readyWithClipboard = (s: ActionState) => ready(s) && hasRoiClipboard;
   // "Remove all" mirrors desktop's ``SelectCond.with_roi``: enabled when
   // *any* selected object has a ROI, even if the displayed one has none.
   const readyWithSelectionRoi = (s: ActionState) =>
@@ -760,6 +770,39 @@ export function buildRoiActions(
       iconUrl: getRoiIconUrl("roi_coordinate"),
       enabled: ready,
       run: cb.onEditNumerically,
+    },
+    {
+      id: "roi.copy",
+      label: t("Copy ROI"),
+      menuPath: "ROI/Copy ROI",
+      iconUrl: getRoiIconUrl("roi_copy"),
+      beginGroup: true,
+      enabled: readyWithRoi,
+      run: cb.onCopy,
+    },
+    {
+      id: "roi.paste",
+      label: t("Paste ROI"),
+      menuPath: "ROI/Paste ROI",
+      iconUrl: getRoiIconUrl("roi_paste"),
+      enabled: readyWithClipboard,
+      run: cb.onPaste,
+    },
+    {
+      id: "roi.import",
+      label: t("Import ROI…"),
+      menuPath: "ROI/Import ROI…",
+      iconUrl: getRoiIconUrl("roi_import"),
+      enabled: ready,
+      run: cb.onImport,
+    },
+    {
+      id: "roi.export",
+      label: t("Export ROI…"),
+      menuPath: "ROI/Export ROI…",
+      iconUrl: getRoiIconUrl("roi_export"),
+      enabled: readyWithRoi,
+      run: cb.onExport,
     },
     {
       id: "roi.extract_each",
@@ -822,6 +865,14 @@ export interface ImageRoiActionCallbacks {
   onExtractEach: () => void;
   /** Extract a single new image containing the union of all ROIs. */
   onExtractMerged: () => void;
+  /** Copy the displayed image's ROI into the panel clipboard. */
+  onCopy: () => void;
+  /** Paste the clipboard ROI onto the selected images. */
+  onPaste: () => void;
+  /** Import a ROI from a ``.dlabroi`` file onto the selected images. */
+  onImport: () => void;
+  /** Export the displayed image's ROI to a ``.dlabroi`` file. */
+  onExport: () => void;
   /** Drop a single ROI by index. */
   onRemoveAt: (index: number) => void;
   /** Drop every ROI on the current image. */
@@ -832,11 +883,13 @@ export interface ImageRoiActionCallbacks {
 export function buildImageRoiActions(
   roi: ImageRoiSegment[],
   roiEditMode: boolean,
+  hasRoiClipboard: boolean,
   cb: ImageRoiActionCallbacks,
 ): ActionDescriptor[] {
   const ready = (s: ActionState) =>
     s.status === "ready" && !s.busy && s.currentId !== null;
   const readyWithRoi = (s: ActionState) => ready(s) && roi.length > 0;
+  const readyWithClipboard = (s: ActionState) => ready(s) && hasRoiClipboard;
   // "Remove all" mirrors desktop's ``SelectCond.with_roi``: enabled when
   // *any* selected object has a ROI, even if the displayed one has none.
   const readyWithSelectionRoi = (s: ActionState) =>
@@ -885,6 +938,39 @@ export function buildImageRoiActions(
       beginGroup: true,
       enabled: ready,
       run: cb.onEditNumerically,
+    },
+    {
+      id: "image_roi.copy",
+      label: t("Copy ROI"),
+      menuPath: "ROI/Copy ROI",
+      iconUrl: getRoiIconUrl("roi_copy"),
+      beginGroup: true,
+      enabled: readyWithRoi,
+      run: cb.onCopy,
+    },
+    {
+      id: "image_roi.paste",
+      label: t("Paste ROI"),
+      menuPath: "ROI/Paste ROI",
+      iconUrl: getRoiIconUrl("roi_paste"),
+      enabled: readyWithClipboard,
+      run: cb.onPaste,
+    },
+    {
+      id: "image_roi.import",
+      label: t("Import ROI…"),
+      menuPath: "ROI/Import ROI…",
+      iconUrl: getRoiIconUrl("roi_import"),
+      enabled: ready,
+      run: cb.onImport,
+    },
+    {
+      id: "image_roi.export",
+      label: t("Export ROI…"),
+      menuPath: "ROI/Export ROI…",
+      iconUrl: getRoiIconUrl("roi_export"),
+      enabled: readyWithRoi,
+      run: cb.onExport,
     },
     {
       id: "image_roi.extract_each",

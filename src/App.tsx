@@ -775,6 +775,10 @@ export default function App() {
   // desktop's ``SelectCond.with_roi`` (enabled when *any* selected
   // object carries a ROI, not only the displayed one).
   const [selectionHasRoi, setSelectionHasRoi] = useState(false);
+  // Whether the ROI clipboard holds a ROI compatible with the active
+  // panel (signal vs image), so "Paste ROI" can be enabled.  Mirrors
+  // DataLab desktop's per-panel ROI clipboard.
+  const [hasRoiClipboard, setHasRoiClipboard] = useState(false);
   const [pendingImageGrid, setPendingImageGrid] = useState<{
     sourceIds: string[];
     schema: SchemaWithValues;
@@ -1206,6 +1210,28 @@ export default function App() {
       cancelled = true;
     };
   }, [runtime, selectedIds, currentId, plotRefreshNonce]);
+
+  // Track whether the ROI clipboard holds a ROI matching the active panel
+  // kind (signal vs image), so the "Paste ROI" action can be enabled.
+  // Re-evaluated when switching panels or after a copy (``plotRefreshNonce``).
+  useEffect(() => {
+    if (!runtime) {
+      setHasRoiClipboard(false);
+      return;
+    }
+    let cancelled = false;
+    runtime
+      .hasRoiInClipboard(treeKind)
+      .then((has) => {
+        if (!cancelled) setHasRoiClipboard(has);
+      })
+      .catch(() => {
+        if (!cancelled) setHasRoiClipboard(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, treeKind, plotRefreshNonce]);
 
   // Publish selection / panel snapshots to non-React consumers (the
   // iframe-embedded remote bridge in particular, so host pages can
@@ -2562,6 +2588,87 @@ export default function App() {
     }
   }, [runtime, currentId, selectedIds, refresh]);
 
+  const handleRoiCopy = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const ok = await runtime.copyObjectRoi(currentId);
+    if (ok) setHasRoiClipboard(true);
+  }, [runtime, currentId]);
+
+  const handleRoiPaste = useCallback(async () => {
+    if (!runtime) return;
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      await runtime.pasteObjectRoi(ids);
+      if (currentId) setRoi(await runtime.getSignalRoi(currentId));
+      setPlotRefreshNonce((n) => n + 1);
+    } catch (err) {
+      await notify({
+        kind: "error",
+        title: t("Paste ROI"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, notify]);
+
+  const handleRoiImport = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".dlabroi,.json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await runtime.importObjectRoiBytes(currentId, bytes);
+        setRoi(await runtime.getSignalRoi(currentId));
+        setPlotRefreshNonce((n) => n + 1);
+      } catch (err) {
+        await notify({
+          kind: "error",
+          title: t("Import ROI…"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }, [runtime, currentId, notify]);
+
+  const handleRoiExport = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const oid = currentId;
+    setBusy(true);
+    try {
+      const bytes = await runtime.exportObjectRoiBytes(oid);
+      const blob = new Blob([new Uint8Array(bytes)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${titleForId(oid)}.dlabroi`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      await notify({
+        kind: "error",
+        title: t("Export ROI…"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, titleForId, notify]);
+
   // ------------------------------------------------------------------
   // Image ROI handlers (Phase 13)
   // ------------------------------------------------------------------
@@ -2696,6 +2803,87 @@ export default function App() {
       setBusy(false);
     }
   }, [runtime, currentId, selectedIds, refresh]);
+
+  const handleImageRoiCopy = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const ok = await runtime.copyObjectRoi(currentId);
+    if (ok) setHasRoiClipboard(true);
+  }, [runtime, currentId]);
+
+  const handleImageRoiPaste = useCallback(async () => {
+    if (!runtime) return;
+    const ids = selectedIds.length ? selectedIds : currentId ? [currentId] : [];
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      await runtime.pasteObjectRoi(ids);
+      if (currentId) setImageRoi(await runtime.getImageRoi(currentId));
+      setPlotRefreshNonce((n) => n + 1);
+    } catch (err) {
+      await notify({
+        kind: "error",
+        title: t("Paste ROI"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, selectedIds, currentId, notify]);
+
+  const handleImageRoiImport = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".dlabroi,.json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await runtime.importObjectRoiBytes(currentId, bytes);
+        setImageRoi(await runtime.getImageRoi(currentId));
+        setPlotRefreshNonce((n) => n + 1);
+      } catch (err) {
+        await notify({
+          kind: "error",
+          title: t("Import ROI…"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setBusy(false);
+      }
+    };
+    input.click();
+  }, [runtime, currentId, notify]);
+
+  const handleImageRoiExport = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const oid = currentId;
+    setBusy(true);
+    try {
+      const bytes = await runtime.exportObjectRoiBytes(oid);
+      const blob = new Blob([new Uint8Array(bytes)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${titleForId(oid)}.dlabroi`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      await notify({
+        kind: "error",
+        title: t("Export ROI…"),
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, titleForId, notify]);
 
   /** Open the ROI dialog pre-filled with a single centered rectangle, to
    *  let the user define the area to erase. Mirrors DataLab desktop's
@@ -3573,15 +3761,19 @@ export default function App() {
         : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
       buildPlotResultsAction(treeKind, handlePlotResults),
       ...(treeKind === "signal"
-        ? buildRoiActions(roi, roiEditMode, {
+        ? buildRoiActions(roi, roiEditMode, hasRoiClipboard, {
             onToggleEditMode: handleToggleRoiEditMode,
             onEditNumerically: handleEditRoi,
             onExtractEach: handleRoiExtractEach,
             onExtractMerged: handleRoiExtractMerged,
+            onCopy: handleRoiCopy,
+            onPaste: handleRoiPaste,
+            onImport: handleRoiImport,
+            onExport: handleRoiExport,
             onRemoveAt: handleRoiRemoveAt,
             onRemoveAll: handleRoiRemoveAll,
           })
-        : buildImageRoiActions(imageRoi, imageRoiEditMode, {
+        : buildImageRoiActions(imageRoi, imageRoiEditMode, hasRoiClipboard, {
             onToggleEditMode: handleToggleImageRoiEditMode,
             onAddRectangle: handleImageAddRectangle,
             onAddCircle: handleImageAddCircle,
@@ -3589,6 +3781,10 @@ export default function App() {
             onEditNumerically: handleImageEditRoi,
             onExtractEach: handleImageRoiExtractEach,
             onExtractMerged: handleImageRoiExtractMerged,
+            onCopy: handleImageRoiCopy,
+            onPaste: handleImageRoiPaste,
+            onImport: handleImageRoiImport,
+            onExport: handleImageRoiExport,
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
@@ -3609,6 +3805,7 @@ export default function App() {
       roiEditMode,
       imageRoi,
       imageRoiEditMode,
+      hasRoiClipboard,
       handleCreateTyped,
       handleCreateImageTyped,
       handleAnalysis,
@@ -3622,6 +3819,10 @@ export default function App() {
       handleToggleRoiEditMode,
       handleRoiExtractEach,
       handleRoiExtractMerged,
+      handleRoiCopy,
+      handleRoiPaste,
+      handleRoiImport,
+      handleRoiExport,
       handleRoiRemoveAt,
       handleRoiRemoveAll,
       handleImageAddRectangle,
@@ -3631,6 +3832,10 @@ export default function App() {
       handleImageRoiExtractEach,
       handleToggleImageRoiEditMode,
       handleImageRoiExtractMerged,
+      handleImageRoiCopy,
+      handleImageRoiPaste,
+      handleImageRoiImport,
+      handleImageRoiExport,
       handleImageRoiRemoveAt,
       handleImageRoiRemoveAll,
       handleDistributeOnGrid,

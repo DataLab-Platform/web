@@ -1874,6 +1874,44 @@ await micropip.install(["sigima", "guidata"])
     });
   }
 
+  /** Return ``true`` when "Paste ROI" can run for the given panel *kind*
+   *  (the clipboard must hold a ROI of the matching signal/image type). */
+  async hasRoiInClipboard(kind: "signal" | "image"): Promise<boolean> {
+    return (await this.callPy("has_roi_in_clipboard", {
+      kind,
+    })) as boolean;
+  }
+
+  /** Copy *id*'s ROI into the panel clipboard.  Returns ``false`` when the
+   *  object has no ROI. */
+  async copyObjectRoi(id: string): Promise<boolean> {
+    return (await this.callPy("copy_object_roi", { oid: id })) as boolean;
+  }
+
+  /** Paste the clipboard ROI onto every object of *ids* (merged with any
+   *  existing ROI).  Returns the number of objects updated. */
+  async pasteObjectRoi(ids: string[]): Promise<number> {
+    return (await this.callPy("paste_object_roi", { oids: ids })) as number;
+  }
+
+  /** Serialise *id*'s ROI to ``.dlabroi`` (JSON) bytes for download. */
+  async exportObjectRoiBytes(id: string): Promise<Uint8Array> {
+    const result = (await this.callPy("export_object_roi_bytes", {
+      oid: id,
+    })) as Uint8Array | ArrayBuffer | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
+  }
+
+  /** Merge a previously exported ``.dlabroi`` ROI into object *id*. */
+  async importObjectRoiBytes(id: string, bytes: Uint8Array): Promise<void> {
+    await this.callPy("import_object_roi_bytes", {
+      oid: id,
+      data: bytes,
+    });
+  }
+
   /** Return an indented text tree of *kind*'s groups and object titles
    *  (mirrors DataLab desktop's "Copy titles to clipboard"). */
   async getPanelTitlesText(kind: "signal" | "image"): Promise<string> {
