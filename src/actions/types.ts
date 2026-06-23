@@ -13,6 +13,12 @@ export interface ActionState {
   selectedIds: string[];
   currentId: string | null;
   hasObjects: boolean;
+  /** Number of currently selected groups. Mirrors DataLab desktop's
+   *  group selection, which is exclusive with object selection. Used to
+   *  reproduce ``SelectCond.exactly_one_group_or_one_object`` (Rename),
+   *  where a single selected group counts as one target even though its
+   *  child object ids populate ``selectedIds``. */
+  selectedGroupCount: number;
   /** ``true`` when at least one macro is loaded in the workspace. */
   hasMacros: boolean;
   /** ``true`` when at least one notebook is loaded in the workspace. */

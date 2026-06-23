@@ -3683,6 +3683,7 @@ export default function App() {
       hasNotebooks: notebookCount > 0,
       hasMetadataClipboard,
       selectionHasRoi,
+      selectedGroupCount: selectedGroupIds.length,
     }),
     [
       status,
@@ -3694,6 +3695,7 @@ export default function App() {
       notebookCount,
       hasMetadataClipboard,
       selectionHasRoi,
+      selectedGroupIds,
     ],
   );
 

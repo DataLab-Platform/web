@@ -23,6 +23,7 @@ function makeState(over: Partial<ActionState> = {}): ActionState {
     hasNotebooks: false,
     hasMetadataClipboard: false,
     selectionHasRoi: false,
+    selectedGroupCount: 0,
     ...over,
   };
 }
@@ -83,6 +84,29 @@ describe("buildStaticActions", () => {
     const del = actions.find((a) => a.id === "edit.delete")!;
     expect(del.enabled(makeState())).toBe(false);
     expect(del.enabled(makeState({ selectedIds: ["x"] }))).toBe(true);
+  });
+
+  it("enables ``edit.rename`` only for a single object or a single group", () => {
+    const actions = buildStaticActions(makeStaticCallbacks());
+    const rename = actions.find((a) => a.id === "edit.rename")!;
+    // Nothing selected — disabled.
+    expect(rename.enabled(makeState())).toBe(false);
+    // Exactly one object (no group) — enabled.
+    expect(rename.enabled(makeState({ selectedIds: ["a"] }))).toBe(true);
+    // Several objects selected — disabled (mirrors desktop exactly_one).
+    expect(rename.enabled(makeState({ selectedIds: ["a", "b"] }))).toBe(false);
+    // A single group (its children populate ``selectedIds``) — enabled.
+    expect(
+      rename.enabled(
+        makeState({ selectedIds: ["a", "b"], selectedGroupCount: 1 }),
+      ),
+    ).toBe(true);
+    // Two groups selected — disabled.
+    expect(
+      rename.enabled(
+        makeState({ selectedIds: ["a", "b"], selectedGroupCount: 2 }),
+      ),
+    ).toBe(false);
   });
 
   it("enables ``file.save_workspace_h5`` for any persistable content", () => {
@@ -240,10 +264,23 @@ describe("isFeatureActionEnabled", () => {
     );
   });
 
-  it("enables 1-to-1 and n-to-1 as soon as something is selected", () => {
+  it("enables 1-to-1 as soon as something is selected", () => {
     const sel = makeState({ currentId: "a" });
     expect(isFeatureActionEnabled("1_to_1", sel)).toBe(true);
-    expect(isFeatureActionEnabled("n_to_1", sel)).toBe(true);
+  });
+
+  it("requires at least two selected objects for n-to-1 features", () => {
+    // A single selection (current or one selected id) is not enough:
+    // aggregations like Sum/Average/Product need two or more objects.
+    expect(
+      isFeatureActionEnabled("n_to_1", makeState({ currentId: "a" })),
+    ).toBe(false);
+    expect(
+      isFeatureActionEnabled("n_to_1", makeState({ selectedIds: ["a"] })),
+    ).toBe(false);
+    expect(
+      isFeatureActionEnabled("n_to_1", makeState({ selectedIds: ["a", "b"] })),
+    ).toBe(true);
   });
 });
 

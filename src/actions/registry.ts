@@ -213,7 +213,13 @@ export function buildStaticActions(
       menuPath: "Edit/Rename",
       iconUrl: getEditIconUrl("rename.svg"),
       beginGroup: true,
-      enabled: (s) => ready(s) && s.currentId !== null,
+      // Mirror DataLab desktop's ``SelectCond.exactly_one_group_or_one_object``:
+      // a single group, or a single object (with no group) — selecting a group
+      // populates ``selectedIds`` with its children, so check the group count.
+      enabled: (s) =>
+        ready(s) &&
+        (s.selectedGroupCount === 1 ||
+          (s.selectedGroupCount === 0 && s.selectedIds.length === 1)),
       run: cb.onRenameCurrent,
     },
     {
@@ -570,11 +576,13 @@ export function buildAIAssistantActions(
  * | pattern   | meaning                       | requirement beyond a selection |
  * | --------- | ----------------------------- | ------------------------------ |
  * | ``1_to_1``| one object → one object       | none                           |
- * | ``n_to_1``| n objects → one object        | none (operates on the set)     |
+ * | ``n_to_1``| n objects → one object        | at least two selected objects  |
  * | ``2_to_1``| object + operand → one object | a second object must exist     |
  *
  * Every pattern first needs the runtime ready, not busy, and at least one
- * selected or current object. Keep this in sync with ``processor.py`` when a
+ * selected or current object. ``n_to_1`` aggregations (Sum, Average, …) are
+ * only meaningful on two or more objects, mirroring DataLab desktop's
+ * ``SelectCond.at_least_two``. Keep this in sync with ``processor.py`` when a
  * new pattern is introduced.
  */
 export function isFeatureActionEnabled(
@@ -583,6 +591,8 @@ export function isFeatureActionEnabled(
 ): boolean {
   if (s.status !== "ready" || s.busy) return false;
   if (s.selectedIds.length === 0 && !s.currentId) return false;
+  // ``n_to_1`` aggregations need at least two objects to combine.
+  if (pattern === "n_to_1") return s.selectedIds.length >= 2;
   // ``2_to_1`` needs a second operand object to combine with the selection.
   if (pattern === "2_to_1") return s.hasObjects;
   return true;
