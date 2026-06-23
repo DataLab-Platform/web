@@ -1669,6 +1669,32 @@ export default function App() {
     [pendingProfile, runFeature],
   );
 
+  // Extract a frozen cross-section profile from the image viewer as a new
+  // signal, reusing the Sigima ``line_profile`` feature (mirrors DataLab
+  // desktop's "Process signal" button next to the cross-section panels).
+  const handleExtractProfile = useCallback(
+    async (params: {
+      direction: "horizontal" | "vertical";
+      row: number;
+      col: number;
+    }) => {
+      if (!runtime || !currentId) return;
+      const feature = features.find((f) => f.id === "image:line_profile");
+      if (!feature) return;
+      // Start from the feature's default parameter values so any item we do
+      // not set keeps its default, then override direction + position.
+      const schema = await runtime.getFeatureSchema(feature.id, currentId);
+      const values: Record<string, unknown> = {
+        ...(schema?.values ?? {}),
+        direction: params.direction,
+        row: params.row,
+        col: params.col,
+      };
+      await runFeature(feature, [currentId], null, values, effectiveGroupIds());
+    },
+    [runtime, currentId, features, runFeature, effectiveGroupIds],
+  );
+
   const refreshResults = useCallback(
     async (oid: string) => {
       if (!runtime) return;
@@ -4307,6 +4333,7 @@ export default function App() {
                         );
                     }
                   }}
+                  onExtractProfile={handleExtractProfile}
                 />
               )}
           </main>

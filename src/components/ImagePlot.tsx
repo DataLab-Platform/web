@@ -91,6 +91,16 @@ interface ImagePlotProps {
    *  toolbar.  Persisted on the image object so it survives panel
    *  switches.  Only affects the downsampled display bitmap. */
   onResampleChange?: (method: ResampleMethod) => void;
+  /** Called when the user clicks one of the "extract profile" buttons next
+   *  to a frozen cross-section preview.  ``direction`` selects the horizontal
+   *  (top preview, fixed ``row``) or vertical (right preview, fixed ``col``)
+   *  slice.  The host wires this to the Sigima ``line_profile`` feature so a
+   *  new signal is created, mirroring DataLab desktop's "Process signal". */
+  onExtractProfile?: (params: {
+    direction: "horizontal" | "vertical";
+    row: number;
+    col: number;
+  }) => void;
 }
 
 /**
@@ -118,6 +128,7 @@ export function ImagePlot({
   onLutRangeChange,
   onColormapChange,
   onResampleChange,
+  onExtractProfile,
 }: ImagePlotProps) {
   const plotlyTheme = usePlotlyTheme();
   // ------------------------------------------------------------------
@@ -130,6 +141,16 @@ export function ImagePlot({
 
   // Reset transient tool state when the underlying image changes.
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  // When ``frozen`` is true the crosshair / profiles stop following the mouse
+  // and stay pinned at the last cursor position (toggled by clicking the
+  // image in profiles mode), mirroring DataLab desktop's placed cross-section
+  // marker.  Only meaningful while the profiles tool is active.
+  const [frozen, setFrozen] = useState(false);
+  // Leaving the profiles tool always unfreezes so the next activation starts
+  // in the live-tracking state.
+  useEffect(() => {
+    if (tool !== "profiles" && frozen) setFrozen(false);
+  }, [tool, frozen]);
   const [statsRect, setStatsRect] = useState<{
     x0: number;
     y0: number;
@@ -165,6 +186,7 @@ export function ImagePlot({
     setCursor(null);
     setStatsRect(null);
     setDraftLut(null);
+    setFrozen(false);
   }, [data.id]);
 
   const effectiveLut: [number, number] = useMemo(() => {
@@ -544,6 +566,11 @@ export function ImagePlot({
       const xMax = extent.xMax;
       const yMin = extent.yMin;
       const yMax = extent.yMax;
+      // Pinned crosshair is drawn solid (and slightly thicker) so the user
+      // can tell at a glance that the profiles no longer follow the mouse.
+      const crossLine = frozen
+        ? { color: CROSSHAIR_COLOR, width: 1.5, dash: "solid" }
+        : { color: CROSSHAIR_COLOR, width: 1, dash: "dot" };
       shapes.push({
         type: "line",
         xref: "x",
@@ -552,7 +579,7 @@ export function ImagePlot({
         x1: cursor.x,
         y0: yMin,
         y1: yMax,
-        line: { color: CROSSHAIR_COLOR, width: 1, dash: "dot" },
+        line: crossLine,
         layer: "above",
         editable: false,
       });
@@ -564,7 +591,7 @@ export function ImagePlot({
         x1: xMax,
         y0: cursor.y,
         y1: cursor.y,
-        line: { color: CROSSHAIR_COLOR, width: 1, dash: "dot" },
+        line: crossLine,
         layer: "above",
         editable: false,
       });
@@ -585,7 +612,7 @@ export function ImagePlot({
       });
     }
     return shapes;
-  }, [tool, cursor, statsRect, extent]);
+  }, [tool, cursor, statsRect, extent, frozen]);
 
   const allTraces = useMemo(
     () => [...traces, ...resultTraces],
@@ -694,7 +721,7 @@ export function ImagePlot({
 
   const handleHover = useCallback(
     (event: Record<string, unknown>) => {
-      if (tool !== "profiles") return;
+      if (tool !== "profiles" || frozen) return;
       const points = (event as { points?: Array<Record<string, unknown>> })
         .points;
       if (!points || points.length === 0) return;
@@ -703,7 +730,7 @@ export function ImagePlot({
       const y = Number(p.y);
       if (Number.isFinite(x) && Number.isFinite(y)) setCursor({ x, y });
     },
-    [tool],
+    [tool, frozen],
   );
 
   // ------------------------------------------------------------------
@@ -751,14 +778,26 @@ export function ImagePlot({
       const row = data.data[j] as Float32Array | number[];
       const z = row ? row[i] : NaN;
       setHoverInfo({ x: xData, y: yData, z, px, py });
-      if (tool === "profiles") setCursor({ x: xData, y: yData });
+      if (tool === "profiles" && !frozen) setCursor({ x: xData, y: yData });
     },
-    [data, tool, hoverInfo, xEdges, yEdges],
+    [data, tool, hoverInfo, xEdges, yEdges, frozen],
   );
 
   const handleWrapperMouseLeave = useCallback(() => {
     setHoverInfo(null);
   }, []);
+
+  // Click toggles the frozen crosshair while the profiles tool is active.
+  // Freezing requires a current cursor position (the click point) so the
+  // crosshair has somewhere to pin; unfreezing always works.
+  const handleHostClick = useCallback(() => {
+    if (tool !== "profiles") return;
+    if (frozen) {
+      setFrozen(false);
+    } else if (cursor) {
+      setFrozen(true);
+    }
+  }, [tool, frozen, cursor]);
 
   const handleRelayout = useCallback(
     (event: Record<string, unknown>) => {
@@ -1065,10 +1104,17 @@ export function ImagePlot({
 
   const imagePlotEl = (
     <div
-      className="image-plot-host"
+      className={`image-plot-host${
+        tool === "profiles"
+          ? frozen
+            ? " profiles-frozen"
+            : " profiles-live"
+          : ""
+      }`}
       style={{ position: "relative", width: "100%", height: "100%" }}
       onMouseMove={handleWrapperMouseMove}
       onMouseLeave={handleWrapperMouseLeave}
+      onClick={handleHostClick}
     >
       {heatmapPlot}
       {hoverTooltip}
@@ -1141,8 +1187,32 @@ export function ImagePlot({
                   {t("Hover the image to update profiles")}
                 </div>
               )}
+              {frozen && profileData && onExtractProfile ? (
+                <button
+                  type="button"
+                  className="image-profile-extract"
+                  title={t("Extract this horizontal profile as a new signal")}
+                  onClick={() =>
+                    onExtractProfile({
+                      direction: "horizontal",
+                      row: profileData.row,
+                      col: profileData.col,
+                    })
+                  }
+                >
+                  {t("Extract")}
+                </button>
+              ) : null}
             </div>
-            <div className="image-plot-cell image-plot-cell-corner" />
+            <div className="image-plot-cell image-plot-cell-corner">
+              {cursor ? (
+                <div className="image-profile-freeze-hint">
+                  {frozen
+                    ? t("Frozen — click the image to unfreeze")
+                    : t("Click the image to freeze")}
+                </div>
+              ) : null}
+            </div>
             <div className="image-plot-cell image-plot-cell-heatmap">
               {imagePlotEl}
             </div>
@@ -1181,6 +1251,22 @@ export function ImagePlot({
                   config={{ displayModeBar: false, responsive: true } as never}
                   useResizeHandler
                 />
+              ) : null}
+              {frozen && profileData && onExtractProfile ? (
+                <button
+                  type="button"
+                  className="image-profile-extract"
+                  title={t("Extract this vertical profile as a new signal")}
+                  onClick={() =>
+                    onExtractProfile({
+                      direction: "vertical",
+                      row: profileData.row,
+                      col: profileData.col,
+                    })
+                  }
+                >
+                  {t("Extract")}
+                </button>
               ) : null}
             </div>
           </div>
