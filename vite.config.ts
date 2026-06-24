@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { pythonHmr } from "./plugins/vite-plugin-python-hmr";
-import { openAiKeyDevEndpoint } from "./plugins/vite-plugin-openai-key-dev";
+import { pythonHmr } from "./build-plugins/vite-plugin-python-hmr";
+import { openAiKeyDevEndpoint } from "./build-plugins/vite-plugin-openai-key-dev";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

@@ -56,10 +56,14 @@ class MyPlugin(PluginBase):
 | `self.main`                                      | Bridge to the React main window (parent for dialogs)                                         |
 | `self.signalpanel`, `self.imagepanel`            | Panels with `processor`, `acthandler`, `get_newparam_from_current`                           |
 | `self.proxy`                                     | `LocalProxy`-compatible API: `add_object`, `add_group`, `calc`, `get_object*`, `call_method` |
-| `self.show_warning` / `show_error` / `show_info` | Async message popups                                                                         |
-| `self.ask_yesno(msg, cancelable=False)`          | Async yes/no(/cancel) prompt                                                                 |
-| `self.edit_new_signal_parameters_async(...)`     | Async variant of the desktop helper                                                          |
-| `self.edit_new_image_parameters_async(...)`      | Async variant of the desktop helper                                                          |
+| `await self.show_info_async(msg)`                | Async info popup (`show_warning_async` / `show_error_async` for the other kinds)             |
+| `await self.ask_yesno_async(msg, cancelable=…)`  | Async yes/no(/cancel) prompt                                                                 |
+| `await self.edit_new_signal_parameters_async(…)` | Async variant of the desktop helper                                                          |
+| `await self.edit_new_image_parameters_async(…)`  | Async variant of the desktop helper                                                          |
+
+The synchronous helpers (`self.show_info` / `show_warning` / `show_error` /
+`ask_yesno`) exist for desktop source compatibility but raise
+`BrowserNotSupportedError` in Pyodide — use the `_async` variants above.
 
 ## Browser-only differences
 
@@ -80,6 +84,10 @@ class MyPlugin(PluginBase):
   _Load from file…_ and select a `.py` file. The first time a plugin is
   loaded you will be prompted to confirm execution. The decision is
   remembered (per source SHA-256) in `localStorage`.
+- **Bundled examples:** the _Plugins → Manage plugins…_ dialog lists the
+  example plugins shipped under the repo-root `plugins/examples/` folder
+  (mirroring DataLab desktop). Click _Load_ next to one to try it; the
+  same consent gate applies. These are **not** auto-loaded.
 - **Bundled built-ins:** drop a file into
   `src/runtime/builtin_plugins/`; it will be discovered automatically at
   startup.

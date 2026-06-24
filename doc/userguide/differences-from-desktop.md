@@ -71,8 +71,10 @@ The desktop application has no analogue because it never hits a memory wall of t
 
 Built-in Python plugins live under `src/runtime/builtin_plugins/` and
 are discovered automatically at startup; user plugins are loaded from a
-local `.py` file via _Plugins → Manage plugins…_. Both are registered
-through the same hook system as the desktop app. See
+local `.py` file via _Plugins → Manage plugins…_. The same dialog also
+lists the bundled **example plugins** (repo-root `plugins/examples/`,
+mirroring the desktop layout), which you can load on demand. All are
+registered through the same hook system as the desktop app. See
 [Plugins](plugins.md) for the practical guide.
 
 ## Macros and notebooks

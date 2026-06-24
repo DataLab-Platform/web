@@ -134,7 +134,7 @@ export function isConfigured(settings: ProviderSettings): boolean {
 }
 
 /** Best-effort fetch of the dev-only ``/__dev__/openai-key`` endpoint
- *  (registered by the Vite plugin in ``plugins/vite-plugin-openai-key-dev.ts``).
+ *  (registered by the Vite plugin in ``build-plugins/vite-plugin-openai-key-dev.ts``).
  *
  *  Returns the developer's shell ``OPENAI_API_KEY`` when running under
  *  ``npm run dev``, or an empty string otherwise (production build, no

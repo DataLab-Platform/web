@@ -17,6 +17,7 @@ import {
   isPluginTrusted,
   trustPlugin,
 } from "../plugins/trustStore";
+import { EXAMPLE_PLUGINS, type ExamplePlugin } from "../plugins/examplePlugins";
 
 interface Props {
   onClose: () => void;
@@ -66,6 +67,17 @@ export function PluginManagerDialog({ onClose }: Props) {
     }
     const hash = await hashSource(source);
     setPending({ filename: file.name, source, hash });
+  };
+
+  const handleLoadExample = async (ex: ExamplePlugin) => {
+    if (!runtime) return;
+    const trusted = await isPluginTrusted(ex.filename, ex.source);
+    if (trusted) {
+      await doLoad(ex.filename, ex.source);
+      return;
+    }
+    const hash = await hashSource(ex.source);
+    setPending({ filename: ex.filename, source: ex.source, hash });
   };
 
   const doLoad = async (filename: string, source: string) => {
@@ -190,6 +202,38 @@ export function PluginManagerDialog({ onClose }: Props) {
             ))}
           </tbody>
         </table>
+        {EXAMPLE_PLUGINS.length > 0 && (
+          <>
+            <h3 style={{ marginBottom: 4 }}>{t("Example plugins")}</h3>
+            <p style={{ margin: "0 0 8px", color: "#888", fontSize: 12 }}>
+              {t("Bundled examples you can load on demand.")}
+            </p>
+            <table className="plugins-table" style={{ width: "100%" }}>
+              <tbody>
+                {EXAMPLE_PLUGINS.map((ex) => {
+                  const loaded = records.some(
+                    (r) => r.filename === ex.filename,
+                  );
+                  return (
+                    <tr key={ex.filename}>
+                      <td>
+                        <code style={{ fontSize: 11 }}>{ex.filename}</code>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <button
+                          onClick={() => void handleLoadExample(ex)}
+                          disabled={busy || loaded}
+                        >
+                          {loaded ? t("loaded") : t("Load")}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
         <div className="actions">
           <button onClick={onClose}>{t("Close")}</button>
         </div>

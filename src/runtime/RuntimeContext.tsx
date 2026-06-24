@@ -86,7 +86,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Hot-reload: a small Vite plugin (plugins/vite-plugin-python-hmr.ts)
+  // Hot-reload: a small Vite plugin (build-plugins/vite-plugin-python-hmr.ts)
   // watches .py files and pushes the new source via a custom HMR event.
   // We re-execute it inside the live Pyodide instance instead of forcing a
   // full page reload (which would mean another 30 s of cold-start).

@@ -46,7 +46,7 @@ from sigima.io.image.base import ImageFormatBase  # noqa: F401
 from sigima.io.image.formats import ClassicsImageFormat  # noqa: F401
 from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 
-from datalab.config import Conf, MOD_NAME, _
+from datalab.config import MOD_NAME, Conf, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
 
@@ -262,6 +262,44 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         from datalab import helpers
 
         return helpers.ask_question(message, title=title, cancelable=cancelable)
+
+    # -- Async dialog helpers (preferred in the browser) ---------------
+    #
+    # Browser-only additions (no desktop counterpart): the synchronous
+    # helpers above raise :class:`BrowserNotSupportedError` in Pyodide
+    # because they cannot block the JavaScript event loop. Plugins that
+    # run in DataLab-Web should ``await`` these variants instead.
+
+    async def show_info_async(self, message: str) -> None:
+        """Show an informational dialog (browser-safe)."""
+        from datalab import helpers
+
+        return await helpers.show_message_async("info", message)
+
+    async def show_warning_async(self, message: str) -> None:
+        """Show a warning dialog (browser-safe)."""
+        from datalab import helpers
+
+        return await helpers.show_message_async("warning", message)
+
+    async def show_error_async(self, message: str) -> None:
+        """Show an error dialog (browser-safe)."""
+        from datalab import helpers
+
+        return await helpers.show_message_async("error", message)
+
+    async def ask_yesno_async(
+        self,
+        message: str,
+        title: str | None = None,
+        cancelable: bool = False,
+    ) -> bool | None:
+        """Ask a yes/no(/cancel) question (browser-safe)."""
+        from datalab import helpers
+
+        return await helpers.ask_question_async(
+            message, title=title, cancelable=cancelable
+        )
 
     def edit_new_signal_parameters(
         self,

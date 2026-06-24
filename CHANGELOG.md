@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Image profile extraction**: horizontal and vertical line profiles can be extracted interactively from the image viewer, with a freeze state that pins the current profile while you keep exploring the image.
 - **Image spatial overlay multi-view**: a spatial overlay view places several images in a shared coordinate system and automatically switches to spatial mode when a geometry tool is used, preserving the current multi-selection after distributing images on a grid or resetting their positions.
 - **Processing error dialog**: when a processing or analysis call fails, a copy-pasteable modal now surfaces the full traceback and the context of the failed request instead of failing silently; the traceback is still logged to the browser console.
+- **Example plugins**: the _Plugins → Manage plugins…_ dialog now offers a set of bundled example plugins (ported from DataLab desktop) that you can load on demand to explore the plugin API — menus, submenus, message/question/parameter dialogs and a custom image processing.
 
 ### Changed
 
