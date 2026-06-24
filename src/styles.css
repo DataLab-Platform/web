@@ -1850,6 +1850,279 @@ input {
   color: var(--text-dim);
 }
 
+/* ---- Non-modal ROI editor (lives inside a DraggableFloating window
+   that provides position, size and chrome; the panel just fills it). ---- */
+.roi-floating {
+  font-size: 12px;
+}
+
+.roi-panel {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.roi-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-alt);
+  cursor: move;
+  user-select: none;
+}
+
+.roi-panel-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.roi-panel-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.roi-panel-close:hover {
+  color: var(--text);
+}
+
+.roi-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.roi-panel-toolbar button {
+  font-size: 11px;
+  padding: 3px 6px;
+}
+
+.roi-draw-btn.active {
+  background: var(--accent, #2d7ff9);
+  color: #fff;
+  border-color: var(--accent, #2d7ff9);
+}
+
+.roi-panel-empty {
+  padding: 12px 10px;
+  color: var(--text-dim);
+}
+
+.roi-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 48px;
+}
+
+.roi-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.roi-list-item:hover {
+  background: var(--hover-bg);
+}
+
+.roi-list-item.selected {
+  background: var(--hover-bg);
+  outline: 1px solid var(--accent, #2d7ff9);
+}
+
+.roi-swatch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.roi-list-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.roi-list-type {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.roi-list-remove {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.roi-list-remove:hover {
+  color: #c4302b;
+}
+
+.roi-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.roi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.roi-field-label {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.roi-field input,
+.roi-field textarea {
+  width: 100%;
+}
+
+.roi-field-row {
+  display: flex;
+  gap: 6px;
+}
+
+.roi-field-row .roi-field {
+  flex: 1 1 0;
+}
+
+.roi-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ---- Polygon vertex table ---- */
+.roi-poly {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.roi-poly-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.roi-poly-add {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.roi-poly-table {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.roi-poly-row {
+  display: grid;
+  grid-template-columns: 18px 1fr 1fr 20px;
+  gap: 4px;
+  align-items: center;
+}
+
+.roi-poly-row--head {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.roi-poly-idx {
+  color: var(--text-dim);
+  font-size: 10px;
+  text-align: right;
+}
+
+.roi-poly-row input {
+  width: 100%;
+  min-width: 0;
+}
+
+.roi-poly-remove {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.roi-poly-remove:hover:not(:disabled) {
+  color: #c4302b;
+}
+
+.roi-poly-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.roi-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.roi-panel-footer {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+}
+
+.roi-remove-all {
+  flex: 1 1 auto;
+  font-size: 11px;
+}
+
+.roi-primary {
+  flex: 1 1 auto;
+  font-size: 11px;
+  background: var(--accent, #2d7ff9);
+  color: #fff;
+  border-color: var(--accent, #2d7ff9);
+  font-weight: 600;
+}
+
+.roi-primary:hover {
+  filter: brightness(1.08);
+}
+
 .plot-loading {
   flex-direction: column;
   gap: 18px;

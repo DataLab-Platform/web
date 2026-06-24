@@ -3,7 +3,7 @@ import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
-import { buildRoiOverlays } from "./imageRoi";
+import { buildRoiOverlays, parsePolygonPath } from "./imageRoi";
 import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
@@ -65,6 +65,13 @@ interface ImagePlotProps {
   roiEditMode?: boolean;
   /** Called whenever the ROI list changed via direct plot interaction. */
   onRoiChange?: (segments: ImageRoiSegment[]) => void;
+  /** When set (and ``roiEditMode`` is on), arms the matching graphical draw
+   *  tool (rectangle / circle / polygon) so a ROI can be traced immediately
+   *  without picking a modebar button. */
+  drawGeometry?: "segment" | "rectangle" | "circle" | "polygon" | null;
+  /** Polygon vertex to emphasise on the plot while its coordinate cell is
+   *  being edited in the ROI panel (``null`` ⇒ none). */
+  highlightedVertex?: { roiIndex: number; vertexIndex: number } | null;
   /** Analysis results (centroid, peaks, blobs, …) drawn as overlays. */
   results?: AnalysisResult[];
   /** When true, append a paper-coords summary annotation listing
@@ -121,6 +128,8 @@ export function ImagePlot({
   roi = [],
   roiEditMode = false,
   onRoiChange,
+  drawGeometry = null,
+  highlightedVertex = null,
   results = [],
   showResultsOverlay = false,
   showGraphicalTitles = true,
@@ -614,9 +623,39 @@ export function ImagePlot({
     return shapes;
   }, [tool, cursor, statsRect, extent, frozen]);
 
+  // Bright marker emphasising the polygon vertex whose coordinate cell is
+  // being edited in the ROI panel.  Empty unless a valid vertex is targeted.
+  const highlightTrace = useMemo(() => {
+    if (!highlightedVertex) return [] as unknown[];
+    const seg = roi[highlightedVertex.roiIndex];
+    if (!seg || seg.geometry !== "polygon") return [] as unknown[];
+    const pt = seg.points[highlightedVertex.vertexIndex];
+    if (!pt) return [] as unknown[];
+    const [x, y] = pt;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return [] as unknown[];
+    const color = roiLineColor(highlightedVertex.roiIndex);
+    return [
+      {
+        type: "scatter" as const,
+        x: [x],
+        y: [y],
+        mode: "markers" as const,
+        hoverinfo: "skip" as const,
+        showlegend: false,
+        cliponaxis: false,
+        marker: {
+          symbol: "circle",
+          size: 16,
+          color,
+          line: { color: "#ffffff", width: 2 },
+        },
+      },
+    ];
+  }, [highlightedVertex, roi]);
+
   const allTraces = useMemo(
-    () => [...traces, ...resultTraces],
-    [traces, resultTraces],
+    () => [...traces, ...resultTraces, ...highlightTrace],
+    [traces, resultTraces, highlightTrace],
   );
 
   const layout = useMemo(() => {
@@ -669,7 +708,19 @@ export function ImagePlot({
       // immediately puts the plot into rectangle-drawing mode so the user
       // can drag out a region right away (instead of having to pick the
       // ``drawrect`` modebar button first — otherwise dragging just zooms).
-      dragmode: tool === "stats" ? ("drawrect" as const) : undefined,
+      // ROI edit mode does the same, honouring the geometry armed by the
+      // ROI panel (rectangle / circle / polygon) so a first ROI is always
+      // immediately drawable.
+      dragmode:
+        roiEditMode && drawGeometry
+          ? drawGeometry === "circle"
+            ? ("drawcircle" as const)
+            : drawGeometry === "polygon"
+              ? ("drawclosedpath" as const)
+              : ("drawrect" as const)
+          : tool === "stats"
+            ? ("drawrect" as const)
+            : undefined,
       // Legend positioned to the right of the colorbar (paper coords),
       // outside the plot area, so it never overlaps the image or the
       // colorbar. The right margin is widened above to make room.
@@ -717,6 +768,7 @@ export function ImagePlot({
     roiEditMode,
     roi.length,
     tool,
+    drawGeometry,
   ]);
 
   const handleHover = useCallback(
@@ -947,6 +999,12 @@ export function ImagePlot({
     ],
   );
 
+  // Always-fresh handle to ``handleRelayout`` for the imperatively-bound
+  // ``plotly_relayouting`` listener (see ``onInitialized``), so live ROI
+  // drags never call a stale closure.
+  const relayoutHandlerRef = useRef(handleRelayout);
+  relayoutHandlerRef.current = handleRelayout;
+
   // ------------------------------------------------------------------
   // Profiles
   // ------------------------------------------------------------------
@@ -1060,6 +1118,13 @@ export function ImagePlot({
         gdRef.current = gd as unknown as typeof gdRef.current;
         registerActivePlot("image", gd);
         readPlotPx(gdRef.current);
+        // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
+        // per-frame drag event). Bind it imperatively so ROI drags update
+        // the overlay/form continuously instead of only on mouse release.
+        const g = gd as unknown as {
+          on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
+        };
+        g.on?.("plotly_relayouting", (e) => relayoutHandlerRef.current(e));
       }}
       onUpdate={(_fig, gd) => {
         gdRef.current = gd as unknown as typeof gdRef.current;
@@ -1646,22 +1711,9 @@ function computeHistogram(
   return { centers, counts };
 }
 
-// Parse a Plotly path string ("M x,y L x,y ... Z") into an array of points.
-function parsePolygonPath(path: string): [number, number][] {
-  const pts: [number, number][] = [];
-  // Tokens separated by whitespace; each one is a command (M/L/Z) optionally
-  // followed by "x,y", or just "x,y".
-  for (const tok of path.split(/\s+/)) {
-    if (!tok) continue;
-    const cleaned = tok.replace(/^[MmLlZz]/, "");
-    if (!cleaned.includes(",")) continue;
-    const [xs, ys] = cleaned.split(",");
-    const x = Number(xs);
-    const y = Number(ys);
-    if (Number.isFinite(x) && Number.isFinite(y)) pts.push([x, y]);
-  }
-  return pts;
-}
+// Parse a Plotly path string into an array of points.  Implemented in the
+// Plotly-free ``imageRoi`` module (so it is unit-testable in JSDOM) and
+// re-used here by ``shapeToRoi``.
 
 /** Convert a Plotly shape (rect/circle/path) to an ImageRoiSegment.
  *  ``existing`` provides defaults (title, inverse) for in-place updates. */

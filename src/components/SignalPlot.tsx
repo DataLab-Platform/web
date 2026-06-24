@@ -32,6 +32,10 @@ interface Props {
   roiEditMode?: boolean;
   /** Called whenever the ROI list changed via direct plot interaction. */
   onRoiChange?: (segments: SignalRoiSegment[]) => void;
+  /** When set (and ``roiEditMode`` is on), arms a graphical draw tool so a
+   *  ROI can be traced immediately. ``"segment"`` maps to the rectangle
+   *  tool (a horizontal band over the signal). */
+  drawGeometry?: "segment" | "rectangle" | "circle" | "polygon" | null;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
   /** Analysis results attached to the other selected signals, merged with
@@ -62,6 +66,7 @@ export function SignalPlot({
   roi = [],
   roiEditMode = false,
   onRoiChange,
+  drawGeometry = null,
   results = [],
   extraResults = [],
   showResultsOverlay = false,
@@ -245,6 +250,12 @@ export function SignalPlot({
     }
   };
 
+  // Always-fresh handle to ``handleRelayout`` for the imperatively-bound
+  // ``plotly_relayouting`` listener (see ``onInitialized``), so live drags
+  // never call a stale closure.
+  const relayoutHandlerRef = useRef(handleRelayout);
+  relayoutHandlerRef.current = handleRelayout;
+
   // Edit-mode ROI rectangles: kept anchored to the data Y-axis so
   // Plotly's editable shapes can be dragged/resized.  Each rectangle is
   // tinted with the per-ROI color so multi-ROI editing stays readable.
@@ -407,6 +418,12 @@ export function SignalPlot({
                 opacity: 1,
               }
             : undefined,
+          // Auto-arm the rectangle-draw tool when the ROI panel requests it
+          // so the user can trace a first ROI without hunting for a modebar
+          // button (otherwise dragging would just pan/zoom).
+          ...(roiEditMode && drawGeometry
+            ? { dragmode: "drawrect" as const }
+            : {}),
           shapes: allShapes,
           annotations: allAnnotations,
         } as never
@@ -424,7 +441,16 @@ export function SignalPlot({
         } as never
       }
       onRelayout={handleRelayout}
-      onInitialized={(_fig, gd) => registerActivePlot("signal", gd)}
+      onInitialized={(_fig, gd) => {
+        registerActivePlot("signal", gd);
+        // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
+        // per-frame drag event). Bind it imperatively so ROI drags update
+        // the overlay/form continuously instead of only on mouse release.
+        const g = gd as unknown as {
+          on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
+        };
+        g.on?.("plotly_relayouting", (e) => relayoutHandlerRef.current(e));
+      }}
       onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
       onPurge={() => registerActivePlot("signal", null)}
     />

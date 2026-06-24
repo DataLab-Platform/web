@@ -14,6 +14,27 @@
 import type { ImageRoiSegment } from "../runtime/runtime";
 import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
 
+/**
+ * Parse a Plotly path string into an array of `[x, y]` points.
+ *
+ * Handles both the spaced form we emit when re-rendering an existing ROI
+ * (`"M x,y L x,y Z"`) and the *space-less* form Plotly's `drawclosedpath`
+ * tool produces for a freshly drawn polygon (`"M100,200L150,250L120,300Z"`).
+ * We extract every `number,number` coordinate pair, ignoring the M/L/Z
+ * command letters, so both formats round-trip correctly.
+ */
+export function parsePolygonPath(path: string): [number, number][] {
+  const pts: [number, number][] = [];
+  const re = /(-?\d*\.?\d+(?:e[+-]?\d+)?),(-?\d*\.?\d+(?:e[+-]?\d+)?)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(path)) !== null) {
+    const x = Number(m[1]);
+    const y = Number(m[2]);
+    if (Number.isFinite(x) && Number.isFinite(y)) pts.push([x, y]);
+  }
+  return pts;
+}
+
 /** Result of {@link buildRoiOverlays}. */
 export interface RoiOverlayResult {
   /** Plotly ``shapes`` entries (one per ROI). */

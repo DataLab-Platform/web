@@ -96,8 +96,8 @@ import {
 import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
-import { RoiDialog } from "./components/RoiDialog";
-import { ImageRoiDialog } from "./components/ImageRoiDialog";
+import { RoiPanel } from "./components/RoiPanel";
+import type { RoiDrawGeometry } from "./components/RoiPanel";
 import { RoiGridDialog } from "./components/RoiGridDialog";
 import { H5BrowserDialog } from "./components/H5BrowserDialog";
 import { RecoveryBanner } from "./components/RecoveryBanner";
@@ -745,25 +745,31 @@ export default function App() {
     annotations: [],
   });
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
-  const [editingRoi, setEditingRoi] = useState<SignalRoiSegment[] | null>(null);
   const [roiEditMode, setRoiEditMode] = useState<boolean>(false);
   const [imageRoi, setImageRoi] = useState<ImageRoiSegment[]>([]);
   const [imageRoiEditMode, setImageRoiEditMode] = useState<boolean>(false);
-  const [editingImageRoi, setEditingImageRoi] = useState<
-    ImageRoiSegment[] | null
-  >(null);
+  /** Index of the ROI whose form is shown in the docked ROI panel
+   *  (``null`` ⇒ none selected). Shared by signal & image editors. */
+  const [selectedRoiIndex, setSelectedRoiIndex] = useState<number | null>(null);
+  /** Geometry currently armed for graphical drawing on the plot
+   *  (``null`` ⇒ no draw tool armed). Drives the plot ``dragmode``. */
+  const [roiDrawGeometry, setRoiDrawGeometry] =
+    useState<RoiDrawGeometry | null>(null);
+  /** Vertex index of the selected polygon ROI whose coordinate cell is being
+   *  edited in the ROI panel (``null`` ⇒ none). Highlighted on the plot. */
+  const [activeRoiVertex, setActiveRoiVertex] = useState<number | null>(null);
   /** Persisted LUT range override for the current image (``null`` ⇒
    *  fall back to the image's intrinsic ``data_min``/``data_max``).
    *  Driven by the contrast tool inside :class:`ImagePlot`. */
   const [imageLutRange, setImageLutRange] = useState<[number, number] | null>(
     null,
   );
-  /** ROI segments shown by the ad-hoc dialog used by ``Erase area…``.
-   *  Distinct from ``editingImageRoi`` so submission triggers the erase
-   *  computation instead of overwriting the image's own ROI list. */
-  const [erasingImageRoi, setErasingImageRoi] = useState<
-    ImageRoiSegment[] | null
-  >(null);
+  /** Transient "erase area" session: when active, the docked ROI panel and
+   *  the image plot edit ``eraseRegions`` (not persisted on the object); the
+   *  panel's primary button runs ``eraseImageArea`` on those regions.
+   *  Mirrors DataLab desktop's ``Processing > Restoration > Erase area…``. */
+  const [imageEraseMode, setImageEraseMode] = useState<boolean>(false);
+  const [eraseRegions, setEraseRegions] = useState<ImageRoiSegment[]>([]);
   const [signalTypes, setSignalTypes] = useState<SignalCreationType[]>([]);
   const [imageTypes, setImageTypes] = useState<ImageCreationType[]>([]);
   const [analysisEntries, setAnalysisEntries] = useState<
@@ -2543,21 +2549,25 @@ export default function App() {
   const handleEditRoi = useCallback(async () => {
     if (!runtime || !currentId) return;
     const segs = await runtime.getSignalRoi(currentId);
-    setEditingRoi(segs);
+    // "Edit numerically" now opens the docked ROI panel (no modal) with
+    // the coordinate form, selecting the first ROI.  Drawing stays
+    // disarmed so the plot keeps pan/zoom until the user picks a tool.
+    setRoi(segs);
+    setRoiDrawGeometry(null);
+    setSelectedRoiIndex(segs.length > 0 ? 0 : null);
+    setRoiEditMode(true);
   }, [runtime, currentId]);
 
-  const handleSubmitRoi = useCallback(
-    async (segments: SignalRoiSegment[]) => {
-      if (!runtime || !currentId) return;
-      await runtime.setSignalRoi(currentId, segments);
-      setEditingRoi(null);
-      setRoi(segments);
-    },
-    [runtime, currentId],
-  );
-
   const handleToggleRoiEditMode = useCallback(() => {
-    setRoiEditMode((m) => !m);
+    setRoiEditMode((m) => {
+      const next = !m;
+      // Entering edit mode arms the range-draw tool so the user can trace
+      // a first ROI immediately (even when none exists yet); leaving it
+      // disarms drawing and clears the active selection.
+      setRoiDrawGeometry(next ? "segment" : null);
+      if (!next) setSelectedRoiIndex(null);
+      return next;
+    });
   }, []);
 
   // Live-edit callback fed by the plot when the user drags a ROI handle or
@@ -2566,7 +2576,14 @@ export default function App() {
   const roiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleRoiChangeFromPlot = useCallback(
     (segments: SignalRoiSegment[]) => {
-      setRoi(segments);
+      setRoi((prev) => {
+        // A freshly drawn ROI (count grew) becomes the active selection so
+        // its form opens immediately in the docked panel.
+        if (segments.length > prev.length) {
+          queueMicrotask(() => setSelectedRoiIndex(segments.length - 1));
+        }
+        return segments;
+      });
       if (!runtime || !currentId) return;
       if (roiWriteTimer.current) clearTimeout(roiWriteTimer.current);
       roiWriteTimer.current = setTimeout(() => {
@@ -2577,6 +2594,27 @@ export default function App() {
     },
     [runtime, currentId],
   );
+
+  /** Arm (or disarm with ``null``) a graphical draw tool on the active
+   *  plot, fed by the ROI panel's draw buttons. */
+  const handleRoiRequestDraw = useCallback(
+    (geometry: RoiDrawGeometry | null) => {
+      setRoiDrawGeometry(geometry);
+    },
+    [],
+  );
+
+  // Reset the active ROI selection whenever the displayed object changes
+  // so the docked form never points at a stale index.
+  useEffect(() => {
+    setSelectedRoiIndex(null);
+  }, [currentId]);
+
+  // Clear the highlighted polygon vertex whenever the selected ROI changes
+  // so a marker from a previous ROI never lingers on the plot.
+  useEffect(() => {
+    setActiveRoiVertex(null);
+  }, [selectedRoiIndex]);
 
   const handleRoiRemoveAt = useCallback(
     async (index: number) => {
@@ -2723,7 +2761,11 @@ export default function App() {
   const handleImageEditRoi = useCallback(async () => {
     if (!runtime || !currentId) return;
     const segs = await runtime.getImageRoi(currentId);
-    setEditingImageRoi(segs);
+    // Open the docked ROI panel (no modal) with the coordinate form.
+    setImageRoi(segs);
+    setRoiDrawGeometry(null);
+    setSelectedRoiIndex(segs.length > 0 ? 0 : null);
+    setImageRoiEditMode(true);
   }, [runtime, currentId]);
 
   const handleImageAddRectangle = useCallback(async () => {
@@ -2744,7 +2786,11 @@ export default function App() {
         dy: sy,
       },
     ];
-    setEditingImageRoi(next);
+    setImageRoi(next);
+    setRoiDrawGeometry(null);
+    setSelectedRoiIndex(next.length - 1);
+    setImageRoiEditMode(true);
+    await runtime.setImageRoi(currentId, next);
   }, [runtime, currentId, imageRoi, imageData]);
 
   const handleImageAddCircle = useCallback(async () => {
@@ -2760,21 +2806,28 @@ export default function App() {
       ...imageRoi,
       { geometry: "circle", title: "", inverse: false, xc, yc, r },
     ];
-    setEditingImageRoi(next);
+    setImageRoi(next);
+    setRoiDrawGeometry(null);
+    setSelectedRoiIndex(next.length - 1);
+    setImageRoiEditMode(true);
+    await runtime.setImageRoi(currentId, next);
   }, [runtime, currentId, imageRoi, imageData]);
 
-  const handleSubmitImageRoi = useCallback(
-    async (segments: ImageRoiSegment[]) => {
-      if (!runtime || !currentId) return;
-      await runtime.setImageRoi(currentId, segments);
-      setEditingImageRoi(null);
-      setImageRoi(segments);
-    },
-    [runtime, currentId],
-  );
-
   const handleToggleImageRoiEditMode = useCallback(() => {
-    setImageRoiEditMode((m) => !m);
+    setImageRoiEditMode((m) => {
+      const next = !m;
+      // Entering edit mode arms the rectangle-draw tool so a first ROI can
+      // be traced right away; leaving it disarms drawing and clears the
+      // active selection.  ROI editing and the erase session are mutually
+      // exclusive, so entering one leaves the other.
+      setRoiDrawGeometry(next ? "rectangle" : null);
+      if (next) {
+        setImageEraseMode(false);
+        setEraseRegions([]);
+      }
+      if (!next) setSelectedRoiIndex(null);
+      return next;
+    });
   }, []);
 
   // Live-edit callback fed by the plot when the user drags a ROI handle
@@ -2783,7 +2836,12 @@ export default function App() {
   const imageRoiWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleImageRoiChangeFromPlot = useCallback(
     (segments: ImageRoiSegment[]) => {
-      setImageRoi(segments);
+      setImageRoi((prev) => {
+        if (segments.length > prev.length) {
+          queueMicrotask(() => setSelectedRoiIndex(segments.length - 1));
+        }
+        return segments;
+      });
       if (!runtime || !currentId) return;
       if (imageRoiWriteTimer.current) clearTimeout(imageRoiWriteTimer.current);
       imageRoiWriteTimer.current = setTimeout(() => {
@@ -2932,16 +2990,17 @@ export default function App() {
     }
   }, [runtime, currentId, titleForId, notify]);
 
-  /** Open the ROI dialog pre-filled with a single centered rectangle, to
-   *  let the user define the area to erase. Mirrors DataLab desktop's
-   *  ``compute_erase`` which prompts the user for a ROI. */
-  const handleOpenEraseDialog = useCallback(() => {
+  /** Start an "erase area" session: open the docked ROI panel on a transient
+   *  region list (seeded with one centered rectangle) instead of a modal, so
+   *  the user can draw / edit the area(s) to erase directly on the image.
+   *  Mirrors DataLab desktop's ``compute_erase``. */
+  const handleOpenErase = useCallback(() => {
     if (!runtime || !currentId || !imageData) return;
     const sx = (imageData.width * imageData.dx) / 4 || 1;
     const sy = (imageData.height * imageData.dy) / 4 || 1;
     const x0 = imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
     const y0 = imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
-    setErasingImageRoi([
+    setEraseRegions([
       {
         geometry: "rectangle",
         title: "",
@@ -2952,24 +3011,56 @@ export default function App() {
         dy: sy,
       },
     ]);
+    setSelectedRoiIndex(0);
+    setActiveRoiVertex(null);
+    setRoiDrawGeometry("rectangle");
+    setImageRoiEditMode(false);
+    setImageEraseMode(true);
   }, [runtime, currentId, imageData]);
 
-  const handleSubmitErase = useCallback(
-    async (segments: ImageRoiSegment[]) => {
-      if (!runtime || !currentId) return;
-      setErasingImageRoi(null);
-      if (segments.length === 0) return;
-      setBusy(true);
-      try {
-        const newOid = await runtime.eraseImageArea(currentId, segments);
-        await refresh();
-        setCurrentId(newOid);
-      } finally {
-        setBusy(false);
-      }
+  /** Live region updates from the plot during an erase session (draw / drag).
+   *  Not persisted on the object — only the transient ``eraseRegions``. */
+  const handleEraseChangeFromPlot = useCallback(
+    (segments: ImageRoiSegment[]) => {
+      setEraseRegions((prev) => {
+        if (segments.length > prev.length) {
+          queueMicrotask(() => setSelectedRoiIndex(segments.length - 1));
+        }
+        return segments;
+      });
     },
-    [runtime, currentId, refresh],
+    [],
   );
+
+  /** Apply the erase computation on the transient regions, then leave the
+   *  session and select the freshly created image. */
+  const handleApplyErase = useCallback(async () => {
+    if (!runtime || !currentId) return;
+    const segments = eraseRegions;
+    setImageEraseMode(false);
+    setEraseRegions([]);
+    setSelectedRoiIndex(null);
+    setActiveRoiVertex(null);
+    setRoiDrawGeometry(null);
+    if (segments.length === 0) return;
+    setBusy(true);
+    try {
+      const newOid = await runtime.eraseImageArea(currentId, segments);
+      await refresh();
+      setCurrentId(newOid);
+    } finally {
+      setBusy(false);
+    }
+  }, [runtime, currentId, eraseRegions, refresh]);
+
+  /** Abandon an erase session without modifying the image. */
+  const handleCancelErase = useCallback(() => {
+    setImageEraseMode(false);
+    setEraseRegions([]);
+    setSelectedRoiIndex(null);
+    setActiveRoiVertex(null);
+    setRoiDrawGeometry(null);
+  }, []);
 
   /** Refresh the displayed image of *oid* after an in-place layout
    *  change (distribute on a grid / reset positions). */
@@ -3797,7 +3888,7 @@ export default function App() {
           })
         : []),
       ...(treeKind === "image"
-        ? buildImageEraseActions({ onErase: handleOpenEraseDialog })
+        ? buildImageEraseActions({ onErase: handleOpenErase })
         : []),
       ...(treeKind === "signal"
         ? buildInteractiveFitActions(
@@ -3889,7 +3980,7 @@ export default function App() {
       handleImageRoiRemoveAll,
       handleDistributeOnGrid,
       handleResetImagePositions,
-      handleOpenEraseDialog,
+      handleOpenErase,
       handleOpenFile,
       handleSaveFile,
       handleSaveToDirectory,
@@ -4274,6 +4365,7 @@ export default function App() {
                 roi={roi}
                 roiEditMode={roiEditMode}
                 onRoiChange={handleRoiChangeFromPlot}
+                drawGeometry={roiEditMode ? roiDrawGeometry : null}
                 results={results}
                 showResultsOverlay={showResultsOverlay}
                 showGraphicalTitles={showGraphicalTitles}
@@ -4325,9 +4417,26 @@ export default function App() {
               extraImages.length === 0 && (
                 <ImagePlot
                   data={imageData}
-                  roi={imageRoi}
-                  roiEditMode={imageRoiEditMode}
-                  onRoiChange={handleImageRoiChangeFromPlot}
+                  roi={imageEraseMode ? eraseRegions : imageRoi}
+                  roiEditMode={imageEraseMode || imageRoiEditMode}
+                  onRoiChange={
+                    imageEraseMode
+                      ? handleEraseChangeFromPlot
+                      : handleImageRoiChangeFromPlot
+                  }
+                  drawGeometry={
+                    imageEraseMode || imageRoiEditMode ? roiDrawGeometry : null
+                  }
+                  highlightedVertex={
+                    (imageEraseMode || imageRoiEditMode) &&
+                    selectedRoiIndex !== null &&
+                    activeRoiVertex !== null
+                      ? {
+                          roiIndex: selectedRoiIndex,
+                          vertexIndex: activeRoiVertex,
+                        }
+                      : null
+                  }
                   results={results}
                   showResultsOverlay={showResultsOverlay}
                   showGraphicalTitles={showGraphicalTitles}
@@ -4390,6 +4499,75 @@ export default function App() {
               />
             </>
           )}
+          {runtime &&
+            centralView === "plot" &&
+            ((treeKind === "signal" && data && roiEditMode) ||
+              (treeKind === "image" &&
+                imageData &&
+                extraImages.length === 0 &&
+                (imageRoiEditMode || imageEraseMode))) && (
+              <DraggableFloating
+                storageKey="datalab-web.roiPanelFloating"
+                defaultWidth={300}
+                defaultHeight={460}
+                minWidth={260}
+                minHeight={220}
+                dragHandleSelector=".roi-panel-header"
+                className="floating-dock-host roi-floating"
+              >
+                <RoiPanel
+                  kind={treeKind === "image" ? "image" : "signal"}
+                  signalRoi={roi}
+                  imageRoi={imageEraseMode ? eraseRegions : imageRoi}
+                  bounds={
+                    treeKind === "image" && imageData
+                      ? {
+                          xMin: imageData.x0,
+                          xMax: imageData.x0 + imageData.width * imageData.dx,
+                          yMin: imageData.y0,
+                          yMax: imageData.y0 + imageData.height * imageData.dy,
+                        }
+                      : {
+                          xMin: data?.x[0] ?? 0,
+                          xMax: data?.x[(data?.x.length ?? 1) - 1] ?? 1,
+                          yMin: 0,
+                          yMax: 1,
+                        }
+                  }
+                  selectedIndex={selectedRoiIndex}
+                  onSelect={setSelectedRoiIndex}
+                  onSignalChange={handleRoiChangeFromPlot}
+                  onImageChange={
+                    imageEraseMode
+                      ? setEraseRegions
+                      : handleImageRoiChangeFromPlot
+                  }
+                  onRequestDraw={handleRoiRequestDraw}
+                  activeDraw={roiDrawGeometry}
+                  onActiveVertexChange={setActiveRoiVertex}
+                  title={imageEraseMode ? t("Erase area") : undefined}
+                  primaryAction={
+                    imageEraseMode
+                      ? { label: t("Apply"), onClick: handleApplyErase }
+                      : undefined
+                  }
+                  onRemoveAll={
+                    imageEraseMode
+                      ? () => setEraseRegions([])
+                      : treeKind === "image"
+                        ? handleImageRoiRemoveAll
+                        : handleRoiRemoveAll
+                  }
+                  onClose={
+                    imageEraseMode
+                      ? handleCancelErase
+                      : treeKind === "image"
+                        ? handleToggleImageRoiEditMode
+                        : handleToggleRoiEditMode
+                  }
+                />
+              </DraggableFloating>
+            )}
           {runtime && aiPanelVisible && aiPanelCollapsed && (
             <button
               type="button"
@@ -4592,37 +4770,6 @@ export default function App() {
             initial={editingMeta}
             onSubmit={handleSubmitMeta}
             onCancel={() => setEditingMeta(null)}
-          />
-        )}
-        {editingRoi !== null && data && (
-          <RoiDialog
-            initial={editingRoi}
-            xMin={data.x[0] ?? 0}
-            xMax={data.x[data.x.length - 1] ?? 1}
-            onSubmit={handleSubmitRoi}
-            onCancel={() => setEditingRoi(null)}
-          />
-        )}
-        {editingImageRoi !== null && imageData && (
-          <ImageRoiDialog
-            initial={editingImageRoi}
-            xMin={imageData.x0}
-            xMax={imageData.x0 + imageData.width * imageData.dx}
-            yMin={imageData.y0}
-            yMax={imageData.y0 + imageData.height * imageData.dy}
-            onSubmit={handleSubmitImageRoi}
-            onCancel={() => setEditingImageRoi(null)}
-          />
-        )}
-        {erasingImageRoi !== null && imageData && (
-          <ImageRoiDialog
-            initial={erasingImageRoi}
-            xMin={imageData.x0}
-            xMax={imageData.x0 + imageData.width * imageData.dx}
-            yMin={imageData.y0}
-            yMax={imageData.y0 + imageData.height * imageData.dy}
-            onSubmit={handleSubmitErase}
-            onCancel={() => setErasingImageRoi(null)}
           />
         )}
         {helpView && (

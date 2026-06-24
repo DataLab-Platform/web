@@ -134,8 +134,9 @@ Presentational React. Notable components:
 - `DialogBridge.tsx` — single React entry-point that **receives dialog
   requests from Python** via `bootstrap.set_dialog_bridge()` and routes
   them to the appropriate React dialog component.
-- ROI: `RoiDialog.tsx`, `ImageRoiDialog.tsx`, `RoiGridDialog.tsx`,
-  `signalRoi.ts`, `imageRoi.ts`.
+- ROI: `RoiPanel.tsx` (non-modal docked editor for signal & image ROIs and
+  for the image _Erase area…_ session — draw / table-edit regions, then apply),
+  `RoiGridDialog.tsx`, `signalRoi.ts`, `imageRoi.ts`.
 - Other domain dialogs: `H5BrowserDialog.tsx`, `InteractiveFitDialog.tsx`,
   `TextImportWizard.tsx`, `ObjectPropertiesDialog.tsx`,
   `ProfileDefinitionDialog.tsx`, `SaveToDirectoryDialog.tsx`,

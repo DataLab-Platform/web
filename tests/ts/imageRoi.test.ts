@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildRoiOverlays } from "../../src/components/imageRoi";
+import {
+  buildRoiOverlays,
+  parsePolygonPath,
+} from "../../src/components/imageRoi";
 import { ROI_FILL_COLORS } from "../../src/runtime/plotStyles";
 import type { ImageRoiSegment } from "../../src/runtime/runtime";
 
@@ -125,5 +128,38 @@ describe("buildRoiOverlays", () => {
     expect(s.editable).toBe(false);
     expect(s.line.width).toBe(1.5);
     expect(s.fillcolor).toBeUndefined();
+  });
+});
+
+describe("parsePolygonPath", () => {
+  it("parses the spaced form we emit for existing ROIs", () => {
+    expect(parsePolygonPath("M 1,2 L 3,4 L 5,6 Z")).toEqual([
+      [1, 2],
+      [3, 4],
+      [5, 6],
+    ]);
+  });
+
+  it("parses the space-less form Plotly's drawclosedpath emits (regression)", () => {
+    // Freshly drawn polygons come back with no whitespace between the
+    // M/L/Z commands and the coordinates; the old whitespace-split parser
+    // dropped every point, so the polygon ROI silently vanished on release.
+    expect(parsePolygonPath("M100,200L150,250L120,300Z")).toEqual([
+      [100, 200],
+      [150, 250],
+      [120, 300],
+    ]);
+  });
+
+  it("handles negative and decimal coordinates", () => {
+    expect(parsePolygonPath("M-1.5,2L3,-4.25L0.5,6Z")).toEqual([
+      [-1.5, 2],
+      [3, -4.25],
+      [0.5, 6],
+    ]);
+  });
+
+  it("returns an empty list for a path with no coordinate pairs", () => {
+    expect(parsePolygonPath("MZ")).toEqual([]);
   });
 });

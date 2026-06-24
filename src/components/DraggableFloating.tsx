@@ -23,6 +23,7 @@ import {
 export interface DraggableFloatingProps {
   storageKey: string;
   defaultWidth?: number;
+  defaultHeight?: number;
   minWidth?: number;
   minHeight?: number;
   dragHandleSelector?: string;
@@ -71,6 +72,7 @@ function clamp(value: number, min: number, max: number): number {
 export function DraggableFloating({
   storageKey,
   defaultWidth = 400,
+  defaultHeight,
   minWidth = 280,
   minHeight = 240,
   dragHandleSelector = ".panel-header",
@@ -83,14 +85,19 @@ export function DraggableFloating({
     if (stored) return stored;
     // Default placement: top-right corner with 8px margin (matches the
     // historical right-anchored dock, which spanned the full workspace
-    // height with an 8px top/bottom margin).
+    // height with an 8px top/bottom margin).  ``defaultHeight`` opts into
+    // a compact initial height instead of spanning the full viewport.
     const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
     const vh = typeof window !== "undefined" ? window.innerHeight : 768;
+    const height =
+      defaultHeight !== undefined
+        ? clamp(defaultHeight, minHeight, vh - 16)
+        : Math.max(minHeight, vh - 16);
     return {
       top: 8,
       left: Math.max(8, vw - defaultWidth - 8),
       width: defaultWidth,
-      height: Math.max(minHeight, vh - 16),
+      height,
     };
   });
 
