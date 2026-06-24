@@ -47,6 +47,9 @@ interface Props {
   /** Toggle handler for the AI Assistant panel. Required to render
    *  the toggle button. */
   onToggleAIPanel?: () => void;
+  /** Open the command palette. When omitted the trigger button is
+   *  hidden. */
+  onOpenCommandPalette?: () => void;
 }
 
 export function MenuBar(props: Props) {
@@ -65,6 +68,7 @@ export function MenuBar(props: Props) {
     onToggleStoreOnDisk,
     aiPanelVisible,
     onToggleAIPanel,
+    onOpenCommandPalette,
   } = props;
   const tree = useMemo(() => buildMenuTree(actions), [actions]);
   const [openTop, setOpenTop] = useState<string | null>(null);
@@ -153,12 +157,57 @@ export function MenuBar(props: Props) {
           onToggleStoreOnDisk={onToggleStoreOnDisk}
         />
       )}
+      {onOpenCommandPalette && (
+        <CommandPaletteButton onOpen={onOpenCommandPalette} />
+      )}
       {onToggleAIPanel && (
         <AIToggleButton visible={!!aiPanelVisible} onToggle={onToggleAIPanel} />
       )}
       <LanguageSelector />
       <ThemeToggleButton />
     </div>
+  );
+}
+
+/** Command-palette trigger, mirroring the visual weight of the other
+ *  menu-bar icon buttons. Clicking opens the searchable palette; the
+ *  same palette is reachable via the global Ctrl/Cmd+K shortcut. */
+function CommandPaletteButton({ onOpen }: { onOpen: () => void }) {
+  const shortcut = isMacPlatform() ? "⌘K" : "Ctrl+K";
+  const label = t("Command palette");
+  return (
+    <button
+      type="button"
+      className="menubar-command-palette"
+      onClick={onOpen}
+      title={`${label} (${shortcut})`}
+      aria-label={label}
+    >
+      <svg
+        width={16}
+        height={16}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        focusable={false}
+      >
+        <circle cx={11} cy={11} r={7} />
+        <path d="M21 21l-4.3-4.3" />
+      </svg>
+    </button>
+  );
+}
+
+/** Best-effort macOS detection so the palette shortcut hint reads "⌘K"
+ *  on Apple keyboards and "Ctrl+K" elsewhere. */
+function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /mac|iphone|ipad|ipod/i.test(
+    navigator.platform || navigator.userAgent,
   );
 }
 

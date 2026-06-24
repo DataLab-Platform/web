@@ -1,7 +1,11 @@
 import { resolveSubmenuIcon } from "./submenuIcons";
-import type { ActionDescriptor, MenuNode } from "./types";
+import type { ActionDescriptor, CommandEntry, MenuNode } from "./types";
 import { TOP_LEVEL_ORDER } from "./types";
 import { t } from "../i18n/translate";
+
+/** Separator used to render a feature's localised menu path in the
+ *  command palette, e.g. "Processing › Fourier analysis › FFT". */
+export const COMMAND_PATH_SEPARATOR = " › ";
 
 /** Build a hierarchical menu tree from a flat list of action descriptors.
  *
@@ -85,6 +89,43 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
   });
 
   return root.children ?? [];
+}
+
+/** Flatten a localised menu tree into a flat list of executable commands.
+ *
+ * Walks every leaf of the tree built by {@link buildMenuTree}, recording
+ * each action together with the localised path of the menu folders that
+ * contain it. This is the data source for the command palette, where a
+ * feature is identified by its readable menu path (mirroring how users
+ * navigate the menus) rather than by a stable internal id.
+ *
+ * @param nodes Top-level menu nodes (the result of {@link buildMenuTree}).
+ * @returns One {@link CommandEntry} per leaf, in depth-first menu order.
+ */
+export function flattenMenuLeaves(nodes: MenuNode[]): CommandEntry[] {
+  const out: CommandEntry[] = [];
+  const walk = (node: MenuNode, ancestors: string[]): void => {
+    if (node.action) {
+      const parentLabel = ancestors.join(COMMAND_PATH_SEPARATOR);
+      const pathLabel = parentLabel
+        ? `${parentLabel}${COMMAND_PATH_SEPARATOR}${node.displayLabel}`
+        : node.displayLabel;
+      out.push({
+        action: node.action,
+        label: node.displayLabel,
+        parentLabel,
+        pathLabel,
+        searchText: `${pathLabel} ${node.action.id}`.toLowerCase(),
+      });
+      return;
+    }
+    if (node.children) {
+      const next = node.label ? [...ancestors, node.displayLabel] : ancestors;
+      for (const child of node.children) walk(child, next);
+    }
+  };
+  for (const node of nodes) walk(node, []);
+  return out;
 }
 
 /**

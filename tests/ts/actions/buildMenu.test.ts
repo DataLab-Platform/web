@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildMenuTree } from "../../../src/actions/buildMenu";
+import {
+  buildMenuTree,
+  flattenMenuLeaves,
+} from "../../../src/actions/buildMenu";
 import type { ActionDescriptor } from "../../../src/actions/types";
 
 const noop = () => undefined;
@@ -93,5 +96,69 @@ describe("buildMenuTree", () => {
     const analysis = tree.find((n) => n.label === "Analysis");
     const blob = analysis?.children?.find((c) => c.label === "Blob detection");
     expect(blob?.beginGroup).toBeFalsy();
+  });
+});
+
+describe("flattenMenuLeaves", () => {
+  it("returns one entry per leaf with its localised path", () => {
+    const tree = buildMenuTree([
+      {
+        id: "fft",
+        label: "FFT",
+        menuPath: "Processing/Fourier analysis/FFT",
+        enabled: () => true,
+        run: noop,
+      },
+    ]);
+    const [entry] = flattenMenuLeaves(tree);
+    expect(entry.action.id).toBe("fft");
+    expect(entry.label).toBe("FFT");
+    expect(entry.parentLabel).toBe("Processing › Fourier analysis");
+    expect(entry.pathLabel).toBe("Processing › Fourier analysis › FFT");
+  });
+
+  it("includes the path and action id in the search haystack", () => {
+    const tree = buildMenuTree([
+      {
+        id: "fft",
+        label: "FFT",
+        menuPath: "Processing/FFT",
+        enabled: () => true,
+        run: noop,
+      },
+    ]);
+    const [entry] = flattenMenuLeaves(tree);
+    expect(entry.searchText).toBe("processing › fft fft");
+  });
+
+  it("emits one entry for every leaf across folders", () => {
+    const tree = buildMenuTree([
+      action("open", "File/Open"),
+      action("fft", "Processing/Fourier analysis/FFT"),
+      action("about", "Help/About"),
+    ]);
+    const entries = flattenMenuLeaves(tree);
+    expect(entries.map((e) => e.action.id).sort()).toEqual([
+      "about",
+      "fft",
+      "open",
+    ]);
+  });
+
+  it("leaves parentLabel empty for a top-level leaf without folder", () => {
+    // A menuPath with a single segment yields a top-level leaf.
+    const tree = buildMenuTree([
+      {
+        id: "solo",
+        label: "Solo",
+        menuPath: "Solo",
+        enabled: () => true,
+        run: noop,
+      },
+    ]);
+    const entries = flattenMenuLeaves(tree);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].parentLabel).toBe("");
+    expect(entries[0].pathLabel).toBe("Solo");
   });
 });

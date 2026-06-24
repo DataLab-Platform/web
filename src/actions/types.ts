@@ -102,6 +102,27 @@ export interface MenuNode {
   iconUrl?: string;
 }
 
+/** A single executable command surfaced in the command palette.
+ *
+ * Each entry corresponds to a leaf of the localised menu tree (one
+ * {@link ActionDescriptor}), enriched with its readable, localised menu
+ * path so users can find features the same way they navigate the menus. */
+export interface CommandEntry {
+  /** The underlying action (handler + enablement predicate). */
+  action: ActionDescriptor;
+  /** Localised leaf label (identical to {@link ActionDescriptor.label}). */
+  label: string;
+  /** Localised parent path, e.g. "Processing › Fourier analysis". Empty
+   *  for a top-level leaf with no parent folder. */
+  parentLabel: string;
+  /** Full localised path including the leaf, e.g.
+   *  "Processing › Fourier analysis › FFT". */
+  pathLabel: string;
+  /** Lowercased search haystack (full path + action id) used for
+   *  matching in the command palette. */
+  searchText: string;
+}
+
 /** Top-level menu ordering, matching DataLab desktop conventions. */
 export const TOP_LEVEL_ORDER = [
   "File",

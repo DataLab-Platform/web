@@ -30,6 +30,7 @@ import type {
   SignalData,
 } from "./runtime/runtime";
 import { MenuBar } from "./components/MenuBar";
+import { CommandPalette } from "./components/CommandPalette";
 import { Toolbar } from "./components/Toolbar";
 import {
   buildAIAssistantActions,
@@ -389,6 +390,26 @@ export default function App() {
     // panel had been minimised before the previous hide.
     if (!aiPanelVisible) setAIPanelCollapsed(false);
   }, [aiPanelVisible, setAIPanelVisible, setAIPanelCollapsed]);
+  // Command palette (VSCode-style quick command launcher). Toggled by
+  // the menu-bar button and the global Ctrl/Cmd+K shortcut.
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      // Ctrl+K (Windows/Linux) or Cmd+K (macOS), without other modifiers.
+      const key = event.key.toLowerCase();
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        key === "k"
+      ) {
+        event.preventDefault();
+        setCommandPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   // Notebook / Macro placement.  Each can independently be docked as
   // the central tab (default) or detached as a floating overlay in
   // the right-hand :class:`FloatingDockStack`.  The panels stay
@@ -4034,8 +4055,15 @@ export default function App() {
             }}
             aiPanelVisible={aiPanelVisible}
             onToggleAIPanel={toggleAIPanel}
+            onOpenCommandPalette={() => setCommandPaletteOpen(true)}
           />
         </div>
+        <CommandPalette
+          open={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+          actions={actions}
+          state={actionState}
+        />
         {showToolbar && <Toolbar actions={actions} state={actionState} />}
         {recoveryBanner && (
           <RecoveryBanner

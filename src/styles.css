@@ -408,6 +408,126 @@ input {
   border-color: var(--accent, #2d7ff9);
 }
 
+/* Command-palette trigger button — same low-key icon-button weight as
+   the theme / AI toggles. */
+.menubar-command-palette {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  margin-left: 4px;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.menubar-command-palette:hover:not(:disabled),
+.menubar-command-palette:focus-visible {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+/* Command palette overlay — anchored near the top like VSCode's palette
+   rather than vertically centred. */
+.command-palette-overlay {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.command-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 92vw);
+  max-height: 60vh;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.command-palette-input {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.command-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.command-palette-item--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.command-palette-item--disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.command-palette-item--disabled.command-palette-item--active {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.command-palette-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  object-fit: contain;
+}
+
+.command-palette-label {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-palette-path {
+  flex: 1 1 auto;
+  margin-left: auto;
+  padding-left: 16px;
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.command-palette-item--active .command-palette-path {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.command-palette-empty {
+  padding: 16px 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
 /* Persistent console-status indicator — mirrors DataLab Qt's
    ``ConsoleStatus``: shows an info glyph (ⓘ) when no warning/error has
    been logged, and a warning glyph (⚠) with a numeric badge once one
