@@ -1062,14 +1062,15 @@ export function buildImageRoiActions(
 }
 
 /** Callbacks for the image ``Erase area`` action (mirrors DataLab desktop's
- *  ``Processing > Restoration > Erase area…``). The user-defined ROI is
- *  ad-hoc and does not modify the source image's own ROI list. */
+ *  ``Processing > Erase area…``). The user-defined ROI is ad-hoc and does
+ *  not modify the source image's own ROI list. */
 export interface ImageEraseActionCallbacks {
   onErase: () => void;
 }
 
-/** Wire the ``Erase area…`` entry under ``Processing/Restoration`` for
- *  the currently displayed image. */
+/** Wire the ``Erase area…`` entry directly in the ``Processing`` menu (after
+ *  the processing submenus, with a leading separator), mirroring DataLab
+ *  desktop's placement and ``erase.svg`` icon. */
 export function buildImageEraseActions(
   cb: ImageEraseActionCallbacks,
 ): ActionDescriptor[] {
@@ -1079,7 +1080,9 @@ export function buildImageEraseActions(
     {
       id: "image.erase_area",
       label: t("Erase area\u2026"),
-      menuPath: "Processing/Restoration/Erase area\u2026",
+      menuPath: "Processing/Erase area\u2026",
+      iconUrl: getFeatureIconUrl("erase.svg"),
+      beginGroup: true,
       enabled: ready,
       run: cb.onErase,
     },
