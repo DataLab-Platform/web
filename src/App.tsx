@@ -2546,29 +2546,24 @@ export default function App() {
     [runtime, currentId],
   );
 
-  const handleEditRoi = useCallback(async () => {
-    if (!runtime || !currentId) return;
-    const segs = await runtime.getSignalRoi(currentId);
-    // "Edit numerically" now opens the docked ROI panel (no modal) with
-    // the coordinate form, selecting the first ROI.  Drawing stays
-    // disarmed so the plot keeps pan/zoom until the user picks a tool.
+  const handleToggleRoiEditMode = useCallback(async () => {
+    if (roiEditMode) {
+      // Leaving the editor: disarm drawing and clear the active selection.
+      setRoiEditMode(false);
+      setRoiDrawGeometry(null);
+      setSelectedRoiIndex(null);
+      return;
+    }
+    // Entering the unified ROI editor: load the current ROI, arm the
+    // range-draw tool so a first ROI can be traced immediately, and
+    // pre-select the first ROI (if any) so its coordinate form opens at once.
+    const segs =
+      runtime && currentId ? await runtime.getSignalRoi(currentId) : [];
     setRoi(segs);
-    setRoiDrawGeometry(null);
+    setRoiDrawGeometry("segment");
     setSelectedRoiIndex(segs.length > 0 ? 0 : null);
     setRoiEditMode(true);
-  }, [runtime, currentId]);
-
-  const handleToggleRoiEditMode = useCallback(() => {
-    setRoiEditMode((m) => {
-      const next = !m;
-      // Entering edit mode arms the range-draw tool so the user can trace
-      // a first ROI immediately (even when none exists yet); leaving it
-      // disarms drawing and clears the active selection.
-      setRoiDrawGeometry(next ? "segment" : null);
-      if (!next) setSelectedRoiIndex(null);
-      return next;
-    });
-  }, []);
+  }, [roiEditMode, runtime, currentId]);
 
   // Live-edit callback fed by the plot when the user drags a ROI handle or
   // draws a brand-new rectangle in edit mode.  The backend is updated with
@@ -2758,16 +2753,6 @@ export default function App() {
   // Image ROI handlers (Phase 13)
   // ------------------------------------------------------------------
 
-  const handleImageEditRoi = useCallback(async () => {
-    if (!runtime || !currentId) return;
-    const segs = await runtime.getImageRoi(currentId);
-    // Open the docked ROI panel (no modal) with the coordinate form.
-    setImageRoi(segs);
-    setRoiDrawGeometry(null);
-    setSelectedRoiIndex(segs.length > 0 ? 0 : null);
-    setImageRoiEditMode(true);
-  }, [runtime, currentId]);
-
   const handleImageAddRectangle = useCallback(async () => {
     if (!runtime || !currentId || !imageData) return;
     const sx = (imageData.width * imageData.dx) / 4 || 1;
@@ -2813,22 +2798,26 @@ export default function App() {
     await runtime.setImageRoi(currentId, next);
   }, [runtime, currentId, imageRoi, imageData]);
 
-  const handleToggleImageRoiEditMode = useCallback(() => {
-    setImageRoiEditMode((m) => {
-      const next = !m;
-      // Entering edit mode arms the rectangle-draw tool so a first ROI can
-      // be traced right away; leaving it disarms drawing and clears the
-      // active selection.  ROI editing and the erase session are mutually
-      // exclusive, so entering one leaves the other.
-      setRoiDrawGeometry(next ? "rectangle" : null);
-      if (next) {
-        setImageEraseMode(false);
-        setEraseRegions([]);
-      }
-      if (!next) setSelectedRoiIndex(null);
-      return next;
-    });
-  }, []);
+  const handleToggleImageRoiEditMode = useCallback(async () => {
+    if (imageRoiEditMode) {
+      setImageRoiEditMode(false);
+      setRoiDrawGeometry(null);
+      setSelectedRoiIndex(null);
+      return;
+    }
+    // Entering the unified ROI editor: load the current ROI, arm the
+    // rectangle-draw tool, and pre-select the first ROI (if any) so its
+    // coordinate form opens at once.  ROI editing and the erase session are
+    // mutually exclusive, so entering one leaves the other.
+    const segs =
+      runtime && currentId ? await runtime.getImageRoi(currentId) : [];
+    setImageRoi(segs);
+    setImageEraseMode(false);
+    setEraseRegions([]);
+    setRoiDrawGeometry("rectangle");
+    setSelectedRoiIndex(segs.length > 0 ? 0 : null);
+    setImageRoiEditMode(true);
+  }, [imageRoiEditMode, runtime, currentId]);
 
   // Live-edit callback fed by the plot when the user drags a ROI handle
   // or draws a brand-new shape in edit mode.  The backend is updated with
@@ -3903,7 +3892,6 @@ export default function App() {
       ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, hasRoiClipboard, {
             onToggleEditMode: handleToggleRoiEditMode,
-            onEditNumerically: handleEditRoi,
             onExtractEach: handleRoiExtractEach,
             onExtractMerged: handleRoiExtractMerged,
             onCopy: handleRoiCopy,
@@ -3918,7 +3906,6 @@ export default function App() {
             onAddRectangle: handleImageAddRectangle,
             onAddCircle: handleImageAddCircle,
             onCreateGrid: handleCreateRoiGrid,
-            onEditNumerically: handleImageEditRoi,
             onExtractEach: handleImageRoiExtractEach,
             onExtractMerged: handleImageRoiExtractMerged,
             onCopy: handleImageRoiCopy,
@@ -3955,7 +3942,6 @@ export default function App() {
       handleDeleteAll,
       handleApplyFeature,
       handleEditProperties,
-      handleEditRoi,
       handleToggleRoiEditMode,
       handleRoiExtractEach,
       handleRoiExtractMerged,
@@ -3968,7 +3954,6 @@ export default function App() {
       handleImageAddRectangle,
       handleImageAddCircle,
       handleCreateRoiGrid,
-      handleImageEditRoi,
       handleImageRoiExtractEach,
       handleToggleImageRoiEditMode,
       handleImageRoiExtractMerged,

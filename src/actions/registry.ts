@@ -737,10 +737,8 @@ function buildAnalysisActions(
 
 /** Callbacks for the ``ROI`` top-level menu (mirrors DataLab desktop). */
 export interface RoiActionCallbacks {
-  /** Toggle the interactive (drag/draw) ROI editor on the plot. */
+  /** Toggle the docked ROI editor (draw + coordinate table) on the plot. */
   onToggleEditMode: () => void;
-  /** Open the numerical ROI dialog. */
-  onEditNumerically: () => void;
   /** Extract one new signal per ROI (1-to-n). */
   onExtractEach: () => void;
   /** Extract a single new signal containing the concatenation of all ROIs. */
@@ -776,22 +774,16 @@ export function buildRoiActions(
     ready(s) && (roi.length > 0 || s.selectionHasRoi);
   const out: ActionDescriptor[] = [
     {
-      id: "roi.edit_graphical",
-      label: roiEditMode ? t("Stop graphical edit") : t("Edit graphically"),
+      id: "roi.edit",
+      label: roiEditMode
+        ? t("Stop editing regions of interest")
+        : t("Edit regions of interest"),
       menuPath: roiEditMode
-        ? "ROI/Stop graphical edit"
-        : "ROI/Edit graphically",
+        ? "ROI/Stop editing regions of interest"
+        : "ROI/Edit regions of interest",
       iconUrl: getRoiIconUrl("roi_graphical"),
       enabled: ready,
       run: cb.onToggleEditMode,
-    },
-    {
-      id: "roi.edit_numerical",
-      label: t("Edit numerically…"),
-      menuPath: "ROI/Edit numerically…",
-      iconUrl: getRoiIconUrl("roi_coordinate"),
-      enabled: ready,
-      run: cb.onEditNumerically,
     },
     {
       id: "roi.copy",
@@ -884,13 +876,11 @@ export function buildRoiActions(
 
 /** Callbacks for the image ``ROI`` top-level menu. */
 export interface ImageRoiActionCallbacks {
-  /** Toggle the interactive (drag/draw) ROI editor on the plot. */
+  /** Toggle the docked ROI editor (draw + coordinate table) on the plot. */
   onToggleEditMode: () => void;
-  /** Open the numerical ROI dialog (rectangle/circle/polygon editor). */
-  onEditNumerically: () => void;
-  /** Append a new default rectangle ROI then open the numerical dialog. */
+  /** Append a new default rectangle ROI then open the editor panel. */
   onAddRectangle: () => void;
-  /** Append a new default circle ROI then open the numerical dialog. */
+  /** Append a new default circle ROI then open the editor panel. */
   onAddCircle: () => void;
   /** Open the "Create ROI grid" dialog and replace the current image's ROI
    *  with a generated grid of rectangles. */
@@ -930,11 +920,13 @@ export function buildImageRoiActions(
     ready(s) && (roi.length > 0 || s.selectionHasRoi);
   const out: ActionDescriptor[] = [
     {
-      id: "image_roi.edit_graphical",
-      label: roiEditMode ? t("Stop graphical edit") : t("Edit graphically"),
+      id: "image_roi.edit",
+      label: roiEditMode
+        ? t("Stop editing regions of interest")
+        : t("Edit regions of interest"),
       menuPath: roiEditMode
-        ? "ROI/Stop graphical edit"
-        : "ROI/Edit graphically",
+        ? "ROI/Stop editing regions of interest"
+        : "ROI/Edit regions of interest",
       iconUrl: getRoiIconUrl("roi_graphical"),
       enabled: ready,
       run: cb.onToggleEditMode,
@@ -963,15 +955,6 @@ export function buildImageRoiActions(
       iconUrl: getRoiIconUrl("roi_grid"),
       enabled: ready,
       run: cb.onCreateGrid,
-    },
-    {
-      id: "image_roi.edit_numerical",
-      label: t("Edit numerically…"),
-      menuPath: "ROI/Edit numerically…",
-      iconUrl: getRoiIconUrl("roi_coordinate"),
-      beginGroup: true,
-      enabled: ready,
-      run: cb.onEditNumerically,
     },
     {
       id: "image_roi.copy",
