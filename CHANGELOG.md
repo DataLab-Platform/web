@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - The image **Erase area** action moved into the **Processing** menu with a clearer icon, and several ROI-related labels were reworded for clarity.
 - The signal plot legend was repositioned and restyled for better readability.
 - Edit actions now target the appropriate group selection when operating on objects inside groups.
+- The **Plugins** menu now lists plugin-contributed actions first and groups the **Manage plugins…** / **Reload all plugins** entries (now shown with icons) at the end, mirroring DataLab desktop.
 
 ## [0.5.0] - 2026-06-12
 
