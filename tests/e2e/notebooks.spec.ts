@@ -180,7 +180,7 @@ test.describe("Notebook UI", () => {
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: /Export/ }).click(),
+      page.getByRole("button", { name: "Export…", exact: true }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.ipynb$/);
 
@@ -298,7 +298,7 @@ test.describe("Notebook UI", () => {
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: /Export/ }).click(),
+      page.getByRole("button", { name: "Export…", exact: true }).click(),
     ]);
     const path = await download.path();
     expect(path).toBeTruthy();
