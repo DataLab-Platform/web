@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Command palette**: a VSCode-style searchable overlay (opened with **Ctrl/Cmd+K** or the menu-bar button) lists every menu command by its localised path, with fuzzy search and full keyboard navigation, so any action can be found and run without hunting through the menus.
+- **Toolbar**: a quick-access toolbar above the plot exposes the most common actions (metadata editing, ROI management, …) as buttons, mirroring DataLab desktop's toolbar.
+- **Non-modal ROI editor**: region-of-interest editing now happens in a docked panel that keeps the plot fully visible, replacing the old full-screen modal dialogs that hid the data. It offers a compact ROI list, a single form editing the selected ROI, **draw** buttons that arm the matching plot tool (rectangle, circle, polygon, segment) — usable even when no ROI exists yet — and live two-way sync between the form and the plot overlay.
+- **ROI clipboard**: ROIs can now be copied, pasted, imported and exported, making it easy to reuse the same regions across several signals or images.
+- **Image profile extraction**: horizontal and vertical line profiles can be extracted interactively from the image viewer, with a freeze state that pins the current profile while you keep exploring the image.
+- **Image spatial overlay multi-view**: a spatial overlay view places several images in a shared coordinate system and automatically switches to spatial mode when a geometry tool is used, preserving the current multi-selection after distributing images on a grid or resetting their positions.
+- **Processing error dialog**: when a processing or analysis call fails, a copy-pasteable modal now surfaces the full traceback and the context of the failed request instead of failing silently; the traceback is still logged to the browser console.
+
+### Changed
+
+- Signal ROIs now draw dashed boundary lines marking the region extent, making the selected interval easier to read on the curve.
+- The image **Erase area** action moved into the **Processing** menu with a clearer icon, and several ROI-related labels were reworded for clarity.
+- The signal plot legend was repositioned and restyled for better readability.
+- Edit actions now target the appropriate group selection when operating on objects inside groups.
+
 ## [0.5.0] - 2026-06-12
 
 ### Added
