@@ -1124,12 +1124,16 @@ export function buildPluginActions(
 ): ActionDescriptor[] {
   const ready = (s: ActionState) => s.status === "ready" && !s.busy;
 
-  // Always-visible "Plugins" entries (manager + reload).
+  // Always-visible "Plugins" entries (manager + reload), kept at the *end*
+  // of the menu — after any plugin-contributed actions — with a separator
+  // before them, mirroring DataLab desktop (and using the same icons).
   const fixed: ActionDescriptor[] = [
     {
       id: "plugins.manager",
       label: t("Manage plugins…"),
       menuPath: "Plugins/Manage plugins…",
+      iconUrl: getRootIconUrl("libre-gui-settings.svg"),
+      beginGroup: true,
       enabled: ready,
       run: cb.onOpenManager,
     },
@@ -1137,7 +1141,7 @@ export function buildPluginActions(
       id: "plugins.reload_all",
       label: t("Reload all plugins"),
       menuPath: "Plugins/Reload all plugins",
-      beginGroup: true,
+      iconUrl: getRootIconUrl("refresh-auto.svg"),
       enabled: ready,
       run: cb.onReloadAll,
     },
@@ -1172,5 +1176,5 @@ export function buildPluginActions(
     };
   });
 
-  return [...fixed, ...dynamic];
+  return [...dynamic, ...fixed];
 }
