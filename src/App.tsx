@@ -86,7 +86,12 @@ import {
 } from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
 import { t } from "./i18n/translate";
-import { useConfirm, useMessage, usePrompt } from "./components/ConfirmDialog";
+import {
+  useConfirm,
+  useMessage,
+  useProcessingError,
+  usePrompt,
+} from "./components/ConfirmDialog";
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
 import {
@@ -333,6 +338,7 @@ export default function App() {
   const workspace = useWorkspace();
   const confirm = useConfirm();
   const notify = useMessage();
+  const showProcessingError = useProcessingError();
   const prompt = usePrompt();
   const runWithProgress = useProgress();
   // Whether the metadata clipboard holds a payload "Paste metadata" can
@@ -1553,11 +1559,22 @@ export default function App() {
         } else {
           await refresh(lastId);
         }
+      } catch (err) {
+        // A computation raising in Sigima/Pyodide (e.g. gamma correction on
+        // an image with negative values) is a *processing* problem, not a
+        // crash: surface the full traceback in a copy-pasteable modal
+        // (mirroring DataLab desktop) so the user understands their
+        // request could not be honoured. The traceback is also logged to
+        // the browser console by the runtime.
+        await showProcessingError({
+          context: t("Computing: {feature}", { feature: feature.label }),
+          traceback: err instanceof Error ? err.message : String(err),
+        });
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh, refreshPanelKind],
+    [runtime, refresh, refreshPanelKind, showProcessingError],
   );
 
   const refreshPluginActions = useCallback(async () => {
@@ -1586,12 +1603,26 @@ export default function App() {
           );
         }
       } catch (err) {
-        console.error("[plugins] action failed", err);
+        await showProcessingError({
+          context: t("Plugin action: {action}", {
+            action:
+              pluginActions.find((a) => a.action_id === actionId)?.title ??
+              actionId,
+          }),
+          traceback: err instanceof Error ? err.message : String(err),
+        });
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh, refreshPanelKind, treeKind],
+    [
+      runtime,
+      refresh,
+      refreshPanelKind,
+      treeKind,
+      pluginActions,
+      showProcessingError,
+    ],
   );
 
   const handleReloadPlugins = useCallback(async () => {
@@ -1804,16 +1835,27 @@ export default function App() {
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await notify({
-          kind: "error",
-          message: `Analysis failed: ${message}`,
+        const catalog =
+          treeKind === "image" ? imageAnalysisEntries : analysisEntries;
+        const label = catalog.find((e) => e.id === funcId)?.label ?? funcId;
+        await showProcessingError({
+          context: t("Computing: {feature}", { feature: label }),
+          traceback: err instanceof Error ? err.message : String(err),
         });
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refreshResults, treeKind, notify, currentId],
+    [
+      runtime,
+      refreshResults,
+      treeKind,
+      notify,
+      showProcessingError,
+      currentId,
+      analysisEntries,
+      imageAnalysisEntries,
+    ],
   );
 
   const handleFreeMemory = useCallback(async () => {

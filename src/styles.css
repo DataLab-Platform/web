@@ -2268,6 +2268,56 @@ input {
   font-size: 12px;
 }
 
+/* Processing error dialog (desktop WarningErrorMessageBox parity) */
+.processing-error-card {
+  width: 760px;
+  max-width: 92vw;
+}
+
+.processing-error-context p,
+.processing-error-tip p {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.processing-error-traceback {
+  margin: 12px 0;
+}
+
+.processing-error-traceback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.processing-error-traceback pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  user-select: text;
+  color: #f48771;
+}
+
+.processing-error-tip {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(127, 127, 127, 0.1);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+}
+
 /* Progress dialog */
 .progress-dialog {
   min-width: 420px;

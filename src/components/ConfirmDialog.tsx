@@ -144,6 +144,96 @@ export function MessageDialog(props: MessageDialogProps) {
 }
 
 // ---------------------------------------------------------------------
+// Processing error (rich, copy-pasteable traceback + tip)
+// ---------------------------------------------------------------------
+
+export interface ProcessingErrorOptions {
+  /** Context line, e.g. ``"Computing: Gamma correction"``. */
+  context: string;
+  /** Full Python traceback, shown verbatim and copy-pasteable. */
+  traceback: string;
+  /** Optional override of the default computation tip. */
+  tip?: string;
+  /** Optional dialog heading; defaults to ``"Error"``. */
+  title?: string;
+}
+
+interface PendingProcessingError extends ProcessingErrorOptions {
+  resolve: () => void;
+}
+
+interface ProcessingErrorDialogProps {
+  options: ProcessingErrorOptions;
+  onClose: () => void;
+}
+
+/** Pure presentational error dialog mirroring DataLab desktop's
+ *  ``WarningErrorMessageBox``: a context line, the full traceback in a
+ *  selectable / copyable block, and a tip explaining that computation
+ *  errors are usually caused by the data or parameters. */
+export function ProcessingErrorDialog(props: ProcessingErrorDialogProps) {
+  const { options, onClose } = props;
+  const { context, traceback, tip, title } = options;
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Enter") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(traceback);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard failures (permission denied, etc.)
+    }
+  };
+  const tipText =
+    tip ??
+    t(
+      "DataLab relies on various libraries to perform the computation. During the computation, errors may occur because of the data (e.g. division by zero, unexpected data type, etc.) or because of the libraries (e.g. memory error, etc.). If you encounter an error, before reporting it, please ensure that the computation is correct, by checking the data and the parameters.",
+    );
+  return (
+    <div className="overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div
+        className="card processing-error-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2>{title || t("Error")}</h2>
+        <div className="processing-error-context">
+          <p>{t("An error has occurred during the following context:")}</p>
+          <p>
+            <strong>{context}</strong>
+          </p>
+        </div>
+        <div className="processing-error-traceback">
+          <div className="processing-error-traceback-head">
+            <span>
+              {t("The following traceback may help to understand the problem:")}
+            </span>
+            <button type="button" onClick={handleCopy}>
+              {copied ? t("Copied") : t("Copy")}
+            </button>
+          </div>
+          <pre>{traceback}</pre>
+        </div>
+        <div className="processing-error-tip">
+          <p>{tipText}</p>
+        </div>
+        <div className="actions">
+          <button onClick={onClose} autoFocus>
+            {t("OK")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------
 // Prompt (single-line text input)
 // ---------------------------------------------------------------------
 
@@ -225,11 +315,13 @@ export function PromptDialog(props: PromptDialogProps) {
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
 type MessageFn = (options: MessageOptions) => Promise<void>;
 type PromptFn = (options: PromptOptions) => Promise<string | null>;
+type ProcessingErrorFn = (options: ProcessingErrorOptions) => Promise<void>;
 
 interface DialogContextValue {
   confirm: ConfirmFn;
   message: MessageFn;
   prompt: PromptFn;
+  processingError: ProcessingErrorFn;
 }
 
 const DialogContext = createContext<DialogContextValue | null>(null);
@@ -237,6 +329,7 @@ const DialogContext = createContext<DialogContextValue | null>(null);
 type AnyPending =
   | ({ _kind: "confirm" } & PendingConfirm)
   | ({ _kind: "message" } & PendingMessage)
+  | ({ _kind: "processingError" } & PendingProcessingError)
   | ({ _kind: "prompt" } & PendingPrompt);
 
 /**
@@ -261,6 +354,14 @@ export function DialogProvider(props: { children: ReactNode }) {
       setQueue((q) => [...q, { _kind: "message", ...options, resolve }]);
     });
   }, []);
+  const processingError = useCallback<ProcessingErrorFn>((options) => {
+    return new Promise<void>((resolve) => {
+      setQueue((q) => [
+        ...q,
+        { _kind: "processingError", ...options, resolve },
+      ]);
+    });
+  }, []);
   const prompt = useCallback<PromptFn>((options) => {
     return new Promise<string | null>((resolve) => {
       setQueue((q) => [...q, { _kind: "prompt", ...options, resolve }]);
@@ -268,8 +369,8 @@ export function DialogProvider(props: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<DialogContextValue>(
-    () => ({ confirm, message, prompt }),
-    [confirm, message, prompt],
+    () => ({ confirm, message, prompt, processingError }),
+    [confirm, message, prompt, processingError],
   );
 
   return (
@@ -286,6 +387,15 @@ export function DialogProvider(props: { children: ReactNode }) {
       )}
       {current?._kind === "message" && (
         <MessageDialog
+          options={current}
+          onClose={() => {
+            current.resolve();
+            popQueue();
+          }}
+        />
+      )}
+      {current?._kind === "processingError" && (
+        <ProcessingErrorDialog
           options={current}
           onClose={() => {
             current.resolve();
@@ -320,6 +430,10 @@ export function useConfirm(): ConfirmFn {
 
 export function useMessage(): MessageFn {
   return useDialogs().message;
+}
+
+export function useProcessingError(): ProcessingErrorFn {
+  return useDialogs().processingError;
 }
 
 export function usePrompt(): PromptFn {
