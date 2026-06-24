@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-24
+
 ### Added
 
 - **Command palette**: a VSCode-style searchable overlay (opened with **Ctrl/Cmd+K** or the menu-bar button) lists every menu command by its localised path, with fuzzy search and full keyboard navigation, so any action can be found and run without hunting through the menus.
@@ -164,7 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/DataLab-Platform/web/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DataLab-Platform/web/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/DataLab-Platform/web/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DataLab-Platform/web/compare/v0.2.0...v0.3.0
