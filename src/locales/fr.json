@@ -479,7 +479,7 @@
   "Inverse": "Inverse",
   "Inverse FFT": "FFT inverse",
   "Invert": "Inverser",
-  "is centred on the desktop application. Because DataLab-Web shares the same computation engine (Sigima) and the same processing catalog, most of that content remains directly relevant. Web-specific differences (in-browser execution via Pyodide, persistence, plugins, macros, notebooks) are not covered there.": "est centrée sur l'application de bureau. Comme DataLab-Web partage le même moteur de calcul (Sigima) et le même catalogue de traitements, la majeure partie de ce contenu reste directement pertinente. Les différences propres au web (exécution dans le navigateur via Pyodide, persistance, extensions, macros, notebooks) n'y sont pas abordées.",
+  "is centred on the desktop application. Because DataLab-Web shares the same computation engine (Sigima) and the same processing catalog, most of that content remains directly relevant. Web-specific differences (in-browser execution via Pyodide, persistence, plugins, macros, notebooks) are not covered there.": "est centré sur l'application de bureau. Comme DataLab-Web partage le même moteur de calcul (Sigima) et le même catalogue de traitements, la majeure partie de ce contenu reste directement pertinente. Les différences propres au web (exécution dans le navigateur via Pyodide, persistance, extensions, macros, notebooks) n'y sont pas abordées.",
   "ISODATA thresholding": "Seuillage ISODATA",
   "KB": "Ko",
   "Keep ROIs": "Conserver les ROI",
