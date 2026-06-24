@@ -988,22 +988,5 @@
   "You're ready": "Vous êtes prêt",
   "Zero padding": "Complément de zéros",
   "Zero padding…": "Complément de zéros…",
-  "Zoom in / out around the cursor (Plotly default)": "Zoom avant / arrière autour du curseur (par défaut Plotly)",
-  "Edit graphically": "Éditer graphiquement",
-  "Edit numerically…": "Éditer numériquement…",
-  "Erase": "Effacer",
-  "Stop graphical edit": "Arrêter l'édition graphique",
-  "Circle center must be a number.": "Le centre du cercle doit être un nombre.",
-  "Circle radius must be > 0.": "Le rayon du cercle doit être > 0.",
-  "Edit image regions of interest": "Modifier les régions d'intérêt de l'image",
-  "No ROI defined. Use the buttons below to add one.": "Aucune ROI définie. Utilisez les boutons ci-dessous pour en ajouter une.",
-  "pairs)": "séparées par des espaces)",
-  "Polygon needs ≥ 3 vertices.": "Un polygone nécessite ≥ 3 sommets.",
-  "Rectangle dx/dy must be > 0.": "Les dx/dy du rectangle doivent être > 0.",
-  "Rectangle origin must be a number.": "L'origine du rectangle doit être un nombre.",
-  "ROI {index} — {geometry}": "ROI {index} — {geometry}",
-  "Vertices (space-separated": "Sommets (paires",
-  "All bounds must be valid numbers.": "Toutes les bornes doivent être des nombres valides.",
-  "Each segment must satisfy xmin < xmax.": "Chaque segment doit respecter xmin < xmax.",
-  "No ROI defined. Click Add to create one.": "Aucune ROI définie. Cliquez sur Ajouter pour en créer une."
+  "Zoom in / out around the cursor (Plotly default)": "Zoom avant / arrière autour du curseur (par défaut Plotly)"
 }
