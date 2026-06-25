@@ -24,6 +24,7 @@ import {
   windowPlacement,
 } from "../utils/imageLod";
 import { toBins, binSearchCell } from "../utils/imageCoords";
+import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -291,6 +292,10 @@ export function ImagePlot({
   // layout so a re-render never resets it to the default. ``null`` ⇒ Plotly
   // default ("zoom"). Reset when the image changes.
   const [userDragmode, setUserDragmode] = useState<"zoom" | "pan" | null>(null);
+  // "Show grid over the image" toggle (off by default — matching DataLab
+  // desktop — since the bitmap is a ``layout.images`` background drawn below
+  // the grid).  Persisted so it applies across images and the spatial view.
+  const [showGrid, setShowGrid] = usePersistedBool(IMAGE_GRID_PREF_KEY, false);
   const [plotPx, setPlotPx] = useState<{ w: number; h: number }>({
     w: 1024,
     h: 1024,
@@ -734,12 +739,20 @@ export function ImagePlot({
         title: { text: xtitle },
         range: xRange,
         autorange: false as const,
+        // The bitmap is a ``layout.images`` background drawn *below* the grid
+        // (Plotly only offers below-grid or above-all-traces for images), so a
+        // visible grid sits on top of the image.  Off by default to match the
+        // old ``image`` trace and DataLab desktop; toggled from the toolbar.
+        showgrid: showGrid,
+        zeroline: showGrid,
       },
       yaxis: {
         ...plotlyTheme.yaxis,
         title: { text: ytitle },
         range: yRange,
         autorange: false as const,
+        showgrid: showGrid,
+        zeroline: showGrid,
       },
       // Stats tool mirrors PlotPy's ``ImageStatsTool``: activating it
       // immediately puts the plot into rectangle-drawing mode so the user
@@ -798,6 +811,7 @@ export function ImagePlot({
     displayRange,
     layoutImages,
     userDragmode,
+    showGrid,
     roiShapes,
     roiAnnotations,
     resultShapes,
@@ -1352,6 +1366,8 @@ export function ImagePlot({
           setResampleMethod(method);
           onResampleChange?.(method);
         }}
+        showGrid={showGrid}
+        onShowGridChange={setShowGrid}
       />
       <div className="image-plot-area">
         {showProfiles ? (
@@ -1551,6 +1567,8 @@ function ImageToolbar({
   resample,
   showResample,
   onResampleChange,
+  showGrid,
+  onShowGridChange,
 }: {
   tool: ImageTool;
   setTool: (t: ImageTool) => void;
@@ -1562,6 +1580,8 @@ function ImageToolbar({
   resample: ResampleMethod;
   showResample: boolean;
   onResampleChange: (method: ResampleMethod) => void;
+  showGrid: boolean;
+  onShowGridChange: (show: boolean) => void;
 }) {
   const buttons: Array<{
     id: Exclude<ImageTool, null>;
@@ -1637,6 +1657,18 @@ function ImageToolbar({
           onChange={(e) => onInvertChange(e.target.checked)}
         />
         <span>{t("Invert")}</span>
+      </label>
+      <span className="image-tools-separator" aria-hidden="true" />
+      <label
+        className="image-tools-grid"
+        title={t("Show a coordinate grid over the image")}
+      >
+        <input
+          type="checkbox"
+          checked={showGrid}
+          onChange={(e) => onShowGridChange(e.target.checked)}
+        />
+        <span>{t("Grid")}</span>
       </label>
       {showResample && (
         <label

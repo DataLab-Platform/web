@@ -814,6 +814,7 @@
   "SHA-256": "SHA-256",
   "Shape": "Forme",
   "Shape: {shape}": "Forme : {shape}",
+  "Show a coordinate grid over the image": "Afficher une grille de coordonnées sur l'image",
   "Show AI Assistant": "Afficher l'assistant IA",
   "Show array": "Afficher le tableau",
   "Show graphical object titles": "Afficher les titres des objets graphiques",

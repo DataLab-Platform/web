@@ -32,6 +32,7 @@ import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { paintImageData, buildColorscale } from "../utils/colormap";
 import { aspectFitRanges, type ViewRange } from "../utils/imageLod";
+import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import { t } from "../i18n/translate";
 import type { ImageData } from "../runtime/runtime";
 
@@ -182,6 +183,9 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
   // ------------------------------------------------------------------
   const [viewRange, setViewRange] = useState<ViewRange | null>(null);
   const [userDragmode, setUserDragmode] = useState<"zoom" | "pan" | null>(null);
+  // Shared "show grid over images" preference (toggled from the single-image
+  // viewer's toolbar); off by default to match DataLab desktop.
+  const [showGrid] = usePersistedBool(IMAGE_GRID_PREF_KEY, false);
   const [plotPx, setPlotPx] = useState<{ w: number; h: number }>({
     w: 1024,
     h: 1024,
@@ -475,11 +479,18 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
       ...plotlyTheme.xaxis,
       range: displayRange.x,
       autorange: false as const,
+      // Bitmaps are ``layout.images`` backgrounds drawn below the grid, so a
+      // visible grid sits on top of the images.  Off by default (toggled from
+      // the single-image toolbar), matching the single-image viewer.
+      showgrid: showGrid,
+      zeroline: showGrid,
     },
     yaxis: {
       ...plotlyTheme.yaxis,
       range: displayRange.y,
       autorange: false as const,
+      showgrid: showGrid,
+      zeroline: showGrid,
     },
     dragmode: userDragmode ?? undefined,
     showlegend: false,
