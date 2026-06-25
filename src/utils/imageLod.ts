@@ -184,3 +184,45 @@ function clamp(v: number, lo: number, hi: number): number {
   if (v > hi) return hi;
   return v;
 }
+
+/**
+ * Aspect-fit a desired data window into the plot area so that pixels stay
+ * square WITHOUT relying on Plotly's ``scaleanchor`` (an ``image`` trace
+ * force-sets that constraint, which ties the Y axis fully to X and makes
+ * independent vertical pan impossible — so the bitmap is drawn as a
+ * ``layout.images`` background and squareness is enforced here instead).
+ *
+ * The window is centred and whichever axis has spare room is expanded so the
+ * whole window fits with square pixels.
+ *
+ * @param winX Desired X window ``[x0, x1]`` (any order).
+ * @param winY Desired Y window ``[y0, y1]`` (any order).
+ * @param plotPx On-screen plot-area size in CSS pixels.
+ * @param scaleratio Y/X data-unit ratio for square pixels (``dy/dx`` for a
+ *  single uniform image; ``1`` for a shared coordinate space).
+ * @returns Display ranges; the Y range is returned reversed
+ *  (``range[0] > range[1]``), matching the image convention.
+ */
+export function aspectFitRanges(
+  winX: [number, number],
+  winY: [number, number],
+  plotPx: { w: number; h: number },
+  scaleratio: number,
+): { x: [number, number]; y: [number, number] } {
+  const xc = (winX[0] + winX[1]) / 2;
+  const yc = (winY[0] + winY[1]) / 2;
+  const xSpan = Math.abs(winX[1] - winX[0]);
+  const ySpan = Math.abs(winY[1] - winY[0]);
+  const w = plotPx.w > 0 ? plotPx.w : 1;
+  const h = plotPx.h > 0 ? plotPx.h : 1;
+  const r = scaleratio > 0 ? scaleratio : 1;
+  // X data-units per pixel needed to fit each axis; square pixels require
+  // (y units/px) = r * (x units/px), so pick the larger requirement.
+  const uppX = Math.max(xSpan / w, ySpan / (h * r));
+  const dispXHalf = (uppX * w) / 2;
+  const dispYHalf = (r * uppX * h) / 2;
+  return {
+    x: [xc - dispXHalf, xc + dispXHalf],
+    y: [yc + dispYHalf, yc - dispYHalf],
+  };
+}

@@ -17,6 +17,7 @@ import {
   type ImageGeometry,
   type ResampleMethod,
   type ViewRange,
+  aspectFitRanges,
   rasterPlan,
   shouldUseLod,
   visibleWindow,
@@ -295,13 +296,16 @@ export function ImagePlot({
     h: 1024,
   });
   const plotPxRef = useRef(plotPx);
-  // Physical placement of the (possibly windowed) bitmap. ``null`` falls
-  // back to the full-image origin/spacing.
+  // Physical placement of the (possibly windowed) bitmap, plus its pixel
+  // dimensions (``cw``/``ch``) so it can be sized as a ``layout.images``
+  // background image. ``null`` falls back to the full-image geometry.
   const [bitmapPlacement, setBitmapPlacement] = useState<{
     x0: number;
     dx: number;
     y0: number;
     dy: number;
+    cw: number;
+    ch: number;
   } | null>(null);
   // Reset the view whenever the underlying image changes so a new image
   // opens at full extent.
@@ -310,6 +314,22 @@ export function ImagePlot({
     setUserDragmode(null);
   }, [data.id]);
 
+  // Displayed axis ranges with square image pixels.  The uniform-image bitmap
+  // is drawn as a ``layout.images`` background (no axis constraint), so we
+  // aspect-fit the desired window (``viewRange`` or the full extent) into the
+  // current plot-area pixel size ourselves.  Both axes stay independently
+  // pan-/zoom-able while pixels remain square.  Used by both the layout and
+  // the LOD raster so the bitmap matches the view.
+  const displayRange = useMemo(() => {
+    const winX: [number, number] = viewRange
+      ? viewRange.x
+      : [extent.xMin, extent.xMax];
+    const winY: [number, number] = viewRange
+      ? viewRange.y
+      : [extent.yMax, extent.yMin];
+    const scaleratio = isUniform ? data.dy / data.dx : 1;
+    return aspectFitRanges(winX, winY, plotPx, scaleratio);
+  }, [viewRange, extent, isUniform, data.dx, data.dy, plotPx]);
   const [bitmapUrl, setBitmapUrl] = useState<string | null>(null);
   useEffect(() => {
     // Non-uniform images are rendered by a ``heatmap`` trace (see below),
@@ -332,7 +352,7 @@ export function ImagePlot({
     };
     const useLod = shouldUseLod(w, h);
     const win = useLod
-      ? visibleWindow(geom, viewRange)
+      ? visibleWindow(geom, displayRange)
       : { i0: 0, i1: w, j0: 0, j1: h };
     const dpr = window.devicePixelRatio || 1;
     const plan = useLod
@@ -361,7 +381,11 @@ export function ImagePlot({
       );
       ctx.putImageData(img, 0, 0);
       setBitmapUrl(canvas.toDataURL("image/png"));
-      setBitmapPlacement(windowPlacement(plan, geom));
+      setBitmapPlacement({
+        ...windowPlacement(plan, geom),
+        cw: plan.cw,
+        ch: plan.ch,
+      });
     }, RASTER_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
   }, [
@@ -378,7 +402,7 @@ export function ImagePlot({
     colormapName,
     colormapInverted,
     resampleMethod,
-    viewRange,
+    displayRange,
     plotPx,
   ]);
 
@@ -476,31 +500,11 @@ export function ImagePlot({
       });
       return out;
     }
-    if (bitmapUrl) {
-      const place = bitmapPlacement ?? {
-        x0: data.x0,
-        dx: data.dx,
-        y0: data.y0,
-        dy: data.dy,
-      };
-      out.push({
-        type: "image" as const,
-        source: bitmapUrl,
-        // ``image`` traces use the upper-left of the first pixel as
-        // origin (unlike ``heatmap`` which uses pixel centers).  No
-        // 0.5*dx offset needed.  When LOD is active ``place`` carries
-        // the windowed sub-bitmap's origin / per-cell spacing so the
-        // decimated image lands on the same physical coordinates.
-        x0: place.x0,
-        dx: place.dx,
-        y0: place.y0,
-        dy: place.dy,
-        // We render our own tooltip via ``onMouseMove`` (gd → data
-        // coords) and look ``z`` up directly in the typed array — the
-        // ``image`` trace cannot show ``z`` natively.
-        hoverinfo: "skip" as const,
-      });
-    }
+    // Uniform images: the canvas bitmap is drawn as a ``layout.images``
+    // background (see ``layout`` below) rather than an ``image`` trace, so
+    // Plotly does not force a ``scaleanchor`` constraint on the axes (which
+    // would make vertical pan impossible).  Only the hidden colorbar scatter
+    // is a real trace here.
     // Hidden scatter trace whose sole purpose is to render the
     // colorbar.  ``marker.colorscale`` is sampled from the same LUT
     // as ``paintImageData`` so the bar and the image stay in sync,
@@ -530,15 +534,9 @@ export function ImagePlot({
     });
     return out;
   }, [
-    bitmapUrl,
-    bitmapPlacement,
     xEdges,
     yEdges,
     data.data,
-    data.x0,
-    data.y0,
-    data.dx,
-    data.dy,
     data.zlabel,
     data.zunit,
     effectiveLut,
@@ -663,26 +661,60 @@ export function ImagePlot({
     [traces, resultTraces, highlightTrace],
   );
 
+  // Uniform-image bitmap drawn as a ``layout.images`` background.  Unlike the
+  // ``image`` trace it replaces, a layout image imposes no axis constraint,
+  // so the axes stay free and both directions can be panned (square pixels
+  // are kept via the aspect-fitted ``displayRange``).  ``bitmapPlacement``
+  // carries the windowed sub-bitmap origin / per-cell spacing / pixel size so
+  // the (possibly decimated) LOD bitmap lands on the right physical extent.
+  const layoutImages = useMemo(() => {
+    if (!bitmapUrl || data.is_uniform_coords === false) return [];
+    const p = bitmapPlacement ?? {
+      x0: data.x0,
+      dx: data.dx,
+      y0: data.y0,
+      dy: data.dy,
+      cw: data.width,
+      ch: data.height,
+    };
+    return [
+      {
+        source: bitmapUrl,
+        xref: "x" as const,
+        yref: "y" as const,
+        x: p.x0,
+        y: p.y0,
+        sizex: p.cw * p.dx,
+        sizey: p.ch * p.dy,
+        xanchor: "left" as const,
+        yanchor: "top" as const,
+        sizing: "stretch" as const,
+        layer: "below" as const,
+      },
+    ];
+  }, [
+    bitmapUrl,
+    bitmapPlacement,
+    data.is_uniform_coords,
+    data.x0,
+    data.y0,
+    data.dx,
+    data.dy,
+    data.width,
+    data.height,
+  ]);
+
   const layout = useMemo(() => {
     const xtitle = data.xunit ? `${data.xlabel} (${data.xunit})` : data.xlabel;
     const ytitle = data.yunit ? `${data.ylabel} (${data.yunit})` : data.ylabel;
-    // Image-trace axes are not auto-ranged from typed-array data —
-    // compute the pixel-aligned extents explicitly so the image fills the
-    // plot regardless of the hidden colorbar scatter trace.  The captured
-    // ``viewRange`` is fed back as a *controlled* range so the view sticks
-    // across re-renders (react-plotly drives the plot in controlled mode and
-    // would otherwise revert the user's view).  ``viewRange`` is updated on
-    // zoom release and on every manual-pan frame, and also sizes the windowed
-    // LOD bitmap so the decimated image matches the visible window.
-    const xRange: [number, number] = viewRange
-      ? viewRange.x
-      : [extent.xMin, extent.xMax];
-    const yRange: [number, number] = viewRange
-      ? viewRange.y
-      : [extent.yMax, extent.yMin];
-    // Uniform images keep square *pixels* (scaleratio = dy/dx); non-uniform
-    // images use physical units directly, so 1 x-unit == 1 y-unit on screen.
-    const scaleratio = isUniform ? data.dy / data.dx : 1;
+    // Controlled axis ranges fed back so the view sticks across re-renders
+    // (react-plotly drives the plot in controlled mode and would otherwise
+    // revert the user's view).  ``displayRange`` aspect-fits the desired
+    // window so image pixels stay square without Plotly's ``scaleanchor``
+    // (which the old ``image`` trace forced, breaking vertical pan); it also
+    // sizes the windowed LOD bitmap so the decimated image matches the view.
+    const xRange = displayRange.x;
+    const yRange = displayRange.y;
     return {
       ...plotlyTheme,
       title: { text: data.title || "" },
@@ -696,18 +728,16 @@ export function ImagePlot({
         t: 40,
         b: 50,
       },
+      images: layoutImages,
       xaxis: {
         ...plotlyTheme.xaxis,
         title: { text: xtitle },
-        constrain: "domain" as const,
         range: xRange,
         autorange: false as const,
       },
       yaxis: {
         ...plotlyTheme.yaxis,
         title: { text: ytitle },
-        scaleanchor: "x" as const,
-        scaleratio,
         range: yRange,
         autorange: false as const,
       },
@@ -765,9 +795,8 @@ export function ImagePlot({
   }, [
     plotlyTheme,
     data,
-    extent,
-    isUniform,
-    viewRange,
+    displayRange,
+    layoutImages,
     userDragmode,
     roiShapes,
     roiAnnotations,
@@ -872,15 +901,17 @@ export function ImagePlot({
   }, [tool, frozen, cursor]);
 
   // ------------------------------------------------------------------
-  // Manual pan.
+  // Manual pan (uniform images).
   //
-  // Plotly's native drag-pan does not translate ``image``-trace axes (the
-  // relayout stream reports a constant range), so the modebar "Pan" tool
-  // looks armed but never moves the view.  We implement pan ourselves: on
-  // mousedown (capture phase, before Plotly's no-op pan handler) we record
-  // the gesture anchor and the axis ranges, then translate the controlled
-  // ``viewRange`` on every mousemove.  Each frame is computed from the fixed
-  // anchor (not incrementally) so there is no runaway amplification.
+  // The uniform-image bitmap is a ``layout.images`` background, so the axes
+  // carry no constraint and can be panned in both directions.  We drive the
+  // pan ourselves (rather than via Plotly's native pan) because the latter
+  // mutates the axis ranges in parallel with our controlled ``displayRange``
+  // and the two fight — in practice native pan moved X but reset Y.  On
+  // mousedown (capture phase) we record the gesture anchor and the current
+  // axis ranges and stop the event so Plotly's own pan never starts; each
+  // mousemove then translates ``viewRange`` from the fixed anchor (not
+  // incrementally, so there is no runaway amplification).
   // ------------------------------------------------------------------
   const panRef = useRef<{
     startX: number;
@@ -897,10 +928,17 @@ export function ImagePlot({
       if (evt.button !== 0) return;
       if (userDragmode !== "pan") return;
       if (roiEditMode || tool === "stats") return;
-      // Non-uniform images render as a ``heatmap`` trace whose axes Plotly
-      // *can* pan natively — leave those to Plotly and only take over the
-      // ``image``-trace (uniform) case where native pan is a no-op.
-      if (data.is_uniform_coords === false) return;
+      // We drive the pan ourselves (rather than via Plotly's native pan) for
+      // BOTH uniform and non-uniform images: uniform bitmaps are a
+      // ``layout.images`` background (free axes) and non-uniform images are a
+      // ``heatmap`` whose native pan Plotly reverts on release (it transforms
+      // the trace during the drag but the controlled ``displayRange`` snaps it
+      // back).  Stop Plotly's native pan from starting (its mousedown handler
+      // lives on the drag layer, a descendant) so only our manual pan runs —
+      // yet keep ``dragmode: "pan"`` so the modebar button stays armed and the
+      // cursor shows the grab affordance.
+      evt.stopPropagation();
+      evt.nativeEvent.stopImmediatePropagation();
       const gd = gdRef.current;
       const fl = gd?._fullLayout;
       const xa = fl?.xaxis;
@@ -923,10 +961,12 @@ export function ImagePlot({
       const onMove = (e: MouseEvent) => {
         const p = panRef.current;
         if (!p) return;
-        // Data units per CSS pixel on each axis (sign included, so reversed
-        // Y axes pan in the natural "grab" direction).
+        // Data units per CSS pixel along each axis, in its on-screen
+        // increasing direction: X grows rightward (range[1]−range[0]); the
+        // image Y axis is reversed so screen-down grows toward range[0]
+        // (range[0]−range[1]).  "Grab" pan subtracts the dragged delta.
         const dxData = ((e.clientX - p.startX) * (p.x1 - p.x0)) / p.xLen;
-        const dyData = ((e.clientY - p.startY) * (p.y1 - p.y0)) / p.yLen;
+        const dyData = ((e.clientY - p.startY) * (p.y0 - p.y1)) / p.yLen;
         setViewRange({
           x: [p.x0 - dxData, p.x1 - dxData],
           y: [p.y0 - dyData, p.y1 - dyData],
@@ -940,7 +980,7 @@ export function ImagePlot({
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [userDragmode, roiEditMode, tool, data.is_uniform_coords],
+    [userDragmode, roiEditMode, tool],
   );
 
   const handleRelayout = useCallback(
@@ -954,9 +994,9 @@ export function ImagePlot({
       // the controlled axes and the LOD raster follow the user's view.  Zoom
       // is a rubber band that only changes the range on release; feeding the
       // live ``plotly_relayouting`` stream back mid-drag made box-zoom behave
-      // erratically.  Pan is handled separately (manual pan handlers below):
-      // Plotly's native pan does not translate ``image``-trace axes, so we
-      // never rely on its (constant) live stream for the range.
+      // erratically.  Uniform-image pan is handled by the manual pan handlers
+      // below (we drive ``viewRange`` directly), so we ignore Plotly's pan
+      // stream there; non-uniform (heatmap) images keep native pan.
       if (!live) {
         const ax0 = event["xaxis.range[0]"];
         const ax1 = event["xaxis.range[1]"];
@@ -968,22 +1008,17 @@ export function ImagePlot({
         ) {
           setViewRange(null);
         } else if (
-          // In pan mode the manual pan handler owns the range for uniform
-          // (image-trace) images, so ignore Plotly's constant relayout there;
-          // non-uniform (heatmap) images are panned natively by Plotly, so we
-          // still capture their final range here.
-          (userDragmode !== "pan" || data.is_uniform_coords === false) &&
+          // The manual pan handler owns the range while panning (both uniform
+          // and non-uniform), so ignore Plotly's pan relayout there; we still
+          // capture box-zoom (which only relayouts on release).
+          userDragmode !== "pan" &&
           (ax0 !== undefined ||
             ax1 !== undefined ||
             ay0 !== undefined ||
             ay1 !== undefined)
         ) {
-          const curX: [number, number] = viewRange
-            ? viewRange.x
-            : [extent.xMin, extent.xMax];
-          const curY: [number, number] = viewRange
-            ? viewRange.y
-            : [extent.yMax, extent.yMin];
+          const curX: [number, number] = displayRange.x;
+          const curY: [number, number] = displayRange.y;
           const nx: [number, number] = [
             ax0 !== undefined ? Number(ax0) : curX[0],
             ax1 !== undefined ? Number(ax1) : curX[1],
@@ -1100,10 +1135,8 @@ export function ImagePlot({
       resultShapes.length,
       tool,
       statsRect,
-      viewRange,
-      extent,
+      displayRange,
       userDragmode,
-      data.is_uniform_coords,
     ],
   );
 

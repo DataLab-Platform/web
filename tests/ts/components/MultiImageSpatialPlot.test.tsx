@@ -7,8 +7,8 @@
  * Plotly plot according to its physical ``x0``/``y0``/``dx``/``dy``
  * coordinates. That is what makes the "Distribute on a grid" / "Reset
  * positions" geometry tools observable in the browser, so the key
- * behaviour to lock in is: one ``image`` trace per image, each anchored
- * at its own origin, and a shared axis range spanning them all.
+ * behaviour to lock in is: one ``layout.images`` background per image, each
+ * anchored at its own origin, and a shared axis range spanning them all.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,20 +79,10 @@ function makeImage(id: string, x0: number, y0: number): ImageData {
   };
 }
 
-interface ImageTrace {
-  type: string;
-  x0: number;
-  y0: number;
-}
-
-function readTraces(container: HTMLElement): ImageTrace[] {
-  const plot = container.querySelector('[data-testid="plot"]');
-  return JSON.parse(plot?.getAttribute("data-traces") ?? "[]");
-}
-
 function readLayout(container: HTMLElement): {
   xaxis: { range: [number, number] };
   yaxis: { range: [number, number] };
+  images?: Array<{ x: number; y: number }>;
 } {
   const plot = container.querySelector('[data-testid="plot"]');
   return JSON.parse(plot?.getAttribute("data-layout") ?? "{}");
@@ -107,13 +97,13 @@ function renderSpatial(images: ImageData[], totalSelected: number) {
 }
 
 describe("MultiImageSpatialPlot", () => {
-  it("renders one image trace per image, anchored at each origin", () => {
+  it("renders one layout-image background per image, anchored at each origin", () => {
     const images = [makeImage("a", 0, 0), makeImage("b", 10, 5)];
     const { container } = renderSpatial(images, 2);
-    const traces = readTraces(container).filter((t) => t.type === "image");
-    expect(traces).toHaveLength(2);
-    expect(traces.map((t) => t.x0).sort((p, q) => p - q)).toEqual([0, 10]);
-    expect(traces.map((t) => t.y0).sort((p, q) => p - q)).toEqual([0, 5]);
+    const imgs = readLayout(container).images ?? [];
+    expect(imgs).toHaveLength(2);
+    expect(imgs.map((m) => m.x).sort((p, q) => p - q)).toEqual([0, 10]);
+    expect(imgs.map((m) => m.y).sort((p, q) => p - q)).toEqual([0, 5]);
   });
 
   it("spans the axis range across all images (Y reversed)", () => {

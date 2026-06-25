@@ -33,15 +33,18 @@ interface TraceInfo {
   pngHeight: number;
 }
 
-/** Read the ``image`` trace of the single-image viewer and decode its PNG
- *  ``source`` dimensions. */
+/** Read the bitmap ``layout.images`` background of the single-image viewer
+ *  and decode its PNG ``source`` dimensions.  The bitmap used to be an
+ *  ``image`` trace but is now a layout image (so the axes carry no constraint
+ *  and can be panned in both directions).  The per-cell spacing ``dx``/``dy``
+ *  is recovered as ``sizex / pngWidth`` / ``sizey / pngHeight``. */
 async function readImageTrace(page: Page): Promise<TraceInfo> {
   return page.evaluate(async () => {
     const gd = document.querySelector(".image-plot-host .js-plotly-plot") as
-      | (HTMLElement & { data?: Array<Record<string, unknown>> })
+      | (HTMLElement & { layout?: { images?: Array<Record<string, unknown>> } })
       | null;
-    const trace = gd?.data?.find((t) => t.type === "image");
-    if (!trace) {
+    const img = gd?.layout?.images?.[0];
+    if (!img) {
       return {
         hasTrace: false,
         source: "",
@@ -51,18 +54,20 @@ async function readImageTrace(page: Page): Promise<TraceInfo> {
         pngHeight: 0,
       };
     }
-    const source = String(trace.source ?? "");
+    const source = String(img.source ?? "");
     const dims = await new Promise<{ w: number; h: number }>((resolve) => {
       const im = new Image();
       im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
       im.onerror = () => resolve({ w: 0, h: 0 });
       im.src = source;
     });
+    const sizex = Number(img.sizex ?? 0);
+    const sizey = Number(img.sizey ?? 0);
     return {
       hasTrace: true,
       source,
-      dx: Number(trace.dx ?? 0),
-      dy: Number(trace.dy ?? 0),
+      dx: dims.w > 0 ? sizex / dims.w : 0,
+      dy: dims.h > 0 ? sizey / dims.h : 0,
       pngWidth: dims.w,
       pngHeight: dims.h,
     };
