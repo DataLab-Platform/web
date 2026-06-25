@@ -18,7 +18,7 @@ The latest release is deployed automatically to GitHub Pages. Open the link in a
 >
 > To add the exception: open `edge://settings/privacy` → _Security_ → _Manage enhanced security for sites_ → under _Never use enhanced security for these sites_, click _Add a site_ and enter `https://datalab-platform.com` (or your deployment URL). Reload the page; load time drops back to ~30 s. Chrome, Firefox and Safari are not affected.
 
-![DataLab Web — 2D sinc image with statistics and contrast tools](doc/images/screenshot-image-sinc2d.png)
+![DataLab Web demo — creating a 2D sinc image, extracting a cross-section profile, measuring its full width at half-maximum, and running Canny edge detection from the command palette](doc/images/datalab-web-demo.gif)
 
 ## Features
 

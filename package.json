@@ -21,6 +21,7 @@
     "i18n:check": "node scripts/i18n-extract.mjs --check",
     "gen:colormaps": "node scripts/gen-colormaps.mjs",
     "changelog:extract": "node scripts/extract-changelog.mjs",
+    "demo:gif": "node scripts/make-demo-gif.mjs",
     "bench:run": "node tests/benchmark/scripts/run_all.mjs",
     "bench:report": "python tests/benchmark/shared/report.py",
     "bench:wheels": "node tests/benchmark/scripts/build_wheels.mjs",

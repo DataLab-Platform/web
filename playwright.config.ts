@@ -48,6 +48,10 @@ export default defineConfig({
         /opfs_worker_bench\.spec\.ts/,
         /_repro_.*\.spec\.ts/,
         /tests[\\/]benchmark[\\/]/,
+        // The demo-recording spec is opt-in: it is driven by its own
+        // ``playwright.demo.config.ts`` (video on) via ``npm run demo:gif``
+        // and must never run as part of the regression suite.
+        /demo[\\/]demo\.spec\.ts/,
       ],
     },
     {
