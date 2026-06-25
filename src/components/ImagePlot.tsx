@@ -3,7 +3,13 @@ import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { hexToRgba, roiLineColor } from "../runtime/plotStyles";
-import { buildRoiOverlays, parsePolygonPath } from "./imageRoi";
+import {
+  buildRoiOverlays,
+  computeDraggedSegment,
+  parsePolygonPath,
+  resizeCursor,
+  roiHitTest,
+} from "./imageRoi";
 import { buildResultAnnotationBox } from "./resultBox";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
@@ -437,6 +443,7 @@ export function ImagePlot({
             _length?: number;
             range?: [number, number];
           };
+          dragmode?: string;
         };
       })
     | null
@@ -877,6 +884,33 @@ export function ImagePlot({
         if (hoverInfo) setHoverInfo(null);
         return;
       }
+      // ROI edit affordance: when hovering a ROI (or one of its resize
+      // handles) in edit mode, set a move / resize cursor on Plotly's drag
+      // layer so the user sees the ROI is grabbable. Native editable shapes
+      // used to provide this; we replaced them with a manual drag handler, so
+      // we drive the cursor ourselves. The erase / select tools keep Plotly's
+      // own cursor (a hit there reaches Plotly, not our handler).
+      if (roiEditMode && roi.length > 0) {
+        const dm = fl?.dragmode;
+        const skipForTool =
+          dm === "eraseshape" || dm === "select" || dm === "lasso";
+        const dragEl = gd.querySelector<SVGElement>(".nsewdrag");
+        if (dragEl) {
+          let cur = "";
+          if (!skipForTool) {
+            const tolX = Math.abs(xa.p2c(px - xOff + 8) - xData) || 1e-9;
+            const tolY = Math.abs(ya.p2c(py - yOff + 8) - yData) || 1e-9;
+            const hit = roiHitTest(roi, xData, yData, tolX, tolY);
+            if (hit) {
+              const xRight = xa.p2c(px - xOff + 1) > xData;
+              const yDown = ya.p2c(py - yOff + 1) > yData;
+              cur = resizeCursor(hit.handle, xRight, yDown);
+            }
+          }
+          // ``important`` so it wins over Plotly's own ``cursor-*`` class.
+          dragEl.style.setProperty("cursor", cur, cur ? "important" : "");
+        }
+      }
       // Map data coords → cell indices.  Uniform images use the regular
       // grid; non-uniform images binary-search the bin edges so the
       // reported ``z`` is exact (no quantisation).
@@ -895,11 +929,14 @@ export function ImagePlot({
       setHoverInfo({ x: xData, y: yData, z, px, py });
       if (tool === "profiles" && !frozen) setCursor({ x: xData, y: yData });
     },
-    [data, tool, hoverInfo, xEdges, yEdges, frozen],
+    [data, tool, hoverInfo, xEdges, yEdges, frozen, roiEditMode, roi],
   );
 
   const handleWrapperMouseLeave = useCallback(() => {
     setHoverInfo(null);
+    // Drop any ROI move/resize cursor we set on Plotly's drag layer.
+    const dragEl = gdRef.current?.querySelector<SVGElement>(".nsewdrag");
+    if (dragEl) dragEl.style.removeProperty("cursor");
   }, []);
 
   // Click toggles the frozen crosshair while the profiles tool is active.
@@ -940,6 +977,95 @@ export function ImagePlot({
   const handleHostMouseDownCapture = useCallback(
     (evt: React.MouseEvent<HTMLDivElement>) => {
       if (evt.button !== 0) return;
+
+      // ----------------------------------------------------------------
+      // Manual ROI move / resize.
+      //
+      // Plotly emits no live ``plotly_relayouting`` stream while an
+      // image-trace shape is dragged (only the final geometry on mouse
+      // release — the same dead-interaction family as the manual pan), so
+      // we drive ROI editing ourselves for continuous on-screen feedback.
+      // We hit-test the ROI shapes in pixel space; on a hit we take over
+      // the gesture (blocking Plotly's zoom box / shape-draw) and translate
+      // the controlled ``roi`` from a fixed anchor each frame.
+      // ----------------------------------------------------------------
+      if (roiEditMode && onRoiChange && roi.length > 0) {
+        const gd = gdRef.current;
+        const fl = gd?._fullLayout;
+        const xa = fl?.xaxis;
+        const ya = fl?.yaxis;
+        // A hit on a ROI always takes over (move / resize), regardless of the
+        // active dragmode — this mirrors Plotly's native editable-shape
+        // behaviour, which we replaced for live feedback. A miss falls
+        // through to Plotly (drawing a new ROI in a ``draw*`` mode, or
+        // box-zoom otherwise). The erase / select tools are the exception:
+        // clicking a shape there must reach Plotly (to erase / select it).
+        const dm = fl?.dragmode;
+        const skipForTool =
+          dm === "eraseshape" || dm === "select" || dm === "lasso";
+        if (
+          !skipForTool &&
+          gd &&
+          xa &&
+          ya &&
+          typeof xa.p2c === "function" &&
+          typeof ya.p2c === "function"
+        ) {
+          const p2cX = xa.p2c;
+          const p2cY = ya.p2c;
+          const rect = gd.getBoundingClientRect();
+          const xOff = xa._offset ?? 0;
+          const yOff = ya._offset ?? 0;
+          // Pointer in axis-relative pixels, then in data coordinates. We
+          // hit-test entirely in DATA space (converting the 8px handle
+          // tolerance to data units via ``p2c``) so we never depend on the
+          // pixel-origin convention of ``c2p``.
+          const mpx = evt.clientX - rect.left - xOff;
+          const mpy = evt.clientY - rect.top - yOff;
+          const mdx = p2cX(mpx);
+          const mdy = p2cY(mpy);
+          const TOL = 8; // px hit tolerance for resize handles
+          const tolX = Math.abs(p2cX(mpx + TOL) - mdx) || 1e-9;
+          const tolY = Math.abs(p2cY(mpy + TOL) - mdy) || 1e-9;
+          const hit = roiHitTest(roi, mdx, mdy, tolX, tolY);
+          if (hit) {
+            // Take over the gesture: stop Plotly's own drag (zoom box /
+            // shape draw) from starting for this pointer sequence.
+            evt.preventDefault();
+            evt.nativeEvent.stopImmediatePropagation();
+            const ax = mdx;
+            const ay = mdy;
+            const orig = roi[hit.index];
+            const baseRoi = roi.slice();
+            const handle = hit.handle;
+            const index = hit.index;
+            const commit = onRoiChange;
+            const onMove = (e: MouseEvent) => {
+              const g = gdRef.current;
+              const f = g?._fullLayout;
+              const x2 = f?.xaxis;
+              const y2 = f?.yaxis;
+              if (!g || !x2 || !y2) return;
+              const r2 = g.getBoundingClientRect();
+              const mx = x2.p2c(e.clientX - r2.left - (x2._offset ?? 0));
+              const my = y2.p2c(e.clientY - r2.top - (y2._offset ?? 0));
+              if (!Number.isFinite(mx) || !Number.isFinite(my)) return;
+              const next = baseRoi.slice();
+              next[index] = computeDraggedSegment(orig, handle, mx, my, ax, ay);
+              commit(next);
+            };
+            const onUp = () => {
+              window.removeEventListener("mousemove", onMove);
+              window.removeEventListener("mouseup", onUp);
+            };
+            window.addEventListener("mousemove", onMove);
+            window.addEventListener("mouseup", onUp);
+          }
+        }
+        // In ROI edit mode the manual pan below never applies.
+        return;
+      }
+
       if (userDragmode !== "pan") return;
       if (roiEditMode || tool === "stats") return;
       // We drive the pan ourselves (rather than via Plotly's native pan) for
@@ -994,7 +1120,7 @@ export function ImagePlot({
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [userDragmode, roiEditMode, tool],
+    [userDragmode, roiEditMode, tool, roi, onRoiChange],
   );
 
   const handleRelayout = useCallback(
@@ -1259,7 +1385,13 @@ export function ImagePlot({
         {
           responsive: true,
           displaylogo: false,
-          editable: roiEditMode || tool === "stats",
+          // Native shape editing is disabled in ROI mode: Plotly streams no
+          // live geometry for image-trace shapes, so move/resize is handled
+          // by the manual drag handler (handleHostMouseDownCapture) for
+          // continuous feedback. The drawrect/drawcircle/drawclosedpath
+          // modebar tools still create new ROIs (they are dragmode-based and
+          // do not require ``editable``).
+          editable: tool === "stats",
           modeBarButtonsToAdd: roiEditMode
             ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
             : tool === "stats"
