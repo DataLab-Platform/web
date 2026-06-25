@@ -286,6 +286,10 @@ export function ImagePlot({
   // on-screen plot-area size, both used to size the LOD raster. ``null``
   // view = full extent (fresh image / double-click reset).
   const [viewRange, setViewRange] = useState<ViewRange | null>(null);
+  // User-selected modebar drag mode ("zoom" / "pan"). Echoed back into the
+  // layout so a re-render never resets it to the default. ``null`` ⇒ Plotly
+  // default ("zoom"). Reset when the image changes.
+  const [userDragmode, setUserDragmode] = useState<"zoom" | "pan" | null>(null);
   const [plotPx, setPlotPx] = useState<{ w: number; h: number }>({
     w: 1024,
     h: 1024,
@@ -303,6 +307,7 @@ export function ImagePlot({
   // opens at full extent.
   useEffect(() => {
     setViewRange(null);
+    setUserDragmode(null);
   }, [data.id]);
 
   const [bitmapUrl, setBitmapUrl] = useState<string | null>(null);
@@ -662,11 +667,13 @@ export function ImagePlot({
     const xtitle = data.xunit ? `${data.xlabel} (${data.xunit})` : data.xlabel;
     const ytitle = data.yunit ? `${data.ylabel} (${data.yunit})` : data.ylabel;
     // Image-trace axes are not auto-ranged from typed-array data —
-    // compute the pixel-aligned extents explicitly so the image fills
-    // the plot regardless of the hidden colorbar scatter trace.  When
-    // the user has zoomed/panned we feed the captured ``viewRange``
-    // back so the view sticks (and matches the windowed LOD bitmap)
-    // instead of snapping back to the full extent on every re-render.
+    // compute the pixel-aligned extents explicitly so the image fills the
+    // plot regardless of the hidden colorbar scatter trace.  The captured
+    // ``viewRange`` is fed back as a *controlled* range so the view sticks
+    // across re-renders (react-plotly drives the plot in controlled mode and
+    // would otherwise revert the user's view).  ``viewRange`` is updated on
+    // zoom release and on every manual-pan frame, and also sizes the windowed
+    // LOD bitmap so the decimated image matches the visible window.
     const xRange: [number, number] = viewRange
       ? viewRange.x
       : [extent.xMin, extent.xMax];
@@ -710,7 +717,10 @@ export function ImagePlot({
       // ``drawrect`` modebar button first — otherwise dragging just zooms).
       // ROI edit mode does the same, honouring the geometry armed by the
       // ROI panel (rectangle / circle / polygon) so a first ROI is always
-      // immediately drawable.
+      // immediately drawable.  Otherwise we echo the user's modebar choice
+      // (``userDragmode``) back into the layout so a re-render never resets
+      // it to the default "zoom" mid-interaction (which used to make Pan
+      // unusable — the mode flipped back the instant the view re-rendered).
       dragmode:
         roiEditMode && drawGeometry
           ? drawGeometry === "circle"
@@ -720,7 +730,7 @@ export function ImagePlot({
               : ("drawrect" as const)
           : tool === "stats"
             ? ("drawrect" as const)
-            : undefined,
+            : (userDragmode ?? undefined),
       // Legend positioned to the right of the colorbar (paper coords),
       // outside the plot area, so it never overlaps the image or the
       // colorbar. The right margin is widened above to make room.
@@ -758,6 +768,7 @@ export function ImagePlot({
     extent,
     isUniform,
     viewRange,
+    userDragmode,
     roiShapes,
     roiAnnotations,
     resultShapes,
@@ -798,6 +809,15 @@ export function ImagePlot({
   // ------------------------------------------------------------------
   const handleWrapperMouseMove = useCallback(
     (evt: React.MouseEvent<HTMLDivElement>) => {
+      // While a mouse button is held (zoom rubber band, manual pan, ROI
+      // drag), skip the hover read-out: every ``setHoverInfo`` re-renders the
+      // component and ``Plotly.react`` re-applies the layout, which disrupts
+      // the in-progress gesture (box-zoom used to behave erratically).  The
+      // manual pan does not need hover — it tracks the pointer itself.
+      if (evt.buttons !== 0) {
+        if (hoverInfo) setHoverInfo(null);
+        return;
+      }
       const gd = gdRef.current;
       const fl = gd?._fullLayout;
       const xa = fl?.xaxis;
@@ -851,12 +871,93 @@ export function ImagePlot({
     }
   }, [tool, frozen, cursor]);
 
+  // ------------------------------------------------------------------
+  // Manual pan.
+  //
+  // Plotly's native drag-pan does not translate ``image``-trace axes (the
+  // relayout stream reports a constant range), so the modebar "Pan" tool
+  // looks armed but never moves the view.  We implement pan ourselves: on
+  // mousedown (capture phase, before Plotly's no-op pan handler) we record
+  // the gesture anchor and the axis ranges, then translate the controlled
+  // ``viewRange`` on every mousemove.  Each frame is computed from the fixed
+  // anchor (not incrementally) so there is no runaway amplification.
+  // ------------------------------------------------------------------
+  const panRef = useRef<{
+    startX: number;
+    startY: number;
+    x0: number;
+    x1: number;
+    y0: number;
+    y1: number;
+    xLen: number;
+    yLen: number;
+  } | null>(null);
+  const handleHostMouseDownCapture = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      if (evt.button !== 0) return;
+      if (userDragmode !== "pan") return;
+      if (roiEditMode || tool === "stats") return;
+      // Non-uniform images render as a ``heatmap`` trace whose axes Plotly
+      // *can* pan natively — leave those to Plotly and only take over the
+      // ``image``-trace (uniform) case where native pan is a no-op.
+      if (data.is_uniform_coords === false) return;
+      const gd = gdRef.current;
+      const fl = gd?._fullLayout;
+      const xa = fl?.xaxis;
+      const ya = fl?.yaxis;
+      const xr = xa?.range;
+      const yr = ya?.range;
+      const xLen = xa?._length;
+      const yLen = ya?._length;
+      if (!xr || !yr || !xLen || !yLen) return;
+      panRef.current = {
+        startX: evt.clientX,
+        startY: evt.clientY,
+        x0: xr[0],
+        x1: xr[1],
+        y0: yr[0],
+        y1: yr[1],
+        xLen,
+        yLen,
+      };
+      const onMove = (e: MouseEvent) => {
+        const p = panRef.current;
+        if (!p) return;
+        // Data units per CSS pixel on each axis (sign included, so reversed
+        // Y axes pan in the natural "grab" direction).
+        const dxData = ((e.clientX - p.startX) * (p.x1 - p.x0)) / p.xLen;
+        const dyData = ((e.clientY - p.startY) * (p.y1 - p.y0)) / p.yLen;
+        setViewRange({
+          x: [p.x0 - dxData, p.x1 - dxData],
+          y: [p.y0 - dyData, p.y1 - dyData],
+        });
+      };
+      const onUp = () => {
+        panRef.current = null;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [userDragmode, roiEditMode, tool, data.is_uniform_coords],
+  );
+
   const handleRelayout = useCallback(
-    (event: Record<string, unknown>) => {
-      // Capture pan/zoom first (in any mode) so the LOD raster follows the
-      // visible window and the forced full-extent range does not snap the
-      // zoom back on the next re-render.
-      {
+    (event: Record<string, unknown>, live = false) => {
+      // Echo the user's modebar drag-mode choice (zoom / pan) into state so
+      // the layout re-supplies it and a re-render never resets it to the
+      // default mid-interaction (the old "Pan flips back to zoom" bug).
+      const dm = event.dragmode;
+      if (dm === "zoom" || dm === "pan") setUserDragmode(dm);
+      // Capture the visible range on the *final* relayout (mouse release) so
+      // the controlled axes and the LOD raster follow the user's view.  Zoom
+      // is a rubber band that only changes the range on release; feeding the
+      // live ``plotly_relayouting`` stream back mid-drag made box-zoom behave
+      // erratically.  Pan is handled separately (manual pan handlers below):
+      // Plotly's native pan does not translate ``image``-trace axes, so we
+      // never rely on its (constant) live stream for the range.
+      if (!live) {
         const ax0 = event["xaxis.range[0]"];
         const ax1 = event["xaxis.range[1]"];
         const ay0 = event["yaxis.range[0]"];
@@ -867,10 +968,15 @@ export function ImagePlot({
         ) {
           setViewRange(null);
         } else if (
-          ax0 !== undefined ||
-          ax1 !== undefined ||
-          ay0 !== undefined ||
-          ay1 !== undefined
+          // In pan mode the manual pan handler owns the range for uniform
+          // (image-trace) images, so ignore Plotly's constant relayout there;
+          // non-uniform (heatmap) images are panned natively by Plotly, so we
+          // still capture their final range here.
+          (userDragmode !== "pan" || data.is_uniform_coords === false) &&
+          (ax0 !== undefined ||
+            ax1 !== undefined ||
+            ay0 !== undefined ||
+            ay1 !== undefined)
         ) {
           const curX: [number, number] = viewRange
             ? viewRange.x
@@ -996,6 +1102,8 @@ export function ImagePlot({
       statsRect,
       viewRange,
       extent,
+      userDragmode,
+      data.is_uniform_coords,
     ],
   );
 
@@ -1124,7 +1232,9 @@ export function ImagePlot({
         const g = gd as unknown as {
           on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
         };
-        g.on?.("plotly_relayouting", (e) => relayoutHandlerRef.current(e));
+        g.on?.("plotly_relayouting", (e) =>
+          relayoutHandlerRef.current(e, true),
+        );
       }}
       onUpdate={(_fig, gd) => {
         gdRef.current = gd as unknown as typeof gdRef.current;
@@ -1177,6 +1287,7 @@ export function ImagePlot({
           : ""
       }`}
       style={{ position: "relative", width: "100%", height: "100%" }}
+      onMouseDownCapture={handleHostMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}
       onMouseLeave={handleWrapperMouseLeave}
       onClick={handleHostClick}
