@@ -3135,6 +3135,12 @@ export default function App() {
         // is preserved (passing ``currentId`` would collapse it to a
         // single image and hide the spatial overlay we just enabled).
         await refresh();
+        // The op moves the *other* selected images in place (same UIDs),
+        // so neither ``currentId`` nor ``selectedIds`` change and the
+        // central fetch effect would keep stale ``extraImages`` (old
+        // x0/y0). Bump the plot nonce to force a re-fetch so the spatial
+        // overlay shows the new positions without a deselect/reselect.
+        setPlotRefreshNonce((n) => n + 1);
       } finally {
         setBusy(false);
       }
@@ -3160,6 +3166,9 @@ export default function App() {
       await reloadCurrentImage();
       // Preserve the multi-selection (see handleSubmitImageGrid).
       await refresh();
+      // Force a re-fetch of the other selected images' coordinates
+      // (see handleSubmitImageGrid for the rationale).
+      setPlotRefreshNonce((n) => n + 1);
     } finally {
       setBusy(false);
     }
