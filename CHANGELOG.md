@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **AI assistant from the welcome screen**: the welcome screen now offers an **Ask the AI assistant** entry that opens (and expands) the built-in assistant panel directly, so you can start chatting to inspect, create and process your data without hunting for the panel.
+- **Image grid toggle**: the image viewer gained a grid toggle whose state is remembered across single-image and multi-image spatial views.
+
+### Changed
+
+- Macros are no longer silently bulk-restored from the cache on a cold start: like notebooks, they are now reachable through the **Recent…** menus, and pristine template macros are no longer cached. The cold-start banner now points to the **Recent…** menus accordingly.
+- Reduced the horizontal clutter of the menu bar and top UI for a cleaner layout.
+
+### Fixed
+
+- Image regions of interest now update live while you move or resize them with the mouse, instead of only refreshing when the drag ends.
+- Reworked image panning and zooming: box-zoom now sticks on release, panning works reliably on image traces (including fixing an inverted vertical pan and keeping square pixels), and the multi-image spatial overlay re-fetches the selected images' coordinates so it updates correctly.
+
 ## [0.6.0] - 2026-06-24
 
 ### Added
