@@ -17,6 +17,50 @@ Playwright runs serially (`workers: 1`, ~3 min Pyodide boot per spec
 file in CI), so adding E2E tests has a real, compounding cost. Treat
 them as a scarce resource.
 
+A continuous layer ties the three together: GitHub Actions (`tests.yml`) runs all three on every push / PR. The Python layer runs `bootstrap.py` directly under CPython through fixtures that stub the Pyodide-only modules (`js`, `pyodide.ffi`); this gives fast feedback and high coverage without booting WebAssembly.
+
+## Running the suites locally
+
+```powershell
+# One-time: copy the environment template and create the project venv
+# (Python 3.11 or 3.12 — earlier versions trip a quirk in
+# ``isinstance(list[T], type)`` that breaks Sigima's processor
+# introspection).
+Copy-Item .env.template .env
+py -3.11 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+
+# Python unit tests + coverage report (htmlcov-python/)
+.\.venv\Scripts\python -m pytest tests/python --cov=src/runtime --cov-report=html:htmlcov-python
+
+# TypeScript unit tests + coverage report (coverage-ts/)
+npm test
+npm run test:cov
+
+# End-to-end browser tests (boots Pyodide in Chromium ~1.5 min)
+npx playwright install chromium   # one-time
+npm run test:e2e
+
+# Performance benchmarks (opt-in — ~5 min). Includes the image-display
+# benchmark and the 50k-sample binary transfer probe.
+npx playwright test --project=perf
+PERF=1 npm run test:e2e
+
+# Run a throwaway `_repro_*` probe (the default suite ignores them).
+$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts
+```
+
+Test layout:
+
+```text
+tests/
+├── python/          # pytest suite — exercises bootstrap.py headlessly
+├── ts/              # Vitest suite — pure TypeScript modules
+└── e2e/             # Playwright specs — real browser smoke tests
+```
+
+VS Code tasks are provided under `.vscode/tasks.json` (`🚀 Pytest`, `🟢 Vitest`, `🎭 Playwright`, …). The default test task (`Ctrl+Shift+P → Run Test Task`) launches the Python suite.
+
 ## Default suite vs perf project
 
 The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. The costly `perf` and `benchmark` projects are **opt-in**: each is registered only when explicitly requested, either via its `--project=<name>` flag or its `PW_<NAME>` env var (see `wantsProject` in [playwright.config.ts](../playwright.config.ts)). A bare `playwright test` — and therefore the default CI run, which calls `npm run test:e2e` (`--project=chromium`) — never pays for them.

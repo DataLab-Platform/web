@@ -14,7 +14,7 @@ in the browser.
 
 The whole stack runs **inside a single browser tab**: there is no backend.
 The HDF5 workspace file is the only durable artifact (see
-[Persistence model](../README.md#persistence-model)).
+[Persistence model](persistence.md)).
 
 ---
 
