@@ -198,6 +198,9 @@ export function WelcomeView({
                 { version: appVersion },
               )}
             </div>
+            <div className="welcome-edition">
+              {t("Web edition of the DataLab application")}
+            </div>
           </div>
           {onDismiss && (
             <button

@@ -354,11 +354,17 @@ describe("buildViewActions", () => {
       onToggleNotebookFloating: vi.fn(),
       macroFloating: false,
       onToggleMacroFloating: vi.fn(),
+      locale: "en",
+      availableLocales: [
+        { code: "en", label: "English" },
+        { code: "fr", label: "Français" },
+      ],
+      onSetLocale: vi.fn(),
       ...over,
     };
   }
 
-  it("exposes one popout entry and five checkable toggles", () => {
+  it("exposes one popout entry, five checkable toggles and the languages", () => {
     const actions = buildViewActions(makeViewCallbacks());
     expect(actions.map((a) => a.id)).toEqual([
       "view.open_separate_view",
@@ -367,7 +373,23 @@ describe("buildViewActions", () => {
       "view.show_graphical_titles",
       "view.notebook_floating",
       "view.macro_floating",
+      "view.language.en",
+      "view.language.fr",
     ]);
+  });
+
+  it("marks the active locale and switches to another on demand", () => {
+    const cb = makeViewCallbacks({ locale: "en" });
+    const actions = buildViewActions(cb);
+    const en = actions.find((a) => a.id === "view.language.en")!;
+    const fr = actions.find((a) => a.id === "view.language.fr")!;
+    expect(en.label).toMatch(/^\u2713 /);
+    expect(fr.label).not.toMatch(/^\u2713/);
+    // Selecting the active locale is a no-op; selecting another switches.
+    en.run();
+    expect(cb.onSetLocale).not.toHaveBeenCalled();
+    fr.run();
+    expect(cb.onSetLocale).toHaveBeenCalledWith("fr");
   });
 
   it("prefixes the active toggle with a checkmark glyph", () => {

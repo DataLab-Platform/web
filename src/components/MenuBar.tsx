@@ -7,7 +7,6 @@ import { ConsoleStatusIndicator } from "./ConsoleStatusIndicator";
 import { MemoryUsageIndicator } from "./MemoryUsageIndicator";
 import { useTheme } from "../utils/theme";
 import { t } from "../i18n/translate";
-import { useTranslation } from "../i18n/I18nProvider";
 import type { RuntimeApi } from "../runtime/runtime";
 
 interface Props {
@@ -97,7 +96,7 @@ export function MenuBar(props: Props) {
     <div className="menubar" ref={barRef}>
       <div className="menubar-brand">
         <img className="menubar-logo" src={logoUrl} alt="" aria-hidden="true" />
-        <h1>DataLab Web</h1>
+        <h1>DataLab</h1>
         <button
           type="button"
           className="experimental-badge"
@@ -139,6 +138,9 @@ export function MenuBar(props: Props) {
           );
         })}
       </nav>
+      {onOpenCommandPalette && (
+        <CommandPaletteButton onOpen={onOpenCommandPalette} />
+      )}
       <span className="spacer" />
       <span
         className="status"
@@ -157,13 +159,9 @@ export function MenuBar(props: Props) {
           onToggleStoreOnDisk={onToggleStoreOnDisk}
         />
       )}
-      {onOpenCommandPalette && (
-        <CommandPaletteButton onOpen={onOpenCommandPalette} />
-      )}
       {onToggleAIPanel && (
         <AIToggleButton visible={!!aiPanelVisible} onToggle={onToggleAIPanel} />
       )}
-      <LanguageSelector />
       <ThemeToggleButton />
     </div>
   );
@@ -184,8 +182,9 @@ function CommandPaletteButton({ onOpen }: { onOpen: () => void }) {
       aria-label={label}
     >
       <svg
-        width={16}
-        height={16}
+        className="menubar-command-palette__icon"
+        width={15}
+        height={15}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -198,6 +197,7 @@ function CommandPaletteButton({ onOpen }: { onOpen: () => void }) {
         <circle cx={11} cy={11} r={7} />
         <path d="M21 21l-4.3-4.3" />
       </svg>
+      <span className="menubar-command-palette__shortcut">{shortcut}</span>
     </button>
   );
 }
@@ -249,113 +249,6 @@ function AIToggleButton({
         <path d="M9 11h.01M12 11h.01M15 11h.01" />
       </svg>
     </button>
-  );
-}
-
-/** Small inline flag icon for a locale. Uses SVG rather than flag emoji
- *  because Windows does not render regional-indicator emoji as flags
- *  (it shows the bare letter pair instead). Unknown locales fall back to
- *  the upper-cased code so the selector keeps working as locales grow. */
-function FlagIcon({ code }: { code: string }) {
-  if (code === "fr") {
-    return (
-      <svg
-        viewBox="0 0 3 2"
-        className="menubar-flag"
-        aria-hidden
-        focusable={false}
-      >
-        <rect width={3} height={2} fill="#fff" />
-        <rect width={1} height={2} fill="#0055a4" />
-        <rect x={2} width={1} height={2} fill="#ef4135" />
-      </svg>
-    );
-  }
-  if (code === "en") {
-    return (
-      <svg
-        viewBox="0 0 60 30"
-        className="menubar-flag"
-        aria-hidden
-        focusable={false}
-      >
-        <rect width={60} height={30} fill="#012169" />
-        <path d="M0,0 60,30 M60,0 0,30" stroke="#fff" strokeWidth={6} />
-        <path d="M0,0 60,30 M60,0 0,30" stroke="#c8102e" strokeWidth={4} />
-        <path d="M30,0 V30 M0,15 H60" stroke="#fff" strokeWidth={10} />
-        <path d="M30,0 V30 M0,15 H60" stroke="#c8102e" strokeWidth={6} />
-      </svg>
-    );
-  }
-  return <span className="menubar-flag-code">{code.toUpperCase()}</span>;
-}
-
-/** Compact flag-based language selector. Shows only the active locale's
- *  flag to save space; clicking opens a small menu of available locales
- *  (flag + native name). Switching triggers a full page reload (see
- *  ``locale.ts``) so the Pyodide runtime re-boots with the matching
- *  ``LANG`` and guidata/Sigima ``.mo`` catalogs take effect. */
-function LanguageSelector() {
-  const { locale, setLocale, availableLocales } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handlePointer = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", handlePointer);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("mousedown", handlePointer);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [open]);
-
-  const activeLabel =
-    availableLocales.find((l) => l.code === locale)?.label ?? locale;
-
-  return (
-    <div className="menubar-language" ref={rootRef}>
-      <button
-        type="button"
-        className="menubar-language-button"
-        onClick={() => setOpen((v) => !v)}
-        title={`${t("Language")} — ${activeLabel}`}
-        aria-label={t("Language")}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <FlagIcon code={locale} />
-      </button>
-      {open && (
-        <div className="menubar-language-menu" role="menu">
-          {availableLocales.map(({ code, label }) => (
-            <button
-              key={code}
-              type="button"
-              role="menuitemradio"
-              aria-checked={code === locale}
-              className={
-                "menubar-language-item" +
-                (code === locale ? " menubar-language-item--active" : "")
-              }
-              onClick={() => {
-                setOpen(false);
-                if (code !== locale) setLocale(code);
-              }}
-            >
-              <FlagIcon code={code} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 

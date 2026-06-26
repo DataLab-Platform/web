@@ -465,6 +465,12 @@ export interface ViewActionCallbacks {
   macroFloating: boolean;
   /** Toggle the Macro panel placement (tab ⇄ floating). */
   onToggleMacroFloating: () => void;
+  /** Currently active locale code (e.g. ``"en"`` / ``"fr"``). */
+  locale: string;
+  /** Locales offered in the Language submenu (code + native label). */
+  availableLocales: { code: string; label: string }[];
+  /** Switch the UI locale (triggers a full reload, see ``locale.ts``). */
+  onSetLocale: (code: string) => void;
 }
 
 /** Wire View menu actions (UI preferences only). */
@@ -528,6 +534,20 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       enabled: always,
       run: cb.onToggleMacroFloating,
     },
+    ...cb.availableLocales.map((loc, index) => ({
+      id: `view.language.${loc.code}`,
+      label: `${checkPrefix(loc.code === cb.locale)}${loc.label}`,
+      // The leaf segment uses the stable locale code; the folder label is
+      // translated via ``t("Language")`` by the menu-tree builder.
+      menuPath: `View/Language/${loc.code}`,
+      // The first entry opens a new group so the Language submenu is
+      // separated from the panel-detach toggles above.
+      beginGroup: index === 0 ? true : undefined,
+      enabled: always,
+      run: () => {
+        if (loc.code !== cb.locale) cb.onSetLocale(loc.code);
+      },
+    })),
   ];
 }
 

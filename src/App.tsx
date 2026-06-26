@@ -86,6 +86,7 @@ import {
 } from "./utils/consoleLog";
 import { DialogBridge } from "./components/DialogBridge";
 import { t } from "./i18n/translate";
+import { useTranslation } from "./i18n/I18nProvider";
 import {
   useConfirm,
   useMessage,
@@ -3858,6 +3859,9 @@ export default function App() {
     [features, treeKind],
   );
 
+  // Locale state powering the View › Language submenu.
+  const { locale, setLocale, availableLocales } = useTranslation();
+
   const actions = useMemo(
     () => [
       ...buildStaticActions({
@@ -3911,6 +3915,9 @@ export default function App() {
         onToggleNotebookFloating: toggleNotebookFloating,
         macroFloating,
         onToggleMacroFloating: toggleMacroFloating,
+        locale,
+        availableLocales,
+        onSetLocale: setLocale,
       }),
       ...buildAIAssistantActions({
         visible: aiPanelVisible,
@@ -4056,6 +4063,9 @@ export default function App() {
       macroFloating,
       toggleMacroFloating,
       handleStartTour,
+      locale,
+      setLocale,
+      availableLocales,
     ],
   );
 
