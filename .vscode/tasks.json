@@ -375,6 +375,22 @@
       "problemMatcher": []
     },
     {
+      "label": "🎬 Update demo GIF",
+      "detail": "Record the scripted Playwright demo and encode doc/images/datalab-web-demo.gif.",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "demo:gif"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "panel": "dedicated",
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "🚀 Dev Server",
       "detail": "Background Vite dev server on http://localhost:5173/.",
       "type": "shell",
