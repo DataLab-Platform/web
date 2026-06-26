@@ -447,11 +447,29 @@ def _signal_style(obj: Any) -> dict[str, Any]:
 def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
     """Merge signal and image curated catalogs into a single dict.
 
-    Delegates to :func:`processor.build_full_catalog` so the kernel and the
-    disposable compute worker share one source of truth for feature ids and
-    the ``"image:"`` namespacing.
+    Image features are namespaced under ``"image:"`` to avoid id
+    collisions with same-named signal features.
     """
-    return _proc.build_full_catalog()
+    catalog: dict[str, _proc.FeatureSpec] = {}
+    for fid, spec in _proc.build_signal_catalog().items():
+        catalog[fid] = spec
+    for fid, spec in _proc.build_image_catalog().items():
+        new_id = f"image:{fid}"
+        # Reflect the prefix so the front-end uses it consistently.
+        catalog[new_id] = _proc.FeatureSpec(
+            feature_id=new_id,
+            label=spec.label,
+            menu_path=spec.menu_path,
+            pattern=spec.pattern,
+            icon=spec.icon,
+            operand_label=spec.operand_label,
+            paramclass=spec.paramclass,
+            func=spec.func,
+            object_kind=spec.object_kind,
+            skip_xarray_compat=spec.skip_xarray_compat,
+            output_kind=spec.output_kind,
+        )
+    return catalog
 
 
 # Preserve the live model & catalogue across HMR re-executions of this file.
@@ -4341,125 +4359,6 @@ def apply_feature(
         new_ids.append(new_oid)
         # Record the originating processing so the "Processing" side panel
         # tab can re-edit its parameters and re-apply it on the same source(s).
-        _LAST_PROCESSING[new_oid] = {
-            "feature_id": feature_id,
-            "source_ids": list(source_ids),
-            "operand_id": operand_id,
-            "params": dict(params) if params else {},
-        }
-    return new_ids
-
-
-# ---------------------------------------------------------------------------
-# Interruptible processing — kernel-side extract / commit split
-# ---------------------------------------------------------------------------
-#
-# To make a long processing cancellable without a ``SharedArrayBuffer`` (which
-# would force COOP/COEP and break plain static hosting), the heavy Sigima call
-# is delegated to a disposable compute worker (``computeWorker.ts``), cancelled
-# by terminating it. The kernel keeps ownership of the model: it *extracts* the
-# serialised inputs, the compute worker runs ``run_feature_serialized``, and the
-# kernel *commits* the serialised results. The two helpers below are the kernel
-# halves; together they reproduce the non-group path of :func:`apply_feature`.
-#
-# Eligibility (no group-exclusive selection, not cross-kind, feature present in
-# the compute catalogue) is decided by the main-thread orchestrator; anything
-# else falls back to the in-kernel :func:`apply_feature` (non-cancellable).
-
-
-def extract_feature_inputs(
-    feature_id: str,
-    source_ids: list[str],
-    operand_id: str | None = None,
-) -> dict[str, Any]:
-    """Resolve and serialise the inputs needed to run *feature_id* off-kernel.
-
-    Pickles the source objects (and the operand for ``2_to_1``) so the
-    disposable compute worker can run the computation and be cancelled by
-    termination. The computation itself is **not** run here.
-
-    Args:
-        feature_id: The feature to prepare inputs for.
-        source_ids: The source object ids (model-resident).
-        operand_id: Optional operand object id (``2_to_1`` only).
-
-    Returns:
-        ``{"sources_b64": [...], "operand_b64": str | None}``.
-
-    Raises:
-        ValueError: If the feature is unknown or no source is given.
-    """
-    if hasattr(source_ids, "to_py"):
-        source_ids = source_ids.to_py()
-    catalog = _full_catalog_with_plugins()
-    if feature_id not in catalog:
-        raise ValueError(f"Unknown feature: {feature_id!r}")
-    if not source_ids:
-        raise ValueError("extract_feature_inputs requires at least one source")
-    sources_b64 = [_proc.encode_pickled_obj(_MODEL.get(oid)) for oid in source_ids]
-    operand_b64 = (
-        _proc.encode_pickled_obj(_MODEL.get(operand_id)) if operand_id else None
-    )
-    return {"sources_b64": sources_b64, "operand_b64": operand_b64}
-
-
-def commit_feature_results(
-    feature_id: str,
-    source_ids: list[str],
-    items: list[tuple[str | None, str]],
-    operand_id: str | None = None,
-    params: dict[str, Any] | None = None,
-) -> list[str]:
-    """Insert compute-worker results into the model and return the new ids.
-
-    Mirrors the tail of :func:`apply_feature` (non-group path): placeholder
-    title substitution, source-group placement (or the destination panel's
-    default group for cross-kind features), model insertion and
-    last-processing recording.
-
-    Args:
-        feature_id: The feature that produced *items*.
-        source_ids: The source object ids, in the order passed to
-         :func:`extract_feature_inputs`.
-        items: ``(source_oid_or_None, pickled_result_b64)`` entries produced
-         by :func:`processor.run_feature_serialized`.
-        operand_id: Optional operand id (``2_to_1`` only), for title patching.
-        params: The user-edited parameter values, recorded for re-apply.
-
-    Returns:
-        The new result object ids.
-    """
-    if hasattr(source_ids, "to_py"):
-        source_ids = source_ids.to_py()
-    if hasattr(items, "to_py"):
-        items = items.to_py()
-    if hasattr(params, "to_py"):
-        params = params.to_py()
-    catalog = _full_catalog_with_plugins()
-    spec = catalog.get(feature_id)
-    if spec is None:
-        raise ValueError(f"Unknown feature: {feature_id!r}")
-    src_panel = _MODEL.panel(spec.object_kind)
-    cross_kind = spec.output_kind != spec.object_kind
-    dst_panel = _MODEL.panel(spec.output_kind) if cross_kind else src_panel
-    src_ids_snapshot = list(source_ids)
-    new_ids: list[str] = []
-    for source_oid, pickled in items:
-        dst = _proc.decode_pickled_obj(pickled)
-        if source_oid is None:
-            patch_oids = src_ids_snapshot
-        elif spec.pattern == "2_to_1" and operand_id is not None:
-            patch_oids = [source_oid, operand_id]
-        else:
-            patch_oids = [source_oid]
-        patch_title_with_ids(dst, patch_oids)
-        if cross_kind:
-            group = dst_panel.ensure_default_group()
-        else:
-            anchor = source_oid or source_ids[0]
-            group = src_panel.find_group_of(anchor)
-        new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=group.gid)
-        new_ids.append(new_oid)
         _LAST_PROCESSING[new_oid] = {
             "feature_id": feature_id,
             "source_ids": list(source_ids),

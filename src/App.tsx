@@ -95,9 +95,6 @@ import {
 } from "./components/ConfirmDialog";
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
-import { ProcessingOrchestrator } from "./runtime/ProcessingOrchestrator";
-import { isInterruptibleProcessingEnabled } from "./runtime/interruptibleProcessing";
-import { pyodideLang } from "./i18n/locale";
 import {
   SeparateViewDialog,
   type SeparateViewContent,
@@ -345,28 +342,8 @@ export default function App() {
   const showProcessingError = useProcessingError();
   const prompt = usePrompt();
   const runWithProgress = useProgress();
-  // Interruptible processing: a lazily-spawned compute worker runs the heavy
-  // Sigima call off the kernel so the user can cancel it (by terminating the
-  // worker) without a ``SharedArrayBuffer``. Owned here so one worker is reused
-  // across processings and disposed on unmount. See ``ProcessingOrchestrator``.
-  const orchestratorRef = useRef<ProcessingOrchestrator | null>(null);
-  useEffect(() => {
-    if (!runtime) return;
-    const orch = new ProcessingOrchestrator(runtime, pyodideLang());
-    orchestratorRef.current = orch;
-    if (import.meta.env.DEV) {
-      // Expose for ad-hoc debugging and E2E probes (the cancellable path
-      // runs a *second* Pyodide in the compute worker, which only a
-      // browser-driven test can exercise). Mirrors ``window.runtime``.
-      (
-        window as unknown as { orchestrator?: ProcessingOrchestrator }
-      ).orchestrator = orch;
-    }
-    return () => {
-      orch.dispose();
-      orchestratorRef.current = null;
-    };
-  }, [runtime]);
+  // Whether the metadata clipboard holds a payload "Paste metadata" can
+  // apply. Mirrors DataLab desktop's per-panel ``metadata_clipboard``.
   const [hasMetadataClipboard, setHasMetadataClipboard] = useState(false);
   const {
     dirty: workspaceDirty,
@@ -1571,45 +1548,36 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        // Cancellable path: a built-in feature (present in the compute
-        // worker's catalogue) applied to *selected objects* runs in the
-        // disposable worker so the user can interrupt it. It is **opt-in**
-        // (off by default) because the worker boots a second full Pyodide
-        // instance, which can exhaust browser memory on large data — see
-        // ``interruptibleProcessing.ts``. When disabled (the default), and
-        // for the group-exclusive path and plugin features, processings run
-        // in-kernel via ``applyFeature``.
-        const orch = orchestratorRef.current;
-        const useWorker =
-          isInterruptibleProcessingEnabled() &&
-          orch !== null &&
+        // Cooperative cancellation: when a 1-to-1 / 2-to-1 feature is applied
+        // to *several* selected objects, run it one object at a time through
+        // the progress dialog, which surfaces a Cancel button (and Esc) and
+        // stops the loop at the next object boundary — keeping the results
+        // already produced. This needs no second runtime and no
+        // ``SharedArrayBuffer``. A single object, an n-to-1 aggregation or a
+        // group-exclusive selection runs as one call (not interruptible: a
+        // lone Sigima call cannot be interrupted in-process without a second
+        // Python runtime, which would exhaust browser memory — see the
+        // "Interruptible processing" note in the architecture docs).
+        const cooperative =
           groupIds.length === 0 &&
-          !feature.id.startsWith("plugin:");
+          sourceIds.length > 1 &&
+          (feature.pattern === "1_to_1" || feature.pattern === "2_to_1");
         let newIds: string[];
-        if (useWorker) {
-          const { results, cancelled } = await runWithProgress<string[]>({
+        if (cooperative) {
+          const { results } = await runWithProgress<string[]>({
             title: t("Computing: {feature}", { feature: feature.label }),
-            total: 1,
-            step: async (_i, { signal }) => {
-              // Wire the dialog's Cancel button (and Esc) to terminate the
-              // compute worker; ``runFeature`` then rejects and the run is
-              // reported as cancelled with the model left untouched.
-              const onAbort = () => orch.cancel();
-              signal.addEventListener("abort", onAbort, { once: true });
-              try {
-                return await orch.runFeature({
-                  featureId: feature.id,
-                  sourceIds,
-                  operandId,
-                  params: values,
-                });
-              } finally {
-                signal.removeEventListener("abort", onAbort);
-              }
-            },
+            total: sourceIds.length,
+            step: async (i) =>
+              runtime.applyFeature(
+                feature.id,
+                [sourceIds[i]],
+                operandId,
+                values,
+                [],
+              ),
           });
-          if (cancelled) return; // user aborted — nothing was committed
-          newIds = results[0] ?? [];
+          newIds = results.flat();
+          if (newIds.length === 0) return; // cancelled before any result
         } else {
           newIds = await runtime.applyFeature(
             feature.id,

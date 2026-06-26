@@ -1021,42 +1021,6 @@ def build_image_catalog() -> dict[str, FeatureSpec]:
     return _build_catalog_for_kind("image", IMAGE_OVERRIDES)
 
 
-def build_full_catalog() -> dict[str, FeatureSpec]:
-    """Merge the signal and image catalogues into a single dict.
-
-    Image features are namespaced under ``"image:"`` to avoid id
-    collisions with same-named signal features (e.g. ``normalize`` exists
-    for both kinds). This is the single source of truth used both by the
-    kernel (``bootstrap._build_full_catalog``) and by the disposable
-    compute worker (``computeWorker.ts``), so a feature resolves to the
-    same spec on either side of the worker boundary.
-
-    Returns:
-        The merged ``{feature_id: FeatureSpec}`` catalogue (plugins not
-        included — those are merged kernel-side by
-        :func:`merge_plugin_features`).
-    """
-    catalog: dict[str, FeatureSpec] = dict(build_signal_catalog())
-    for fid, spec in build_image_catalog().items():
-        new_id = f"image:{fid}"
-        # Reflect the prefix in ``feature_id`` so the front-end (and the
-        # compute worker) use it consistently.
-        catalog[new_id] = FeatureSpec(
-            feature_id=new_id,
-            label=spec.label,
-            menu_path=spec.menu_path,
-            pattern=spec.pattern,
-            icon=spec.icon,
-            operand_label=spec.operand_label,
-            paramclass=spec.paramclass,
-            func=spec.func,
-            object_kind=spec.object_kind,
-            skip_xarray_compat=spec.skip_xarray_compat,
-            output_kind=spec.output_kind,
-        )
-    return catalog
-
-
 def merge_plugin_features(
     catalog: dict[str, FeatureSpec], kind: str
 ) -> dict[str, FeatureSpec]:
@@ -1403,103 +1367,6 @@ def resolve_active(
     return resolve_dataset_active(instance)
 
 
-# ---------------------------------------------------------------------------
-# Isolated (off-kernel) feature execution
-# ---------------------------------------------------------------------------
-#
-# To make a long-running processing *interruptible* without a
-# ``SharedArrayBuffer`` (which would force COOP/COEP and break plain
-# static hosting), the heavy Sigima call is delegated to a separate,
-# disposable compute worker (``computeWorker.ts``). Cancelling means
-# ``Worker.terminate()`` on that worker — the kernel worker that owns
-# ``_MODEL`` is never touched, so the workspace survives.
-#
-# The contract below is the **pure** half of that split: it runs the
-# computation on *serialised* inputs and returns *serialised* outputs,
-# with no access to the live object model. The kernel keeps ownership of
-# everything stateful (resolving sources from ``_MODEL``, title patching,
-# group placement, insertion); the compute worker only evaluates
-# ``BaseProcessor.apply`` — including the signal X-array interpolation /
-# alignment baked into the ``_compute_*`` methods.
-#
-# Sigima objects pickle cleanly and both runtimes ship the same Sigima
-# version, so base-64 pickle is a safe, structured-clone-friendly wire
-# format across the worker boundary.
-
-
-def encode_pickled_obj(obj: Any) -> str:
-    """Return *obj* as a base-64-encoded pickle string.
-
-    Args:
-        obj: Any picklable object (typically a ``SignalObj`` / ``ImageObj``).
-
-    Returns:
-        The base-64 ASCII encoding of ``pickle.dumps(obj)``.
-    """
-    import base64  # noqa: PLC0415
-    import pickle  # noqa: PLC0415
-
-    return base64.b64encode(pickle.dumps(obj)).decode("ascii")
-
-
-def decode_pickled_obj(b64: str) -> Any:
-    """Return the object decoded from a base-64-encoded pickle string.
-
-    Args:
-        b64: A base-64 ASCII string produced by :func:`encode_pickled_obj`.
-
-    Returns:
-        The unpickled object.
-    """
-    import base64  # noqa: PLC0415
-    import pickle  # noqa: PLC0415
-
-    return pickle.loads(base64.b64decode(b64.encode("ascii")))
-
-
-def run_feature_serialized(
-    catalog: dict[str, FeatureSpec],
-    feature_id: str,
-    source_ids: list[str],
-    sources_b64: list[str],
-    params: dict[str, Any] | None = None,
-    operand_b64: str | None = None,
-) -> list[tuple[str | None, str]]:
-    """Execute *feature_id* on serialised inputs and return serialised results.
-
-    This is the disposable compute worker's only computational entry point.
-    It never touches the live object model: the kernel resolves and pickles
-    the source objects, this function evaluates the Sigima computation, and
-    the kernel unpickles the results to perform title patching, group
-    placement and model insertion.
-
-    Args:
-        catalog: The resolved feature catalogue (signal + image, plus any
-         merged plugin features) the compute worker built at boot.
-        feature_id: The id of the feature to apply.
-        source_ids: The kernel-side oids of the source objects, kept in the
-         same order as *sources_b64* and passed through unchanged so the
-         kernel can map each result back to its source group / title.
-        sources_b64: The base-64-pickled source objects.
-        params: Optional dict of user-edited parameter values.
-        operand_b64: The base-64-pickled operand object (``2_to_1`` only).
-
-    Returns:
-        One ``(source_oid_or_None, pickled_result_b64)`` entry per result,
-        mirroring :class:`ApplyResult` but with each result object pickled.
-    """
-    spec = catalog.get(feature_id)
-    if spec is None:
-        raise ValueError(f"Unknown feature: {feature_id!r}")
-    if not source_ids:
-        raise ValueError("run_feature_serialized requires at least one source")
-    sources = [decode_pickled_obj(b64) for b64 in sources_b64]
-    operand = decode_pickled_obj(operand_b64) if operand_b64 is not None else None
-    ctx = ApplyContext(feature=spec, sources=sources, operand=operand, params=params)
-    result = BaseProcessor(spec.object_kind).apply(ctx, source_ids)
-    return [(source_oid, encode_pickled_obj(obj)) for source_oid, obj in result.items]
-
-
 __all__ = [
     "ApplyContext",
     "ApplyResult",
@@ -1509,16 +1376,12 @@ __all__ = [
     "IMAGE_OVERRIDES",
     "Pattern",
     "SIGNAL_OVERRIDES",
-    "build_full_catalog",
     "build_image_catalog",
     "build_signal_catalog",
-    "decode_pickled_obj",
-    "encode_pickled_obj",
     "get_schema",
     "merge_plugin_features",
     "resolve_active",
     "resolve_callbacks",
     "resolve_choices",
-    "run_feature_serialized",
     "serialize_catalog",
 ]
