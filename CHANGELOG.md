@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Cancellable batch processing**: when you apply a processing to several selected signals or images at once, it now runs object by object through the progress dialog, whose **Cancel** button (or the **Esc** key) stops it at the next object — keeping the results already computed. Single-object operations and aggregations (which are a single computation) are not interruptible.
 - **Busy indicator for long computations**: a single processing that takes more than a moment (e.g. a moving median on a large image) now shows a "Computing…" dialog with an animated bar, instead of only greying the interface.
+- **Test data loading in Test Data plugin**: the bundled _Test Data_ plugin now offers menu actions to load a set of standard test signals and images (sine, Gaussian, dot matrix, …) directly, making it easy to explore processing features without importing external files.
 
 ### Changed
 
