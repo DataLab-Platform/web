@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-26
+
 ### Added
 
 - **AI assistant from the welcome screen**: the welcome screen now offers an **Ask the AI assistant** entry that opens (and expands) the built-in assistant panel directly, so you can start chatting to inspect, create and process your data without hunting for the panel.
@@ -181,7 +183,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/DataLab-Platform/web/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/DataLab-Platform/web/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DataLab-Platform/web/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/DataLab-Platform/web/compare/v0.3.0...v0.4.0
