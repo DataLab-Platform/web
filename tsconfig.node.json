@@ -10,5 +10,10 @@
     "strict": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "build-plugins/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.demo.config.ts",
+    "build-plugins/**/*.ts"
+  ]
 }
