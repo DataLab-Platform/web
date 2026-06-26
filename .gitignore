@@ -6,11 +6,16 @@ release/
 packages/sdk/dist/
 *.tsbuildinfo
 
-# Compiled Vite config — the source of truth is vite.config.ts; a stale
-# compiled vite.config.js takes precedence over the .ts file and silently
-# masks any change to the real config.
+# Compiled root config files — the source of truth is the *.config.ts (and
+# tsconfig.node.json builds them with noEmit). A stale compiled *.config.js
+# takes precedence over the .ts file and silently masks any change to the
+# real config, so never commit these emitted artifacts.
 vite.config.js
 vite.config.d.ts
+playwright.config.js
+playwright.config.d.ts
+playwright.demo.config.js
+playwright.demo.config.d.ts
 
 # Editor
 .vscode/*.log
