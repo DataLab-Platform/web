@@ -19,6 +19,7 @@ import { getRoiIconUrl } from "../assets/roiIcons";
 import { getRootIconUrl } from "../assets/rootIcons";
 import datalabIconUrl from "../assets/DataLab.svg?url";
 import { t } from "../i18n/translate";
+import type { SupportedLocale } from "../i18n/locale";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -466,11 +467,11 @@ export interface ViewActionCallbacks {
   /** Toggle the Macro panel placement (tab ⇄ floating). */
   onToggleMacroFloating: () => void;
   /** Currently active locale code (e.g. ``"en"`` / ``"fr"``). */
-  locale: string;
+  locale: SupportedLocale;
   /** Locales offered in the Language submenu (code + native label). */
-  availableLocales: { code: string; label: string }[];
+  availableLocales: ReadonlyArray<{ code: SupportedLocale; label: string }>;
   /** Switch the UI locale (triggers a full reload, see ``locale.ts``). */
-  onSetLocale: (code: string) => void;
+  onSetLocale: (code: SupportedLocale) => void;
 }
 
 /** Wire View menu actions (UI preferences only). */
