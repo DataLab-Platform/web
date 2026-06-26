@@ -3,19 +3,22 @@
  *
  * DataLab-Web can run its Pyodide runtime two ways:
  *
- *   * **in-thread** (default) — {@link DataLabRuntime} runs on the UI thread,
- *     exactly as it always has. Zero risk; this is what ships.
- *   * **worker** — Pyodide and the runtime live in a Dedicated Web Worker
- *     ({@link kernelWorker}), driven from the UI thread through
- *     {@link WorkerRuntimeProxy}. This unlocks synchronous OPFS spills
- *     (DEW ADR #2) but is still being end-to-end validated, so it is strictly
- *     opt-in.
+ *   * **worker** (default) — Pyodide and the runtime live in a Dedicated Web
+ *     Worker ({@link kernelWorker}), driven from the UI thread through
+ *     {@link WorkerRuntimeProxy}. This keeps the UI thread responsive during
+ *     heavy work and unlocks synchronous OPFS spills (DEW ADR #2). It is the
+ *     nominal mode and needs no special HTTP headers (transferables, not
+ *     ``SharedArrayBuffer``), so plain static hosting keeps working.
+ *   * **main** — {@link DataLabRuntime} runs on the UI thread, exactly as it
+ *     originally shipped. Kept as a **backup / escape hatch** (e.g. to rule
+ *     out a worker-specific issue): select it with ``?runtime=main``.
  *
  * The mode is resolved once per page load, in priority order:
- *   1. ``?runtime=worker`` / ``?runtime=main`` URL parameter (handy for E2E).
+ *   1. ``?runtime=worker`` / ``?runtime=main`` URL parameter (handy for E2E
+ *      and as the user-facing backup switch).
  *   2. ``localStorage["datalab-web:runtime"]`` (persisted developer choice).
- *   3. ``VITE_RUNTIME_WORKER`` build-time env (``"1"``/``"true"`` → worker).
- *   4. Default: in-thread.
+ *   3. ``VITE_RUNTIME_WORKER`` build-time env (``"0"``/``"false"`` → main).
+ *   4. Default: worker.
  */
 export type RuntimeMode = "main" | "worker";
 
@@ -48,10 +51,11 @@ function fromStorage(): RuntimeMode | null {
 function fromEnv(): RuntimeMode | null {
   const raw = String(import.meta.env.VITE_RUNTIME_WORKER ?? "").toLowerCase();
   if (raw === "1" || raw === "true") return "worker";
+  if (raw === "0" || raw === "false") return "main";
   return null;
 }
 
 /** Resolve the runtime execution mode for this page load. */
 export function getRuntimeMode(): RuntimeMode {
-  return fromUrl() ?? fromStorage() ?? fromEnv() ?? "main";
+  return fromUrl() ?? fromStorage() ?? fromEnv() ?? "worker";
 }

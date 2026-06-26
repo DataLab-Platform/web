@@ -269,14 +269,15 @@ flowchart LR
     RB --> RT4
 ```
 
-#### Optional worker-hosted runtime + on-disk storage
+#### Worker-hosted runtime (default) + on-disk storage
 
-Everything above describes the **default** topology, where the main
-runtime runs on the UI thread. The runtime can also be hosted in its own
-Dedicated Web Worker — an **opt-in** mode selected by `runtimeMode.ts`
-(`?runtime=worker`, a `localStorage` key, or the `VITE_RUNTIME_WORKER`
-build flag; the default stays in-thread). Both paths satisfy the same
-`RuntimeApi` façade, so the UI is identical either way.
+By default the Pyodide runtime is hosted in its own Dedicated Web Worker,
+selected by `runtimeMode.ts`. This keeps the UI thread responsive during
+heavy work and unlocks synchronous OPFS spills (DEW ADR #2). The legacy
+in-thread topology — where `DataLabRuntime` runs on the UI thread — is
+kept as a **backup / escape hatch**, selectable with `?runtime=main` (or a
+`localStorage` key / the `VITE_RUNTIME_WORKER=0` build flag). Both paths
+satisfy the same `RuntimeApi` façade, so the UI is identical either way.
 
 ```mermaid
 flowchart LR
