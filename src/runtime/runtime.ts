@@ -1604,6 +1604,18 @@ await micropip.install(["sigima", "guidata"])
     return OpfsObjectStore.isSupported();
   }
 
+  /**
+   * Instance accessor mirroring {@link DataLabRuntime.isDiskStorageSupported}.
+   *
+   * Unlike the static, this is part of the {@link RuntimeApi} surface, so it
+   * is reachable through the worker-backed façade ({@link WorkerRuntimeProxy})
+   * regardless of the active runtime mode — where it reports the capability of
+   * the thread actually hosting the store (the worker in ``worker`` mode).
+   */
+  isDiskStorageSupported(): boolean {
+    return DataLabRuntime.isDiskStorageSupported();
+  }
+
   /** Return the active storage mode. */
   getStorageMode(): StorageMode {
     return this.storageMode;

@@ -197,12 +197,12 @@ test.describe("OPFS worker benchmark", () => {
     // --- Async backend: runtime on the main thread -------------------
     await page.goto("/?runtime=main");
     await waitForRuntimeReady(page);
-    const asyncSupported = await page.evaluate(() =>
+    const asyncSupported = await page.evaluate(async () =>
       (
         window as unknown as {
-          runtime: { constructor: { isDiskStorageSupported(): boolean } };
+          runtime: { isDiskStorageSupported(): boolean | Promise<boolean> };
         }
-      ).runtime.constructor.isDiskStorageSupported(),
+      ).runtime.isDiskStorageSupported(),
     );
     test.skip(!asyncSupported, "on-disk storage unavailable in this context");
     const asyncMetrics = await runDiskWorkload(page, CONFIGS);

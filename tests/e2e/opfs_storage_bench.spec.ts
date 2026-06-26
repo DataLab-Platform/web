@@ -106,13 +106,15 @@ test.describe("OPFS storage benchmark", () => {
 
     // Skip cleanly when the browser cannot provide OPFS (older engines /
     // insecure contexts). The default CI run never reaches here because
-    // the spec is opt-in (perf project only).
-    const diskSupported = await page.evaluate(() =>
+    // the spec is opt-in (perf project only). The instance accessor is part
+    // of the RuntimeApi surface, so it works in both runtime modes (the
+    // worker façade forwards it to the worker, where the store lives).
+    const diskSupported = await page.evaluate(async () =>
       (
         window as unknown as {
-          runtime: { constructor: { isDiskStorageSupported(): boolean } };
+          runtime: { isDiskStorageSupported(): boolean | Promise<boolean> };
         }
-      ).runtime.constructor.isDiskStorageSupported(),
+      ).runtime.isDiskStorageSupported(),
     );
     test.skip(!diskSupported, "on-disk storage unavailable in this context");
 
