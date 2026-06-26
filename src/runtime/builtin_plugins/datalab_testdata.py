@@ -11,9 +11,10 @@ Differences from the desktop version:
 * All actions that prompt the user use ``await param.edit_async(self.main)``
   rather than the synchronous ``param.edit(self.main)`` (the latter cannot
   block the JavaScript event loop in Pyodide).
-* File-based loaders (``read_test_objects``) are omitted because there is no
-  local filesystem access; the synthetic factories already cover the demo
-  needs.
+* The "Load all test signals/images" loaders read the test files bundled with
+  the Sigima wheel (present in Pyodide's virtual filesystem). Formats whose
+  reader is unavailable in the browser are skipped silently instead of
+  aborting the whole batch.
 """
 
 from __future__ import annotations
@@ -21,6 +22,9 @@ from __future__ import annotations
 import sigima.tests.data as test_data
 from datalab.config import _
 from datalab.plugins import PluginBase, PluginInfo
+from sigima.io.image import ImageIORegistry
+from sigima.io.signal import SignalIORegistry
+from sigima.tests import helpers
 
 
 class PluginTestData(PluginBase):
@@ -38,6 +42,10 @@ class PluginTestData(PluginBase):
         """Create paracetamol spectrum signal."""
         obj = test_data.create_paracetamol_signal()
         self.proxy.add_object(obj)
+
+    async def load_all_test_signals(self) -> None:
+        """Load all bundled test signals."""
+        self._load_all_test_objs(SignalIORegistry, "curve_formats")
 
     # -- Images ------------------------------------------------------------
 
@@ -104,6 +112,35 @@ class PluginTestData(PluginBase):
             obj = test_data.create_grid_of_gaussian_images(param)
             self.proxy.add_object(obj)
 
+    async def load_all_test_images(self) -> None:
+        """Load all bundled test images."""
+        self._load_all_test_objs(ImageIORegistry, "image_formats")
+
+    # -- Shared loader -----------------------------------------------------
+
+    def _load_all_test_objs(
+        self,
+        registry: type[SignalIORegistry | ImageIORegistry],
+        in_folder: str,
+    ) -> None:
+        """Read every bundled test file and add the decoded objects.
+
+        Formats whose reader is unavailable in Pyodide raise at read time;
+        those files are skipped so a single unsupported format never aborts
+        the whole batch.
+        """
+        try:
+            fnames = helpers.get_test_fnames("*.*", in_folder)
+        except FileNotFoundError:
+            return
+        for fname in fnames:
+            try:
+                obj = registry.read(fname)[0]
+            except Exception:  # noqa: BLE001 - skip unreadable test formats
+                continue
+            if obj is not None:
+                self.proxy.add_object(obj)
+
     # -- Menu wiring -------------------------------------------------------
 
     def create_actions(self) -> None:
@@ -114,6 +151,12 @@ class PluginTestData(PluginBase):
                 _("Load spectrum of paracetamol"),
                 triggered=self.create_paracetamol_signal,
                 select_condition="always",
+            )
+            sah.new_action(
+                _("Load all test signals"),
+                triggered=self.load_all_test_signals,
+                select_condition="always",
+                separator=True,
             )
         iah = self.imagepanel.acthandler
         with iah.new_menu(_("Test data")):
@@ -156,4 +199,10 @@ class PluginTestData(PluginBase):
                 _("Create image with a grid of gaussian spots"),
                 triggered=self.create_grid_gaussian_image,
                 select_condition="always",
+            )
+            iah.new_action(
+                _("Load all test images"),
+                triggered=self.load_all_test_images,
+                select_condition="always",
+                separator=True,
             )
