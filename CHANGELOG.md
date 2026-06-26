@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-26
+
 ### Added
 
 - **Cancellable batch processing**: when you apply a processing to several selected signals or images at once, it now runs object by object through the progress dialog, whose **Cancel** button (or the **Esc** key) stops it at the next object — keeping the results already computed. Single-object operations and aggregations (which are a single computation) are not interruptible.
@@ -193,7 +195,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/DataLab-Platform/web/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/DataLab-Platform/web/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/DataLab-Platform/web/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/DataLab-Platform/web/compare/v0.4.0...v0.5.0
