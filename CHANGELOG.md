@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
-- **Cancellable processing**: long-running computations now run in a dedicated background worker and can be interrupted from the progress dialog (its **Cancel** button or the **Esc** key) without losing your workspace — handy for heavy operations such as a moving median on a large image, which previously could not be stopped once started.
+- **Cancellable processing (experimental, opt-in)**: with `?cancellable=1`, a processing runs in a dedicated background worker so it can be interrupted from the progress dialog (its **Cancel** button or the **Esc** key) without losing your workspace — useful for heavy operations such as a moving median on a large image. It is **off by default**: the extra background worker boots a second Python runtime, which can exhaust browser memory on large data, so by default processings run in the main runtime (working, but not cancellable).
 
 ### Changed
 

@@ -96,6 +96,7 @@ import {
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
 import { ProcessingOrchestrator } from "./runtime/ProcessingOrchestrator";
+import { isInterruptibleProcessingEnabled } from "./runtime/interruptibleProcessing";
 import { pyodideLang } from "./i18n/locale";
 import {
   SeparateViewDialog,
@@ -1572,11 +1573,15 @@ export default function App() {
       try {
         // Cancellable path: a built-in feature (present in the compute
         // worker's catalogue) applied to *selected objects* runs in the
-        // disposable worker so the user can interrupt it. The group-exclusive
-        // path and plugin features (``plugin:`` prefix, not in the worker
-        // catalogue) stay in-kernel via ``applyFeature``.
+        // disposable worker so the user can interrupt it. It is **opt-in**
+        // (off by default) because the worker boots a second full Pyodide
+        // instance, which can exhaust browser memory on large data — see
+        // ``interruptibleProcessing.ts``. When disabled (the default), and
+        // for the group-exclusive path and plugin features, processings run
+        // in-kernel via ``applyFeature``.
         const orch = orchestratorRef.current;
         const useWorker =
+          isInterruptibleProcessingEnabled() &&
           orch !== null &&
           groupIds.length === 0 &&
           !feature.id.startsWith("plugin:");
