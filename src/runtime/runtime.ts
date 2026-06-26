@@ -978,11 +978,8 @@ export class DataLabRuntime {
       "reset_image_positions",
       "apply_feature",
       "apply_processing",
+      "commit_feature_results",
       "reapply_last_processing",
-      "run_signal_analysis",
-      "run_image_analysis",
-      "open_signal_from_bytes",
-      "open_image_from_bytes",
       "open_from_directory_chunk",
       "import_signal_csv",
       "commit_text_import",
@@ -1308,6 +1305,7 @@ await micropip.install(["sigima", "guidata"])
     "duplicate_object",
     "apply_processing",
     "apply_feature",
+    "commit_feature_results",
     "extract_image_rois",
     "erase_image_area",
     "commit_interactive_fit",
@@ -2774,6 +2772,52 @@ await micropip.install(["sigima", "guidata"])
       operand_id: operandId,
       params,
       group_ids: groupIds,
+    })) as string[];
+  }
+
+  /**
+   * Resolve and serialise the inputs a {@link ComputeWorkerClient} needs to
+   * run *featureId* off the kernel (the kernel keeps owning the model). The
+   * computation is **not** run here; pair with {@link commitFeatureResults}.
+   *
+   * This is the kernel half of the interruptible-processing path: the heavy
+   * Sigima call runs in a disposable compute worker so it can be cancelled
+   * by terminating that worker, with no ``SharedArrayBuffer`` (static
+   * hosting stays intact).
+   */
+  async extractFeatureInputs(
+    featureId: string,
+    sourceIds: string[],
+    operandId: string | null = null,
+  ): Promise<{ sources_b64: string[]; operand_b64: string | null }> {
+    return (await this.callPy("extract_feature_inputs", {
+      feature_id: featureId,
+      source_ids: sourceIds,
+      operand_id: operandId,
+    })) as { sources_b64: string[]; operand_b64: string | null };
+  }
+
+  /**
+   * Insert the compute worker's serialised results into the model and return
+   * the new object ids. Mirrors the non-group tail of {@link applyFeature}
+   * (title patching, group placement, last-processing recording).
+   *
+   * @param items ``[source_oid_or_null, pickled_result_b64]`` entries from
+   *  the compute worker (``processor.run_feature_serialized``).
+   */
+  async commitFeatureResults(
+    featureId: string,
+    sourceIds: string[],
+    items: [string | null, string][],
+    operandId: string | null = null,
+    params: Record<string, unknown> | null = null,
+  ): Promise<string[]> {
+    return (await this.callPy("commit_feature_results", {
+      feature_id: featureId,
+      source_ids: sourceIds,
+      items,
+      operand_id: operandId,
+      params,
     })) as string[];
   }
 

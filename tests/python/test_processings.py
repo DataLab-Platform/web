@@ -371,3 +371,172 @@ def test_radial_profile_callback_recomputes_centre(fresh_bootstrap):
     )
     assert centroid["x0"] < 24.0
     assert centroid["y0"] < 32.0
+
+
+# ---------------------------------------------------------------------------
+# Isolated (off-kernel) feature execution — ``processor.run_feature_serialized``
+# is the pure half of the interruptible-processing split: it runs a Sigima
+# computation on *pickled* inputs and returns *pickled* outputs, never
+# touching the live object model. It is what the disposable compute worker
+# (``computeWorker.ts``) evaluates so a long call can be cancelled by
+# terminating that worker without losing the workspace.
+# ---------------------------------------------------------------------------
+
+
+import processor as _proc  # noqa: E402
+
+
+def test_run_feature_serialized_normalize_round_trips(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 64)
+    oid = bs.add_signal_from_arrays("raw", x, np.linspace(0, 10, 64))
+    catalog = bs._full_catalog_with_plugins()
+    src_b64 = _proc.encode_pickled_obj(bs._MODEL.get(oid))
+    results = _proc.run_feature_serialized(catalog, "normalize", [oid], [src_b64])
+    assert len(results) == 1
+    source_oid, pickled = results[0]
+    assert source_oid == oid  # passed through for kernel-side group/title mapping
+    obj = _proc.decode_pickled_obj(pickled)
+    # Default normalisation is min-max → 0..1.
+    assert obj.y.max() == pytest.approx(1.0, abs=1e-6)
+    assert obj.y.min() == pytest.approx(0.0, abs=1e-6)
+
+
+def test_run_feature_serialized_does_not_mutate_model(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    oid = bs.add_signal_from_arrays("raw", x, np.linspace(0, 10, 32))
+    catalog = bs._full_catalog_with_plugins()
+    before = len(bs.list_signals())
+    src_b64 = _proc.encode_pickled_obj(bs._MODEL.get(oid))
+    _proc.run_feature_serialized(catalog, "normalize", [oid], [src_b64])
+    # The pure computation owns no model state: nothing is inserted.
+    assert len(bs.list_signals()) == before
+
+
+def test_run_feature_serialized_n_to_1_average(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 50)
+    a = bs.add_signal_from_arrays("a", x, np.zeros_like(x))
+    b = bs.add_signal_from_arrays("b", x, np.ones_like(x) * 2)
+    catalog = bs._full_catalog_with_plugins()
+    srcs_b64 = [
+        _proc.encode_pickled_obj(bs._MODEL.get(a)),
+        _proc.encode_pickled_obj(bs._MODEL.get(b)),
+    ]
+    results = _proc.run_feature_serialized(catalog, "average", [a, b], srcs_b64)
+    assert len(results) == 1
+    source_oid, pickled = results[0]
+    assert source_oid is None  # n_to_1 has no single source mapping
+    np.testing.assert_allclose(_proc.decode_pickled_obj(pickled).y, np.ones(50))
+
+
+def test_run_feature_serialized_2_to_1_difference_with_operand(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    a = bs.add_signal_from_arrays("a", x, np.ones_like(x) * 3)
+    op = bs.add_signal_from_arrays("op", x, np.ones_like(x))
+    catalog = bs._full_catalog_with_plugins()
+    src_b64 = _proc.encode_pickled_obj(bs._MODEL.get(a))
+    op_b64 = _proc.encode_pickled_obj(bs._MODEL.get(op))
+    results = _proc.run_feature_serialized(
+        catalog, "difference", [a], [src_b64], operand_b64=op_b64
+    )
+    assert len(results) == 1
+    np.testing.assert_allclose(
+        _proc.decode_pickled_obj(results[0][1]).y, np.full(32, 2.0)
+    )
+
+
+def test_run_feature_serialized_unknown_feature_raises(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("s", [0, 1], [0, 0])
+    catalog = bs._full_catalog_with_plugins()
+    src_b64 = _proc.encode_pickled_obj(bs._MODEL.get(oid))
+    with pytest.raises(ValueError):
+        _proc.run_feature_serialized(catalog, "does_not_exist", [oid], [src_b64])
+
+
+def test_run_feature_serialized_requires_a_source(fresh_bootstrap):
+    bs = fresh_bootstrap
+    catalog = bs._full_catalog_with_plugins()
+    with pytest.raises(ValueError):
+        _proc.run_feature_serialized(catalog, "normalize", [], [])
+
+
+# ---------------------------------------------------------------------------
+# Kernel extract / commit split — the delegated (cancellable) path must be
+# behaviourally identical to in-kernel ``apply_feature`` for the non-group
+# case: same result title, values, group placement and last-processing record.
+# ---------------------------------------------------------------------------
+
+
+def _delegated_apply(bs, feature_id, source_ids, operand_id=None, params=None):
+    """Run the off-kernel path: extract → run_feature_serialized → commit."""
+    inp = bs.extract_feature_inputs(feature_id, source_ids, operand_id)
+    catalog = bs._full_catalog_with_plugins()
+    items = _proc.run_feature_serialized(
+        catalog,
+        feature_id,
+        source_ids,
+        inp["sources_b64"],
+        params,
+        inp["operand_b64"],
+    )
+    return bs.commit_feature_results(feature_id, source_ids, items, operand_id, params)
+
+
+def test_delegated_1_to_1_matches_apply_feature(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 64)
+    src = bs.add_signal_from_arrays("raw", x, np.linspace(0, 10, 64))
+    ref = bs.apply_feature("normalize", [src])[0]
+    out = _delegated_apply(bs, "normalize", [src])[0]
+    # Identical title (same source oid embedded) and identical values.
+    assert bs.get_object_meta(out)["title"] == bs.get_object_meta(ref)["title"]
+    np.testing.assert_allclose(bs.get_signal_xy(out)["y"], bs.get_signal_xy(ref)["y"])
+    # Same source group as the in-kernel path.
+    assert _group_of(bs, out) == _group_of(bs, ref)
+    # Last-processing recorded identically (bar the result oid).
+    rec = bs.get_last_processing(out)
+    assert rec["feature_id"] == "normalize"
+    assert rec["source_ids"] == [src]
+
+
+def test_delegated_2_to_1_matches_apply_feature(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 32)
+    a = bs.add_signal_from_arrays("a", x, np.ones_like(x) * 3)
+    op = bs.add_signal_from_arrays("op", x, np.ones_like(x))
+    ref = bs.apply_feature("difference", [a], operand_id=op)[0]
+    out = _delegated_apply(bs, "difference", [a], operand_id=op)[0]
+    assert bs.get_object_meta(out)["title"] == bs.get_object_meta(ref)["title"]
+    np.testing.assert_allclose(bs.get_signal_xy(out)["y"], bs.get_signal_xy(ref)["y"])
+    rec = bs.get_last_processing(out)
+    assert rec["operand_id"] == op
+
+
+def test_delegated_n_to_1_matches_apply_feature(fresh_bootstrap):
+    bs = fresh_bootstrap
+    x = np.linspace(0, 1, 50)
+    a = bs.add_signal_from_arrays("a", x, np.zeros_like(x))
+    b = bs.add_signal_from_arrays("b", x, np.ones_like(x) * 2)
+    ref = bs.apply_feature("average", [a, b])[0]
+    out = _delegated_apply(bs, "average", [a, b])[0]
+    assert bs.get_object_meta(out)["title"] == bs.get_object_meta(ref)["title"]
+    np.testing.assert_allclose(bs.get_signal_xy(out)["y"], bs.get_signal_xy(ref)["y"])
+
+
+def test_extract_feature_inputs_unknown_feature_raises(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src = bs.add_signal_from_arrays("s", [0, 1], [0, 0])
+    with pytest.raises(ValueError):
+        bs.extract_feature_inputs("does_not_exist", [src])
+
+
+def _group_of(bs, oid, kind="signal"):
+    """Return the gid of the group hosting *oid*."""
+    for g in bs.get_panel_tree(kind)["groups"]:
+        if any(o["id"] == oid for o in g["objects"]):
+            return g["gid"]
+    raise AssertionError(f"object {oid!r} not found in any group")

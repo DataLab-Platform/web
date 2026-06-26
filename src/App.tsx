@@ -95,6 +95,8 @@ import {
 } from "./components/ConfirmDialog";
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
+import { ProcessingOrchestrator } from "./runtime/ProcessingOrchestrator";
+import { pyodideLang } from "./i18n/locale";
 import {
   SeparateViewDialog,
   type SeparateViewContent,
@@ -342,8 +344,28 @@ export default function App() {
   const showProcessingError = useProcessingError();
   const prompt = usePrompt();
   const runWithProgress = useProgress();
-  // Whether the metadata clipboard holds a payload "Paste metadata" can
-  // apply. Mirrors DataLab desktop's per-panel ``metadata_clipboard``.
+  // Interruptible processing: a lazily-spawned compute worker runs the heavy
+  // Sigima call off the kernel so the user can cancel it (by terminating the
+  // worker) without a ``SharedArrayBuffer``. Owned here so one worker is reused
+  // across processings and disposed on unmount. See ``ProcessingOrchestrator``.
+  const orchestratorRef = useRef<ProcessingOrchestrator | null>(null);
+  useEffect(() => {
+    if (!runtime) return;
+    const orch = new ProcessingOrchestrator(runtime, pyodideLang());
+    orchestratorRef.current = orch;
+    if (import.meta.env.DEV) {
+      // Expose for ad-hoc debugging and E2E probes (the cancellable path
+      // runs a *second* Pyodide in the compute worker, which only a
+      // browser-driven test can exercise). Mirrors ``window.runtime``.
+      (
+        window as unknown as { orchestrator?: ProcessingOrchestrator }
+      ).orchestrator = orch;
+    }
+    return () => {
+      orch.dispose();
+      orchestratorRef.current = null;
+    };
+  }, [runtime]);
   const [hasMetadataClipboard, setHasMetadataClipboard] = useState(false);
   const {
     dirty: workspaceDirty,
@@ -1548,13 +1570,50 @@ export default function App() {
       if (!runtime) return;
       setBusy(true);
       try {
-        const newIds = await runtime.applyFeature(
-          feature.id,
-          sourceIds,
-          operandId,
-          values,
-          groupIds,
-        );
+        // Cancellable path: a built-in feature (present in the compute
+        // worker's catalogue) applied to *selected objects* runs in the
+        // disposable worker so the user can interrupt it. The group-exclusive
+        // path and plugin features (``plugin:`` prefix, not in the worker
+        // catalogue) stay in-kernel via ``applyFeature``.
+        const orch = orchestratorRef.current;
+        const useWorker =
+          orch !== null &&
+          groupIds.length === 0 &&
+          !feature.id.startsWith("plugin:");
+        let newIds: string[];
+        if (useWorker) {
+          const { results, cancelled } = await runWithProgress<string[]>({
+            title: t("Computing: {feature}", { feature: feature.label }),
+            total: 1,
+            step: async (_i, { signal }) => {
+              // Wire the dialog's Cancel button (and Esc) to terminate the
+              // compute worker; ``runFeature`` then rejects and the run is
+              // reported as cancelled with the model left untouched.
+              const onAbort = () => orch.cancel();
+              signal.addEventListener("abort", onAbort, { once: true });
+              try {
+                return await orch.runFeature({
+                  featureId: feature.id,
+                  sourceIds,
+                  operandId,
+                  params: values,
+                });
+              } finally {
+                signal.removeEventListener("abort", onAbort);
+              }
+            },
+          });
+          if (cancelled) return; // user aborted — nothing was committed
+          newIds = results[0] ?? [];
+        } else {
+          newIds = await runtime.applyFeature(
+            feature.id,
+            sourceIds,
+            operandId,
+            values,
+            groupIds,
+          );
+        }
         const lastId = newIds[newIds.length - 1] ?? null;
         if (feature.output_kind !== feature.object_kind) {
           // Cross-kind: result lands in a different panel — switch to it
@@ -1579,7 +1638,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, refresh, refreshPanelKind, showProcessingError],
+    [runtime, refresh, refreshPanelKind, showProcessingError, runWithProgress],
   );
 
   const refreshPluginActions = useCallback(async () => {
