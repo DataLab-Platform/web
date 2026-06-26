@@ -8,13 +8,22 @@ import { defineConfig, devices } from "@playwright/test";
  * generous timeout. The Vite dev server is reused locally and started
  * fresh in CI.
  *
- * Two projects are defined:
+ * Three projects are defined:
  *
  *   * ``chromium`` (default) — the regression suite. Excludes
  *     performance benchmarks and ``_repro_*`` throwaway probes.
  *   * ``perf`` (opt-in) — performance-only specs (``image_perf``,
  *     and any ``PERF``-gated tests). Run with
  *     ``npx playwright test --project=perf``.
+ *   * ``repro`` (opt-in, env-gated) — throwaway ``_repro_*`` probes.
+ *     The ``chromium`` project ``testIgnore``s ``_repro_*`` so a
+ *     forgotten probe never lands in CI, but that also means a probe
+ *     can't be run by file path (``testIgnore`` can't be overridden on
+ *     the CLI). Rather than renaming the file, set ``PW_REPRO=1`` and
+ *     target this project, e.g. (PowerShell):
+ *       ``$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts``
+ *     The project only exists when ``PW_REPRO`` is set, so CI (which
+ *     runs a bare ``playwright test`` and never sets it) is unaffected.
  */
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -92,6 +101,20 @@ export default defineConfig({
       testDir: "./tests/benchmark",
       timeout: 120 * 60_000,
     },
+    // Opt-in throwaway-probe project — only present when ``PW_REPRO``
+    // is set (see the file header for the rationale and the exact
+    // command). Lets ``_repro_*`` probes run without renaming them,
+    // while keeping them out of every CI run (CI runs a bare
+    // ``playwright test`` and never sets ``PW_REPRO``).
+    ...(process.env.PW_REPRO
+      ? [
+          {
+            name: "repro",
+            use: { ...devices["Desktop Chrome"] },
+            testMatch: [/_repro_.*\.spec\.ts/],
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: "npm run dev",

@@ -215,6 +215,9 @@ npm run test:e2e
 # benchmark and the 50k-sample binary transfer probe.
 npx playwright test --project=perf
 PERF=1 npm run test:e2e
+
+# Run a throwaway `_repro_*` probe (the default suite ignores them).
+$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts
 ```
 
 Test layout:

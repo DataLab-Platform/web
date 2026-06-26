@@ -19,10 +19,7 @@ them as a scarce resource.
 
 ## Default suite vs perf project
 
-The default Playwright project (`chromium`) runs the regression suite
-and intentionally **excludes** performance benchmarks and `_repro_*`
-throwaway probes. Performance specs live under a separate `perf`
-project that must be opted into:
+The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. Performance specs live under a separate `perf` project, and `_repro_*` probes under an env-gated `repro` project — both must be opted into:
 
 ```powershell
 npm run test:e2e                       # default chromium suite
@@ -33,6 +30,16 @@ PERF=1 npm run test:e2e                # default suite + PERF-gated tests
 When you need a perf or budget-style probe, mark it with
 `test.skip(!process.env.PERF, "...")` or move the spec under the
 `perf` project's `testMatch` glob (currently `image_perf.spec.ts`).
+
+### Running a `_repro_*` throwaway probe
+
+Because the `chromium` project `testIgnore`s `_repro_*` (so a forgotten probe never lands in CI) and `testIgnore` can't be overridden on the CLI, `npx playwright test tests/e2e/_repro_x.spec.ts` returns **"No tests found"**. Do **not** rename the file to run it. Instead use the env-gated `repro` project, which only exists when `PW_REPRO` is set (so CI, which runs a bare `playwright test`, is unaffected):
+
+```powershell
+$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts
+```
+
+Run it from the `DataLab-Web` folder — if the terminal cwd is another workspace folder, `npx` can't find the local Playwright and stalls on a download prompt.
 
 ### Worker-mode coverage
 
@@ -146,7 +153,10 @@ When asked to implement or fix anything that touches the UI:
 2. Apply the change.
 3. **Run Playwright** on the temporary spec to verify. **No UI work is
    declared done without this step**, including intermediate phases of
-   a multi-phase plan.
+   a multi-phase plan. Run a `_repro_*` probe through the env-gated
+   `repro` project (a bare run ignores it):
+   `$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts`
+   (see _Running a `\_repro_\*` throwaway probe\_ above).
 4. Apply the decision tree above. If promoting, write a single,
    well-named permanent spec covering the invariant. Delete the
    reproduction spec.

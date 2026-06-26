@@ -182,11 +182,16 @@ done (bug fix, feature, or any phase of a multi-phase task):
    silently break in ways only a browser-driven test catches reliably.
    Use a throwaway probe (`tests/e2e/_repro_*.spec.ts`, deleted
    afterwards) when the change does not warrant a permanent regression
-   spec. A neighbouring perf benchmark or a sibling component's tests
-   do **not** count — they may stay green while your code path never
-   runs. The probe must assert something visible (a DOM node, a trace,
-   a pixel) rather than just calling `window.runtime.*` from
-   `page.evaluate`, which can silently no-op.
+   spec. The `chromium` project ignores `_repro_*`, so run the probe
+   through the env-gated `repro` project (from the `DataLab-Web`
+   folder):
+   `$env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts`
+   — do **not** rename the file to run it. A neighbouring perf
+   benchmark or a sibling component's tests do **not** count — they may
+   stay green while your code path never runs. The probe must assert
+   something visible (a DOM node, a trace, a pixel) rather than just
+   calling `window.runtime.*` from `page.evaluate`, which can silently
+   no-op.
 3. **For `src/runtime/*.py` changes**, run pytest (`tests/python`).
 4. **When you add or change user-facing strings**, run `npm run i18n:check`
    (or the `🌍 i18n: Check catalog (step 2/2)` task). CI fails on missing or
