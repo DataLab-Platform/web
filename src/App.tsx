@@ -1579,13 +1579,27 @@ export default function App() {
           newIds = results.flat();
           if (newIds.length === 0) return; // cancelled before any result
         } else {
-          newIds = await runtime.applyFeature(
-            feature.id,
-            sourceIds,
-            operandId,
-            values,
-            groupIds,
-          );
+          // Single object, n-to-1 aggregation or group-exclusive selection:
+          // one opaque call. Wrap it in an *indeterminate*, non-cancellable
+          // progress dialog so a long computation (e.g. a moving median on a
+          // large image) shows a clear "computation in progress" indicator
+          // instead of only greying the UI. The dialog only appears after
+          // ``minDuration`` (400 ms), so quick operations don't flash it.
+          const { results } = await runWithProgress<string[]>({
+            title: t("Computing: {feature}", { feature: feature.label }),
+            total: 1,
+            cancellable: false,
+            indeterminate: true,
+            step: async () =>
+              runtime.applyFeature(
+                feature.id,
+                sourceIds,
+                operandId,
+                values,
+                groupIds,
+              ),
+          });
+          newIds = results[0] ?? [];
         }
         const lastId = newIds[newIds.length - 1] ?? null;
         if (feature.output_kind !== feature.object_kind) {

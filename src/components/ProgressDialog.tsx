@@ -63,6 +63,12 @@ export interface ProgressOptions<T> {
   minDuration?: number;
   /** Show the Cancel button. Defaults to ``true``. */
   cancellable?: boolean;
+  /**
+   * Render an indeterminate (animated) bar with no count/percentage, for
+   * a single opaque operation whose progress cannot be measured (e.g. one
+   * long Sigima call). Defaults to ``false``.
+   */
+  indeterminate?: boolean;
   /** Initial secondary label (shown under the progress bar). */
   initialLabel?: string;
 }
@@ -88,6 +94,7 @@ interface ProgressState {
   total: number;
   label: string;
   cancellable: boolean;
+  indeterminate: boolean;
   onCancel: () => void;
 }
 
@@ -101,7 +108,8 @@ interface ProgressDialogProps {
 
 /** Pure presentational progress dialog. */
 export function ProgressDialog({ state }: ProgressDialogProps) {
-  const { title, value, total, label, cancellable, onCancel } = state;
+  const { title, value, total, label, cancellable, indeterminate, onCancel } =
+    state;
   const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
   useEffect(() => {
     if (!cancellable) return;
@@ -119,17 +127,23 @@ export function ProgressDialog({ state }: ProgressDialogProps) {
           className="progress-bar"
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={value}
+          aria-valuemax={indeterminate ? undefined : total}
+          aria-valuenow={indeterminate ? undefined : value}
         >
-          <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+          {indeterminate ? (
+            <div className="progress-bar-fill indeterminate" />
+          ) : (
+            <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+          )}
         </div>
-        <div className="progress-meta">
-          <span className="progress-count">
-            {value} / {total}
-          </span>
-          <span className="progress-pct">{pct}%</span>
-        </div>
+        {!indeterminate && (
+          <div className="progress-meta">
+            <span className="progress-count">
+              {value} / {total}
+            </span>
+            <span className="progress-pct">{pct}%</span>
+          </div>
+        )}
         {label && <p className="progress-label">{label}</p>}
         {cancellable && (
           <div className="actions">
@@ -161,6 +175,7 @@ export function ProgressProvider(props: { children: ReactNode }) {
       step,
       minDuration = 400,
       cancellable = true,
+      indeterminate = false,
       initialLabel = "",
     } = options;
 
@@ -174,6 +189,7 @@ export function ProgressProvider(props: { children: ReactNode }) {
       total,
       label: labelText,
       cancellable,
+      indeterminate,
       onCancel: () => controller.abort(),
     };
 

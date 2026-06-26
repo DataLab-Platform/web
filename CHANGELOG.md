@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 
 - **Cancellable batch processing**: when you apply a processing to several selected signals or images at once, it now runs object by object through the progress dialog, whose **Cancel** button (or the **Esc** key) stops it at the next object — keeping the results already computed. Single-object operations and aggregations (which are a single computation) are not interruptible.
+- **Busy indicator for long computations**: a single processing that takes more than a moment (e.g. a moving median on a large image) now shows a "Computing…" dialog with an animated bar, instead of only greying the interface.
 
 ### Changed
 
