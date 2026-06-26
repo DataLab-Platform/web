@@ -21,7 +21,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MacroMeta, MacroRecord, RuntimeApi } from "../runtime/runtime";
+import type { MacroMeta, RuntimeApi } from "../runtime/runtime";
 import { MacroRuntime } from "../runtime/MacroRuntime";
 import {
   MacroEditorTabs,
@@ -36,6 +36,7 @@ import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
 import {
+  clearRecent,
   getRecent,
   listRecent,
   recordRecent,
@@ -255,30 +256,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       let cancelled = false;
       (async () => {
         // Initial hydration must not flag the workspace as dirty
-        // (seeding a default macro / restoring from the recent cache
-        // are not user edits): the two mutating calls in this effect
-        // are issued with ``{ silent: true }``.
+        // (seeding a default macro is not a user edit): the mutating
+        // call below is issued with ``{ silent: true }``.
+        //
+        // Macros are NOT silently bulk-restored from the IndexedDB
+        // recent cache anymore (symmetry with notebooks): the cache is
+        // a roll-over of the documents the user actually *edited*,
+        // surfaced only through the "Recent…" menu. The workspace HDF5
+        // is the single durable source of truth.
         let metas = await runtime.listMacros();
-        if (metas.length === 0) {
-          // Workspace has no macros yet — try to recover anything from
-          // the unified IndexedDB recent cache (macros that survived a
-          // workspace switch). The cache only feeds the fallback; once
-          // the user is in a workspace, Python is the source of truth.
-          try {
-            const recent = await listRecent("macro");
-            if (recent.length > 0) {
-              const records: MacroRecord[] = recent.map((e) => ({
-                id: e.id,
-                title: e.title,
-                code: e.content,
-              }));
-              await runtime.replaceMacros(records, { silent: true });
-              metas = await runtime.listMacros();
-            }
-          } catch {
-            /* ignore cache errors */
-          }
-        }
         if (metas.length === 0) {
           await runtime.createMacro(undefined, undefined, { silent: true });
           metas = await runtime.listMacros();
@@ -296,16 +282,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             code: m.code,
           })),
         );
-        // Seed the cross-workspace recent cache with every macro
-        // we just hydrated, so workspace bootstrap (or auto-created
-        // default macros) are surfaced through the "Recent…" menu.
-        for (const m of full) {
-          void recordRecent("macro", {
-            id: m.id,
-            title: m.title,
-            content: m.code,
-          }).catch(() => undefined);
-        }
+        // Hydration never seeds the recent cache: only documents the
+        // user actually edits (see ``touchedIdsRef`` / ``persistMirror``)
+        // are cached and surfaced through the "Recent…" menu.
         // Restore previously open tabs / active id.
         const savedActive = window.localStorage.getItem(LS_LAST_ACTIVE);
         const savedOpen = window.localStorage.getItem(LS_OPEN_TABS);
@@ -337,12 +316,20 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     // Persistence helpers
     // ---------------------------------------------------------------------
 
+    // Ids of macros the user has actually touched this session (edited,
+    // renamed, imported, duplicated, opened from Recent… or created by
+    // the AI assistant). Only these are mirrored into the IndexedDB
+    // recent cache, so pristine auto-created sample macros never
+    // pollute it (option C).
+    const touchedIdsRef = useRef<Set<string>>(new Set());
+
     const persistMirror = useCallback((next: MacroState[]) => {
-      // Push every macro into the unified IndexedDB recent cache so
-      // they survive workspace switches and can be re-opened from a
-      // future "Open recent…" UI. Fire-and-forget: cache failures
-      // never block the UI.
+      // Mirror only *touched* macros into the unified IndexedDB recent
+      // cache so they survive workspace switches and can be re-opened
+      // from the "Recent…" menu. Fire-and-forget: cache failures never
+      // block the UI.
       for (const m of next) {
+        if (!touchedIdsRef.current.has(m.id)) continue;
         void recordRecent("macro", {
           id: m.id,
           title: m.title,
@@ -376,6 +363,17 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
             | undefined;
           const newId = detail?.id;
           if (newId && full.some((m) => m.id === newId)) {
+            // Macros created behind our back (AI assistant) carry real
+            // content — surface them through the "Recent…" menu too.
+            touchedIdsRef.current.add(newId);
+            const created = full.find((m) => m.id === newId);
+            if (created) {
+              void recordRecent("macro", {
+                id: created.id,
+                title: created.title,
+                content: created.code,
+              }).catch(() => undefined);
+            }
             setOpenIds((prev) =>
               prev.includes(newId) ? prev : [...prev, newId],
             );
@@ -413,6 +411,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
 
     const handleCodeChange = useCallback(
       (id: string, code: string) => {
+        touchedIdsRef.current.add(id);
         setMacros((prev) => {
           const next = prev.map((m) => (m.id === id ? { ...m, code } : m));
           persistMirror(next);
@@ -520,6 +519,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       setRenamingId(null);
       const current = macros.find((x) => x.id === id);
       if (!current || current.title === trimmed) return;
+      touchedIdsRef.current.add(id);
       runtime.renameMacro(id, trimmed).catch((err) => {
         console.error("Failed to rename macro:", err);
       });
@@ -540,6 +540,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       if (!activeId) return;
       const rec = await runtime.duplicateMacro(activeId);
       const code = rec.code ?? "";
+      touchedIdsRef.current.add(rec.id);
       setMacros((prev) => {
         const next = [...prev, { id: rec.id, title: rec.title, code }];
         persistMirror(next);
@@ -560,6 +561,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         const text = await file.text();
         const { title, code } = parseImportedMacro(file.name, text);
         const rec = await runtime.createMacro(title, code);
+        touchedIdsRef.current.add(rec.id);
         setMacros((prev) => {
           const next = [...prev, { id: rec.id, title: rec.title, code }];
           persistMirror(next);
@@ -757,6 +759,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         if (!cached) return;
         const rec = await runtime.createMacro(cached.title, cached.content);
         const code = rec.code ?? cached.content;
+        touchedIdsRef.current.add(rec.id);
         setMacros((prev) => {
           const next = [...prev, { id: rec.id, title: rec.title, code }];
           persistMirror(next);
@@ -789,6 +792,25 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       [recentList, confirm],
     );
 
+    const handleClearRecent = useCallback(async () => {
+      if (recentList.length === 0) return;
+      if (
+        !(await confirm({
+          title: t("Clear recent cache"),
+          message: t("Remove all {count} macros from the recent cache?", {
+            count: recentList.length,
+          }),
+          confirmLabel: t("Remove all"),
+          destructive: true,
+        }))
+      ) {
+        return;
+      }
+      await clearRecent("macro").catch(() => undefined);
+      setRecentList(await listRecent("macro").catch(() => []));
+      setRecentMenuOpen(false);
+    }, [recentList, confirm]);
+
     // ---------------------------------------------------------------------
     // Imperative handle (notebook → macro conversion, etc.)
     // ---------------------------------------------------------------------
@@ -797,6 +819,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       async (title: string, code: string): Promise<string> => {
         const rec = await runtime.createMacro(title, code);
         const safe = rec.code ?? "";
+        touchedIdsRef.current.add(rec.id);
         setMacros((prev) => {
           const next = [...prev, { id: rec.id, title: rec.title, code: safe }];
           persistMirror(next);
@@ -979,6 +1002,15 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
                     </div>
                   );
                 })}
+                {recentList.length > 0 && (
+                  <button
+                    type="button"
+                    className="macro-recent-menu-clear"
+                    onClick={handleClearRecent}
+                  >
+                    {t("Clear all")}
+                  </button>
+                )}
               </div>
             )}
           </div>

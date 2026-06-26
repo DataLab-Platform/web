@@ -133,11 +133,10 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   // -- 4. Hard reload — Pyodide is wiped ------------------------------
   await page.reload();
   await waitForRuntimeReady(page);
-  // Title is "Untitled" — possibly with a "(recovered)" hint because
-  // the IndexedDB recent cache still holds the macro from step 2 and
-  // the cold-start RecoveryBanner kicks in (PR 2). The exact wording
-  // is asserted by ``workspace_persistence_ux.spec.ts``; here we just
-  // require the filename hasn't carried over.
+  // Title is "Untitled" after the reload. The IndexedDB recent cache
+  // still holds the macro from step 2, so the cold-start Recent… hint
+  // banner may appear, but the workspace stays clean (no "(recovered)"
+  // hint). Here we just require the filename hasn't carried over.
   await expect.poll(() => page.title()).toContain("Untitled");
   await expect.poll(() => page.title()).not.toContain(suggested);
 

@@ -2,46 +2,40 @@ import { useCallback } from "react";
 import { t } from "../i18n/translate";
 
 /**
- * Cold-start recovery banner.
+ * Cold-start "Recent…" hint banner.
  *
- * Surfaces a single, dismissable message at the top of the app
- * whenever the workspace booted with macros and/or notebooks
- * **silently recovered from the IndexedDB cache** rather than from an
- * HDF5 file.
+ * Surfaces a single, dismissable message at the top of the app on a
+ * cold start when the IndexedDB cache still holds macros and/or
+ * notebooks the user edited in a previous session.
  *
- * The semantics are deliberately minimal:
+ * The semantics are deliberately minimal and honest:
  *
- *   * The macro / notebook panels already auto-rehydrate from the
- *     "Recent…" cache on first mount when the workspace is empty
+ *   * Macros and notebooks are **not** silently restored into the
+ *     workspace. The cache is a roll-over of *edited* documents,
+ *     reachable only through each panel's "Recent…" menu
  *     (see :file:`src/components/MacroPanel.tsx` and
  *     :file:`src/components/notebook/NotebookPanel.tsx`). The banner
- *     does **not** drive that recovery; it only informs the user
- *     that it happened and reminds them that — under the
- *     "HDF5 = single durable source of truth" model — the recovered
- *     content is *not yet durable* until they save an HDF5 workspace.
+ *     simply tells the user those documents exist and where to find
+ *     them.
  *
- *   * Signals and images do **not** survive a reload. If they were
- *     in the previous session, they are gone; only the macro /
- *     notebook content (which the panels persist eagerly) comes back.
+ *   * Signals and images are **not** cached at all — they never
+ *     survive a reload. Only HDF5 saves are durable.
  *
- *   * The banner is shown once per cold start. After "Save HDF5
- *     workspace…" or "Dismiss", it stays hidden for the session.
+ *   * The banner is shown once per cold start. After "Dismiss" — or
+ *     once the user opens / saves an HDF5 workspace — it stays hidden
+ *     for the session.
  *
  * The component is purely presentational; the parent decides when
  * to render it.
  */
 
 export interface RecoveryBannerProps {
-  /** Number of macros recovered from the IndexedDB cache. */
+  /** Number of macros available in the IndexedDB "Recent…" cache. */
   macroCount: number;
-  /** Number of notebooks recovered from the IndexedDB cache. */
+  /** Number of notebooks available in the IndexedDB "Recent…" cache. */
   notebookCount: number;
-  /** Triggered when the user clicks "Save HDF5 workspace…". */
-  onSave: () => void;
   /** Triggered when the user clicks "Dismiss". */
   onDismiss: () => void;
-  /** ``true`` while the Save action is unavailable (e.g. busy). */
-  saveDisabled?: boolean;
 }
 
 function pluralise(n: number, singularKey: string, pluralKey: string): string {
@@ -51,13 +45,8 @@ function pluralise(n: number, singularKey: string, pluralKey: string): string {
 export function RecoveryBanner({
   macroCount,
   notebookCount,
-  onSave,
   onDismiss,
-  saveDisabled = false,
 }: RecoveryBannerProps): JSX.Element {
-  const handleSave = useCallback(() => {
-    onSave();
-  }, [onSave]);
   const handleDismiss = useCallback(() => {
     onDismiss();
   }, [onDismiss]);
@@ -81,21 +70,15 @@ export function RecoveryBanner({
     >
       <div className="recovery-banner-message">
         <strong>
-          {t("Recovered {summary} from the previous session.", { summary })}
+          {t("{summary} from a previous session available in Recent…", {
+            summary,
+          })}
         </strong>{" "}
         {t(
-          "Signals and images were not restored — only macros and notebooks are cached in the browser. Save an HDF5 workspace to make the current state durable.",
+          "Open them from each panel's Recent… menu. Signals and images are not cached in the browser — save an HDF5 workspace to make the current state durable.",
         )}
       </div>
       <div className="recovery-banner-actions">
-        <button
-          type="button"
-          className="recovery-banner-save"
-          onClick={handleSave}
-          disabled={saveDisabled}
-        >
-          {t("Save to HDF5 file…")}
-        </button>
         <button
           type="button"
           className="recovery-banner-dismiss"

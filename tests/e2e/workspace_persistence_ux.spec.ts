@@ -11,145 +11,57 @@ declare global {
 
 /**
  * UX-level safety nets for the "HDF5 = single durable source of
- * truth" persistence model (PR 2). Round-trip data integrity is
- * covered by ``workspace_persistence_roundtrip``; this spec drives
- * the user-facing surfaces:
+ * truth" persistence model. Round-trip data integrity is covered by
+ * ``workspace_persistence_roundtrip``; this spec drives the
+ * user-facing surfaces:
  *
  *   * the cold-start ``RecoveryBanner`` appears when the IndexedDB
- *     "Recent…" cache holds macros / notebooks the panels silently
- *     rehydrated, and disappears after Save or Dismiss,
+ *     "Recent…" cache holds edited macros / notebooks, points the user
+ *     at each panel's "Recent…" menu, and disappears after Dismiss.
+ *     Macros and notebooks are NOT silently restored, so the workspace
+ *     stays clean (no "(recovered)" title hint),
  *   * the ``beforeunload`` guard fires when (and only when) the
- *     workspace is dirty,
- *   * ``Dismiss`` keeps the "(recovered)" hint in the document title
- *     until the user saves an HDF5 — the underlying state is still
- *     non-durable.
+ *     workspace is dirty.
  */
 
-test.describe("Workspace persistence UX (PR 2)", () => {
-  test("recovery banner appears on cold start when the recent cache holds entries", async ({
+test.describe("Workspace persistence UX", () => {
+  test("Recent… hint banner appears on cold start when the cache holds entries", async ({
     page,
   }) => {
-    // -- 1. Warm-up pass: create a uniquely-titled macro, let the
-    //       MacroPanel write it to the IndexedDB recent cache. --
+    // -- 1. Warm-up: seed the IndexedDB recent cache with an edited
+    //       macro. This mirrors MacroPanel's ``persistMirror`` on a
+    //       *touched* macro — pristine, auto-created sample macros are
+    //       deliberately never cached (option C). --
     await page.goto("/");
     await waitForRuntimeReady(page);
-    const macroTitle = `recovery-${Date.now()}`;
-    await page.evaluate(async (t) => {
-      await window.runtime.createMacro(t, "# recovery probe\n");
+    const macroTitle = `recent-${Date.now()}`;
+    await page.evaluate(async (title) => {
+      const { recordRecent } = await import("/src/storage/recentStore.ts");
+      await recordRecent("macro", {
+        id: `m-${Date.now()}`,
+        title,
+        content: "# recent probe\n",
+      });
     }, macroTitle);
-    // The MacroPanel writes to the cache via the panel's effects, so
-    // make sure it has mounted at least once.
-    await page.getByRole("tab", { name: "Macros" }).click();
-    // The Recent… menu only appears once recordRecent has resolved;
-    // wait for the cache to settle.
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(async () => {
-            const { listRecent } = await import("/src/storage/recentStore.ts");
-            const r = await listRecent("macro");
-            return r.length;
-          }),
-        { timeout: 15_000, intervals: [200, 500] },
-      )
-      .toBeGreaterThan(0);
 
     // -- 2. Cold reload — Pyodide is wiped but the IndexedDB cache
-    //       survives. The MacroPanel will silently rehydrate from it
-    //       and App.tsx will surface the recovery banner. --
+    //       survives. Macros are NOT auto-restored; App.tsx surfaces an
+    //       informational banner pointing at the "Recent…" menus. --
     await page.reload();
     await waitForRuntimeReady(page);
 
     const banner = page.getByTestId("recovery-banner");
     await expect(banner).toBeVisible({ timeout: 30_000 });
-    await expect(banner).toContainText(/Recovered/i);
+    await expect(banner).toContainText(/Recent/i);
     await expect(banner).toContainText(/macro/i);
 
-    // Title carries the "(recovered)" hint until the user saves.
-    await expect.poll(() => page.title()).toContain("(recovered)");
+    // The workspace stays clean / non-recovered: no "(recovered)" hint
+    // (nothing was silently restored into the workspace).
+    await expect.poll(() => page.title()).not.toContain("(recovered)");
 
-    // -- 3. Dismiss hides the banner but keeps the (recovered) hint
-    //       (the workspace is still non-durable). --
+    // -- 3. Dismiss hides the banner for the session. --
     await banner.getByRole("button", { name: /Dismiss/i }).click();
     await expect(banner).toBeHidden();
-    await expect.poll(() => page.title()).toContain("(recovered)");
-
-    // -- 4. After a Save HDF5, the (recovered) hint clears. --
-    const downloadPromise = page.waitForEvent("download");
-    await page.getByRole("menuitem", { name: "File" }).first().click();
-    await page.getByRole("menuitem", { name: /Save to HDF5 file/i }).click();
-    const dl = await downloadPromise;
-    const filename = dl.suggestedFilename();
-    await dl.saveAs(test.info().outputPath(filename));
-    await expect.poll(() => page.title()).not.toContain("(recovered)");
-    await expect.poll(() => page.title()).toContain(filename);
-  });
-
-  test("recovery banner Save button promotes the recovered state to durable", async ({
-    page,
-  }) => {
-    // Seed the cache with a notebook this time. We persist the
-    // notebook in the Python store *and* explicitly seed the
-    // IndexedDB recent cache, mirroring what NotebookPanel's
-    // autosave does once a user touches a notebook (pristine
-    // empties are intentionally not recorded — see Bug 1 contract).
-    await page.goto("/");
-    await waitForRuntimeReady(page);
-    const nbContent = JSON.stringify({
-      nbformat: 4,
-      nbformat_minor: 5,
-      metadata: {},
-      cells: [
-        {
-          cell_type: "code",
-          id: "c1",
-          source: "# recovery-nb-probe",
-          metadata: {},
-          outputs: [],
-          execution_count: null,
-        },
-      ],
-    });
-    await page.evaluate(async (content) => {
-      const rec = await window.runtime.createNotebook("recovery-nb", content);
-      const { recordRecent } = await import("/src/storage/recentStore.ts");
-      await recordRecent("notebook", {
-        id: rec.id,
-        title: rec.title,
-        content,
-      });
-    }, nbContent);
-    await page.getByRole("tab", { name: "Notebooks" }).click();
-    await expect
-      .poll(
-        async () =>
-          page.evaluate(async () => {
-            const { listRecent } = await import("/src/storage/recentStore.ts");
-            const r = await listRecent("notebook");
-            return r.length;
-          }),
-        { timeout: 30_000, intervals: [250, 500] },
-      )
-      .toBeGreaterThan(0);
-
-    // Cold reload → banner appears.
-    await page.reload();
-    await waitForRuntimeReady(page);
-    const banner = page.getByTestId("recovery-banner");
-    await expect(banner).toBeVisible({ timeout: 30_000 });
-    await expect(banner).toContainText(/notebook/i);
-
-    // Click "Save to HDF5 file…" inside the banner.
-    const downloadPromise = page.waitForEvent("download");
-    await banner.getByRole("button", { name: /Save to HDF5 file/i }).click();
-    const dl = await downloadPromise;
-    expect(dl.suggestedFilename()).toMatch(/^workspace-.*\.h5$/);
-    await dl.saveAs(test.info().outputPath(dl.suggestedFilename()));
-
-    // Banner disappears, title is clean and titled.
-    await expect(banner).toBeHidden();
-    await expect.poll(() => page.title()).not.toContain("(recovered)");
-    await expect.poll(() => page.title()).not.toContain("•");
   });
 
   test("beforeunload prompt fires only when the workspace is dirty", async ({

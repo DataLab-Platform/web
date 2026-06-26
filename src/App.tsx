@@ -352,7 +352,6 @@ export default function App() {
     markDirty,
     markClean,
     setFilename: setWorkspaceFilename,
-    setRecovered: setWorkspaceRecovered,
   } = workspace;
   // Window-title + reload-guard: the HDF5 workspace file is the single
   // durable contract. Anything in-memory that diverges from it must be
@@ -976,14 +975,14 @@ export default function App() {
     };
   }, [runtime]);
 
-  // Cold-start recovery banner: once after the runtime is ready and no
+  // Cold-start "Recent…" hint: once after the runtime is ready and no
   // HDF5 file is associated with this session, peek at the IndexedDB
-  // "Recent…" cache. If it holds any macros or notebooks the panels
-  // will have silently rehydrated them — surface that to the user with
-  // an informational banner so the (recovered) state isn't invisible.
-  // The banner sets ``recovered=true`` on the workspace context, which
-  // adds a "(recovered)" hint to the window title until the next
-  // ``markClean`` (= Open or Save HDF5).
+  // "Recent…" cache. Macros and notebooks are no longer silently
+  // restored (they are only reachable through each panel's "Recent…"
+  // menu), so if the cache holds any edited documents we surface a
+  // one-time informational banner telling the user where to find them.
+  // The workspace itself stays clean / non-recovered — HDF5 is still
+  // the single durable source of truth.
   useEffect(() => {
     if (status !== "ready") return;
     if (recoveryEvaluated.current) return;
@@ -1002,7 +1001,6 @@ export default function App() {
           macros: macros.length,
           notebooks: notebooks.length,
         });
-        setWorkspaceRecovered(true);
       } catch {
         /* IndexedDB unavailable — banner stays hidden. */
       }
@@ -1010,17 +1008,16 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [status, workspaceFilename, setWorkspaceRecovered]);
+  }, [status, workspaceFilename]);
 
-  // Auto-hide the recovery banner once the user has saved or opened
-  // an HDF5 workspace (both transitions clear ``workspaceRecovered``
-  // via ``markClean``). Keeping the banner around after Save would be
-  // confusing — the recovered state has been promoted to durable.
+  // Auto-hide the "Recent…" hint once the user has opened or saved an
+  // HDF5 workspace: they are now in a named, durable workspace and the
+  // cold-start hint is no longer relevant.
   useEffect(() => {
-    if (recoveryBanner !== null && !workspaceRecovered) {
+    if (recoveryBanner !== null && workspaceFilename !== null) {
       setRecoveryBanner(null);
     }
-  }, [recoveryBanner, workspaceRecovered]);
+  }, [recoveryBanner, workspaceFilename]);
 
   useEffect(() => {
     if (status !== "ready" || !runtime) return;
@@ -4206,11 +4203,7 @@ export default function App() {
           <RecoveryBanner
             macroCount={recoveryBanner.macros}
             notebookCount={recoveryBanner.notebooks}
-            onSave={() => {
-              void handleSaveWorkspaceHdf5();
-            }}
             onDismiss={() => setRecoveryBanner(null)}
-            saveDisabled={status !== "ready" || busy}
           />
         )}
         <div className="workspace">

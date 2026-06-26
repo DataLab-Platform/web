@@ -54,6 +54,7 @@ import {
 import { notebookToMacro } from "../../notebook/notebookToMacro";
 import { macroToNotebook } from "../../macros/macroToNotebook";
 import {
+  clearRecent,
   getRecent,
   listRecent,
   recordRecent,
@@ -938,6 +939,25 @@ export const NotebookPanel = forwardRef<
     [storedList, confirm],
   );
 
+  const handleClearStored = useCallback(async () => {
+    if (storedList.length === 0) return;
+    if (
+      !(await confirm({
+        title: t("Clear recent cache"),
+        message: t("Remove all {count} notebooks from the recent cache?", {
+          count: storedList.length,
+        }),
+        confirmLabel: t("Remove all"),
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
+    await clearRecent("notebook").catch(() => undefined);
+    setStoredList(await listRecent("notebook").catch(() => []));
+    setOpenMenuFor(null);
+  }, [storedList, confirm]);
+
   // --------------------------------------------------------------------
   // Imperative handle — used by the application MenuBar to drive the
   // File → Notebook actions even when the notebook panel is hidden.
@@ -1244,6 +1264,15 @@ export const NotebookPanel = forwardRef<
                   </div>
                 );
               })}
+              {storedList.length > 0 && (
+                <button
+                  type="button"
+                  className="nb-open-menu-clear"
+                  onClick={handleClearStored}
+                >
+                  {t("Clear all")}
+                </button>
+              )}
             </div>
           )}
         </div>

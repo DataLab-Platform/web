@@ -89,9 +89,11 @@ describe("Recent… → workspace replay", () => {
     }
   });
 
-  it("replays cached macros via runtime.replaceMacros", async () => {
-    // The MacroPanel fallback path uses ``replaceMacros`` (bulk import)
-    // instead of repeated ``createMacro`` calls; mirror that here.
+  it("replays cached macros via runtime.createMacro", async () => {
+    // Macros are no longer bulk-restored. Like notebooks, a cached
+    // macro is replayed individually through the "Recent…" menu
+    // (MacroPanel.handleOpenRecent → runtime.createMacro), with the
+    // new id replacing the cached one.
     await recordRecent("macro", {
       id: "m1",
       title: "Hello",
@@ -104,30 +106,39 @@ describe("Recent… → workspace replay", () => {
     });
 
     const runtime = {
-      replaceMacros: vi
+      createMacro: vi
         .fn<
           (
-            records: Array<{ id: string; title: string; code: string }>,
-          ) => Promise<void>
+            title: string,
+            code: string,
+          ) => Promise<{ id: string; title: string; code: string }>
         >()
-        .mockResolvedValue(undefined),
+        .mockImplementation(async (title, code) => ({
+          id: `fresh-${title}`,
+          title,
+          code,
+        })),
     };
 
     const cached = await listRecent("macro");
-    const records = cached.map((e) => ({
-      id: e.id,
-      title: e.title,
-      code: e.content,
-    }));
-    await runtime.replaceMacros(records);
+    expect(cached.map((e) => e.title).sort()).toEqual(["Hello", "World"]);
 
-    expect(runtime.replaceMacros).toHaveBeenCalledTimes(1);
-    expect(runtime.replaceMacros.mock.calls[0][0]).toHaveLength(2);
-    expect(
-      runtime.replaceMacros.mock.calls[0][0].map((r) => r.title).sort(),
-    ).toEqual(["Hello", "World"]);
-    expect(
-      runtime.replaceMacros.mock.calls[0][0].map((r) => r.code).sort(),
-    ).toEqual(["print('hello')", "print('world')"]);
+    const restored: Array<{ id: string; title: string }> = [];
+    for (const e of cached) {
+      const rec = await runtime.createMacro(e.title, e.content);
+      restored.push({ id: rec.id, title: rec.title });
+    }
+
+    expect(runtime.createMacro).toHaveBeenCalledTimes(2);
+    // Ids are reassigned by the new workspace.
+    expect(restored.map((r) => r.title).sort()).toEqual(["Hello", "World"]);
+    expect(restored.map((r) => r.id).sort()).toEqual([
+      "fresh-Hello",
+      "fresh-World",
+    ]);
+    // Each cached entry's content was forwarded verbatim.
+    for (const e of cached) {
+      expect(runtime.createMacro).toHaveBeenCalledWith(e.title, e.content);
+    }
   });
 });

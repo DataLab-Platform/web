@@ -125,16 +125,6 @@ input {
   flex-shrink: 0;
 }
 
-.recovery-banner-save {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent-hover);
-}
-
-.recovery-banner-save:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
 .recovery-banner-dismiss {
   background: transparent;
 }
@@ -4326,6 +4316,23 @@ input {
   color: #c4302b;
 }
 
+.macro-recent-menu-clear {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: #c4302b;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.macro-recent-menu-clear:hover {
+  background: var(--hover-bg);
+}
+
 /* "+" button at the right of the macro tab strip (mirrors .nb-tab-new). */
 .macro-tab-new-container {
   position: relative;
@@ -4884,6 +4891,23 @@ input {
 
 .nb-open-menu-delete:hover {
   color: #c4302b;
+}
+
+.nb-open-menu-clear {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: #c4302b;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nb-open-menu-clear:hover {
+  background: var(--hover-bg);
 }
 
 /* Notebook: rendered markdown */
