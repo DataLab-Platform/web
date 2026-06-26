@@ -396,6 +396,13 @@ export default function App() {
     // panel had been minimised before the previous hide.
     if (!aiPanelVisible) setAIPanelCollapsed(false);
   }, [aiPanelVisible, setAIPanelVisible, setAIPanelCollapsed]);
+  // Unconditionally open and expand the AI Assistant panel (used by the
+  // Welcome page card, where toggling would be confusing if the panel
+  // happened to be already visible).
+  const openAIPanel = useCallback(() => {
+    setAIPanelVisible(true);
+    setAIPanelCollapsed(false);
+  }, [setAIPanelVisible, setAIPanelCollapsed]);
   // Command palette (VSCode-style quick command launcher). Toggled by
   // the menu-bar button and the global Ctrl/Cmd+K shortcut.
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -4384,6 +4391,7 @@ export default function App() {
                       }}
                       onOpenUserGuide={() => setUserGuideOpen(true)}
                       onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
+                      onOpenAIAssistant={openAIPanel}
                     />
                   );
                 }

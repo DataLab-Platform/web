@@ -58,6 +58,8 @@ export interface WelcomeViewProps {
   onStartTour: () => void;
   onOpenUserGuide: () => void;
   onOpenReleaseNotes: () => void;
+  /** Open (and expand) the AI Assistant panel. */
+  onOpenAIAssistant: () => void;
 }
 
 interface QuickAction {
@@ -106,6 +108,7 @@ export function WelcomeView({
   onStartTour,
   onOpenUserGuide,
   onOpenReleaseNotes,
+  onOpenAIAssistant,
 }: WelcomeViewProps) {
   const releaseNotesUnseen = useUnseenRelease(appVersion);
   const startActions: QuickAction[] = [
@@ -146,6 +149,14 @@ export function WelcomeView({
   ];
 
   const walkthroughActions: QuickAction[] = [
+    {
+      iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
+      label: t("Ask the AI assistant"),
+      description: t(
+        "Chat with the built-in assistant to inspect, create and process your data.",
+      ),
+      onClick: onOpenAIAssistant,
+    },
     {
       iconUrl: getRootIconUrl("visualization.svg"),
       label: t("Take the guided tour"),

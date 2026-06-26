@@ -22,6 +22,7 @@ function renderWelcome(
     onImportTextWizard: vi.fn(),
     onStartTour: vi.fn(),
     onOpenUserGuide: vi.fn(),
+    onOpenAIAssistant: vi.fn(),
     ...overrides,
   };
   const utils = render(<WelcomeView {...props} />);
