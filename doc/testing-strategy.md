@@ -19,17 +19,32 @@ them as a scarce resource.
 
 ## Default suite vs perf project
 
-The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. Performance specs live under a separate `perf` project, and `_repro_*` probes under an env-gated `repro` project — both must be opted into:
+The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. The costly `perf` and `benchmark` projects are **opt-in**: each is registered only when explicitly requested, either via its `--project=<name>` flag or its `PW_<NAME>` env var (see `wantsProject` in [playwright.config.ts](../playwright.config.ts)). A bare `playwright test` — and therefore the default CI run, which calls `npm run test:e2e` (`--project=chromium`) — never pays for them.
 
 ```powershell
-npm run test:e2e                       # default chromium suite
-npx playwright test --project=perf     # perf benchmarks only
-PERF=1 npm run test:e2e                # default suite + PERF-gated tests
+npm run test:e2e                       # default chromium suite (CI default)
+npm run test:e2e:perf                  # perf benchmarks only (--project=perf)
+npx playwright test --project=perf     # same, explicit form
+PERF=1 npm run test:e2e                # chromium suite + PERF-gated probes
 ```
 
-When you need a perf or budget-style probe, mark it with
-`test.skip(!process.env.PERF, "...")` or move the spec under the
-`perf` project's `testMatch` glob (currently `image_perf.spec.ts`).
+When you need a perf or budget-style probe, mark it with `test.skip(!process.env.PERF, "...")` (it then runs in `chromium` only under `PERF=1`) or add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`).
+
+## Performance benchmarks: on-demand CI and regression tracking
+
+Perf benchmarks are **deterministic with respect to the code**: if nothing changes, the numbers do not change, so re-running them on every commit (or on a fixed schedule) would add noise, not signal. They are therefore driven by a dedicated, opt-in workflow — [.github/workflows/perf.yml](../.github/workflows/perf.yml) — that runs the `perf` project (`npm run test:e2e:perf`) only when wanted:
+
+- manually via **Run workflow** (`workflow_dispatch`);
+- on a pull request labelled `run-perf` (opt-in per PR);
+- on every push to `main` (release merges);
+- on every `vX.Y.Z` release tag.
+
+Results are tracked over time with [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) on the orphan `benchmarks` branch (open `dev/bench/determinist/index.html` or `dev/bench/timings/index.html` from that branch to view the charts). [scripts/perf-to-benchmark-json.mjs](../scripts/perf-to-benchmark-json.mjs) converts the raw result JSON into the action's `customSmallerIsBetter` format, splitting metrics into two groups with different policies:
+
+- **Deterministic** (memory Δheap in MiB, approximate JSON payload in MB) — these make trustworthy gates. On a `run-perf` pull request, an increase beyond **125 %** of the baseline **fails the check** and comments on the PR. On `main` / tags the value is recorded but never fails (the change is already merged).
+- **Timings** (milliseconds) — noisy on shared CI runners, so they are tracked with a wide **200 %** threshold and **never fail**; they exist purely for trend inspection.
+
+The cheap deterministic invariants encoded directly in the specs (data-integrity checksums, spill counts, the heap-decoupling `expect(...)`) still run wherever the `perf` project runs and fail fast on a broken guarantee, independent of the chart thresholds.
 
 ### Running a `_repro_*` throwaway probe
 

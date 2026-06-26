@@ -199,6 +199,11 @@ done (bug fix, feature, or any phase of a multi-phase task):
 
 ## Git workflow
 
+- **Branching model**: day-to-day work lands on `develop`; `main` is the
+  release branch (merged from `develop` only at release time), mirroring the
+  sibling repos (DataLab, Sigima). Open PRs against `develop`. CI runs the
+  cheap regression suite on both branches; the multi-minute perf benchmarks
+  are opt-in (`.github/workflows/perf.yml`), never on every commit.
 - **Never commit without explicit approval.** Before running `git commit`,
   always submit the proposed commit message to the user (subject + body) and
   wait for confirmation. The user may edit the message or reject the commit

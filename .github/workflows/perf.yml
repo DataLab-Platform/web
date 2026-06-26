@@ -1,0 +1,117 @@
+name: perf
+
+# On-demand performance-benchmark guard. The multi-minute perf specs are
+# deterministic with respect to the code, so there is no point re-running
+# them on every commit (a time-based schedule would add noise, not signal).
+# Instead they run only when explicitly wanted:
+#
+#   * manually (``workflow_dispatch``),
+#   * on a pull request carrying the ``run-perf`` label,
+#   * on every push to ``main`` (release merges),
+#   * on every ``vX.Y.Z`` release tag.
+#
+# Results are tracked over time by ``benchmark-action/github-action-benchmark``
+# on the orphan ``benchmarks`` branch (chart at ``dev/bench/.../index.html``).
+# On pull requests a deterministic regression beyond the threshold fails the
+# check (the regression gate); on ``main`` / tags the history is recorded but
+# never fails, since the change is already merged.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+# A release pushes ``main`` and a tag; each is a distinct ref and runs once.
+# Cancel only superseded runs of the *same* ref (rapid re-pushes).
+concurrency:
+  group: perf-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  perf:
+    name: Performance benchmarks (on-demand)
+    # On a pull request, run only when the PR carries the ``run-perf`` label
+    # (opt-in). Manual / push / tag events always run.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run-perf')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run perf benchmarks
+        # ``test:e2e:perf`` is ``playwright test --project=perf`` (image_perf
+        # + opfs_*); the comparative ``benchmark`` project is never run here.
+        # PW_PERF is redundant with the ``--project=perf`` flag but makes the
+        # opt-in explicit.
+        env:
+          PW_PERF: "1"
+        run: npm run test:e2e:perf
+
+      - name: Convert results to benchmark format
+        run: node scripts/perf-to-benchmark-json.mjs
+
+      - name: Track deterministic metrics (regression gate)
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: DataLab-Web perf (deterministic)
+          tool: customSmallerIsBetter
+          output-file-path: tests/benchmark/results/bench-determinist.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: benchmarks
+          benchmark-data-dir-path: dev/bench/determinist
+          alert-threshold: "125%"
+          comment-on-alert: true
+          summary-always: true
+          # Memory / payload-size metrics are deterministic, so a real
+          # increase is a genuine regression: fail the check on PRs. On
+          # main / tags only record + comment (already merged).
+          fail-on-alert: ${{ github.event_name == 'pull_request' }}
+          auto-push: ${{ github.event_name != 'pull_request' }}
+          save-data-file: ${{ github.event_name != 'pull_request' }}
+
+      - name: Track timing metrics (trend only)
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: DataLab-Web perf (timings)
+          tool: customSmallerIsBetter
+          output-file-path: tests/benchmark/results/bench-timings.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: benchmarks
+          benchmark-data-dir-path: dev/bench/timings
+          # Wall-clock timings are noisy on shared runners: keep a wide
+          # threshold and never fail — these are for trend inspection only.
+          alert-threshold: "200%"
+          comment-on-alert: true
+          summary-always: true
+          fail-on-alert: false
+          auto-push: ${{ github.event_name != 'pull_request' }}
+          save-data-file: ${{ github.event_name != 'pull_request' }}
+
+      - name: Upload raw perf results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: |
+            tests/benchmark/results/*.json
+            playwright-report/
+          retention-days: 14

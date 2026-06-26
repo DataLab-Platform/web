@@ -14,6 +14,9 @@
  *   npx playwright test tests/e2e/image_perf.spec.ts --reporter=list
  */
 import { test, expect } from "@playwright/test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { waitForRuntimeReady } from "./fixtures";
 
 interface BenchResult {
@@ -277,6 +280,30 @@ test.describe("Image display perf", () => {
       `Multi-select → grid:       ${result.multiSelectToGridMs.toFixed(0)} ms`,
     );
     console.log("================================\n");
+
+    // Persist machine-readable results next to the other benchmark
+    // outputs so they can be tracked over time. Only the deterministic
+    // metrics (payload sizes) are meaningful as regression invariants;
+    // the timings are kept for trend inspection but are noisy on shared
+    // CI runners (see scripts/perf-to-benchmark-json.mjs).
+    const here = dirname(fileURLToPath(import.meta.url));
+    const resultsDir = join(here, "..", "benchmark", "results");
+    mkdirSync(resultsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outPath = join(resultsDir, `image_perf_${stamp}.json`);
+    writeFileSync(
+      outPath,
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          imageKinds: backend.types,
+          result,
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(`[image-perf] results written to ${outPath}\n`);
 
     // Soft sanity bounds: the test does not fail on slowness — the
     // user explicitly wants to measure it — but we keep an upper

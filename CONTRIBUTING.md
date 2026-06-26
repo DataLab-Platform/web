@@ -81,9 +81,13 @@ DataLab-Web is fully internationalised: English is the source language and Frenc
 
 DataLab-Web sometimes backports a feature or patches a bug that is fixed upstream (`guidata`, `sigima`, …) but not yet in a released wheel. These **temporary shims** are tracked centrally so they can be audited and removed once upstream catches up. Every backport shim is declared once in [src/runtime/shims/registry.ts](src/runtime/shims/registry.ts), carries `# TEMPORARY SHIM` / `@shim-registry: <id>` markers in its source, and is kept in sync by a network-free anti-drift test that runs in `npm test`. Run `npm run audit:shims` (or the **🔍 Audit shims (versions)** task) to see which shims are now removable. Full workflow — adding, registering and removing a shim — is in [doc/shim-registry.md](doc/shim-registry.md).
 
+## Branching model
+
+DataLab-Web follows the same two-branch model as the sibling repositories (DataLab, Sigima): day-to-day work lands on **`develop`**, and **`main`** is the release branch — `develop` is merged into `main` only when cutting a real release. CI ([tests.yml](.github/workflows/tests.yml)) runs the cheap regression suite on both branches and on pull requests targeting either. The multi-minute performance benchmarks are **not** part of that run; they are opt-in and driven by a separate on-demand workflow (see the **Performance benchmarks** section of [doc/testing-strategy.md](doc/testing-strategy.md)).
+
 ## Pull requests
 
-- Open a pull request against `main`.
+- Open a pull request against `develop` (reserve `main` for release merges).
 - Make sure the project still builds (`npm run build`), passes lint (`npm run lint`), formatting (`npm run format:check`) and tests (`npm test`, plus Playwright when UI behaviour changes — see [doc/testing-strategy.md](doc/testing-strategy.md)).
 - When you add or restructure a top-level subsystem (a new worker, a new bridge, a new Python helper module …), update [doc/architecture.md](doc/architecture.md) in the same commit so the layer / component diagrams stay accurate.
 - **User-visible changes**: add a bullet under the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md), in the appropriate `Added` / `Changed` / `Fixed` / `Removed` group. The release script promotes that section to a versioned heading at tag time (and refuses to release if it is empty, unless `--allow-empty-changelog` is passed for tag-only / infrastructure releases). The in-app **Help > Release notes** dialog renders the file directly.
