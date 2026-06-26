@@ -1584,7 +1584,7 @@ export default function App() {
           // progress dialog so a long computation (e.g. a moving median on a
           // large image) shows a clear "computation in progress" indicator
           // instead of only greying the UI. The dialog only appears after
-          // ``minDuration`` (400 ms), so quick operations don't flash it.
+          // ``minDuration`` (1500 ms), so quick operations don't flash it.
           const { results } = await runWithProgress<string[]>({
             title: t("Computing: {feature}", { feature: feature.label }),
             total: 1,

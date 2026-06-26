@@ -1,7 +1,7 @@
 /**
  * Generic cancellable progress dialog, mirroring DataLab Qt's
  * ``QProgressDialog`` behaviour: the dialog only becomes visible
- * after ``minDuration`` (default 400 ms) has elapsed, so short
+ * after ``minDuration`` (default 1500 ms) has elapsed, so short
  * operations don't flash a modal at the user.
  *
  * A single :class:`ProgressProvider` is mounted near the application
@@ -58,7 +58,7 @@ export interface ProgressOptions<T> {
   step: (index: number, ctx: ProgressStepContext) => Promise<T>;
   /**
    * Minimum elapsed milliseconds before the dialog becomes visible.
-   * Mirrors ``QProgressDialog.setMinimumDuration``. Defaults to 400.
+   * Mirrors ``QProgressDialog.setMinimumDuration``. Defaults to 1500.
    */
   minDuration?: number;
   /** Show the Cancel button. Defaults to ``true``. */
@@ -173,7 +173,7 @@ export function ProgressProvider(props: { children: ReactNode }) {
       title,
       total,
       step,
-      minDuration = 400,
+      minDuration = 1500,
       cancellable = true,
       indeterminate = false,
       initialLabel = "",
