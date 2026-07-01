@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782489008781,
+  "lastUpdate": 1782925474935,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -228,6 +228,75 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/DataLab-Platform/web/commit/5cfdfc3f9e552c178fbe7f3474c97e48bd45e8bb"
         },
         "date": 1782489008255,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 33.21,
+            "unit": "MB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [1024² ×16 float64]",
+            "value": 130.4,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [2048² ×8 float64]",
+            "value": 74.3,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 35.8,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 35.8,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 94.6,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 94.6,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "6206853b532a1840d95602e4595e2327cc4ac281",
+          "message": "feat: add theme option for demo GIF recording and update tests for theme handling",
+          "timestamp": "2026-07-01T19:01:11+02:00",
+          "tree_id": "5b0facc43bfa27aeaf7d6c1812cc3e313582e756",
+          "url": "https://github.com/DataLab-Platform/web/commit/6206853b532a1840d95602e4595e2327cc4ac281"
+        },
+        "date": 1782925474341,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
