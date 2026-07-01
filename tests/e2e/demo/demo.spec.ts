@@ -73,6 +73,22 @@ async function openTopMenu(page: Page, key: string): Promise<void> {
 test("DataLab-Web feature showcase", async ({ page }) => {
   const t0 = Date.now();
 
+  // Optional light/dark override for the recording, driven by
+  // ``scripts/make-demo-gif.mjs --theme <light|dark>`` via ``DEMO_THEME``.
+  // Injected into localStorage *before* the app boots so ``initThemeEarly()``
+  // picks it up on first paint. Without it, the app follows the browser's
+  // ``prefers-color-scheme`` (light in headless Chromium).
+  const demoTheme = process.env.DEMO_THEME;
+  if (demoTheme === "light" || demoTheme === "dark") {
+    await page.addInitScript((mode) => {
+      try {
+        window.localStorage.setItem("datalab-web:theme", mode);
+      } catch {
+        /* ignore — localStorage may be unavailable */
+      }
+    }, demoTheme);
+  }
+
   await page.goto("/");
   await waitForRuntimeReady(page);
   // Let the first paint settle so the action window starts on a clean frame.

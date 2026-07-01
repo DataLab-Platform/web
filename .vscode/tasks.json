@@ -379,7 +379,7 @@
       "detail": "Record the scripted Playwright demo and encode doc/images/datalab-web-demo.gif.",
       "type": "shell",
       "command": "npm",
-      "args": ["run", "demo:gif"],
+      "args": ["run", "demo:gif", "--", "--theme", "${input:demoTheme}"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -499,6 +499,13 @@
       "type": "promptString",
       "description": "New version (SemVer like 0.2.0, or keyword: patch | minor | major | prerelease)",
       "default": "minor"
+    },
+    {
+      "id": "demoTheme",
+      "type": "pickString",
+      "description": "UI theme for the recorded demo GIF",
+      "options": ["light", "dark"],
+      "default": "light"
     }
   ]
 }

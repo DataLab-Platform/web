@@ -28,6 +28,7 @@
  *   node scripts/make-demo-gif.mjs --width 800 --fps 12 --colors 200
  *   node scripts/make-demo-gif.mjs --target-mb 4 --out doc/images/demo.gif
  *   node scripts/make-demo-gif.mjs --speed 1.5      # faster playback
+ *   node scripts/make-demo-gif.mjs --theme dark     # record in dark mode
  */
 
 import { spawnSync } from "node:child_process";
@@ -55,7 +56,19 @@ function arg(name, fallback) {
 const hasFlag = (name) => process.argv.includes(`--${name}`);
 
 const SKIP_RECORD = hasFlag("skip-record");
-const OUT = resolve(ROOT, arg("out", "doc/images/datalab-web-demo.gif"));
+// Force the recorded UI theme ("light" | "dark"). When omitted the app
+// follows the browser's ``prefers-color-scheme`` (light in headless Chromium).
+const THEME = arg("theme", null);
+if (THEME !== null && THEME !== "light" && THEME !== "dark") {
+  fail(`--theme must be "light" or "dark" (got "${THEME}").`);
+}
+// Default output name carries a ``-light``/``-dark`` suffix when a theme is
+// forced, so the two variants don't overwrite each other. An explicit
+// ``--out`` always wins.
+const DEFAULT_OUT = THEME
+  ? `doc/images/datalab-web-demo-${THEME}.gif`
+  : "doc/images/datalab-web-demo.gif";
+const OUT = resolve(ROOT, arg("out", DEFAULT_OUT));
 const TARGET_MB = Number(arg("target-mb", "4"));
 const SPEED = Number(arg("speed", "1")); // >1 = faster playback
 // Forced overrides (skip the auto size-search when all three are given).
@@ -132,6 +145,7 @@ if (!SKIP_RECORD) {
   const rec = spawnSync("npx playwright test -c playwright.demo.config.ts", {
     stdio: "inherit",
     shell: true,
+    env: THEME ? { ...process.env, DEMO_THEME: THEME } : process.env,
   });
   if (rec.status !== 0)
     fail(`Playwright recording failed (exit ${rec.status}).`);
