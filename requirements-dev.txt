@@ -25,6 +25,7 @@ guidata>=3.13.4
 numpy>=1.22
 scipy>=1.10.1
 scikit-image>=0.19.2
+tifffile>=2022.4.8
 pandas>=1.4
 
 # Used by the HDF5 browser shim (``dlw_h5browser.py``).

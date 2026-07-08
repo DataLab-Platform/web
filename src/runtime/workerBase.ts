@@ -86,9 +86,13 @@ os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
   // Install Sigima + guidata so user code can ``import sigima`` and
   // ``import guidata.dataset`` exactly as in DataLab desktop. This adds
   // ~10-30s to the first run; subsequent runs reuse the same worker.
+  // ``tifffile`` is pulled explicitly because the Pyodide-built
+  // ``scikit-image`` trims it from its deps, breaking TIFF I/O otherwise.
+  // Capped ``<2025``: tifffile 2025+ requires numpy>=2.1 but the pinned
+  // Pyodide ships numpy 1.26.4 (lift when Pyodide bumps numpy).
   await py.runPythonAsync(`
 import micropip
-await micropip.install(["sigima", "guidata"])
+await micropip.install(["sigima", "guidata", "tifffile<2025"])
 `);
 
   // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced in

@@ -1093,9 +1093,16 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
 
     onProgress?.(t("Installing Sigima…"));
+    // ``tifffile`` is a pure-Python PyPI wheel that scikit-image needs for
+    // TIFF I/O (``skimage.io`` loads ``tifffile_plugin`` for ``.tif``). The
+    // Pyodide-built ``scikit-image`` trims it from its dependency list, so
+    // micropip must pull it explicitly or TIFF read/write fails at runtime.
+    // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
+    // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
+    // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
     await py.runPythonAsync(`
 import micropip
-await micropip.install(["sigima", "guidata"])
+await micropip.install(["sigima", "guidata", "tifffile<2025"])
 `);
 
     onProgress?.(t("Initialising Sigima namespace…"));
