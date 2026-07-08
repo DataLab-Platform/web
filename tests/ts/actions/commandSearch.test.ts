@@ -24,19 +24,34 @@ describe("fuzzyMatch", () => {
     expect(fuzzyMatch("abcdef", "abc").matched).toBe(false);
   });
 
-  it("scores a contiguous match higher than a scattered one", () => {
-    const contiguous = fuzzyMatch("abc", "abc def");
-    const scattered = fuzzyMatch("abc", "a1b2c3 def");
-    expect(contiguous.matched).toBe(true);
-    expect(scattered.matched).toBe(true);
-    expect(contiguous.score).toBeGreaterThan(scattered.score);
-  });
-
   it("rewards matches at word boundaries", () => {
     // "fa" hits the start of two words in "fourier analysis" vs mid-word
     // occurrences in "affair anomaly".
     const boundary = fuzzyMatch("fa", "fourier analysis");
     const midWord = fuzzyMatch("fa", "affair anomaly");
     expect(boundary.score).toBeGreaterThan(midWord.score);
+  });
+
+  it("matches a plain substring anywhere, even mid-word", () => {
+    // A single contiguous run is always accepted (substring search).
+    expect(fuzzyMatch("rota", "rotate").matched).toBe(true);
+    expect(fuzzyMatch("bration", "calibration").matched).toBe(true);
+  });
+
+  it("rejects scattered mid-word noise", () => {
+    // The characters r, o, t, a appear in order in these paths but only as
+    // scattered mid-word runs, so they must NOT match "rota".
+    expect(
+      fuzzyMatch("rota", "edit › annotations › import annotations").matched,
+    ).toBe(false);
+    expect(fuzzyMatch("rota", "analysis › horizontal projection").matched).toBe(
+      false,
+    );
+    expect(fuzzyMatch("abc", "a1b2c3 def").matched).toBe(false);
+  });
+
+  it("keeps acronym-style matches where every run is at a word boundary", () => {
+    // "fan" -> "Fourier ANalysis": f (boundary) + an (boundary) run.
+    expect(fuzzyMatch("fan", "fourier analysis").matched).toBe(true);
   });
 });
