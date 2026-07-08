@@ -38,3 +38,26 @@ export async function disableQuickstartTemplate(page: Page): Promise<void> {
     }
   });
 }
+
+/**
+ * Remove the File System Access API save pickers at runtime so
+ * save/export actions fall back to the ``<a download>`` path.
+ *
+ * Playwright's Chromium exposes ``showSaveFilePicker`` /
+ * ``showDirectoryPicker``, but native pickers can't be driven from a
+ * test. Tests that capture saved bytes via ``page.waitForEvent("download")``
+ * must call this first. The app re-checks availability on every save, so
+ * a runtime delete on an already-loaded page suffices (no reload needed).
+ */
+export async function forceSaveDownloadFallback(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    try {
+      delete (window as unknown as { showSaveFilePicker?: unknown })
+        .showSaveFilePicker;
+      delete (window as unknown as { showDirectoryPicker?: unknown })
+        .showDirectoryPicker;
+    } catch {
+      // Non-configurable on some engines — ignore.
+    }
+  });
+}

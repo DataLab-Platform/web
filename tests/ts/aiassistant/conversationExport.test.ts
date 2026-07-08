@@ -103,7 +103,7 @@ describe("downloadMarkdown", () => {
     vi.restoreAllMocks();
   });
 
-  it("creates an object URL, triggers a click, and revokes the URL", () => {
+  it("creates an object URL, triggers a click, and revokes the URL", async () => {
     // jsdom does not implement these by default — install no-op stubs
     // before spying so ``vi.spyOn`` can monkey-patch them.
     if (typeof URL.createObjectURL !== "function") {
@@ -121,7 +121,8 @@ describe("downloadMarkdown", () => {
     const clickSpy = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
-    downloadMarkdown("hello.md", "# hi\n");
+    const result = await downloadMarkdown("hello.md", "# hi\n");
+    expect(result.outcome).toBe("downloaded");
     expect(createSpy).toHaveBeenCalledTimes(1);
     expect(clickSpy).toHaveBeenCalledTimes(1);
     expect(revokeSpy).toHaveBeenCalledWith("blob:fake");

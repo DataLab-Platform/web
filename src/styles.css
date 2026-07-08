@@ -2283,6 +2283,79 @@ input {
   text-overflow: ellipsis;
 }
 
+/* Non-modal toast notifications (see components/Toast.tsx) */
+.toast-host {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, 90vw);
+  z-index: 1100;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent, #3a8bd0);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: toast-in 140ms ease-out;
+}
+
+.toast-success {
+  border-left-color: #3fa34d;
+}
+
+.toast-warning {
+  border-left-color: #d0902f;
+}
+
+.toast-error {
+  border-left-color: var(--danger, #c0392b);
+}
+
+.toast-message {
+  flex: 1 1 auto;
+  white-space: pre-line;
+}
+
+.toast-close {
+  flex: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Help / About / Shortcuts / Console dialog */
 .help-dialog {
   min-width: 520px;

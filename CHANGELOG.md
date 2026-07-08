@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- **Save file / Save signal / Save image…**: on Chromium-based browsers (Chrome, Edge, …), this now opens the native "Save as…" dialog so you choose the destination folder, filename and extension directly — the browser equivalent of DataLab desktop's save dialog — instead of only prompting for a file extension and downloading silently. The same native dialog is now used for exporting metadata, ROIs, HDF5 workspaces, macros, notebooks and AI assistant conversations. On browsers without this API (Firefox, Safari), saving still falls back to downloading into the browser's Downloads folder, but a brief on-screen notification now confirms the file name and destination so it is no longer unclear whether (and where) the file was saved.
+- **Save to directory…**: on browsers without a folder-picker API, you are now warned beforehand that each file will be downloaded individually into the Downloads folder, instead of silently falling back to that behavior.
+
+### Fixed
+
+- **Command palette search**: short queries no longer flood the results with unrelated commands. Typing `rota` (looking for _Rotation_) used to also match entries like _Import annotations_, _Polynomial calibration_ or _Horizontal projection_, because the search accepted any command whose letters appeared in order, however scattered. The search now keeps only commands that either contain the query as-is or match it word-by-word (initials), so results stay relevant while still finding commands like `fft` or `fan` → _Fourier analysis_.
+
 ## [0.6.2] - 2026-06-26
 
 ### Added

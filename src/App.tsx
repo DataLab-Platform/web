@@ -95,6 +95,7 @@ import {
 } from "./components/ConfirmDialog";
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
+import { useToast } from "./components/Toast";
 import {
   SeparateViewDialog,
   type SeparateViewContent,
@@ -133,6 +134,14 @@ import { type MacroPanelHandle } from "./components/MacroPanel";
 import { type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
+import {
+  acceptFromExtensions,
+  downloadBytes,
+  pickSaveFile,
+  saveBytesToFile,
+  supportsSaveFilePicker,
+  writeBytesToHandle,
+} from "./utils/saveFile";
 import { formatBytes } from "./utils/memory";
 import { listRecent } from "./storage/recentStore";
 import type {
@@ -342,6 +351,7 @@ export default function App() {
   const showProcessingError = useProcessingError();
   const prompt = usePrompt();
   const runWithProgress = useProgress();
+  const pushToast = useToast();
   // Whether the metadata clipboard holds a payload "Paste metadata" can
   // apply. Mirrors DataLab desktop's per-panel ``metadata_clipboard``.
   const [hasMetadataClipboard, setHasMetadataClipboard] = useState(false);
@@ -2521,27 +2531,45 @@ export default function App() {
     }
   }, [runtime, selectedIds, currentId, refresh, confirm]);
 
+  /** Toast telling the user a file was handed to the browser's Downloads
+   *  folder. Only shown on the download-fallback path (browsers without
+   *  the File System Access API): when the native "Save as…" picker is
+   *  used, its own dialog already reveals the destination. */
+  const toastDownloaded = useCallback(
+    (filename: string) => {
+      pushToast({
+        kind: "success",
+        message: t("Saved {name} to your browser's Downloads folder.", {
+          name: filename,
+        }),
+      });
+    },
+    [pushToast],
+  );
+
   const handleExportMetadata = useCallback(async () => {
     if (!runtime || selectedIds.length !== 1) return;
     const oid = selectedIds[0];
     setBusy(true);
     try {
       const bytes = await runtime.exportObjectMetadataBytes(oid);
-      const blob = new Blob([new Uint8Array(bytes)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${titleForId(oid)}.dlabmeta`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const result = await saveBytesToFile(
+        new Uint8Array(bytes),
+        `${titleForId(oid)}.dlabmeta`,
+        [
+          acceptFromExtensions(
+            t("DataLab metadata"),
+            ["dlabmeta"],
+            "application/json",
+          ),
+        ],
+        "application/json",
+      );
+      if (result.outcome === "downloaded") toastDownloaded(result.filename);
     } finally {
       setBusy(false);
     }
-  }, [runtime, selectedIds, titleForId]);
+  }, [runtime, selectedIds, titleForId, toastDownloaded]);
 
   const handleImportMetadata = useCallback(async () => {
     if (!runtime || selectedIds.length !== 1) return;
@@ -2820,17 +2848,19 @@ export default function App() {
     setBusy(true);
     try {
       const bytes = await runtime.exportObjectRoiBytes(oid);
-      const blob = new Blob([new Uint8Array(bytes)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${titleForId(oid)}.dlabroi`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const result = await saveBytesToFile(
+        new Uint8Array(bytes),
+        `${titleForId(oid)}.dlabroi`,
+        [
+          acceptFromExtensions(
+            t("DataLab ROI"),
+            ["dlabroi"],
+            "application/json",
+          ),
+        ],
+        "application/json",
+      );
+      if (result.outcome === "downloaded") toastDownloaded(result.filename);
     } catch (err) {
       await notify({
         kind: "error",
@@ -2840,7 +2870,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, titleForId, notify]);
+  }, [runtime, currentId, titleForId, notify, toastDownloaded]);
 
   // ------------------------------------------------------------------
   // Image ROI handlers (Phase 13)
@@ -3050,17 +3080,19 @@ export default function App() {
     setBusy(true);
     try {
       const bytes = await runtime.exportObjectRoiBytes(oid);
-      const blob = new Blob([new Uint8Array(bytes)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${titleForId(oid)}.dlabroi`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const result = await saveBytesToFile(
+        new Uint8Array(bytes),
+        `${titleForId(oid)}.dlabroi`,
+        [
+          acceptFromExtensions(
+            t("DataLab ROI"),
+            ["dlabroi"],
+            "application/json",
+          ),
+        ],
+        "application/json",
+      );
+      if (result.outcome === "downloaded") toastDownloaded(result.filename);
     } catch (err) {
       await notify({
         kind: "error",
@@ -3070,7 +3102,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [runtime, currentId, titleForId, notify]);
+  }, [runtime, currentId, titleForId, notify, toastDownloaded]);
 
   /** Start an "erase area" session: open the docked ROI panel on a transient
    *  region list (seeded with one centered rectangle) instead of a modal, so
@@ -3281,35 +3313,44 @@ export default function App() {
     setBusy(true);
     try {
       const bytes = await runtime.saveWorkspaceHdf5();
-      const blob = new Blob([new Uint8Array(bytes)], {
-        type: "application/x-hdf",
-      });
-      const url = URL.createObjectURL(blob);
       // When no filename has been associated with the session yet
       // ("Untitled"), suggest a timestamped one. Otherwise keep the
-      // last known name, mirroring desktop "Save" semantics — the
-      // browser still drops the file in the user's Downloads folder.
-      const downloadName =
+      // last known name, mirroring desktop "Save" semantics.
+      const suggestedName =
         workspaceFilename ??
         `workspace-${new Date()
           .toISOString()
           .replace(/[-:T]/g, "")
           .replace(/\..+$/, "")}.h5`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = downloadName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const result = await saveBytesToFile(
+        new Uint8Array(bytes),
+        suggestedName,
+        [
+          acceptFromExtensions(
+            t("HDF5 files"),
+            ["h5", "hdf5", "hdf", "he5"],
+            "application/x-hdf",
+          ),
+        ],
+        "application/x-hdf",
+      );
+      // The user dismissed the native picker — leave the dirty state as-is.
+      if (result.outcome === "cancelled") return;
+      if (result.outcome === "downloaded") toastDownloaded(result.filename);
       // Clean transition — the HDF5 file now contains the durable
       // image of the in-memory state.
-      setWorkspaceFilename(downloadName);
+      setWorkspaceFilename(result.filename);
       markClean();
     } finally {
       setBusy(false);
     }
-  }, [runtime, workspaceFilename, setWorkspaceFilename, markClean]);
+  }, [
+    runtime,
+    workspaceFilename,
+    setWorkspaceFilename,
+    markClean,
+    toastDownloaded,
+  ]);
 
   const handleOpenWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;
@@ -3449,7 +3490,7 @@ export default function App() {
   const handleSaveFile = useCallback(async () => {
     if (!runtime || !currentId) return;
     // Default to CSV (signals) or TIFF (images); users can pick another
-    // extension by editing the filename in the prompt dialog.
+    // extension via the native picker's type dropdown or the filename.
     const isImage = treeKind === "image";
     const formats = isImage
       ? await runtime.listImageIoFormats()
@@ -3461,40 +3502,89 @@ export default function App() {
       /[^\w.-]+/g,
       "_",
     );
-    // Browsers can't really show an extension picker on a synthetic <a>
-    // download; we offer a one-line prompt with the catalog of supported
-    // extensions for parity with DataLab's "Save signal…" dialog.
+    const unsupported = (cleanExt: string) => ({
+      kind: "error" as const,
+      title: t("Save file"),
+      message: t('Unsupported extension ".{ext}".\nSupported: {list}', {
+        ext: cleanExt,
+        list: writeExts.join(", "),
+      }),
+    });
+
+    // Native "Save as…" picker (Chromium): the user chooses the folder,
+    // name and extension directly. We serialise *after* the pick so the
+    // chosen extension drives the writer.
+    if (supportsSaveFilePicker()) {
+      let handle;
+      try {
+        handle = await pickSaveFile(`${stem}.${fallbackExt}`, [
+          acceptFromExtensions(
+            isImage ? t("Image files") : t("Signal files"),
+            writeExts,
+          ),
+        ]);
+      } catch (err) {
+        await notify({
+          kind: "error",
+          title: t("Save file"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+      if (!handle) return; // user cancelled the picker
+      const cleanExt = (handle.name.split(".").pop() ?? "").toLowerCase();
+      if (!writeExts.includes(cleanExt)) {
+        await notify(unsupported(cleanExt));
+        return;
+      }
+      const bytes = isImage
+        ? await runtime.saveImageToBytes(currentId, handle.name)
+        : await runtime.saveSignalToBytes(currentId, handle.name);
+      try {
+        await writeBytesToHandle(handle, new Uint8Array(bytes));
+      } catch (err) {
+        await notify({
+          kind: "error",
+          title: t("Save file"),
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
+
+    // Fallback (Firefox / Safari): browsers can't show an extension
+    // picker on a synthetic <a> download, so we offer a one-line prompt
+    // with the catalog of supported extensions, then drop the file in the
+    // Downloads folder and confirm via a toast.
     const ext = await prompt({
-      title: "Save file",
-      message: `File extension (one of: ${writeExts.join(", ")})`,
+      title: t("Save file"),
+      message: t("File extension (one of: {list})", {
+        list: writeExts.join(", "),
+      }),
       defaultValue: fallbackExt,
     });
     if (!ext) return;
     const cleanExt = ext.replace(/^\./, "").trim();
     if (!writeExts.includes(cleanExt)) {
-      await notify({
-        kind: "error",
-        title: "Save file",
-        message: `Unsupported extension ".${cleanExt}".\nSupported: ${writeExts.join(", ")}`,
-      });
+      await notify(unsupported(cleanExt));
       return;
     }
     const filename = `${stem}.${cleanExt}`;
     const bytes = isImage
       ? await runtime.saveImageToBytes(currentId, filename)
       : await runtime.saveSignalToBytes(currentId, filename);
-    const blob = new Blob([new Uint8Array(bytes)], {
-      type: "application/octet-stream",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [runtime, currentId, data, imageData, treeKind, notify, prompt]);
+    downloadBytes(new Uint8Array(bytes), filename);
+    toastDownloaded(filename);
+  }, [
+    runtime,
+    currentId,
+    data,
+    imageData,
+    treeKind,
+    notify,
+    prompt,
+    toastDownloaded,
+  ]);
 
   /** Open the "Save to directory…" dialog with the current selection
    *  (falls back to the whole panel when nothing is explicitly selected,
@@ -3692,6 +3782,23 @@ export default function App() {
         }
         if (usedPicker) return;
 
+        // No directory picker available (Firefox / Safari): we can't let
+        // the user choose a destination folder, so warn that each file
+        // will land in the browser's Downloads folder before proceeding.
+        if (typeof picker !== "function") {
+          if (
+            !(await confirm({
+              title: t("Save to directory"),
+              message: t(
+                "This browser cannot let you choose a destination folder.\nEach file will be downloaded to your browser's Downloads folder instead.",
+              ),
+              confirmLabel: t("Download"),
+            }))
+          ) {
+            return;
+          }
+        }
+
         // Fallback: trigger one download per file. Browsers may prompt
         // the user to allow multiple downloads from this site.
         for (const { name, bytes } of payloads) {
@@ -3707,6 +3814,13 @@ export default function App() {
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }
+        pushToast({
+          kind: "success",
+          message: t(
+            "{count} file(s) saved to your browser's Downloads folder.",
+            { count: payloads.length },
+          ),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await notify({
@@ -3718,7 +3832,7 @@ export default function App() {
         setBusy(false);
       }
     },
-    [runtime, pendingSaveToDir, treeKind, confirm, notify],
+    [runtime, pendingSaveToDir, treeKind, confirm, notify, pushToast],
   );
 
   const handleOpenFile = useCallback(async () => {

@@ -63,7 +63,13 @@ import {
 } from "../../storage/recentStore";
 import { Cell } from "./Cell";
 import { useConfirm, useMessage } from "../ConfirmDialog";
+import { useToast } from "../Toast";
 import { t } from "../../i18n/translate";
+import {
+  acceptFromExtensions,
+  saveBytesToFile,
+  type SaveFileResult,
+} from "../../utils/saveFile";
 
 interface NotebookPanelProps {
   runtime: RuntimeApi;
@@ -121,25 +127,27 @@ const LS_ACTIVE_NB_ID = "datalab-web.notebooks.activeId";
 const AUTOSAVE_DELAY_MS = 600;
 
 /**
- * Trigger a browser download for *nb* as ``<safeName>.ipynb``.
- *
- * Inlined here (was previously exported by ``notebookStore``) since
- * the IndexedDB-as-source-of-truth helper module has been retired.
+ * Save *nb* as ``<safeName>.ipynb``. Uses the native "Save as…" picker
+ * when available, otherwise downloads to the browser's Downloads folder.
+ * Returns the {@link SaveFileResult} so the caller can toast on the
+ * download-fallback path.
  */
-function downloadNotebookAsIpynb(nb: NotebookModel): void {
+function saveNotebookAsIpynb(nb: NotebookModel): Promise<SaveFileResult> {
   const text = notebookToJsonString(nb);
-  const blob = new Blob([text], {
-    type: "application/x-ipynb+json;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
+  const bytes = new TextEncoder().encode(text);
   const safe = nb.name.replace(/[^-A-Za-z0-9_.() ]+/g, "_") || "notebook";
-  a.download = `${safe}.ipynb`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  return saveBytesToFile(
+    bytes,
+    `${safe}.ipynb`,
+    [
+      acceptFromExtensions(
+        t("Jupyter notebooks"),
+        ["ipynb"],
+        "application/x-ipynb+json",
+      ),
+    ],
+    "application/x-ipynb+json;charset=utf-8",
+  );
 }
 
 export const NotebookPanel = forwardRef<
@@ -163,6 +171,7 @@ export const NotebookPanel = forwardRef<
 ) {
   const confirm = useConfirm();
   const notify = useMessage();
+  const pushToast = useToast();
   // -- Open notebooks (in-memory) --------------------------------------
   const [notebooks, setNotebooks] = useState<NotebookModel[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -789,10 +798,18 @@ export const NotebookPanel = forwardRef<
   }, []);
 
   // -- File: Save as .ipynb ------------------------------------------
-  const handleSaveAs = useCallback(() => {
+  const handleSaveAs = useCallback(async () => {
     if (!activeNotebook) return;
-    downloadNotebookAsIpynb(activeNotebook);
-  }, [activeNotebook]);
+    const result = await saveNotebookAsIpynb(activeNotebook);
+    if (result.outcome === "downloaded") {
+      pushToast({
+        kind: "success",
+        message: t("Saved {name} to your browser's Downloads folder.", {
+          name: result.filename,
+        }),
+      });
+    }
+  }, [activeNotebook, pushToast]);
 
   // -- File: Open .ipynb (file picker) -------------------------------
   const fileInputRef = useRef<HTMLInputElement | null>(null);

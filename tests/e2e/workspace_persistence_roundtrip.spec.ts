@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { waitForRuntimeReady, disableQuickstartTemplate } from "./fixtures";
+import {
+  waitForRuntimeReady,
+  disableQuickstartTemplate,
+  forceSaveDownloadFallback,
+} from "./fixtures";
 
 import type { DataLabRuntime } from "../../src/runtime/runtime";
 
@@ -116,6 +120,10 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   );
 
   // -- 3. Save HDF5 via the File menu ---------------------------------
+  // Playwright's Chromium exposes ``showSaveFilePicker``; force the
+  // download-fallback path so we can capture the bytes via the download
+  // event (native pickers can't be driven from a test).
+  await forceSaveDownloadFallback(page);
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: "File" }).first().click();
   await page.getByRole("menuitem", { name: /Save to HDF5 file/i }).click();

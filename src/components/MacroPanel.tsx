@@ -31,7 +31,9 @@ import {
 import { MacroConsole, type MacroConsoleHandle } from "./MacroConsole";
 import { Splitter } from "./Splitter";
 import { useConfirm } from "./ConfirmDialog";
+import { useToast } from "./Toast";
 import { t } from "../i18n/translate";
+import { acceptFromExtensions, saveBytesToFile } from "../utils/saveFile";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
 import callMethodTemplate from "../macros/templates/call_method_macro.py?raw";
@@ -169,6 +171,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     ref,
   ) {
     const confirm = useConfirm();
+    const pushToast = useToast();
     const [macros, setMacros] = useState<MacroState[]>([]);
     const [openIds, setOpenIds] = useState<string[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
@@ -574,22 +577,28 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       [runtime, openMacro, persistMirror],
     );
 
-    const handleExport = useCallback(() => {
+    const handleExport = useCallback(async () => {
       if (!activeId) return;
       const m = macros.find((x) => x.id === activeId);
       if (!m) return;
       const text = makeFileHeader(m.title) + (m.code ?? "");
-      const blob = new Blob([text], { type: "text/x-python;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+      const bytes = new TextEncoder().encode(text);
       const safe = m.title.replace(/[^-A-Za-z0-9_.() ]+/g, "_");
-      a.download = `${safe}.py`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }, [activeId, macros]);
+      const result = await saveBytesToFile(
+        bytes,
+        `${safe}.py`,
+        [acceptFromExtensions(t("Python files"), ["py"], "text/x-python")],
+        "text/x-python;charset=utf-8",
+      );
+      if (result.outcome === "downloaded") {
+        pushToast({
+          kind: "success",
+          message: t("Saved {name} to your browser's Downloads folder.", {
+            name: result.filename,
+          }),
+        });
+      }
+    }, [activeId, macros, pushToast]);
 
     /**
      * Flush any pending debounced save for *macroId* so subsequent

@@ -18,6 +18,7 @@ import {
   sanitizeFilename,
 } from "../../aiassistant/conversationExport";
 import { t } from "../../i18n/translate";
+import { useToast } from "../Toast";
 
 interface Props {
   /** Called with the selected conversation id (or ``null`` to dismiss). */
@@ -39,6 +40,7 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
   const [items, setItems] = useState<ConversationInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(activeId);
   const [busy, setBusy] = useState(false);
+  const pushToast = useToast();
   /** ID of the row currently in inline-rename mode (``null`` = none). */
   const [editingId, setEditingId] = useState<string | null>(null);
   /** Current draft of the row being renamed. */
@@ -136,7 +138,15 @@ export function ConversationsDialog({ onClose, activeId = null }: Props) {
       .toISOString()
       .slice(0, 10);
     const base = sanitizeFilename(conv.title || "conversation");
-    downloadMarkdown(`${stamp}-${base}.md`, content);
+    const result = await downloadMarkdown(`${stamp}-${base}.md`, content);
+    if (result.outcome === "downloaded") {
+      pushToast({
+        kind: "success",
+        message: t("Saved {name} to your browser's Downloads folder.", {
+          name: result.filename,
+        }),
+      });
+    }
   };
 
   return (

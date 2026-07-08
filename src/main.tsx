@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { DialogProvider } from "./components/ConfirmDialog";
 import { ProgressProvider } from "./components/ProgressDialog";
+import { ToastProvider } from "./components/Toast";
 import { I18nProvider, initI18nEarly } from "./i18n";
 import { RuntimeProvider } from "./runtime/RuntimeContext";
 import { WorkspaceProvider } from "./runtime/WorkspaceContext";
@@ -27,7 +28,9 @@ createRoot(container).render(
           <WorkspaceProvider>
             <DialogProvider>
               <ProgressProvider>
-                <App />
+                <ToastProvider>
+                  <App />
+                </ToastProvider>
               </ProgressProvider>
             </DialogProvider>
           </WorkspaceProvider>

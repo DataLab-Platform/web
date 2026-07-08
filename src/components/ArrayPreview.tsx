@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ObjectStats, RuntimeApi } from "../runtime/runtime";
 import { t } from "../i18n/translate";
+import { acceptFromExtensions, saveBytesToFile } from "../utils/saveFile";
+import { useToast } from "./Toast";
 import { ArrayEditorDialog, MAX_EDITABLE_CELLS } from "./ArrayEditorDialog";
 
 interface Props {
@@ -82,6 +84,7 @@ function SignalArrayPreview({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const pushToast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -110,17 +113,25 @@ function SignalArrayPreview({
     }
   }, [data]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     if (!data) return;
     const csv = buildCsv(data.x, data.y);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${oid}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [data, oid]);
+    const bytes = new TextEncoder().encode(csv);
+    const result = await saveBytesToFile(
+      bytes,
+      `${oid}.csv`,
+      [acceptFromExtensions(t("CSV files"), ["csv"], "text/csv")],
+      "text/csv",
+    );
+    if (result.outcome === "downloaded") {
+      pushToast({
+        kind: "success",
+        message: t("Saved {name} to your browser's Downloads folder.", {
+          name: result.filename,
+        }),
+      });
+    }
+  }, [data, oid, pushToast]);
 
   if (error) return <div className="array-preview-error">{error}</div>;
   if (!data)

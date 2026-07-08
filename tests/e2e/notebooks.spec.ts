@@ -1,5 +1,5 @@
 import { test as coldTest, expect } from "@playwright/test";
-import { waitForRuntimeReady } from "./fixtures";
+import { waitForRuntimeReady, forceSaveDownloadFallback } from "./fixtures";
 import { test, resetWarmNotebookPanel } from "./fixtures-warm";
 
 /**
@@ -178,6 +178,9 @@ test.describe("Notebook UI", () => {
     await page.keyboard.type("print('download-me')");
     await page.waitForTimeout(800);
 
+    // Force the download-fallback path (Chromium exposes the native
+    // save picker, which a test can't drive).
+    await forceSaveDownloadFallback(page);
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("button", { name: "Export…", exact: true }).click(),
@@ -296,6 +299,9 @@ test.describe("Notebook UI", () => {
     await page.keyboard.type(marker);
     await page.waitForTimeout(800);
 
+    // Force the download-fallback path (Chromium exposes the native
+    // save picker, which a test can't drive).
+    await forceSaveDownloadFallback(page);
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("button", { name: "Export…", exact: true }).click(),

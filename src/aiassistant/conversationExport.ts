@@ -11,6 +11,12 @@
 
 import type { Conversation } from "./conversationStore";
 import type { ChatMessage, ToolCall } from "./types";
+import { t } from "../i18n/translate";
+import {
+  acceptFromExtensions,
+  saveBytesToFile,
+  type SaveFileResult,
+} from "../utils/saveFile";
 
 /** Format an ISO-8601 timestamp from an epoch millisecond value. */
 function isoStamp(ms: number): string {
@@ -122,26 +128,19 @@ export function sanitizeFilename(name: string, maxLen = 80): string {
   return cleaned.length > maxLen ? cleaned.slice(0, maxLen).trim() : cleaned;
 }
 
-/** Trigger a browser download of *content* under *filename*. Uses the
- *  ``<a download>`` pattern so it works without a server round-trip.
- *  Safe in test environments: no-ops when ``URL.createObjectURL`` is
- *  missing (jsdom) but still calls the spy if one is installed. */
-export function downloadMarkdown(filename: string, content: string): void {
-  if (typeof document === "undefined" || typeof URL === "undefined") return;
-  if (typeof URL.createObjectURL !== "function") return;
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  } finally {
-    if (typeof URL.revokeObjectURL === "function") {
-      URL.revokeObjectURL(url);
-    }
-  }
+/** Save conversation *content* as a Markdown file under *filename*.
+ *  Uses the native "Save as…" picker when available, otherwise downloads
+ *  to the browser's Downloads folder. Returns the {@link SaveFileResult}
+ *  so the caller can toast on the download-fallback path. */
+export function downloadMarkdown(
+  filename: string,
+  content: string,
+): Promise<SaveFileResult> {
+  const bytes = new TextEncoder().encode(content);
+  return saveBytesToFile(
+    bytes,
+    filename,
+    [acceptFromExtensions(t("Markdown files"), ["md"], "text/markdown")],
+    "text/markdown;charset=utf-8",
+  );
 }
