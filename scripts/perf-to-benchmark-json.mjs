@@ -14,9 +14,11 @@
  *     gates: a real increase means a genuine memory/serialisation
  *     regression. The workflow alerts (and fails on PRs) on these.
  *
- *   - ``bench-timings.json`` — millisecond timings. Kept for trend
- *     inspection only: on shared CI runners they vary run-to-run, so the
- *     workflow tracks them with a wide threshold and never fails on them.
+ *   - ``bench-timings.json`` — trend-only metrics. Millisecond timings
+ *     vary run-to-run on shared CI runners, and a few memory metrics
+ *     (e.g. RAM-mode peak heap growth) are allocator-dependent rather
+ *     than code-deterministic; both are tracked here with a wide
+ *     threshold and never fail the workflow.
  *
  * For each benchmark the most recent ``<prefix>_<timestamp>.json`` file
  * is used (the timestamp embedded in the filename sorts lexicographically).
@@ -38,7 +40,11 @@ const outDir = process.argv[3] || resultsDir;
 
 /** @typedef {{ name: string, unit: string, value: number }} Metric */
 
-/** Mean of a numeric array (0 when empty). */
+/**
+ * Mean of a numeric array (0 when empty).
+ * @param {number[]} xs
+ * @returns {number}
+ */
 function mean(xs) {
   if (!xs || xs.length === 0) return 0;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -49,6 +55,8 @@ const MiB = 1024 * 1024;
 /**
  * Latest ``<prefix>*.json`` file in ``resultsDir`` (by filename sort), or
  * ``null`` when none is present.
+ * @param {string} prefix
+ * @returns {{ file: string, data: any } | null}
  */
 function latest(prefix) {
   if (!existsSync(resultsDir)) return null;
@@ -62,8 +70,13 @@ function latest(prefix) {
 
 const determinist = /** @type {Metric[]} */ ([]);
 const timings = /** @type {Metric[]} */ ([]);
-const used = [];
+const used = /** @type {string[]} */ ([]);
 
+/**
+ * Human-readable config label for one benchmark result row.
+ * @param {{ side: number, n: number, dtype: string }} r
+ * @returns {string}
+ */
 function cfgLabel(r) {
   return `${r.side}² ×${r.n} ${r.dtype}`;
 }
@@ -117,7 +130,14 @@ function cfgLabel(r) {
         unit: "MiB",
         value: +diskGrowth.toFixed(1),
       });
-      determinist.push({
+      // RAM-mode peak growth holds the full working set on purpose, so it is
+      // expected to be large. It is also allocator-dependent: the Pyodide WASM
+      // linear memory grows in coarse chunks and never shrinks, so unrelated
+      // changes (e.g. an extra package loaded at init shifting the baseline
+      // arena) move it by 2× on a single sample without any real leak. It is
+      // therefore tracked as a trend-only metric, never as a regression gate —
+      // the deterministic guard is the `disk Δheap` above.
+      timings.push({
         name: `opfs_storage · ram Δheap [${label}]`,
         unit: "MiB",
         value: +ramGrowth.toFixed(1),
