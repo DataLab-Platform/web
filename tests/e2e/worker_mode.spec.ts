@@ -18,6 +18,10 @@
  * assertions share a single page booted once in ``beforeAll`` and run
  * ``serial``.
  */
+/// <reference types="node" />
+import { Buffer } from "node:buffer";
+import { writeFile } from "node:fs/promises";
+
 import { test, expect, type Browser, type Page } from "@playwright/test";
 
 import { waitForRuntimeReady } from "./fixtures";
@@ -288,7 +292,7 @@ test.describe.serial("worker-mode runtime (E2E)", () => {
     const bytes = Buffer.from(b64, "base64");
     expect(bytes.length).toBeGreaterThan(0);
     const tmpPath = test.info().outputPath("plain-regression.h5");
-    await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, bytes));
+    await writeFile(tmpPath, bytes);
 
     // Drive the real menu path: File > Open HDF5 files… → file chooser.
     const chooserPromise = page.waitForEvent("filechooser");
