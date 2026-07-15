@@ -91,6 +91,47 @@ def test_node_attrs_exposes_attributes(opened):
     assert attrs["attributes"].get("units") == "V"
 
 
+def _assert_no_h5_references(value):
+    """Recursively assert *value* holds no ``h5py.h5r.Reference`` object."""
+    assert not isinstance(value, h5py.h5r.Reference)
+    if isinstance(value, dict):
+        for item in value.values():
+            _assert_no_h5_references(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _assert_no_h5_references(item)
+
+
+def test_node_attrs_stringifies_reference_attributes(tmp_path):
+    """HDF5 reference attributes must not leak non-cloneable objects.
+
+    Files converted with ``h4toh5convert`` carry object-reference attributes
+    (e.g. ``DIMENSION_LIST``) that h5py exposes as ``object``-dtype arrays of
+    :class:`h5py.h5r.Reference`. Such objects cannot cross the worker→main
+    thread ``postMessage`` boundary ("could not be cloned"), so
+    ``_collect_attrs`` must stringify them rather than ``tolist()`` them.
+    """
+    path = tmp_path / "ref.h5"
+    ref_dtype = h5py.special_dtype(ref=h5py.Reference)
+    with h5py.File(path, "w") as f:
+        img = f.create_dataset("img", data=np.arange(64, dtype=float).reshape(8, 8))
+        s0 = f.create_dataset("scale0", data=np.arange(8))
+        s1 = f.create_dataset("scale1", data=np.arange(8))
+        img.attrs.create("DIMENSION_LIST", np.array([s0.ref, s1.ref], dtype=ref_dtype))
+        img.attrs["REFERENCE"] = s0.ref
+        img.attrs["units"] = "px"
+    result = h5b.open_file("ref.h5", path.read_bytes())
+    try:
+        attrs = h5b.node_attrs(result["file_id"], "/img")["attributes"]
+        assert attrs["units"] == "px"
+        # Reference attributes survive only as harmless strings.
+        assert isinstance(attrs["DIMENSION_LIST"], str)
+        assert isinstance(attrs["REFERENCE"], str)
+        _assert_no_h5_references(attrs)
+    finally:
+        h5b.close_all()
+
+
 def test_preview_signal(opened):
     file_id = opened["file_id"]
     prev = h5b.preview(file_id, "/sig")

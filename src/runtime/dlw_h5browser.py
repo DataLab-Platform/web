@@ -431,9 +431,19 @@ def _collect_attrs(dset: Any) -> dict[str, Any]:
         if isinstance(value, bytes):
             value = _safe_decode_bytes(value)
         if isinstance(value, np.ndarray):
-            try:
-                value = value.tolist()
-            except Exception:  # noqa: BLE001
+            # Numeric, boolean and string arrays convert cleanly to
+            # JSON-friendly lists. ``object``/``void`` dtypes are how h5py
+            # exposes HDF5 object/region *reference* attributes (e.g.
+            # ``DIMENSION_LIST`` / ``REFERENCE_LIST`` produced by
+            # ``h4toh5convert``): ``tolist()`` would yield ``h5py.h5r.Reference``
+            # elements that cannot cross the worker→main-thread ``postMessage``
+            # boundary ("could not be cloned"), so stringify them instead.
+            if value.dtype.kind in "biufcSU":
+                try:
+                    value = value.tolist()
+                except Exception:  # noqa: BLE001
+                    value = repr(value)
+            else:
                 value = repr(value)
         elif isinstance(value, (np.integer,)):
             value = int(value)

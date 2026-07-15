@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Saving and opening TIFF images**: saving (or opening) an image in TIFF format no longer fails with an internal `No module named 'tifffile'` error. The library required for TIFF support is now installed alongside the rest of the scientific stack at startup, so `.tif`/`.tiff` files can be written and read like any other image format.
 - **Command palette search**: short queries no longer flood the results with unrelated commands. Typing `rota` (looking for _Rotation_) used to also match entries like _Import annotations_, _Polynomial calibration_ or _Horizontal projection_, because the search accepted any command whose letters appeared in order, however scattered. The search now keeps only commands that either contain the query as-is or match it word-by-word (initials), so results stay relevant while still finding commands like `fft` or `fan` → _Fourier analysis_.
+- **HDF5 files converted from HDF4**: opening an HDF5 file produced by `h4toh5convert` no longer breaks the Properties panel (with a `could not be cloned` error) nor the display of imported signals and images. Such files carry HDF5 object-reference attributes (e.g. `DIMENSION_LIST`) that could not be transferred out of the computation worker; these attributes are now shown as plain text instead, so the data imports and displays normally.
 
 ## [0.6.2] - 2026-06-26
 
