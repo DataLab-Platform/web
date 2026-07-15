@@ -10,12 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Save file / Save signal / Save image…**: on Chromium-based browsers (Chrome, Edge, …), this now opens the native "Save as…" dialog so you choose the destination folder, filename and extension directly — the browser equivalent of DataLab desktop's save dialog — instead of only prompting for a file extension and downloading silently. The same native dialog is now used for exporting metadata, ROIs, HDF5 workspaces, macros, notebooks and AI assistant conversations. On browsers without this API (Firefox, Safari), saving still falls back to downloading into the browser's Downloads folder, but a brief on-screen notification now confirms the file name and destination so it is no longer unclear whether (and where) the file was saved.
 - **Save to directory…**: on browsers without a folder-picker API, you are now warned beforehand that each file will be downloaded individually into the Downloads folder, instead of silently falling back to that behavior.
+- **Image toolbar**: the grid toggle and the resampling selector are now aligned and sized consistently with the colormap and invert controls.
 
 ### Fixed
 
 - **Saving and opening TIFF images**: saving (or opening) an image in TIFF format no longer fails with an internal `No module named 'tifffile'` error. The library required for TIFF support is now installed alongside the rest of the scientific stack at startup, so `.tif`/`.tiff` files can be written and read like any other image format.
 - **Command palette search**: short queries no longer flood the results with unrelated commands. Typing `rota` (looking for _Rotation_) used to also match entries like _Import annotations_, _Polynomial calibration_ or _Horizontal projection_, because the search accepted any command whose letters appeared in order, however scattered. The search now keeps only commands that either contain the query as-is or match it word-by-word (initials), so results stay relevant while still finding commands like `fft` or `fan` → _Fourier analysis_.
 - **HDF5 files converted from HDF4**: opening an HDF5 file produced by `h4toh5convert` no longer breaks the Properties panel (with a `could not be cloned` error) nor the display of imported signals and images. Such files carry HDF5 object-reference attributes (e.g. `DIMENSION_LIST`) that could not be transferred out of the computation worker; these attributes are now shown as plain text instead, so the data imports and displays normally.
+- **Opening plain HDF5 files**: opening a regular (non-DataLab-workspace) HDF5 file no longer fails with an internal `ArrayBuffer already detached` error before the HDF5 browser could open. Such files now open in the HDF5 browser as expected, so you can pick which datasets to import.
 
 ## [0.6.2] - 2026-06-26
 
