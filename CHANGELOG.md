@@ -19,36 +19,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [0.6.2] - 2026-06-26
 
-### Added
+### Added in 0.6.2
 
 - **Cancellable batch processing**: when you apply a processing to several selected signals or images at once, it now runs object by object through the progress dialog, whose **Cancel** button (or the **Esc** key) stops it at the next object — keeping the results already computed. Single-object operations and aggregations (which are a single computation) are not interruptible.
 - **Busy indicator for long computations**: a single processing that takes more than a moment (e.g. a moving median on a large image) now shows a "Computing…" dialog with an animated bar, instead of only greying the interface.
 - **Test data loading in Test Data plugin**: the bundled _Test Data_ plugin now offers menu actions to load a set of standard test signals and images (sine, Gaussian, dot matrix, …) directly, making it easy to explore processing features without importing external files.
 
-### Changed
+### Changed in 0.6.2
 
 - The Pyodide runtime now runs in a background worker **by default**, keeping the interface responsive while computations run. The previous in-thread runtime remains available as a fallback via `?runtime=main` (see [doc/troubleshooting.md](doc/troubleshooting.md)).
 
 ## [0.6.1] - 2026-06-26
 
-### Added
+### Added in 0.6.1
 
 - **AI assistant from the welcome screen**: the welcome screen now offers an **Ask the AI assistant** entry that opens (and expands) the built-in assistant panel directly, so you can start chatting to inspect, create and process your data without hunting for the panel.
 - **Image grid toggle**: the image viewer gained a grid toggle whose state is remembered across single-image and multi-image spatial views.
 
-### Changed
+### Changed in 0.6.1
 
 - Macros are no longer silently bulk-restored from the cache on a cold start: like notebooks, they are now reachable through the **Recent…** menus, and pristine template macros are no longer cached. The cold-start banner now points to the **Recent…** menus accordingly.
 - Reduced the horizontal clutter of the menu bar and top UI for a cleaner layout.
 
-### Fixed
+### Fixed in 0.6.1
 
 - Image regions of interest now update live while you move or resize them with the mouse, instead of only refreshing when the drag ends.
 - Reworked image panning and zooming: box-zoom now sticks on release, panning works reliably on image traces (including fixing an inverted vertical pan and keeping square pixels), and the multi-image spatial overlay re-fetches the selected images' coordinates so it updates correctly.
 
 ## [0.6.0] - 2026-06-24
 
-### Added
+### Added in 0.6.0
 
 - **Command palette**: a VSCode-style searchable overlay (opened with **Ctrl/Cmd+K** or the menu-bar button) lists every menu command by its localised path, with fuzzy search and full keyboard navigation, so any action can be found and run without hunting through the menus.
 - **Toolbar**: a quick-access toolbar above the plot exposes the most common actions (metadata editing, ROI management, …) as buttons, mirroring DataLab desktop's toolbar.
@@ -59,7 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Processing error dialog**: when a processing or analysis call fails, a copy-pasteable modal now surfaces the full traceback and the context of the failed request instead of failing silently; the traceback is still logged to the browser console.
 - **Example plugins**: the _Plugins → Manage plugins…_ dialog now offers a set of bundled example plugins (ported from DataLab desktop) that you can load on demand to explore the plugin API — menus, submenus, message/question/parameter dialogs and a custom image processing.
 
-### Changed
+### Changed in 0.6.0
 
 - Signal ROIs now draw dashed boundary lines marking the region extent, making the selected interval easier to read on the curve.
 - The image **Erase area** action moved into the **Processing** menu with a clearer icon, and several ROI-related labels were reworded for clarity.
@@ -69,7 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [0.5.0] - 2026-06-12
 
-### Added
+### Added in 0.5.0
 
 - **Large-image level-of-detail (LOD) rendering**: the single-image viewer now rasterises only the visible viewport at a stride matched to the current zoom, so panning and zooming very large images (4096²+) stays responsive instead of re-rendering the full array on every interaction. Profiles, statistics, histograms and hover read-outs continue to read the full-resolution data, so accuracy is unchanged.
 - **Memory indicator and reclamation**: the menu bar shows live memory usage — both the Pyodide WebAssembly heap and the data currently held by the workspace. Clicking the indicator opens a menu gathering the memory-related actions: a **Store data on disk** toggle and a one-click **Free memory** action to reclaim memory that is no longer in use.
@@ -84,14 +84,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Multi-selection ROI extraction**: aligned region-of-interest extraction on multiple selected signals or images, allowing users to apply the current object's ROI to all selected objects and grouping the outputs cleanly.
 - **Blob detection grouping**: grouped blob detection under the **Analysis** submenu to mirror the DataLab desktop menu organization.
 
-### Changed
+### Changed in 0.5.0
 
 - Menu and toolbar icons are now embedded directly in the bundle instead of being fetched as separate files, so they appear instantly on first paint without a brief flicker and without extra network round-trips.
 - **Optimized bundle splitting and lazy-loading**: reduced the initial app bundle footprint from 2.05 MB to ~414 kB gzipped. Heavier vendor dependencies (Plotly, CodeMirror, and React) are now split into dedicated cacheable chunks, and code-editor panels (Macro and Notebook panels) are lazy-loaded after first boot.
 - **Fast binary signal serialization**: large signal data arrays are now serialized using raw binary buffers via zero-copy views (`Float64Array`) instead of JSON stringification across the JS/Pyodide boundary, dramatically reducing serialization processing overhead.
 - **Offscreen rendering and OPFS paging latency**: parallelized OPFS page-in disk operations via concurrent promises and optimized offscreen canvas paint loops (avoiding redundant pixel-level color allocations), ensuring responsive performance during heavy viewport updates.
 
-### Fixed
+### Fixed in 0.5.0
 
 - Changing a displayed object's properties (title, axis labels/units…) from a macro, notebook, remote-control call or the AI assistant now refreshes the central plot immediately, instead of updating only the object tree and leaving stale axis titles/units on the graph.
 - Fixed spurious `get_image_data failed` console errors when a script or notebook creates a signal and then an image in quick succession (e.g. the **Signal & image processing** notebook template): a panel refresh could briefly leave the image viewer pointed at a signal object. The processing results were unaffected; only the stray errors are gone.
@@ -114,16 +114,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [0.4.0] - 2026-06-01
 
-### Added
+### Added in 0.4.0
 
 - **Internationalisation framework**: the UI now renders in the user's regional language (auto-detected, with a language selector in the menu bar and a `?lang=` URL override). English is the source language and French is the first translated locale.
 - **Spreadsheet array editor**: signal and image raw data (signal X/Y values, image pixel matrices) can now be edited directly from the properties panel through a spreadsheet-style array editor dialog, with an enriched array preview.
 
-### Changed
+### Changed in 0.4.0
 
 - Inactive and computed parameter fields are now displayed read-only in the properties panel, matching DataLab Qt's behaviour.
 
-### Fixed
+### Fixed in 0.4.0
 
 - Non-uniform images now render with their exact pixel coordinates (correct extent and hover Z values) instead of being collapsed onto a uniform grid.
 - Picture-in-Picture floating windows and their `pagehide` listener are now properly cleaned up when the side panel is closed.
