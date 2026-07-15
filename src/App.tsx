@@ -3377,7 +3377,11 @@ export default function App() {
           if (msg.includes("Not a DataLab HDF5 workspace")) {
             let opened: H5BrowserFile | null = null;
             try {
-              opened = await runtime.openH5Browser(file.name, bytes);
+              // ``bytes`` was *transferred* (detached) by the failed
+              // ``openWorkspaceHdf5`` call above in worker mode, so re-read
+              // the file for this fallback path.
+              const h5bytes = new Uint8Array(await file.arrayBuffer());
+              opened = await runtime.openH5Browser(file.name, h5bytes);
               const supported = new Set<string>();
               collectSupportedH5NodeIds(opened.root, supported);
               if (supported.size === 0) {

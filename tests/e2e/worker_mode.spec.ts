@@ -52,6 +52,7 @@ interface E2ERuntime {
   getMemoryUsage(): { wasmBytes: number | null };
   deleteAllObjects(kind: "signal" | "image"): Promise<void>;
   resetAll(): Promise<void>;
+  runPython(code: string): Promise<unknown>;
 }
 
 /* The runtime is exposed on ``window.runtime`` in dev mode by
@@ -250,5 +251,64 @@ test.describe.serial("worker-mode runtime (E2E)", () => {
     await expect
       .poll(() => page.title(), { timeout: 10_000 })
       .toMatch(/\u2022/);
+  });
+
+  test("opens a plain (non-workspace) HDF5 file via File > Open HDF5 files", async () => {
+    // Regression guard for the "ArrayBuffer already detached" crash: the
+    // ``File > Open HDF5 files…`` handler first tries ``openWorkspaceHdf5``,
+    // which — in worker mode — *transfers* (detaches) the file bytes into
+    // the worker. A plain HDF5 file is not a DataLab workspace, so that call
+    // rejects and the handler falls back to ``openH5Browser`` to import the
+    // datasets. Re-using the now-detached buffer made ``postMessage`` throw
+    // ``DataCloneError`` and the whole open failed. This only manifests in
+    // worker mode (in-thread mode never transfers), which is why no prior
+    // test caught it.
+    await page.evaluate(async () => {
+      const runtime = (window as unknown as { runtime: E2ERuntime }).runtime;
+      await runtime.resetAll();
+    });
+
+    // Build a plain HDF5 file (a single 2-D dataset → imported as an image)
+    // inside Pyodide and pull the raw bytes out as base64.
+    const b64 = (await page.evaluate(async () => {
+      const runtime = (window as unknown as { runtime: E2ERuntime }).runtime;
+      return (await runtime.runPython(
+        [
+          "import h5py, numpy as np, base64",
+          "path = '/tmp/_plain_regression.h5'",
+          "with h5py.File(path, 'w') as _f:",
+          "    _f.create_dataset('image', " +
+            "data=np.arange(64 * 64, dtype=float).reshape(64, 64))",
+          "with open(path, 'rb') as _fh:",
+          "    _raw = _fh.read()",
+          "base64.b64encode(_raw).decode()",
+        ].join("\n"),
+      )) as string;
+    })) as string;
+    const bytes = Buffer.from(b64, "base64");
+    expect(bytes.length).toBeGreaterThan(0);
+    const tmpPath = test.info().outputPath("plain-regression.h5");
+    await import("node:fs/promises").then((fs) => fs.writeFile(tmpPath, bytes));
+
+    // Drive the real menu path: File > Open HDF5 files… → file chooser.
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("menuitem", { name: "File" }).first().click();
+    await page.getByRole("menuitem", { name: /Open HDF5 files/i }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(tmpPath);
+
+    // The dataset must be imported as an image — proving the fallback ran
+    // without the detached-buffer crash.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const runtime = (window as unknown as { runtime: E2ERuntime })
+              .runtime;
+            return (await runtime.listImages()).length;
+          }),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0);
   });
 });
