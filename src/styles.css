@@ -3859,7 +3859,9 @@ input {
 }
 
 .image-tools-colormap,
-.image-tools-invert {
+.image-tools-invert,
+.image-tools-grid,
+.image-tools-resample {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -3867,7 +3869,8 @@ input {
   color: var(--text);
 }
 
-.image-tools-colormap select {
+.image-tools-colormap select,
+.image-tools-resample select {
   font-size: 12px;
   padding: 2px 4px;
   background: var(--panel);
@@ -3876,7 +3879,8 @@ input {
   border-radius: 3px;
 }
 
-.image-tools-invert input[type="checkbox"] {
+.image-tools-invert input[type="checkbox"],
+.image-tools-grid input[type="checkbox"] {
   margin: 0;
 }
 
