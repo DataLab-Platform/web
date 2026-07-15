@@ -774,7 +774,7 @@
   "Reset axes to autoscale": "Réinitialiser les axes en échelle automatique",
   "Reset image positions": "Réinitialiser les positions des images",
   "Reset to defaults": "Réinitialiser aux valeurs par défaut",
-  "Reset to the image's intrinsic data range": "Réinitialiser à la plage de données intrinsèque de l'image",
+  "Reset to the automatic contrast range": "Réinitialiser à la plage de contraste automatique",
   "Resize": "Redimensionner",
   "Resize left panel": "Redimensionner le panneau de gauche",
   "Resize macro editor": "Redimensionner l'éditeur de macro",

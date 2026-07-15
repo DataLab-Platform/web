@@ -348,9 +348,14 @@ export interface ImageData {
   xcoords?: number[];
   /** Per-row pixel-center Y coordinates (non-uniform images only). */
   ycoords?: number[];
-  /** Pre-computed extrema, used to seed the LUT range. */
+  /** Pre-computed extrema, used to bound the contrast slider. */
   data_min: number;
   data_max: number;
+  /** Default LUT range with histogram outlier tails removed (mirrors
+   *  DataLab desktop's ``ima_eliminate_outliers`` auto-contrast).  Used as the
+   *  default colour range; ``data_min``/``data_max`` still bound the slider.
+   *  Falls back to ``[data_min, data_max]`` when omitted. */
+  lut_default?: [number, number];
   xlabel: string;
   ylabel: string;
   zlabel: string;

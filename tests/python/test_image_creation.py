@@ -235,3 +235,48 @@ def test_get_image_data_non_uniform_coords_track_downsampling(fresh_bootstrap):
     # First coordinate preserved (stride starts at index 0).
     assert small["xcoords"][0] == 0.0
     assert small["ycoords"][0] == 0.0
+
+
+def test_lut_default_eliminates_outliers(fresh_bootstrap):
+    """The default LUT range rejects the histogram outlier tails.
+
+    Mirrors DataLab desktop's ``ima_eliminate_outliers`` auto-contrast: a bulk
+    of values plus a few extreme pixels must yield a default range that clips
+    the extremes, while the true extrema stay in ``data_min``/``data_max``.
+    """
+    bs = fresh_bootstrap
+    arr = np.full((100, 100), 50.0)
+    # A handful of cold / hot outliers well outside the bulk.
+    arr[0, 0] = -1000.0
+    arr[0, 1] = 1000.0
+    oid = bs.add_image_from_array("out", arr)
+    payload = bs.get_image_data(oid)
+    lo, hi = payload["lut_default"]
+    # True extrema preserved for the contrast slider bounds.
+    assert payload["data_min"] == -1000.0
+    assert payload["data_max"] == 1000.0
+    # Default range clips the outliers (stays near the bulk value).
+    assert lo > payload["data_min"]
+    assert hi < payload["data_max"]
+
+
+def test_lut_default_constant_image_is_degenerate(fresh_bootstrap):
+    """A constant image falls back to the raw extrema (no division by zero)."""
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("flat", np.full((10, 10), 7.0))
+    payload = bs.get_image_data(oid)
+    assert payload["lut_default"] == [payload["data_min"], payload["data_max"]]
+
+
+def test_lut_default_smooth_gradient_matches_extrema(fresh_bootstrap):
+    """Without outliers, the default range stays close to the full extrema."""
+    bs = fresh_bootstrap
+    arr = np.linspace(0.0, 1.0, 10000).reshape(100, 100)
+    oid = bs.add_image_from_array("grad", arr)
+    payload = bs.get_image_data(oid)
+    lo, hi = payload["lut_default"]
+    # 2 % elimination on a uniform gradient trims ~1 % off each end.
+    assert lo == pytest.approx(payload["data_min"], abs=0.05)
+    assert hi == pytest.approx(payload["data_max"], abs=0.05)
+    assert lo >= payload["data_min"]
+    assert hi <= payload["data_max"]

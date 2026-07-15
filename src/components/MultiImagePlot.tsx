@@ -128,8 +128,8 @@ function MiniImageImpl({ image }: { image: ImageData }) {
       flat,
       w,
       h,
-      image.data_min,
-      image.data_max,
+      image.lut_default ? image.lut_default[0] : image.data_min,
+      image.lut_default ? image.lut_default[1] : image.data_max,
       image.colormap || "Viridis",
       Boolean(image.invert_colormap),
     );
@@ -139,6 +139,7 @@ function MiniImageImpl({ image }: { image: ImageData }) {
     image.width,
     image.height,
     image.data,
+    image.lut_default,
     image.data_min,
     image.data_max,
     image.colormap,

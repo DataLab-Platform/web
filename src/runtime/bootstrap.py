@@ -3067,6 +3067,72 @@ def create_image(
     return _MODEL.add_object("image", obj, group_id=group_id)
 
 
+# Default fraction of the image histogram eliminated (symmetrically) when
+# seeding the LUT range, mirroring DataLab desktop's ``ima_eliminate_outliers``
+# preference (``datalab/gui/settings.py``, default 2.0 %).  ``percent`` is the
+# *total* mass rejected — ``percent / 2`` off each tail.  Rejecting the extreme
+# pixel values keeps the default colour range representative for scientific
+# images that carry a few hot / cold outliers.
+IMAGE_ELIMINATE_OUTLIERS_PERCENT = 2.0
+
+# Number of histogram bins used to compute the outlier-eliminated LUT range,
+# matching PlotPy's ``lut_range_threshold`` default (``plotpy/lutrange.py``).
+_LUT_HIST_BINS = 256
+
+
+def _eliminate_outliers_range(
+    data: "np.ndarray",
+    data_min: float,
+    data_max: float,
+    percent: float = IMAGE_ELIMINATE_OUTLIERS_PERCENT,
+) -> tuple[float, float]:
+    """Return the LUT range with the outlier tails of the histogram removed.
+
+    Port of PlotPy's ``hist_range_threshold`` (``plotpy/lutrange.py``): build a
+    256-bin histogram and reject ``percent / 2`` of the histogram mass off each
+    tail.  For integer images the first bin (typically value 0) is ignored, as
+    on desktop.  Falls back to the raw ``[data_min, data_max]`` extrema for
+    degenerate cases (constant image, empty / all-NaN data, ``percent <= 0``).
+
+    Args:
+        data: full-resolution image data (may contain NaNs).
+        data_min: pre-computed ``np.nanmin(data)``.
+        data_max: pre-computed ``np.nanmax(data)``.
+        percent: total histogram mass to eliminate (``percent / 2`` per side).
+
+    Returns:
+        ``(vmin, vmax)`` LUT range.
+    """
+    if percent <= 0 or not np.isfinite(data_min) or not np.isfinite(data_max):
+        return data_min, data_max
+    if data_max <= data_min:
+        return data_min, data_max
+    finite = data[np.isfinite(data)]
+    if finite.size == 0:
+        return data_min, data_max
+    hist, bin_edges = np.histogram(finite, bins=_LUT_HIST_BINS)
+    i_offset = 0
+    # Integer images: ignore the first bin (typically corresponding to 0),
+    # mirroring PlotPy's handling of integer-valued histograms.
+    if np.issubdtype(data.dtype, np.integer):
+        hist = hist[1:]
+        i_offset = 1
+    hist_len = len(hist)
+    total = hist.sum()
+    if hist_len == 0 or total == 0:
+        return data_min, data_max
+    # Threshold: reject ``percent / 2`` of the mass off each tail.
+    threshold = 0.5 * percent / 100.0 * total
+    i_bin_min = max(int(np.cumsum(hist).searchsorted(threshold)) - i_offset, 0)
+    i_bin_max = hist_len - int(np.searchsorted(np.cumsum(np.flipud(hist)), threshold))
+    i_bin_max = min(max(i_bin_max, 0), len(bin_edges) - 1)
+    vmin = float(bin_edges[i_bin_min])
+    vmax = float(bin_edges[i_bin_max])
+    if vmax <= vmin:
+        return data_min, data_max
+    return vmin, vmax
+
+
 def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
     """Return *data* decimated so its largest dimension is ≤ *max_size*.
 
@@ -3122,6 +3188,11 @@ def get_image_data(
     # range stays representative even when we ship a downsampled view.
     data_min = float(np.nanmin(raw))
     data_max = float(np.nanmax(raw))
+    # Default LUT range with the histogram outlier tails removed, mirroring
+    # DataLab desktop's ``ima_eliminate_outliers`` auto-contrast.  Computed on
+    # the full-resolution data; the front-end uses it as the default range
+    # while ``data_min``/``data_max`` still bound the contrast slider.
+    lut_min, lut_max = _eliminate_outliers_range(raw, data_min, data_max)
     data = _maybe_downsample(raw, max_size)
     # Non-uniform images carry explicit per-column / per-row pixel-center
     # coordinates (``is_uniform_coords`` is ``False``).  The front-end needs
@@ -3158,6 +3229,7 @@ def get_image_data(
         "ycoords": ycoords,
         "data_min": data_min,
         "data_max": data_max,
+        "lut_default": [lut_min, lut_max],
         "xlabel": obj.xlabel or "",
         "ylabel": obj.ylabel or "",
         "zlabel": getattr(obj, "zlabel", "") or "",

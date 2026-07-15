@@ -209,8 +209,9 @@ export function ImagePlot({
   const effectiveLut: [number, number] = useMemo(() => {
     if (draftLut) return draftLut;
     if (lutRange) return lutRange;
+    if (data.lut_default) return data.lut_default;
     return [data.data_min, data.data_max];
-  }, [draftLut, lutRange, data.data_min, data.data_max]);
+  }, [draftLut, lutRange, data.lut_default, data.data_min, data.data_max]);
 
   // ------------------------------------------------------------------
   // Non-uniform images carry explicit per-column / per-row pixel-center
@@ -1958,7 +1959,7 @@ function ContrastPanel({
           type="button"
           className="contrast-auto"
           onClick={() => onCommit(null)}
-          title={t("Reset to the image's intrinsic data range")}
+          title={t("Reset to the automatic contrast range")}
         >
           {t("Auto")}
         </button>
