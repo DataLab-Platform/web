@@ -16,9 +16,12 @@
  * ``major``, ``prerelease``).
  *
  * The script also promotes the ``[Unreleased]`` section of
- * ``CHANGELOG.md`` to ``[X.Y.Z] - YYYY-MM-DD`` and refreshes the
- * bottom-of-file link references in the same commit. It refuses to
- * proceed if ``[Unreleased]`` has no entries, unless
+ * ``CHANGELOG.md`` to ``[X.Y.Z] - YYYY-MM-DD``, suffixes each
+ * sub-heading with `` in X.Y.Z`` (so ``### Fixed`` becomes
+ * ``### Fixed in X.Y.Z``, matching the released-section convention that
+ * keeps the in-app **Help > Release notes** dialog unambiguous), and
+ * refreshes the bottom-of-file link references in the same commit. It
+ * refuses to proceed if ``[Unreleased]`` has no entries, unless
  * ``--allow-empty-changelog`` is passed (intended for tag-only or
  * infrastructure releases).
  */
@@ -28,7 +31,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { extractSection } from "./extract-changelog.mjs";
+import { extractSection, promoteSubHeadings } from "./extract-changelog.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_PKG = resolve(ROOT, "package.json");
@@ -58,8 +61,10 @@ function readVersion(pkgPath) {
 /**
  * Promote the ``[Unreleased]`` block of CHANGELOG.md to a versioned
  * section dated today, leaving a fresh empty ``[Unreleased]`` on top
- * and updating the bottom link references. Returns ``true`` if the
- * file was modified.
+ * and updating the bottom link references. Each sub-heading of the
+ * promoted block is suffixed with `` in X.Y.Z`` (via
+ * {@link promoteSubHeadings}) to match the released-section convention.
+ * Returns ``true`` if the file was modified.
  *
  * If the ``[Unreleased]`` block is empty, the release is aborted
  * unless ``allowEmpty`` is true (CLI flag ``--allow-empty-changelog``).
@@ -99,7 +104,7 @@ function promoteChangelog(newVersion, allowEmpty) {
     );
   }
   const today = new Date().toISOString().slice(0, 10);
-  const promoted = body.replace(/in Unreleased\b/g, `in ${newVersion}`);
+  const promoted = promoteSubHeadings(body, newVersion);
   const replacement =
     `${header}\n\n` +
     `## [${newVersion}] - ${today}\n\n` +

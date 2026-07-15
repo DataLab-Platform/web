@@ -18,7 +18,6 @@
  * assertions share a single page booted once in ``beforeAll`` and run
  * ``serial``.
  */
-/// <reference types="node" />
 import { Buffer } from "node:buffer";
 import { writeFile } from "node:fs/promises";
 

@@ -9,7 +9,10 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { extractSection } from "../../../scripts/extract-changelog.mjs";
+import {
+  extractSection,
+  promoteSubHeadings,
+} from "../../../scripts/extract-changelog.mjs";
 
 const SAMPLE = `# Changelog
 
@@ -77,5 +80,44 @@ describe("extractSection", () => {
   it("does not treat a version as a regex prefix", () => {
     // '0.3' must not match '0.3.0' (the dot is escaped, brackets required).
     expect(extractSection(SAMPLE, "0.3")).toBeNull();
+  });
+});
+
+describe("promoteSubHeadings", () => {
+  it("suffixes bare sub-headings with ' in X.Y.Z'", () => {
+    const body = "### Changed\n\n- A tweak.\n\n### Fixed\n\n- A bug fix.";
+    const out = promoteSubHeadings(body, "0.7.0");
+    expect(out).toContain("### Changed in 0.7.0");
+    expect(out).toContain("### Fixed in 0.7.0");
+    // Bullet content must be left untouched.
+    expect(out).toContain("- A tweak.");
+    expect(out).toContain("- A bug fix.");
+  });
+
+  it("rewrites the legacy 'in Unreleased' suffix", () => {
+    const out = promoteSubHeadings(
+      "### Added in Unreleased\n\n- New.",
+      "1.0.0",
+    );
+    expect(out).toContain("### Added in 1.0.0");
+    expect(out).not.toContain("Unreleased");
+  });
+
+  it("is idempotent on already-suffixed sub-headings", () => {
+    const out = promoteSubHeadings("### Fixed in 0.7.0\n\n- Fix.", "0.7.0");
+    expect(out).toBe("### Fixed in 0.7.0\n\n- Fix.");
+  });
+
+  it("leaves the top-level version heading untouched", () => {
+    const out = promoteSubHeadings("## [Unreleased]\n\n### Added", "0.7.0");
+    expect(out).toContain("## [Unreleased]");
+    expect(out).toContain("### Added in 0.7.0");
+  });
+
+  it("is the inverse of extractSection normalisation", () => {
+    const body = "### Added\n\n- One.\n\n### Fixed\n\n- Two.";
+    const promoted = promoteSubHeadings(body, "0.7.0");
+    const md = `## [0.7.0] - 2026-07-15\n\n${promoted}\n`;
+    expect(extractSection(md, "0.7.0")).toBe(body);
   });
 });

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Extract a single version's section from ``CHANGELOG.md``.
  *
@@ -64,6 +63,37 @@ export function extractSection(md, version) {
     "$1",
   );
   return normalised;
+}
+
+/**
+ * Append `` in X.Y.Z`` to every sub-heading (level 3+) of a changelog
+ * ``body`` when promoting the ``[Unreleased]`` section to a versioned
+ * one. This is the exact inverse of the normalisation performed by
+ * {@link extractSection}: released sections carry ``### Added in X.Y.Z``
+ * sub-headings so the in-app **Help > Release notes** dialog stays
+ * unambiguous when several versions are concatenated, while
+ * {@link extractSection} strips the suffix again for single-version
+ * GitHub Release notes.
+ *
+ * The transform is idempotent and tolerant of the input form:
+ * - bare ``### Added``                 -> ``### Added in X.Y.Z``
+ * - legacy ``### Added in Unreleased`` -> ``### Added in X.Y.Z``
+ * - already ``### Added in X.Y.Z``     -> unchanged
+ *
+ * The top-level ``## [X.Y.Z]`` heading (level 2) is deliberately left
+ * untouched. Sub-headings are assumed to be the single-word
+ * Keep-a-Changelog categories (Added / Changed / Fixed / Removed /
+ * Deprecated / Security).
+ *
+ * @param {string} body - Changelog body between two ``## [`` headings.
+ * @param {string} version - Target version, e.g. ``0.7.0``.
+ * @returns {string} The body with sub-headings suffixed by `` in X.Y.Z``.
+ */
+export function promoteSubHeadings(body, version) {
+  return body.replace(
+    /^(#{3,6}[ \t]+\S.*?)(?:[ \t]+in[ \t]+\S+)?[ \t]*$/gm,
+    `$1 in ${version}`,
+  );
 }
 
 function main() {
