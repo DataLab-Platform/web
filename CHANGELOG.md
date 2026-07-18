@@ -6,14 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Changed
+## [0.6.3] - 2026-07-18
+
+### Changed in 0.6.3
 
 - **Image contrast**: images now open with outlier-eliminated contrast by default — the highest and lowest 1% of pixel values (2% total) are excluded from the initial colour range — instead of stretching the full raw min/max, which could wash out the image when a few extreme pixels were present. This matches DataLab desktop's default behavior. The **Auto** button in the contrast panel now resets to this same range rather than the raw data extrema; the contrast sliders still let you reach the full range if needed.
 - **Save file / Save signal / Save image…**: on Chromium-based browsers (Chrome, Edge, …), this now opens the native "Save as…" dialog so you choose the destination folder, filename and extension directly — the browser equivalent of DataLab desktop's save dialog — instead of only prompting for a file extension and downloading silently. The same native dialog is now used for exporting metadata, ROIs, HDF5 workspaces, macros, notebooks and AI assistant conversations. On browsers without this API (Firefox, Safari), saving still falls back to downloading into the browser's Downloads folder, but a brief on-screen notification now confirms the file name and destination so it is no longer unclear whether (and where) the file was saved.
 - **Save to directory…**: on browsers without a folder-picker API, you are now warned beforehand that each file will be downloaded individually into the Downloads folder, instead of silently falling back to that behavior.
 - **Image toolbar**: the grid toggle and the resampling selector are now aligned and sized consistently with the colormap and invert controls.
 
-### Fixed
+### Fixed in 0.6.3
 
 - **Saving and opening TIFF images**: saving (or opening) an image in TIFF format no longer fails with an internal `No module named 'tifffile'` error. The library required for TIFF support is now installed alongside the rest of the scientific stack at startup, so `.tif`/`.tiff` files can be written and read like any other image format.
 - **Command palette search**: short queries no longer flood the results with unrelated commands. Typing `rota` (looking for _Rotation_) used to also match entries like _Import annotations_, _Polynomial calibration_ or _Horizontal projection_, because the search accepted any command whose letters appeared in order, however scattered. The search now keeps only commands that either contain the query as-is or match it word-by-word (initials), so results stay relevant while still finding commands like `fft` or `fan` → _Fourier analysis_.
@@ -209,7 +211,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/DataLab-Platform/web/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/DataLab-Platform/web/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/DataLab-Platform/web/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/DataLab-Platform/web/compare/v0.5.0...v0.6.0
