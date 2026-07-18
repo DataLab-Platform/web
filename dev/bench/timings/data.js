@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784365985487,
+  "lastUpdate": 1784366309934,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (timings)": [
@@ -1074,6 +1074,95 @@ window.BENCHMARK_DATA = {
           {
             "name": "opfs_worker · sync add [2048² ×8 float64]",
             "value": 346.4,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "31cf3779e4d4bcc4956b00aedae4d7f6262b09f9",
+          "message": "v0.6.3",
+          "timestamp": "2026-07-18T11:15:05+02:00",
+          "tree_id": "4aab9fb2756ea450d019b9dc688335cf5814632b",
+          "url": "https://github.com/DataLab-Platform/web/commit/31cf3779e4d4bcc4956b00aedae4d7f6262b09f9"
+        },
+        "date": 1784366309693,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · multi-select → grid",
+            "value": 1739.2,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · getImagesData (×4)",
+            "value": 180,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · plotly draw",
+            "value": 33.1,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [1024² ×16 float64]",
+            "value": 156.4,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [1024² ×16 float64]",
+            "value": 160.8,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [1024² ×16 float64]",
+            "value": 147.4,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [2048² ×8 float64]",
+            "value": 163.4,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [2048² ×8 float64]",
+            "value": 281.9,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [2048² ×8 float64]",
+            "value": 232,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [1024² ×16 float64]",
+            "value": 174.3,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [1024² ×16 float64]",
+            "value": 155.7,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [2048² ×8 float64]",
+            "value": 314.4,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [2048² ×8 float64]",
+            "value": 306.4,
             "unit": "ms"
           }
         ]
