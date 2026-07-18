@@ -6,12 +6,14 @@ import { defineConfig, devices } from "@playwright/test";
  * This config is **opt-in** and is never exercised by the regression
  * suite (the main ``playwright.config.ts`` explicitly ignores
  * ``demo/demo.spec.ts``). It is driven by ``scripts/make-demo-gif.mjs``
- * (``npm run demo:gif``), which runs the single scripted demo with video
- * recording forced on, then converts the resulting WebM to an optimised
- * animated GIF with gifski.
+ * (``npm run demo:gif``), which runs the single scripted demo, capturing
+ * lossless per-frame PNGs via the DevTools screencast API, then assembles
+ * them into an optimised animated GIF with ffmpeg.
  *
  * The viewport is fixed to a 16:10 desktop frame so the recording is
- * deterministic and crops cleanly when scaled down for the GIF.
+ * deterministic; the ``high`` quality profile emits the GIF at this native
+ * 1280x800 capture resolution. Playwright's own WebM recording is disabled
+ * (the screencast frames are the only source).
  */
 const VIEWPORT = { width: 1280, height: 800 };
 
@@ -33,7 +35,7 @@ export default defineConfig({
     viewport: VIEWPORT,
     trace: "off",
     screenshot: "off",
-    video: { mode: "on", size: VIEWPORT },
+    video: "off",
   },
   projects: [
     {

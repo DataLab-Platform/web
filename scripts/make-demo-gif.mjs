@@ -4,16 +4,22 @@
  * animated GIF suitable for the README / website.
  *
  * Pipeline:
- *   1. Run ``playwright.demo.config.ts`` (single spec, video on). This
- *      boots Pyodide and drives the feature showcase, producing a WebM
- *      under ``test-results/demo/`` plus a ``meta.json`` with the trim
- *      window (so the long Pyodide boot is cut from the final GIF).
- *   2. Encode the trimmed action window straight to an optimised GIF with
- *      ffmpeg (palettegen/paletteuse), cutting the Pyodide boot lead-in.
- *   3. If the GIF exceeds the size budget (~4 MB), retry with gradually
- *      cheaper settings (colours → fps → width) until it fits.
+ *   1. Run ``playwright.demo.config.ts`` (single spec). This boots Pyodide,
+ *      drives the feature showcase and captures the action window as lossless
+ *      per-frame PNGs via the DevTools screencast API, writing them (with
+ *      millisecond timestamps) under ``test-results/demo/frames/`` plus a
+ *      ``meta.json`` manifest.
+ *   2. Assemble the frames into an optimised GIF with ffmpeg (concat demuxer →
+ *      palettegen/paletteuse), reproducing the original pacing from the frame
+ *      timestamps.
+ *   3. If the GIF exceeds the size budget, retry with gradually cheaper
+ *      settings (fps → width) until it fits.
  *
- * Requirements: ``ffmpeg`` on PATH (already used by Playwright for video).
+ * Lossless frames (rather than Playwright's ~0.5 Mb/s VP8 WebM) are what make
+ * the GIF crisp: the WebM's block artefacts otherwise cap quality before the
+ * 256-colour quantisation.
+ *
+ * Requirements: ``ffmpeg`` on PATH.
  *   - ffmpeg:  winget install Gyan.FFmpeg   (or choco install ffmpeg)
  *
  * The GIF is encoded with ffmpeg's high-quality ``palettegen`` /
@@ -25,10 +31,16 @@
  * Usage:
  *   node scripts/make-demo-gif.mjs                 # record + convert
  *   node scripts/make-demo-gif.mjs --skip-record   # reuse last recording
- *   node scripts/make-demo-gif.mjs --width 800 --fps 12 --colors 200
- *   node scripts/make-demo-gif.mjs --target-mb 4 --out doc/images/demo.gif
+ *   node scripts/make-demo-gif.mjs --width 1280 --fps 25 --colors 256
+ *   node scripts/make-demo-gif.mjs --target-mb 12 --out doc/images/demo.gif
  *   node scripts/make-demo-gif.mjs --speed 1.5      # faster playback
  *   node scripts/make-demo-gif.mjs --theme dark     # record in dark mode
+ *   node scripts/make-demo-gif.mjs --quality low    # smaller 820px GIF (<=4 MB)
+ *
+ * Quality profiles (``--quality``, default ``high``):
+ *   high — 1280px (native capture resolution), 25 fps, 256-colour global
+ *          palette: the sharpest, smoothest GIF (~12 MB budget).
+ *   low  — 820px, 20 fps: a smaller drop-in variant (<=4 MB budget).
  */
 
 import { spawnSync } from "node:child_process";
@@ -36,8 +48,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +74,13 @@ const THEME = arg("theme", null);
 if (THEME !== null && THEME !== "light" && THEME !== "dark") {
   fail(`--theme must be "light" or "dark" (got "${THEME}").`);
 }
+// Quality profile ("high" | "low"). ``high`` (default) is the sharper, smoother
+// encoding pinned to 820px; ``low`` reproduces the original legacy settings
+// (smaller file, lower quality).
+const QUALITY = arg("quality", "high");
+if (QUALITY !== "high" && QUALITY !== "low") {
+  fail(`--quality must be "high" or "low" (got "${QUALITY}").`);
+}
 // Default output name carries a ``-light``/``-dark`` suffix when a theme is
 // forced, so the two variants don't overwrite each other. An explicit
 // ``--out`` always wins.
@@ -69,7 +88,40 @@ const DEFAULT_OUT = THEME
   ? `doc/images/datalab-web-demo-${THEME}.gif`
   : "doc/images/datalab-web-demo.gif";
 const OUT = resolve(ROOT, arg("out", DEFAULT_OUT));
-const TARGET_MB = Number(arg("target-mb", "4"));
+
+// Per-quality encoding profiles. Each drives the size-search preset ladder
+// (cheapest-last, first that fits the budget wins), the default size budget and
+// the palettegen/paletteuse tuning. Both source from the lossless screencast
+// frames; ``high`` outputs at the native 1280px capture resolution (no
+// downscale) at 25 fps with a global palette (``stats_mode=full``), while
+// ``low`` is a smaller 820px drop-in variant.
+const QUALITY_PROFILES = {
+  low: {
+    targetMb: 4,
+    statsMode: "diff",
+    bayerScale: 3,
+    presets: [
+      { width: 820, fps: 20, colors: 256 },
+      { width: 820, fps: 15, colors: 224 },
+      { width: 820, fps: 12, colors: 192 },
+    ],
+  },
+  high: {
+    targetMb: 12,
+    statsMode: "full",
+    bayerScale: 4,
+    presets: [
+      { width: 1280, fps: 25, colors: 256 },
+      { width: 1280, fps: 20, colors: 256 },
+      { width: 1100, fps: 20, colors: 256 },
+      { width: 960, fps: 20, colors: 224 },
+      { width: 820, fps: 20, colors: 192 },
+    ],
+  },
+};
+const PROFILE = QUALITY_PROFILES[QUALITY];
+
+const TARGET_MB = Number(arg("target-mb", String(PROFILE.targetMb)));
 const SPEED = Number(arg("speed", "1")); // >1 = faster playback
 // Forced overrides (skip the auto size-search when all three are given).
 const FORCE_WIDTH = arg("width", null);
@@ -79,14 +131,7 @@ const FORCE_COLORS = arg("colors", null);
 // Progressive presets, cheapest-last. The first that fits the budget wins.
 // ``colors`` is the GIF palette size (max 256); fewer colours + lower fps
 // + smaller width all shrink the file.
-const PRESETS = [
-  { width: 960, fps: 15, colors: 256 },
-  { width: 960, fps: 13, colors: 256 },
-  { width: 900, fps: 12, colors: 224 },
-  { width: 820, fps: 12, colors: 192 },
-  { width: 760, fps: 10, colors: 160 },
-  { width: 680, fps: 10, colors: 128 },
-];
+const PRESETS = PROFILE.presets;
 
 // ── helpers ───────────────────────────────────────────────────────────
 /** Resolve a binary by trying the bare name (PATH) first, then a list of
@@ -117,24 +162,36 @@ function run(bin, args, label) {
   if (r.status !== 0) fail(`${label} failed (exit ${r.status}).`);
 }
 
-function findLatestWebm(dir) {
-  let best = null;
-  const walk = (d) => {
-    for (const name of readdirSync(d, { withFileTypes: true })) {
-      const p = join(d, name.name);
-      if (name.isDirectory()) walk(p);
-      else if (name.name.endsWith(".webm")) {
-        const m = statSync(p).mtimeMs;
-        if (!best || m > best.m) best = { p, m };
-      }
-    }
-  };
-  if (existsSync(dir)) walk(dir);
-  return best?.p ?? null;
-}
-
 function megabytes(path) {
   return statSync(path).size / (1024 * 1024);
+}
+
+/** Build an ffmpeg ``concat`` demuxer script from the screencast frame manifest,
+ *  using each frame's timestamp delta as its on-screen duration so the GIF
+ *  reproduces the original (variable) pacing. Returns the script path. */
+function buildConcatFile(frames, framesDir) {
+  // The concat demuxer resolves relative entries against the *script* file's
+  // directory, so emit absolute (forward-slash) paths to avoid surprises.
+  const path = (f) => resolve(ROOT, framesDir, f).replace(/\\/g, "/");
+  const lines = [];
+  for (let i = 0; i < frames.length; i++) {
+    const nextT = frames[i + 1]?.t;
+    const prevT = frames[i - 1]?.t;
+    // Duration until the next frame; clamp to a sane floor and fall back to the
+    // previous gap (or ~50 ms) for the final frame.
+    const durMs =
+      nextT !== undefined
+        ? Math.max(10, nextT - frames[i].t)
+        : Math.max(10, frames[i].t - (prevT ?? frames[i].t - 50));
+    lines.push(`file '${path(frames[i].file)}'`);
+    lines.push(`duration ${(durMs / 1000).toFixed(4)}`);
+  }
+  // The concat demuxer ignores the last ``duration``; repeat the final frame so
+  // it is held for its intended time.
+  lines.push(`file '${path(frames[frames.length - 1].file)}'`);
+  const out = join(DEMO_DIR, "frames.txt");
+  writeFileSync(out, lines.join("\n"), "utf-8");
+  return out;
 }
 
 // ── 1. record ─────────────────────────────────────────────────────────
@@ -158,19 +215,27 @@ if (!FFMPEG)
 
 let meta = {};
 if (existsSync(META)) meta = JSON.parse(readFileSync(META, "utf-8"));
-const videoPath =
-  (meta.videoPath && existsSync(meta.videoPath) ? meta.videoPath : null) ??
-  findLatestWebm(DEMO_DIR);
-if (!videoPath) fail(`No recorded video found under ${DEMO_DIR}.`);
 
-// Trim window: cut the boot lead-in, keep the action window (+small margins).
-const start = Math.max(0, (Number(meta.startOffsetMs) || 0) / 1000 - 0.3);
-const end =
-  Number(meta.endOffsetMs) > 0 ? Number(meta.endOffsetMs) / 1000 + 0.3 : null;
+// The GIF is always built from the lossless screencast frames captured by the
+// spec over the (already-trimmed) action window.
+const framesDir =
+  meta.framesDir && existsSync(meta.framesDir) ? meta.framesDir : null;
+const hasFrames =
+  framesDir &&
+  Array.isArray(meta.frames) &&
+  meta.frames.length > 0 &&
+  existsSync(join(framesDir, meta.frames[0].file));
+if (!hasFrames)
+  fail(
+    "No screencast frames found (meta.frames). Re-record without " +
+      "--skip-record.",
+  );
 
-console.log(`[demo-gif] Source : ${videoPath}`);
+// Build the ffmpeg concat script (per-frame durations from the timestamps).
+const concatFile = buildConcatFile(meta.frames, framesDir);
+
 console.log(
-  `[demo-gif] Trim   : ${start.toFixed(2)}s → ${end ? end.toFixed(2) + "s" : "end"}`,
+  `[demo-gif] Source : ${meta.frames.length} lossless frames (${framesDir})`,
 );
 
 // ── 3. encode (with size search) ──────────────────────────────────────
@@ -181,17 +246,31 @@ function encode(width, fps, colors) {
   const pre = SPEED !== 1 ? `setpts=PTS/${SPEED},` : "";
   const chain =
     `[0:v]${pre}fps=${fps},scale=${width}:-1:flags=lanczos,split[a][b];` +
-    `[a]palettegen=max_colors=${colors}:stats_mode=diff[p];` +
-    `[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle`;
-  const args = ["-y", "-ss", String(start)];
-  if (end !== null) args.push("-to", String(end));
-  args.push("-i", videoPath, "-filter_complex", chain, "-loop", "0", OUT);
+    `[a]palettegen=max_colors=${colors}:stats_mode=${PROFILE.statsMode}[p];` +
+    `[b][p]paletteuse=dither=bayer:bayer_scale=${PROFILE.bayerScale}:diff_mode=rectangle`;
+  // The concat demuxer carries per-frame durations; ``fps`` in the filter
+  // resamples this variable-rate input to the target constant frame rate.
+  const args = [
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    concatFile,
+    "-filter_complex",
+    chain,
+    "-loop",
+    "0",
+    OUT,
+  ];
   run(FFMPEG, args, "ffmpeg GIF encode");
 }
 
 function attempt(width, fps, colors) {
   console.log(
-    `[demo-gif] Encoding @ ${width}px ${fps}fps ${colors} colours (speed ×${SPEED})…`,
+    `[demo-gif] Encoding @ ${width}px ${fps}fps ${colors} colours ` +
+      `(quality=${QUALITY}, speed ×${SPEED})…`,
   );
   encode(width, fps, colors);
   const mb = megabytes(OUT);

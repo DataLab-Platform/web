@@ -379,7 +379,15 @@
       "detail": "Record the scripted Playwright demo and encode doc/images/datalab-web-demo.gif.",
       "type": "shell",
       "command": "npm",
-      "args": ["run", "demo:gif", "--", "--theme", "${input:demoTheme}"],
+      "args": [
+        "run",
+        "demo:gif",
+        "--",
+        "--theme",
+        "${input:demoTheme}",
+        "--quality",
+        "${input:demoQuality}"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -506,6 +514,13 @@
       "description": "UI theme for the recorded demo GIF",
       "options": ["light", "dark"],
       "default": "light"
+    },
+    {
+      "id": "demoQuality",
+      "type": "pickString",
+      "description": "Encoding quality for the demo GIF (high = sharper/larger, low = legacy small file)",
+      "options": ["high", "low"],
+      "default": "high"
     }
   ]
 }

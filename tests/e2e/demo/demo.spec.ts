@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { waitForRuntimeReady } from "../fixtures";
 
@@ -28,6 +29,14 @@ import { waitForRuntimeReady } from "../fixtures";
  */
 
 const OUTPUT_DIR = "test-results/demo";
+
+/** Minimal shape of a ``Page.screencastFrame`` CDP event payload (Playwright
+ *  types raw CDP events as ``any``). */
+interface ScreencastFrame {
+  data: string; // base64-encoded PNG
+  sessionId: number;
+  metadata?: { timestamp?: number }; // seconds since epoch (fractional)
+}
 
 /** Hold a readable beat on the current UI state (the GIF needs each step
  *  to linger long enough for a viewer to register it). */
@@ -93,6 +102,43 @@ test("DataLab-Web feature showcase", async ({ page }) => {
   await waitForRuntimeReady(page);
   // Let the first paint settle so the action window starts on a clean frame.
   await hold(page, 800);
+
+  // ── Lossless frame capture (CDP screencast) ──────────────────────────
+  // Playwright's built-in WebM is a low-bitrate VP8 (~0.5 Mb/s) whose block
+  // artefacts cap the GIF's quality before we ever quantise to 256 colours.
+  // Instead we grab per-frame **lossless PNG** screenshots straight from
+  // Chromium's compositor via the DevTools ``Page.startScreencast`` API, so
+  // ``scripts/make-demo-gif.mjs`` builds the GIF from pristine frames. Frames
+  // land in ``test-results/demo/frames/`` and are indexed (with millisecond
+  // timestamps for correct playback timing) in ``meta.json``.
+  //
+  // We ack each frame *immediately* and persist it asynchronously, so
+  // Chromium keeps delivering frames at the compositor's paint rate (smooth
+  // motion) rather than being throttled by disk writes. The frame's wall-clock
+  // timestamp is recorded synchronously, so out-of-order write completion does
+  // not affect playback timing.
+  const FRAMES_DIR = join(OUTPUT_DIR, "frames");
+  rmSync(FRAMES_DIR, { recursive: true, force: true });
+  mkdirSync(FRAMES_DIR, { recursive: true });
+  const frames: { file: string; t: number }[] = [];
+  const pendingWrites: Promise<unknown>[] = [];
+  const cdp = await page.context().newCDPSession(page);
+  let frameIndex = 0;
+  let baseTs: number | null = null;
+  cdp.on("Page.screencastFrame", (evt: ScreencastFrame) => {
+    // Ack first so the next painted frame is delivered without waiting on I/O.
+    void cdp
+      .send("Page.screencastFrameAck", { sessionId: evt.sessionId })
+      .catch(() => {});
+    const name = `frame_${String(++frameIndex).padStart(5, "0")}.png`;
+    const ts = evt.metadata?.timestamp ?? 0;
+    if (baseTs === null) baseTs = ts;
+    frames.push({ file: name, t: (ts - baseTs) * 1000 });
+    pendingWrites.push(
+      writeFile(join(FRAMES_DIR, name), Buffer.from(evt.data, "base64")),
+    );
+  });
+  await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
 
   // Everything below is the part we keep in the GIF.
   const startOffsetMs = Date.now() - t0;
@@ -195,13 +241,22 @@ test("DataLab-Web feature showcase", async ({ page }) => {
 
   const endOffsetMs = Date.now() - t0;
 
-  // Persist the trim window + video path for the conversion script.
-  const video = page.video();
-  const videoPath = video ? await video.path() : null;
+  // Stop the screencast and let the last few frames drain to disk.
+  await cdp.send("Page.stopScreencast").catch(() => {});
+  await page.waitForTimeout(200);
+  await Promise.allSettled(pendingWrites);
+
+  // Persist the lossless frame manifest for the conversion script. ``frames``
+  // are already scoped to the action window (screencast started at
+  // ``startOffsetMs``); the offsets are kept for reference/debugging only.
   mkdirSync(OUTPUT_DIR, { recursive: true });
   writeFileSync(
     join(OUTPUT_DIR, "meta.json"),
-    JSON.stringify({ startOffsetMs, endOffsetMs, videoPath }, null, 2),
+    JSON.stringify(
+      { startOffsetMs, endOffsetMs, framesDir: FRAMES_DIR, frames },
+      null,
+      2,
+    ),
     "utf-8",
   );
 });
