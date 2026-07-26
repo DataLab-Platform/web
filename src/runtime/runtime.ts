@@ -1107,7 +1107,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
     await py.runPythonAsync(`
 import micropip
-await micropip.install(["sigima", "guidata", "tifffile<2025"])
+await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
 `);
 
     onProgress?.(t("Initialising Sigima namespace…"));

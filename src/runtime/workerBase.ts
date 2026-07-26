@@ -92,7 +92,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
   // Pyodide ships numpy 1.26.4 (lift when Pyodide bumps numpy).
   await py.runPythonAsync(`
 import micropip
-await micropip.install(["sigima", "guidata", "tifffile<2025"])
+await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
 `);
 
   // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced in
