@@ -16,6 +16,7 @@ import sys
 import dlw_interactive_fit as ifit
 import numpy as np
 import pytest
+from sigima.tools.signal import fitting as _fit
 
 
 def _gaussian_xy():
@@ -146,3 +147,19 @@ def test_evaluate_polynomial_uses_degree(fit_session):
     )
     assert len(y_eval) == len(session["x"])
     assert all(np.isfinite(y_eval))
+
+
+@pytest.mark.parametrize("fit_id", sorted(ifit._INTERACTIVE_FITS))
+def test_commit_writes_a_fit_type_sigima_understands(fit_session, fit_id):
+    """Every interactive fit must commit metadata Sigima can re-evaluate.
+
+    ``piecewiseexponential_fit`` used to derive its fit type by stripping the
+    ``_fit`` suffix, which produced an unknown ``"piecewiseexponential"`` type
+    and made the committed signal unreadable.
+    """
+    bs, oid = fit_session
+    fitted = ifit.auto_fit_interactive(oid, fit_id)
+    new_oid = ifit.commit_interactive_fit(oid, fit_id, fitted["values"])
+    fit_params = bs._MODEL.get(new_oid).metadata["fit_params"]
+    assert fit_params["fit_type"] in _fit.FIT_TYPE_MAPPING
+    _fit.validate_fit_params(fit_params)

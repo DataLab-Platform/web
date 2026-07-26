@@ -41,12 +41,16 @@ class _FitKind:
         computer: type[_fit.FitComputer],
         param_labels: dict[str, str] | None = None,
         needs_degree: bool = False,
+        fit_type: str | None = None,
     ) -> None:
         self.fit_id = fit_id
         self.label = label
         self.computer = computer
         self.param_labels = param_labels or {}
         self.needs_degree = needs_degree
+        # Sigima's ``FIT_TYPE_MAPPING`` key. It usually matches the fit id
+        # without its ``_fit`` suffix, but not always.
+        self.fit_type = fit_type or fit_id[: -len("_fit")]
 
     def make_computer(
         self, x: np.ndarray, y: np.ndarray, extras: dict[str, Any] | None
@@ -109,6 +113,7 @@ _INTERACTIVE_FITS: dict[str, _FitKind] = {
         "piecewiseexponential_fit",
         "Piecewise exponential fit",
         _fit.DoubleExponentialFitComputer,
+        fit_type="doubleexponential",
     ),
 }
 
@@ -324,7 +329,7 @@ def commit_interactive_fit(
     y_fit_roi = _evaluate(kind, x_roi, float_values)
     residual_rms = np.sqrt(np.mean((y_roi - y_fit_roi) ** 2))
     dst.metadata["fit_params"] = _fit.create_fit_params(
-        fit_id.removesuffix("_fit"),
+        kind.fit_type,
         float_values,
         residual_rms=residual_rms,
         interactive=True,
