@@ -74,10 +74,12 @@ export interface ShimDescriptor {
 /**
  * Version-resolution strategy per target package.
  *
- * ``guidata``/``sigima`` are installed by ``micropip`` without a pin, so
- * the runtime gets the latest PyPI release. ``numpy``/``scipy``/``h5py``
- * are bundled with Pyodide, so their version is fixed by the pinned
- * Pyodide build and read from its ``pyodide-lock.json``.
+ * ``guidata`` is installed by ``micropip`` without a pin, so the runtime gets
+ * the latest PyPI release. ``sigima`` carries a lower-bound pin (see
+ * ``runtime.ts`` and ``workerBase.ts``), so the resolved version is the latest
+ * PyPI release satisfying it. ``numpy``/``scipy``/``h5py`` are bundled with
+ * Pyodide, so their version is fixed by the pinned Pyodide build and read from
+ * its ``pyodide-lock.json``.
  */
 export const PACKAGE_VERSION_SOURCES: Record<string, VersionSource> = {
   guidata: "pypi",
