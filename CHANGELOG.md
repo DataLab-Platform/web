@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- **Gaussian, Lorentzian and Voigt interactive fits**: amplitude now consistently means signed peak height above the baseline, in the signal's Y units. Committed fit curves store versioned Sigima parameters, and both the main Pyodide runtime and computation workers require Sigima 1.1.6 or later so an older area-based model cannot be loaded silently.
+
 ## [0.6.3] - 2026-07-18
 
 ### Changed in 0.6.3

@@ -16,10 +16,11 @@ import sys
 import dlw_interactive_fit as ifit
 import numpy as np
 import pytest
+from sigima.tools.signal import fitting as _fit
 
 
 def _gaussian_xy():
-    """Return a clean Gaussian (amp=3, mu=0.5, sigma=0.8, y0=0.1)."""
+    """Return a clean Gaussian (amplitude=3, mu=0.5, sigma=0.8, y0=0.1)."""
     x = np.linspace(-5.0, 5.0, 200)
     y = 3.0 * np.exp(-((x - 0.5) ** 2) / (2.0 * 0.8**2)) + 0.1
     return x, y
@@ -64,6 +65,9 @@ def test_init_interactive_fit_returns_session(fit_session):
     assert len(session["x"]) == len(session["y"]) == 200
     assert len(session["y_fit"]) == 200
     assert session["params"]  # at least one slider row
+    names = {row["name"] for row in session["params"]}
+    assert "amplitude" in names
+    assert "amp" not in names
     for row in session["params"]:
         assert set(row) >= {"name", "label", "value", "min", "max"}
         # The initial value always lies within the slider bounds.
@@ -105,7 +109,33 @@ def test_commit_interactive_fit_adds_signal(fit_session):
     assert new_oid in after
     # The committed signal carries interactive-fit metadata.
     obj = bs._MODEL.get(new_oid)
-    assert obj.metadata["fit_params"]["interactive"] is True
+    fit_params = obj.metadata["fit_params"]
+    assert fit_params["interactive"] is True
+    assert fit_params["fit_params_version"] == 2
+    assert fit_params["peak_parameterization"] == "height"
+    assert "amplitude" in fit_params
+    assert "amp" not in fit_params
+
+
+def test_commit_residual_uses_fit_roi_while_curve_keeps_full_axis(fit_session):
+    """Committed residuals describe the ROI used by the optimiser."""
+    bs, oid = fit_session
+    src = bs._MODEL.get(oid)
+    outside_roi = (src.x < -2.0) | (src.x > 3.0)
+    src.y[outside_roi] += 50.0
+    bs.set_signal_roi(oid, [{"xmin": -2.0, "xmax": 3.0}])
+
+    fitted = ifit.auto_fit_interactive(oid, "gaussian_fit")
+    new_oid = ifit.commit_interactive_fit(oid, "gaussian_fit", fitted["values"])
+    committed = bs._MODEL.get(new_oid)
+    fit_params = committed.metadata["fit_params"]
+
+    assert len(committed.x) == len(src.x)
+    assert fit_params["residual_rms"] == pytest.approx(
+        fitted["residual_rms"], rel=1e-9, abs=1e-12
+    )
+    full_rms = np.sqrt(np.mean((src.y - committed.y) ** 2))
+    assert full_rms > fit_params["residual_rms"] + 10.0
 
 
 def test_evaluate_polynomial_uses_degree(fit_session):
@@ -117,3 +147,19 @@ def test_evaluate_polynomial_uses_degree(fit_session):
     )
     assert len(y_eval) == len(session["x"])
     assert all(np.isfinite(y_eval))
+
+
+@pytest.mark.parametrize("fit_id", sorted(ifit._INTERACTIVE_FITS))
+def test_commit_writes_a_fit_type_sigima_understands(fit_session, fit_id):
+    """Every interactive fit must commit metadata Sigima can re-evaluate.
+
+    ``piecewiseexponential_fit`` used to derive its fit type by stripping the
+    ``_fit`` suffix, which produced an unknown ``"piecewiseexponential"`` type
+    and made the committed signal unreadable.
+    """
+    bs, oid = fit_session
+    fitted = ifit.auto_fit_interactive(oid, fit_id)
+    new_oid = ifit.commit_interactive_fit(oid, fit_id, fitted["values"])
+    fit_params = bs._MODEL.get(new_oid).metadata["fit_params"]
+    assert fit_params["fit_type"] in _fit.FIT_TYPE_MAPPING
+    _fit.validate_fit_params(fit_params)
