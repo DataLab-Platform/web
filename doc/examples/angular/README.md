@@ -182,15 +182,12 @@ from release `N+1` is supported as long as the MAJOR is unchanged.
 
 Before shipping the integration to production, verify:
 
-- [ ] The bundle is served from a stable URL — relative URLs in the
-      bundle (`<base href="./">`) make any sub-path work.
-- [ ] The iframe `src` includes
-      `?allowedOrigins=<your-app-origin>` (URL-encoded, comma-separated
-      for multiple origins). Never use `*` outside development.
-- [ ] The host page's CSP allows `frame-src` for the bundle origin
-      (and `worker-src 'self' blob:` if your CSP is strict — Pyodide
-      uses workers).
-- [ ] Static assets under `assets/` are served with long-lived cache
-      headers (their filenames are hashed).
-- [ ] The SDK and bundle versions match the compatibility matrix
-      above.
+1. The bundle is served from a stable URL — relative URLs in the bundle
+   (`<base href="./">`) make any sub-path work.
+2. The iframe `src` includes `?allowedOrigins=<your-app-origin>` (URL-encoded,
+   comma-separated for multiple origins). Never use `*` outside development.
+3. The host page's CSP allows `frame-src` for the bundle origin
+   (and `worker-src 'self' blob:` if your CSP is strict — Pyodide uses workers).
+4. Static assets under `assets/` are served with long-lived cache headers
+   (their filenames are hashed).
+5. The SDK and bundle versions match the compatibility matrix above.

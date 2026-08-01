@@ -36,8 +36,8 @@ function fail(msg) {
 /**
  * Extract the changelog body for ``version`` from the ``md`` text.
  *
- * Returns the normalised section (heading line removed, ``### XXX in
- * X.Y.Z`` sub-headings reduced to ``### XXX``). Returns ``null`` when no
+ * Returns the normalised section (heading line removed, ``### ... in
+ * X.Y.Z`` sub-headings reduced to ``### ...``). Returns ``null`` when no
  * matching version section exists.
  */
 export function extractSection(md, version) {
