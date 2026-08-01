@@ -64,6 +64,12 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
         }
         const action = node.action!;
         const enabled = action.enabled(state);
+        const itemRole =
+          action.checkable === "radio"
+            ? "menuitemradio"
+            : action.checkable === "checkbox"
+              ? "menuitemcheckbox"
+              : "menuitem";
         return (
           <Fragment key={node.path}>
             {sep}
@@ -71,7 +77,10 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
               className={
                 "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
               }
-              role="menuitem"
+              role={itemRole}
+              aria-checked={
+                action.checkable ? (action.checked ?? false) : undefined
+              }
               aria-disabled={!enabled}
               onClick={(event) => {
                 event.stopPropagation();
@@ -82,9 +91,13 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
               title={action.menuPath}
             >
               <span className="menu-icon-slot" aria-hidden="true">
-                {action.iconUrl && (
+                {action.checkable ? (
+                  <span className="menu-checkmark">
+                    {action.checked ? "●" : ""}
+                  </span>
+                ) : action.iconUrl ? (
                   <img src={action.iconUrl} alt="" className="menu-icon-img" />
-                )}
+                ) : null}
               </span>
               <span className="menu-label">{node.displayLabel}</span>
             </li>

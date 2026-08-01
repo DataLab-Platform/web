@@ -348,6 +348,9 @@ describe("buildViewActions", () => {
       onToggleResultsOverlay: vi.fn(),
       showGraphicalTitles: true,
       onToggleGraphicalTitles: vi.fn(),
+      signalLayoutMode: "overlay" as const,
+      signalLayoutAvailable: true,
+      onSetSignalLayoutMode: vi.fn(),
       onOpenSeparateView: vi.fn(),
       hasSelection: true,
       notebookFloating: false,
@@ -364,18 +367,55 @@ describe("buildViewActions", () => {
     };
   }
 
-  it("exposes one popout entry, five checkable toggles and the languages", () => {
+  it("exposes popout, view preferences, signal layouts and languages", () => {
     const actions = buildViewActions(makeViewCallbacks());
     expect(actions.map((a) => a.id)).toEqual([
       "view.open_separate_view",
       "view.show_toolbar",
       "view.results_overlay",
       "view.show_graphical_titles",
+      "view.signal_layout.overlay",
+      "view.signal_layout.vertical",
+      "view.signal_layout.horizontal",
       "view.notebook_floating",
       "view.macro_floating",
       "view.language.en",
       "view.language.fr",
     ]);
+  });
+
+  it("registers mutually exclusive signal layout radio actions", () => {
+    const cb = makeViewCallbacks({ signalLayoutMode: "vertical" });
+    const actions = buildViewActions(cb);
+    const layoutActions = actions.filter((action) =>
+      action.id.startsWith("view.signal_layout."),
+    );
+    expect(layoutActions.map((action) => action.checkable)).toEqual([
+      "radio",
+      "radio",
+      "radio",
+    ]);
+    expect(layoutActions.map((action) => action.checked)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+
+    layoutActions[1].run();
+    expect(cb.onSetSignalLayoutMode).not.toHaveBeenCalled();
+    layoutActions[2].run();
+    expect(cb.onSetSignalLayoutMode).toHaveBeenCalledWith("horizontal");
+  });
+
+  it("enables signal layout choices only in the signal panel", () => {
+    const enabled = buildViewActions(makeViewCallbacks()).find(
+      (action) => action.id === "view.signal_layout.overlay",
+    )!;
+    const disabled = buildViewActions(
+      makeViewCallbacks({ signalLayoutAvailable: false }),
+    ).find((action) => action.id === "view.signal_layout.overlay")!;
+    expect(enabled.enabled(makeState())).toBe(true);
+    expect(disabled.enabled(makeState())).toBe(false);
   });
 
   it("marks the active locale and switches to another on demand", () => {
