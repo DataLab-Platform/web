@@ -63,6 +63,7 @@ describe("signalPlotLayout", () => {
     expect(layout.axes.xaxis3.matches).toBeUndefined();
     expect(layout.axes.xaxis.showticklabels).toBe(false);
     expect(layout.axes.xaxis2.showticklabels).toBe(true);
+    expect(layout.axes.xaxis.title).toEqual({ text: "\u200b" });
     expect(layout.minHeight).toBeGreaterThanOrEqual(660);
   });
 

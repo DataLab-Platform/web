@@ -8,6 +8,9 @@ export const SIGNAL_LAYOUT_MODES = [
 
 export type SignalLayoutMode = (typeof SIGNAL_LAYOUT_MODES)[number];
 
+// Plotly trims ordinary whitespace before showing its editable title placeholder.
+const INVISIBLE_AXIS_TITLE = "\u200b";
+
 export interface SignalResultBundle {
   signalId: string;
   results: AnalysisResult[];
@@ -159,11 +162,11 @@ export function buildSignalPlotLayout(
       anchor: assignment.yRef,
       ...(firstMatchingAxis ? { matches: firstMatchingAxis } : {}),
       showticklabels: showXLabels,
-      title: showXLabels
-        ? {
-            text: formatSignalAxis(signal.xlabel || "X", signal.xunit),
-          }
-        : undefined,
+      title: {
+        text: showXLabels
+          ? formatSignalAxis(signal.xlabel || "X", signal.xunit)
+          : INVISIBLE_AXIS_TITLE,
+      },
       automargin: true,
     };
     axes[assignment.yLayoutKey] = {

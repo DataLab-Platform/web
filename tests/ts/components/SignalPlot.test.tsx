@@ -118,6 +118,7 @@ describe("SignalPlot multi-signal layouts", () => {
     expect(peak).toMatchObject({ xaxis: "x2", yaxis: "y2" });
     expect(layout.xaxis2.matches).toBe("x");
     expect(layout.xaxis3.matches).toBeUndefined();
+    expect(layout.xaxis.title).toEqual({ text: "\u200b" });
     const shapes = layout.shapes as unknown as Array<Record<string, unknown>>;
     expect(shapes.some((shape) => shape.yref === "y domain")).toBe(true);
     expect(
