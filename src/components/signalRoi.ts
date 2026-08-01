@@ -90,22 +90,23 @@ export function buildRoiAreaTrace(
 
 /**
  * Build the two dashed vertical boundary lines delimiting a single ROI's
- * X interval.  Each line spans the full plotting area (``yref: "paper"``,
- * ``0 → 1``) so it reaches the very top of the graph regardless of the
- * y-axis autorange, mirroring the desktop reference where the ROI edges
- * span the whole canvas height.  Lines are anchored to the raw
+ *  X interval. By default each line spans the full plotting area
+ *  (``yref: "paper"``, ``0 → 1``). Split signal layouts pass ``"y domain"``
+ *  so the boundaries stay inside the current signal's subplot. Lines are
+ *  anchored to the raw
  * ``xmin``/``xmax`` (not clipped to the data extent) so the true ROI
  * bounds stay visible even when the interval reaches past the signal.
  */
 export function buildRoiBoundaryShapes(
   seg: SignalRoiSegment,
   index: number,
+  yref = "paper",
 ): Record<string, unknown>[] {
   const lineColor = roiLineColor(index);
   return [seg.xmin, seg.xmax].map((x) => ({
     type: "line",
     xref: "x",
-    yref: "paper",
+    yref,
     x0: x,
     x1: x,
     y0: 0,

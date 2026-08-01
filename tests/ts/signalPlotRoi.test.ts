@@ -102,4 +102,9 @@ describe("buildRoiBoundaryShapes", () => {
     const c1 = (shapes[1].line as { color: string }).color;
     expect(c0).toBe(c1);
   });
+
+  it("may scope boundaries to a single subplot domain", () => {
+    const shapes = buildRoiBoundaryShapes({ xmin: 0, xmax: 2 }, 0, "y domain");
+    expect(shapes.every((shape) => shape.yref === "y domain")).toBe(true);
+  });
 });

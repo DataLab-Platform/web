@@ -65,6 +65,12 @@ import {
   type CentralView,
 } from "./components/CentralViewSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
+import {
+  bundleSignalResults,
+  normalizeSignalLayoutMode,
+  type SignalLayoutMode,
+  type SignalResultBundle,
+} from "./components/signalPlotLayout";
 import { ImagePlot } from "./components/ImagePlot";
 import {
   MultiImagePlot,
@@ -303,6 +309,7 @@ function usePersistedSize(
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
 const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
 const SHOW_TOOLBAR_KEY = "datalab-web.show-toolbar";
+const SIGNAL_LAYOUT_MODE_KEY = "datalab-web.signal-layout-mode";
 // Multi-image view mode: ``false`` = read-only CSS grid (default),
 // ``true`` = spatial overlay honouring each image's x0/y0/dx/dy.
 const MULTI_IMAGE_SPATIAL_KEY = "datalab-web.multi-image-spatial";
@@ -340,6 +347,30 @@ function usePersistedBool(
     },
     [key],
   );
+  return [value, update];
+}
+
+function usePersistedSignalLayoutMode(): [
+  SignalLayoutMode,
+  (next: SignalLayoutMode) => void,
+] {
+  const [value, setValue] = useState<SignalLayoutMode>(() => {
+    try {
+      return normalizeSignalLayoutMode(
+        window.localStorage.getItem(SIGNAL_LAYOUT_MODE_KEY),
+      );
+    } catch {
+      return "overlay";
+    }
+  });
+  const update = useCallback((next: SignalLayoutMode) => {
+    setValue(next);
+    try {
+      window.localStorage.setItem(SIGNAL_LAYOUT_MODE_KEY, next);
+    } catch {
+      /* ignore quota / disabled storage */
+    }
+  }, []);
   return [value, update];
 }
 
@@ -587,6 +618,8 @@ export default function App() {
     () => setShowGraphicalTitles(!showGraphicalTitles),
     [showGraphicalTitles, setShowGraphicalTitles],
   );
+  const [signalLayoutMode, setSignalLayoutMode] =
+    usePersistedSignalLayoutMode();
   // View > "Show toolbar" toggle.  On by default to mirror DataLab
   // desktop, which always shows its toolbars.
   const [showToolbar, setShowToolbar] = usePersistedBool(
@@ -647,9 +680,8 @@ export default function App() {
    *  non-empty, applying a processing creates new result group(s). */
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [data, setData] = useState<SignalData | null>(null);
-  /** Other signals selected alongside ``currentId`` — overlaid on top
-   *  of ``data`` in :class:`SignalPlot` to mirror DataLab desktop's
-   *  multi-curve plot. */
+  /** Other signals selected alongside ``currentId`` and rendered according
+   *  to the persisted multi-signal layout preference. */
   const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
   const [imageData, setImageData] = useState<ImageData | null>(null);
   /** Other images selected alongside ``currentId`` - laid out as a
@@ -806,12 +838,9 @@ export default function App() {
   const [pendingPlotResults, setPendingPlotResults] =
     useState<PendingPlotResults | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
-  /** Analysis results attached to the other selected signals (excluding
-   *  ``currentId``).  Merged with ``results`` in :class:`SignalPlot` so
-   *  geometry overlays (FWHM segments, peak markers, …) are drawn for
-   *  every selected signal, not just the displayed one.  The right-hand
-   *  Results panel keeps showing ``currentId``'s results only. */
-  const [extraResults, setExtraResults] = useState<AnalysisResult[]>([]);
+  /** Analysis results attached to the other selected signals, retaining
+   *  source ids so split layouts can route overlays to the correct axes. */
+  const [extraResults, setExtraResults] = useState<SignalResultBundle[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   // Bumped after any action that mutates the *current* object's
   // metadata (paste / add / delete / import metadata).  Metadata can
@@ -1156,8 +1185,8 @@ export default function App() {
       .catch(() => {
         if (!cancelled) setData(null);
       });
-    // Fetch the other selected signals (excluding the current one) so
-    // they can be overlaid on the same plot.
+    // Fetch the other selected signals (excluding the current one) for
+    // overlay, vertical, or horizontal multi-signal rendering.
     const extraIds = selectedIds.filter((id) => id !== currentId);
     if (extraIds.length === 0) {
       setExtraSignals([]);
@@ -1176,7 +1205,9 @@ export default function App() {
       // not only the displayed one.
       Promise.all(extraIds.map((id) => runtime.listSignalResults(id)))
         .then((lists) => {
-          if (!cancelled) setExtraResults(lists.flat());
+          if (!cancelled) {
+            setExtraResults(bundleSignalResults(extraIds, lists));
+          }
         })
         .catch(() => {
           if (!cancelled) setExtraResults([]);
@@ -1874,10 +1905,12 @@ export default function App() {
                 const lists = await Promise.all(
                   extraIds.map((id) => runtime.listSignalResults(id)),
                 );
-                setExtraResults(lists.flat());
+                setExtraResults(bundleSignalResults(extraIds, lists));
               } catch {
-                /* non-fatal: overlays just won't refresh */
+                setExtraResults([]);
               }
+            } else {
+              setExtraResults([]);
             }
           }
         }
@@ -2176,10 +2209,12 @@ export default function App() {
               const lists = await Promise.all(
                 extraIds.map((id) => runtime.listSignalResults(id)),
               );
-              setExtraResults(lists.flat());
+              setExtraResults(bundleSignalResults(extraIds, lists));
             } catch {
-              /* non-fatal: overlays just won't refresh */
+              setExtraResults([]);
             }
+          } else {
+            setExtraResults([]);
           }
         }
         setSideRefreshNonce((n) => n + 1);
@@ -4077,6 +4112,9 @@ export default function App() {
         onToggleResultsOverlay: toggleResultsOverlay,
         showGraphicalTitles,
         onToggleGraphicalTitles: toggleGraphicalTitles,
+        signalLayoutMode,
+        signalLayoutAvailable: treeKind === "signal",
+        onSetSignalLayoutMode: setSignalLayoutMode,
         onOpenSeparateView: openSeparateView,
         hasSelection: selectedIds.length > 0 || currentId !== null,
         notebookFloating,
@@ -4210,6 +4248,8 @@ export default function App() {
       toggleResultsOverlay,
       showGraphicalTitles,
       toggleGraphicalTitles,
+      signalLayoutMode,
+      setSignalLayoutMode,
       openSeparateView,
       aiPanelVisible,
       toggleAIPanel,
@@ -4582,6 +4622,8 @@ export default function App() {
                 showGraphicalTitles={showGraphicalTitles}
                 extraSignals={extraSignals}
                 extraResults={extraResults}
+                layoutMode={signalLayoutMode}
+                onLayoutModeChange={setSignalLayoutMode}
               />
             )}
             {centralView === "plot" &&
@@ -5047,6 +5089,7 @@ export default function App() {
                 roi,
                 results,
                 extraSignals,
+                extraResults,
               };
             } else if (treeKind === "image" && imageData) {
               content = {
@@ -5063,6 +5106,8 @@ export default function App() {
                 content={content}
                 showResultsOverlay={showResultsOverlay}
                 showGraphicalTitles={showGraphicalTitles}
+                signalLayoutMode={signalLayoutMode}
+                onSignalLayoutModeChange={setSignalLayoutMode}
                 onClose={closeSeparateView}
               />
             );

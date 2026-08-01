@@ -20,6 +20,7 @@ import { getRootIconUrl } from "../assets/rootIcons";
 import datalabIconUrl from "../assets/DataLab.svg?url";
 import { t } from "../i18n/translate";
 import type { SupportedLocale } from "../i18n/locale";
+import type { SignalLayoutMode } from "../components/signalPlotLayout";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -451,6 +452,12 @@ export interface ViewActionCallbacks {
   showGraphicalTitles: boolean;
   /** Toggle the preference (and persist the new value). */
   onToggleGraphicalTitles: () => void;
+  /** Current arrangement used when several signals are displayed. */
+  signalLayoutMode: SignalLayoutMode;
+  /** Whether signal layout actions are meaningful in the active panel. */
+  signalLayoutAvailable: boolean;
+  /** Select and persist the multi-signal plot arrangement. */
+  onSetSignalLayoutMode: (mode: SignalLayoutMode) => void;
   /** Open the current selection in a full-screen popout dialog. */
   onOpenSeparateView: () => void;
   /** True when the active panel has at least one object selected
@@ -477,15 +484,24 @@ export interface ViewActionCallbacks {
 /** Wire View menu actions (UI preferences only). */
 export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
   const always = () => true;
-  // Use a leading checkmark glyph as a poor-man's "checkable" item;
-  // the menu bar otherwise renders flat labels and we don't want to
-  // grow the action descriptor schema for toggles.
+  // Existing binary toggles retain their historical label prefix. New
+  // mutually exclusive choices use the descriptor's semantic radio fields.
   const checkPrefix = (on: boolean) => (on ? "\u2713 " : "    ");
   const toolbarPrefix = checkPrefix(cb.showToolbar);
   const overlayPrefix = checkPrefix(cb.showResultsOverlay);
   const titlesPrefix = checkPrefix(cb.showGraphicalTitles);
   const notebookPrefix = checkPrefix(cb.notebookFloating);
   const macroPrefix = checkPrefix(cb.macroFloating);
+  const signalLayoutEnabled = (state: ActionState) =>
+    state.status === "ready" && !state.busy && cb.signalLayoutAvailable;
+  const signalLayoutActions: Array<{
+    mode: SignalLayoutMode;
+    label: string;
+  }> = [
+    { mode: "overlay", label: "Overlay" },
+    { mode: "vertical", label: "Vertical" },
+    { mode: "horizontal", label: "Horizontal" },
+  ];
   return [
     {
       id: "view.open_separate_view",
@@ -520,6 +536,18 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       enabled: always,
       run: cb.onToggleGraphicalTitles,
     },
+    ...signalLayoutActions.map(({ mode, label }, index) => ({
+      id: `view.signal_layout.${mode}`,
+      label: t(label),
+      menuPath: `View/Signal plot layout/${label}`,
+      checkable: "radio" as const,
+      checked: cb.signalLayoutMode === mode,
+      beginGroup: index === 0 ? true : undefined,
+      enabled: signalLayoutEnabled,
+      run: () => {
+        if (cb.signalLayoutMode !== mode) cb.onSetSignalLayoutMode(mode);
+      },
+    })),
     {
       id: "view.notebook_floating",
       label: `${notebookPrefix}${t("Detach Notebooks panel")}`,

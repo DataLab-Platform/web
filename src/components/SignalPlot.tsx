@@ -12,7 +12,15 @@ import {
 } from "../runtime/plotStyles";
 import { buildRoiAreaTrace, buildRoiBoundaryShapes } from "./signalRoi";
 import { buildResultAnnotationBox } from "./resultBox";
+import {
+  buildSignalPlotLayout,
+  SIGNAL_LAYOUT_MODES,
+  type SignalAxisAssignment,
+  type SignalLayoutMode,
+  type SignalResultBundle,
+} from "./signalPlotLayout";
 import { useTheme } from "../utils/theme";
+import { t } from "../i18n/translate";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
@@ -38,11 +46,9 @@ interface Props {
   drawGeometry?: "segment" | "rectangle" | "circle" | "polygon" | null;
   /** Analysis results (FWHM, peaks, …) drawn as overlays on the plot. */
   results?: AnalysisResult[];
-  /** Analysis results attached to the other selected signals, merged with
-   *  ``results`` to draw geometry overlays (FWHM segments, peak markers,
-   *  …) for every selected signal — not just the displayed one.  These
-   *  feed the plot overlays only; the side Results panel is unaffected. */
-  extraResults?: AnalysisResult[];
+  /** Analysis results attached to the other selected signals, retaining
+   *  source ids so split layouts can use the corresponding axes. */
+  extraResults?: SignalResultBundle[];
   /** When true, append a paper-coords summary annotation listing
    *  TableAnalysisResult values in the top-right corner. Defaults
    *  to ``false`` since the right-hand Results panel already shows
@@ -52,10 +58,12 @@ interface Props {
    *  on geometry analysis results (segment lengths, peak names, …).
    *  Wired to the View > "Show graphical object titles" toggle. */
   showGraphicalTitles?: boolean;
-  /** Additional signals overlaid on top of ``data`` (multi-selection).
-   *  Each entry uses metadata-defined style when present, otherwise the
-   *  shared cycling palette starting at ``index + 1``. */
+  /** Additional signals displayed alongside ``data`` (multi-selection). */
   extraSignals?: SignalData[];
+  /** Multi-signal arrangement. Defaults to the historical overlay mode. */
+  layoutMode?: SignalLayoutMode;
+  /** Change the browser-level multi-signal arrangement preference. */
+  onLayoutModeChange?: (mode: SignalLayoutMode) => void;
 }
 
 export function SignalPlot({
@@ -72,15 +80,44 @@ export function SignalPlot({
   showResultsOverlay = false,
   showGraphicalTitles = true,
   extraSignals = [],
+  layoutMode = "overlay",
+  onLayoutModeChange,
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
-  const xAxisTitle = useMemo(
-    () => formatAxis(data.xlabel || "X", data.xunit),
-    [data.xlabel, data.xunit],
+  const allSignals = useMemo(
+    () => [data, ...extraSignals],
+    [data, extraSignals],
   );
-  const yAxisTitle = useMemo(
-    () => formatAxis(data.ylabel || "Y", data.yunit),
-    [data.ylabel, data.yunit],
+  const signalLayout = useMemo(
+    () => buildSignalPlotLayout(allSignals, layoutMode),
+    [allSignals, layoutMode],
+  );
+  const axisBySignalId = useMemo(
+    () =>
+      new Map(
+        signalLayout.assignments.map((assignment) => [
+          assignment.signalId,
+          assignment,
+        ]),
+      ),
+    [signalLayout.assignments],
+  );
+  const primaryAxis = signalLayout.assignments[0];
+  const splitLayout = signalLayout.effectiveMode !== "overlay";
+  const themedAxes = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(signalLayout.axes).map(([key, axis]) => [
+          key,
+          {
+            ...(key.startsWith("xaxis")
+              ? plotlyTheme.xaxis
+              : plotlyTheme.yaxis),
+            ...axis,
+          },
+        ]),
+      ),
+    [plotlyTheme.xaxis, plotlyTheme.yaxis, signalLayout.axes],
   );
 
   // Span used as default Y range for editable ROI rectangles (drag bounds).
@@ -199,17 +236,40 @@ export function SignalPlot({
           // updated already has the surviving rects (less than roiCount).
         }
         roiChanged = updated;
-        nextShapes = extras;
+        nextShapes = extras.map((shape, index) =>
+          restorePrimaryPaperReferences(
+            shape,
+            localShapes[index],
+            primaryAxis,
+            splitLayout,
+          ),
+        );
         touched = true;
       } else {
-        nextShapes = allEv.slice(roiCount + boundaryCount + resultCount);
+        nextShapes = allEv
+          .slice(roiCount + boundaryCount + resultCount)
+          .map((shape, index) =>
+            restorePrimaryPaperReferences(
+              shape,
+              localShapes[index],
+              primaryAxis,
+              splitLayout,
+            ),
+          );
         touched = true;
       }
     }
     if ("annotations" in event && Array.isArray(event.annotations)) {
-      nextAnns = (event.annotations as unknown[]).slice(
-        resultAnnotations.length,
-      );
+      nextAnns = (event.annotations as unknown[])
+        .slice(resultAnnotations.length + resultBoxAnnotations.length)
+        .map((annotation, index) =>
+          restorePrimaryPaperReferences(
+            annotation,
+            localAnnotations[index],
+            primaryAxis,
+            splitLayout,
+          ),
+        );
       touched = true;
     }
     for (const key of Object.keys(event)) {
@@ -312,23 +372,50 @@ export function SignalPlot({
   // draggable rectangles already mark the boundaries.
   const roiBoundaryShapes = useMemo(() => {
     if (roiEditMode) return [] as unknown[];
-    return roi.flatMap((seg, i) => buildRoiBoundaryShapes(seg, i));
-  }, [roi, roiEditMode]);
+    return roi.flatMap((seg, i) =>
+      buildRoiBoundaryShapes(seg, i, splitLayout ? "y domain" : "paper"),
+    );
+  }, [roi, roiEditMode, splitLayout]);
 
-  // Convert each GeometryResult into Plotly shapes + a marker scatter trace
-  // + textual annotations.  TableResults are *not* drawn here — they go to
-  // the side panel.  Mirrors DataLab desktop's PlotPy overlay behaviour.
-  // ``results`` (displayed signal) and ``extraResults`` (other selected
-  // signals) are merged so overlays appear for the whole selection; the
-  // geometry ``coords`` are absolute physical x/y, so they combine safely.
-  const overlayResults = useMemo(
-    () => [...results, ...extraResults],
-    [results, extraResults],
-  );
-  const { resultShapes, resultAnnotations, resultTraces } = useMemo(
-    () => buildGeometryOverlays(overlayResults, showGraphicalTitles),
-    [overlayResults, showGraphicalTitles],
-  );
+  // Convert every signal's GeometryResults into source-axis-aware Plotly
+  // overlays. TableResults remain in the side panel and primary summary box.
+  const { resultShapes, resultAnnotations, resultTraces } = useMemo(() => {
+    const bundles: SignalResultBundle[] = [
+      { signalId: data.id, results },
+      ...extraResults,
+    ];
+    const resultShapes: unknown[] = [];
+    const resultAnnotations: unknown[] = [];
+    const resultTraces: unknown[] = [];
+    bundles.forEach((bundle, bundleIndex) => {
+      const axis = axisBySignalId.get(bundle.signalId);
+      if (!axis) return;
+      const overlays = buildGeometryOverlays(
+        bundle.results,
+        showGraphicalTitles,
+        axis,
+        splitLayout,
+        bundleIndex * RESULT_PALETTE.length,
+      );
+      resultShapes.push(...overlays.resultShapes);
+      resultAnnotations.push(...overlays.resultAnnotations);
+      resultTraces.push(
+        ...overlays.resultTraces.map((trace, traceIndex) => ({
+          ...(trace as Record<string, unknown>),
+          legendgroup: bundle.signalId,
+          uid: `${bundle.signalId}:result:${traceIndex}`,
+        })),
+      );
+    });
+    return { resultShapes, resultAnnotations, resultTraces };
+  }, [
+    axisBySignalId,
+    data.id,
+    extraResults,
+    results,
+    showGraphicalTitles,
+    splitLayout,
+  ]);
   // Top-right paper-coords summary box for TableAnalysisResult rows
   // (FWHM, centroid, peaks, …).  Mirrors PlotPy's "computing results"
   // annotation in DataLab desktop.
@@ -340,22 +427,41 @@ export function SignalPlot({
         : { annotations: [] },
     [results, theme, showResultsOverlay],
   );
+  const displayLocalShapes = useMemo(
+    () =>
+      localShapes.map((shape) =>
+        scopePrimaryPaperReferences(shape, primaryAxis, splitLayout),
+      ),
+    [localShapes, primaryAxis, splitLayout],
+  );
+  const displayLocalAnnotations = useMemo(
+    () =>
+      localAnnotations.map((annotation) =>
+        scopePrimaryPaperReferences(annotation, primaryAxis, splitLayout),
+      ),
+    [localAnnotations, primaryAxis, splitLayout],
+  );
 
   const allShapes = useMemo(
-    () => [...roiShapes, ...roiBoundaryShapes, ...resultShapes, ...localShapes],
-    [roiShapes, roiBoundaryShapes, resultShapes, localShapes],
+    () => [
+      ...roiShapes,
+      ...roiBoundaryShapes,
+      ...resultShapes,
+      ...displayLocalShapes,
+    ],
+    [roiShapes, roiBoundaryShapes, resultShapes, displayLocalShapes],
   );
   const allAnnotations = useMemo(
-    () => [...resultAnnotations, ...resultBoxAnnotations, ...localAnnotations],
-    [resultAnnotations, resultBoxAnnotations, localAnnotations],
+    () => [
+      ...resultAnnotations,
+      ...resultBoxAnnotations,
+      ...displayLocalAnnotations,
+    ],
+    [resultAnnotations, resultBoxAnnotations, displayLocalAnnotations],
   );
   const allTraces = useMemo(() => {
-    // Build one Scatter trace per signal (primary first, then any
-    // selected extras).  Style precedence: explicit metadata > cycling
-    // palette.  Index 0 always uses palette slot 0 so a single signal
-    // keeps the historical muted-blue look.
-    const allSignals: SignalData[] = [data, ...extraSignals];
     const curveTraces = allSignals.map((sig, i) => {
+      const axis = signalLayout.assignments[i];
       const auto = getCurveStyle(i);
       const color = sig.style?.color ?? auto.color;
       const dash = sig.style?.linestyle
@@ -373,92 +479,197 @@ export function SignalPlot({
         ...(partial.marker ? { marker: partial.marker } : {}),
         name: sig.title,
         showlegend: true,
+        uid: sig.id,
+        legendgroup: sig.id,
+        xaxis: axis.xRef,
+        yaxis: axis.yRef,
       };
     });
-    return [...roiFillTraces, ...curveTraces, ...resultTraces];
-  }, [data, extraSignals, roiFillTraces, resultTraces]);
+    const scopedRoiTraces = roiFillTraces.map((trace) => ({
+      ...(trace as Record<string, unknown>),
+      xaxis: primaryAxis.xRef,
+      yaxis: primaryAxis.yRef,
+      legendgroup: data.id,
+    }));
+    return [...scopedRoiTraces, ...curveTraces, ...resultTraces];
+  }, [
+    allSignals,
+    data.id,
+    primaryAxis,
+    resultTraces,
+    roiFillTraces,
+    signalLayout.assignments,
+  ]);
+  const orderedSignalIds = allSignals.map((signal) => signal.id).join(",");
+  const figureRevision = `${signalLayout.effectiveMode}:${orderedSignalIds}`;
 
   return (
-    <Plot
-      data={allTraces as never}
-      layout={
-        {
-          ...plotlyTheme,
-          title: { text: data.title },
-          autosize: true,
-          margin: { l: 60, r: 20, t: 40, b: 50 },
-          xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
-          yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
-          showlegend: resultTraces.length > 0 || extraSignals.length > 0,
-          // Legend inside the plot, anchored top-right, mirroring the
-          // DataLab desktop layout. A semi-transparent background keeps it
-          // readable when it overlaps the curves.
-          legend: {
-            ...plotlyTheme.legend,
-            x: 1,
-            y: 1,
-            xanchor: "right",
-            yanchor: "top",
-            bgcolor:
-              theme === "dark" ? "rgba(30,30,30,0.7)" : "rgba(255,255,255,0.7)",
-            bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
-            borderwidth: 1,
-          },
-          // In ROI edit mode, the newshape default uses the next ROI's
-          // color so the freshly drawn rectangle matches its position in
-          // the cycling palette as soon as it is committed.
-          newshape: roiEditMode
-            ? {
-                line: {
-                  color: roiLineColor(roi.length),
-                  width: 2,
-                  dash: "dot",
+    <div className="signal-plot-host">
+      {extraSignals.length > 0 && onLayoutModeChange && (
+        <div
+          className="signal-layout-modebar"
+          role="group"
+          aria-label={t("Signal plot layout")}
+        >
+          <span className="signal-layout-label">
+            {t("Signal plot layout")}:
+          </span>
+          {SIGNAL_LAYOUT_MODES.map((mode) => {
+            const label =
+              mode === "overlay"
+                ? t("Overlay")
+                : mode === "vertical"
+                  ? t("Vertical")
+                  : t("Horizontal");
+            return (
+              <button
+                key={mode}
+                type="button"
+                className={`signal-layout-modebtn${layoutMode === mode ? " active" : ""}`}
+                aria-pressed={layoutMode === mode}
+                onClick={() => onLayoutModeChange(mode)}
+                title={label}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="signal-plot-viewport">
+        <div
+          className="signal-plot-canvas"
+          style={{
+            minWidth: signalLayout.minWidth,
+            minHeight: signalLayout.minHeight,
+          }}
+        >
+          <Plot
+            data={allTraces as never}
+            layout={
+              {
+                ...plotlyTheme,
+                ...themedAxes,
+                title: { text: data.title },
+                autosize: true,
+                margin: { l: 70, r: 30, t: 40, b: 55 },
+                showlegend: resultTraces.length > 0 || extraSignals.length > 0,
+                uirevision: figureRevision,
+                // Legend inside the plot, anchored top-right, mirroring the
+                // DataLab desktop layout. A semi-transparent background keeps it
+                // readable when it overlaps the curves.
+                legend: {
+                  ...plotlyTheme.legend,
+                  x: 1,
+                  y: 1,
+                  xanchor: "right",
+                  yanchor: "top",
+                  bgcolor:
+                    theme === "dark"
+                      ? "rgba(30,30,30,0.7)"
+                      : "rgba(255,255,255,0.7)",
+                  bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
+                  borderwidth: 1,
+                  uirevision: orderedSignalIds,
                 },
-                fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
-                opacity: 1,
-              }
-            : undefined,
-          // Auto-arm the rectangle-draw tool when the ROI panel requests it
-          // so the user can trace a first ROI without hunting for a modebar
-          // button (otherwise dragging would just pan/zoom).
-          ...(roiEditMode && drawGeometry
-            ? { dragmode: "drawrect" as const }
-            : {}),
-          shapes: allShapes,
-          annotations: allAnnotations,
-        } as never
-      }
-      style={{ width: "100%", height: "100%" }}
-      useResizeHandler
-      config={
-        {
-          responsive: true,
-          displaylogo: false,
-          modeBarButtonsToAdd: roiEditMode
-            ? ["drawrect", "eraseshape"]
-            : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
-          editable: true,
-        } as never
-      }
-      onRelayout={handleRelayout}
-      onInitialized={(_fig, gd) => {
-        registerActivePlot("signal", gd);
-        // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
-        // per-frame drag event). Bind it imperatively so ROI drags update
-        // the overlay/form continuously instead of only on mouse release.
-        const g = gd as unknown as {
-          on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
-        };
-        g.on?.("plotly_relayouting", (e) => relayoutHandlerRef.current(e));
-      }}
-      onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
-      onPurge={() => registerActivePlot("signal", null)}
-    />
+                // In ROI edit mode, the newshape default uses the next ROI's
+                // color so the freshly drawn rectangle matches its position in
+                // the cycling palette as soon as it is committed.
+                newshape: roiEditMode
+                  ? {
+                      line: {
+                        color: roiLineColor(roi.length),
+                        width: 2,
+                        dash: "dot",
+                      },
+                      fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
+                      opacity: 1,
+                    }
+                  : undefined,
+                // Auto-arm the rectangle-draw tool when the ROI panel requests it
+                // so the user can trace a first ROI without hunting for a modebar
+                // button (otherwise dragging would just pan/zoom).
+                ...(roiEditMode && drawGeometry
+                  ? { dragmode: "drawrect" as const }
+                  : {}),
+                shapes: allShapes,
+                annotations: allAnnotations,
+              } as never
+            }
+            style={{ width: "100%", height: "100%" }}
+            useResizeHandler
+            config={
+              {
+                responsive: true,
+                displaylogo: false,
+                modeBarButtonsToAdd: roiEditMode
+                  ? ["drawrect", "eraseshape"]
+                  : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
+                editable: true,
+              } as never
+            }
+            onRelayout={handleRelayout}
+            onInitialized={(_fig, gd) => {
+              registerActivePlot("signal", gd);
+              // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
+              // per-frame drag event). Bind it imperatively so ROI drags update
+              // the overlay/form continuously instead of only on mouse release.
+              const g = gd as unknown as {
+                on?: (
+                  ev: string,
+                  cb: (e: Record<string, unknown>) => void,
+                ) => void;
+              };
+              g.on?.("plotly_relayouting", (e) =>
+                relayoutHandlerRef.current(e),
+              );
+            }}
+            onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
+            onPurge={() => registerActivePlot("signal", null)}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
-function formatAxis(label: string, unit: string): string {
-  return unit ? `${label} (${unit})` : label;
+function isPlotlyRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function scopePrimaryPaperReferences(
+  value: unknown,
+  axis: SignalAxisAssignment,
+  split: boolean,
+): unknown {
+  if (!split || !isPlotlyRecord(value)) return value;
+  return {
+    ...value,
+    xref: value.xref === "paper" ? `${axis.xRef} domain` : value.xref,
+    yref: value.yref === "paper" ? `${axis.yRef} domain` : value.yref,
+  };
+}
+
+function restorePrimaryPaperReferences(
+  value: unknown,
+  originalValue: unknown,
+  axis: SignalAxisAssignment,
+  split: boolean,
+): unknown {
+  if (!split || !isPlotlyRecord(value) || !isPlotlyRecord(originalValue)) {
+    return value;
+  }
+  return {
+    ...value,
+    xref:
+      originalValue.xref === "paper" && value.xref === `${axis.xRef} domain`
+        ? "paper"
+        : value.xref,
+    yref:
+      originalValue.yref === "paper" && value.yref === `${axis.yRef} domain`
+        ? "paper"
+        : value.yref,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -492,7 +703,10 @@ function fmt(n: number): string {
 
 function buildGeometryOverlays(
   results: AnalysisResult[],
-  showTitles = true,
+  showTitles: boolean,
+  axis: SignalAxisAssignment,
+  scopeToDomain: boolean,
+  colorOffset = 0,
 ): {
   resultShapes: unknown[];
   resultAnnotations: unknown[];
@@ -503,7 +717,9 @@ function buildGeometryOverlays(
   // Group point/marker rows into a single per-result scatter trace so the
   // legend stays compact.
   const traces: unknown[] = [];
-  let idx = 0;
+  let idx = colorOffset;
+  const xDomainRef = scopeToDomain ? `${axis.xRef} domain` : "paper";
+  const yDomainRef = scopeToDomain ? `${axis.yRef} domain` : "paper";
   for (const r of results) {
     if (r.category !== "geometry") continue;
     const geom = r as GeometryAnalysisResult;
@@ -534,14 +750,16 @@ function buildGeometryOverlays(
         hoverinfo: "text",
         name,
         showlegend: true,
+        xaxis: axis.xRef,
+        yaxis: axis.yRef,
       });
     } else if (geom.kind === "segment") {
       for (const row of geom.coords) {
         const [x0, y0, x1, y1] = row;
         shapes.push({
           type: "line",
-          xref: "x",
-          yref: "y",
+          xref: axis.xRef,
+          yref: axis.yRef,
           x0,
           y0,
           x1,
@@ -553,8 +771,8 @@ function buildGeometryOverlays(
         annotations.push({
           x: (x0 + x1) / 2,
           y: (y0 + y1) / 2,
-          xref: "x",
-          yref: "y",
+          xref: axis.xRef,
+          yref: axis.yRef,
           text: `${name} = ${fmt(Math.hypot(x1 - x0, y1 - y0))}`,
           showarrow: false,
           font: { color, size: 11 },
@@ -574,14 +792,16 @@ function buildGeometryOverlays(
         line: { color, width: 2 },
         name,
         showlegend: true,
+        xaxis: axis.xRef,
+        yaxis: axis.yRef,
       });
     } else if (geom.kind === "rectangle") {
       for (const row of geom.coords) {
         const [x0, y0, w, h] = row;
         shapes.push({
           type: "rect",
-          xref: "x",
-          yref: "y",
+          xref: axis.xRef,
+          yref: axis.yRef,
           x0,
           y0,
           x1: x0 + w,
@@ -597,8 +817,8 @@ function buildGeometryOverlays(
         const [cx, cy, r] = row;
         shapes.push({
           type: "circle",
-          xref: "x",
-          yref: "y",
+          xref: axis.xRef,
+          yref: axis.yRef,
           x0: cx - r,
           y0: cy - r,
           x1: cx + r,
@@ -622,8 +842,8 @@ function buildGeometryOverlays(
       if (ov.kind === "segment") {
         shapes.push({
           type: "line",
-          xref: "x",
-          yref: "y",
+          xref: axis.xRef,
+          yref: axis.yRef,
           x0: ov.x0,
           y0: ov.y0,
           x1: ov.x1,
@@ -636,8 +856,8 @@ function buildGeometryOverlays(
           annotations.push({
             x: (ov.x0 + ov.x1) / 2,
             y: (ov.y0 + ov.y1) / 2,
-            xref: "x",
-            yref: "y",
+            xref: axis.xRef,
+            yref: axis.yRef,
             text: ov.label,
             showarrow: false,
             font: { color: "#ffffff", size: 11 },
@@ -651,8 +871,8 @@ function buildGeometryOverlays(
       } else if (ov.kind === "vline") {
         shapes.push({
           type: "line",
-          xref: "x",
-          yref: "paper",
+          xref: axis.xRef,
+          yref: yDomainRef,
           x0: ov.x,
           y0: 0,
           x1: ov.x,
@@ -665,8 +885,8 @@ function buildGeometryOverlays(
           annotations.push({
             x: ov.x,
             y: 1,
-            xref: "x",
-            yref: "paper",
+            xref: axis.xRef,
+            yref: yDomainRef,
             text: ov.label,
             showarrow: false,
             font: { color: "#ffffff", size: 11, weight: 700 },
@@ -682,8 +902,8 @@ function buildGeometryOverlays(
       } else if (ov.kind === "hline") {
         shapes.push({
           type: "line",
-          xref: "paper",
-          yref: "y",
+          xref: xDomainRef,
+          yref: axis.yRef,
           x0: 0,
           y0: ov.y,
           x1: 1,
@@ -696,8 +916,8 @@ function buildGeometryOverlays(
           annotations.push({
             x: 1,
             y: ov.y,
-            xref: "paper",
-            yref: "y",
+            xref: xDomainRef,
+            yref: axis.yRef,
             text: ov.label,
             showarrow: false,
             font: { color: "#ffffff", size: 11 },

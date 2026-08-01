@@ -733,6 +733,12 @@ input {
   display: block;
 }
 
+.menu-checkmark {
+  color: var(--accent, #0a6cff);
+  font-size: 9px;
+  line-height: 1;
+}
+
 .menu-separator {
   list-style: none;
   height: 1px;
@@ -1759,6 +1765,63 @@ input {
   justify-content: center;
   height: 100%;
   color: var(--text-dim);
+}
+
+.signal-plot-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.signal-layout-modebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.signal-layout-label {
+  margin-right: 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.signal-layout-modebtn {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.signal-layout-modebtn:hover,
+.signal-layout-modebtn:focus-visible {
+  border-color: var(--accent, #0a6cff);
+}
+
+.signal-layout-modebtn.active {
+  border-color: var(--accent, #0a6cff);
+  background: var(--accent, #0a6cff);
+  color: #fff;
+}
+
+.signal-plot-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.signal-plot-canvas {
+  width: 100%;
+  height: 100%;
 }
 
 /* ---- Non-modal ROI editor (lives inside a DraggableFloating window

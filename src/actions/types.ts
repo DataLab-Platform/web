@@ -38,6 +38,10 @@ export interface ActionDescriptor {
   label: string;
   /** Slash-separated path, e.g. "Operations/Constant/Add constant…". */
   menuPath: string;
+  /** Optional mutually exclusive or independent checked-menu semantics. */
+  checkable?: "checkbox" | "radio";
+  /** Current state for a checkable action. */
+  checked?: boolean;
   /** Insert a separator *before* this item when rendered. */
   beginGroup?: boolean;
   /** Optional URL to an SVG/PNG icon shown next to the label. */
