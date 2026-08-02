@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
+import { reduceSignalForPlot } from "../utils/signalLod";
 import {
   buildCurveTrace,
   getCurveStyle,
@@ -59,6 +60,9 @@ interface Props {
 }
 
 const SIGNAL_PLOT_STYLE = { width: "100%", height: "100%" } as const;
+const SIGNAL_PLOT_HOST_STYLE = { width: "100%", height: "100%" } as const;
+const DEFAULT_SIGNAL_PLOT_WIDTH = 800;
+const SIGNAL_PLOT_HORIZONTAL_MARGIN = 80;
 const EMPTY_RESULTS: AnalysisResult[] = [];
 const EMPTY_ROI: SignalRoiSegment[] = [];
 const EMPTY_SIGNALS: SignalData[] = [];
@@ -79,6 +83,23 @@ export function SignalPlot({
   extraSignals = EMPTY_SIGNALS,
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
+  const plotHostRef = useRef<HTMLDivElement>(null);
+  const [plotWidth, setPlotWidth] = useState(() =>
+    typeof window === "undefined"
+      ? DEFAULT_SIGNAL_PLOT_WIDTH
+      : Math.max(
+          1,
+          Math.min(
+            DEFAULT_SIGNAL_PLOT_WIDTH,
+            window.innerWidth - SIGNAL_PLOT_HORIZONTAL_MARGIN,
+          ),
+        ),
+  );
+  const [xRangeState, setXRangeState] = useState<{
+    id: string;
+    range: readonly [number, number] | null;
+  }>(() => ({ id: data.id, range: null }));
+  const xRange = xRangeState.id === data.id ? xRangeState.range : null;
   const xAxisTitle = useMemo(
     () => formatAxis(data.xlabel || "X", data.xunit),
     [data.xlabel, data.xunit],
@@ -114,6 +135,29 @@ export function SignalPlot({
     annotations.annotations,
   );
 
+  useEffect(() => {
+    const host = plotHostRef.current;
+    if (!host) return;
+    const updateWidth = (hostWidth: number) => {
+      const usefulWidth = Math.max(
+        1,
+        Math.floor(hostWidth - SIGNAL_PLOT_HORIZONTAL_MARGIN),
+      );
+      setPlotWidth((current) =>
+        current === usefulWidth ? current : usefulWidth,
+      );
+    };
+    const initialWidth = host.getBoundingClientRect().width;
+    if (initialWidth > 0) updateWidth(initialWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width && width > 0) updateWidth(width);
+    });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
   // Sync from backend payload whenever the displayed signal or its
   // persisted annotations change.  The (oid, annotations) pair is the
   // authoritative source; any local edits are flushed back via the
@@ -141,6 +185,23 @@ export function SignalPlot({
   }, []);
 
   const handleRelayout = (event: Record<string, unknown>) => {
+    const nextXRange = relayoutXRange(event);
+    if (nextXRange !== undefined) {
+      setXRangeState((current) => {
+        const currentRange = current.id === data.id ? current.range : null;
+        if (nextXRange === null) {
+          return currentRange === null ? current : { id: data.id, range: null };
+        }
+        if (
+          currentRange &&
+          currentRange[0] === nextXRange[0] &&
+          currentRange[1] === nextXRange[1]
+        ) {
+          return current;
+        }
+        return { id: data.id, range: nextXRange };
+      });
+    }
     let touched = false;
     let nextShapes = localShapes;
     let nextAnns = localAnnotations;
@@ -296,6 +357,21 @@ export function SignalPlot({
     });
   }, [roi, roiEditMode, yMin, yMax, showGraphicalTitles]);
 
+  // Level of detail (LOD): reduce every selected signal to the current
+  // viewport before building Plotly traces, without changing its raw data.
+  const lodSignals = useMemo(
+    () =>
+      [data, ...extraSignals].map((signal) => ({
+        signal,
+        lod: reduceSignalForPlot(signal.x, signal.y, {
+          width: plotWidth,
+          xRange,
+        }),
+      })),
+    [data, extraSignals, plotWidth, xRange],
+  );
+  const primaryLod = lodSignals[0].lod;
+
   // View-mode "area under curve" overlay: one filled scatter trace per
   // ROI, clipping the primary signal between ``xmin`` and ``xmax`` and
   // filling down to ``y = 0``.  Mirrors the new desktop reference
@@ -307,9 +383,9 @@ export function SignalPlot({
   const roiFillTraces = useMemo(() => {
     if (roiEditMode) return [] as unknown[];
     return roi
-      .map((seg, i) => buildRoiAreaTrace(seg, i, data.x, data.y))
+      .map((seg, i) => buildRoiAreaTrace(seg, i, primaryLod.x, primaryLod.y))
       .filter((t): t is Record<string, unknown> => t !== null);
-  }, [roi, roiEditMode, data.x, data.y]);
+  }, [roi, roiEditMode, primaryLod]);
 
   // View-mode dashed vertical boundary lines: two per ROI (at ``xmin`` and
   // ``xmax``) spanning the full plotting area (``yref: "paper"``) so they
@@ -359,29 +435,28 @@ export function SignalPlot({
     // selected extras).  Style precedence: explicit metadata > cycling
     // palette.  Index 0 always uses palette slot 0 so a single signal
     // keeps the historical muted-blue look.
-    const allSignals: SignalData[] = [data, ...extraSignals];
-    const curveTraces = allSignals.map((sig, i) => {
+    const curveTraces = lodSignals.map(({ signal, lod }, i) => {
       const auto = getCurveStyle(i);
-      const color = sig.style?.color ?? auto.color;
-      const dash = sig.style?.linestyle
-        ? plotlyDash(sig.style.linestyle)
+      const color = signal.style?.color ?? auto.color;
+      const dash = signal.style?.linestyle
+        ? plotlyDash(signal.style.linestyle)
         : auto.dash;
-      const width = sig.style?.linewidth ?? auto.width;
-      const mode = normalizeCurveStyle(sig.style?.curvestyle);
-      const partial = buildCurveTrace(sig.x, sig.y, color, width, dash, mode);
+      const width = signal.style?.linewidth ?? auto.width;
+      const mode = normalizeCurveStyle(signal.style?.curvestyle);
+      const partial = buildCurveTrace(lod.x, lod.y, color, width, dash, mode);
       return {
-        x: partial.x ?? sig.x,
-        y: partial.y ?? sig.y,
+        x: partial.x ?? lod.x,
+        y: partial.y ?? lod.y,
         type: partial.type,
         mode: partial.mode,
         ...(partial.line ? { line: partial.line } : {}),
         ...(partial.marker ? { marker: partial.marker } : {}),
-        name: sig.title,
+        name: signal.title,
         showlegend: true,
       };
     });
     return [...roiFillTraces, ...curveTraces, ...resultTraces];
-  }, [data, extraSignals, roiFillTraces, resultTraces]);
+  }, [lodSignals, roiFillTraces, resultTraces]);
 
   const layout = useMemo(
     () => ({
@@ -465,27 +540,72 @@ export function SignalPlot({
   );
 
   return (
-    <Plot
-      data={allTraces as never}
-      layout={layout as never}
-      style={SIGNAL_PLOT_STYLE}
-      useResizeHandler
-      config={config as never}
-      onRelayout={handleRelayout}
-      onInitialized={(_fig, gd) => {
-        registerActivePlot("signal", gd);
-        // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
-        // per-frame drag event). Bind it imperatively so ROI drags update
-        // the overlay/form continuously instead of only on mouse release.
-        const g = gd as unknown as {
-          on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
-        };
-        g.on?.("plotly_relayouting", (e) => relayoutHandlerRef.current(e));
-      }}
-      onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
-      onPurge={() => registerActivePlot("signal", null)}
-    />
+    <div
+      ref={plotHostRef}
+      className="signal-plot-host"
+      style={SIGNAL_PLOT_HOST_STYLE}
+    >
+      <Plot
+        data={allTraces as never}
+        layout={layout as never}
+        style={SIGNAL_PLOT_STYLE}
+        useResizeHandler
+        config={config as never}
+        onRelayout={handleRelayout}
+        onInitialized={(_fig, gd) => {
+          registerActivePlot("signal", gd);
+          // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
+          // per-frame drag event). Bind it imperatively so ROI drags update
+          // the overlay/form continuously instead of only on mouse release.
+          const g = gd as unknown as {
+            on?: (ev: string, cb: (e: Record<string, unknown>) => void) => void;
+            _fullLayout?: { xaxis?: { _length?: number } };
+          };
+          const axisWidth = g._fullLayout?.xaxis?._length;
+          if (axisWidth && axisWidth > 0) {
+            const usefulWidth = Math.max(1, Math.floor(axisWidth));
+            setPlotWidth((current) =>
+              current === usefulWidth ? current : usefulWidth,
+            );
+          }
+          g.on?.("plotly_relayouting", (event) => {
+            const overlayEvent = withoutAxisRelayout(event);
+            if (Object.keys(overlayEvent).length > 0) {
+              relayoutHandlerRef.current(overlayEvent);
+            }
+          });
+        }}
+        onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
+        onPurge={() => registerActivePlot("signal", null)}
+      />
+    </div>
   );
+}
+
+function relayoutXRange(
+  event: Record<string, unknown>,
+): readonly [number, number] | null | undefined {
+  if (event["xaxis.autorange"] === true) return null;
+  const fullRange = event["xaxis.range"];
+  const start = Array.isArray(fullRange)
+    ? Number(fullRange[0])
+    : Number(event["xaxis.range[0]"]);
+  const end = Array.isArray(fullRange)
+    ? Number(fullRange[1])
+    : Number(event["xaxis.range[1]"]);
+  return Number.isFinite(start) && Number.isFinite(end)
+    ? [start, end]
+    : undefined;
+}
+
+function withoutAxisRelayout(
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  const overlayEvent: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(event)) {
+    if (!/^[xy]axis\./.test(key)) overlayEvent[key] = value;
+  }
+  return overlayEvent;
 }
 
 function formatAxis(label: string, unit: string): string {

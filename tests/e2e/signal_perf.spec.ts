@@ -27,6 +27,7 @@ interface SignalBenchResult {
   selectToVisibleMs: number;
   plotRenderCount: number;
   traceCount: number;
+  plotWidth: number;
   plottedPoints: number;
   longTaskCount: number;
   longTaskTotalMs: number;
@@ -52,31 +53,104 @@ async function waitForGraphHook(page: Page): Promise<void> {
   );
 }
 
+async function readSignalPlot(page: Page, title: string) {
+  return page.evaluate((traceTitle: string) => {
+    const graph = document.querySelector(".js-plotly-plot") as
+      | (Element & {
+          data?: Array<{ name?: string; x?: ArrayLike<number> }>;
+          _fullLayout?: { xaxis?: { _length?: number } };
+        })
+      | null;
+    const traces = graph?.data ?? [];
+    const trace = traces.find((candidate) => candidate.name === traceTitle);
+    return {
+      traceCount: traces.length,
+      plotWidth: Number(graph?._fullLayout?.xaxis?._length ?? 0),
+      plottedPoints: trace?.x?.length ?? 0,
+    };
+  }, title);
+}
+
+async function waitForSignalRender(
+  page: Page,
+  title: string,
+  notBefore: number,
+) {
+  await page.waitForFunction(
+    ({ traceTitle, minimumStartTime }) => {
+      const metrics = (
+        window as unknown as {
+          __dlwPlotlyMetrics?: {
+            plotRenders: Array<{
+              kind: string;
+              startTime: number;
+            }>;
+          };
+        }
+      ).__dlwPlotlyMetrics;
+      const graph = document.querySelector(".js-plotly-plot") as
+        | (Element & { data?: Array<{ name?: string }> })
+        | null;
+      return Boolean(
+        graph?.data?.some((trace) => trace.name === traceTitle) &&
+        metrics?.plotRenders.some(
+          (render) =>
+            render.kind === "signal" && render.startTime >= minimumStartTime,
+        ),
+      );
+    },
+    { traceTitle: title, minimumStartTime: notBefore },
+    { timeout: 120_000 },
+  );
+  const metrics = await readPlotlyMetrics(page);
+  const render = metrics.plotRenders.find(
+    (candidate) =>
+      candidate.kind === "signal" && candidate.startTime >= notBefore,
+  );
+  if (!render) throw new Error(`Missing post-selection render for ${title}`);
+  return render;
+}
+
 async function measureHover(page: Page): Promise<number | null> {
   await resetPlotlyMetrics(page);
-  const point = await page.evaluate(() => {
+  const points = await page.evaluate(() => {
     const path = document.querySelector(
       ".js-plotly-plot .scatterlayer .trace .js-line",
     );
     if (!(path instanceof SVGGeometryElement)) return null;
     const matrix = path.getScreenCTM();
     if (!matrix) return null;
-    const local = path.getPointAtLength(path.getTotalLength() * 0.5);
-    const screen = new DOMPoint(local.x, local.y).matrixTransform(matrix);
-    return { x: screen.x, y: screen.y };
+    const coordinates = [
+      ...String(path.getAttribute("d") ?? "").matchAll(
+        /[ML](-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?),(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)/gi,
+      ),
+    ].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }));
+    if (coordinates.length === 0) return null;
+    return [0.15, 0.3, 0.5, 0.7, 0.85].map((fraction) => {
+      const index = Math.min(
+        coordinates.length - 1,
+        Math.floor(coordinates.length * fraction),
+      );
+      const local = coordinates[index];
+      const screen = new DOMPoint(local.x, local.y).matrixTransform(matrix);
+      return { x: screen.x, y: screen.y };
+    });
   });
-  if (!point) return null;
+  if (!points) return null;
   const startedAt = await page.evaluate(() => performance.now());
-  await page.mouse.move(point.x, point.y);
-  try {
-    await page
-      .locator(".js-plotly-plot .hoverlayer .hovertext")
-      .first()
-      .waitFor({ state: "visible", timeout: 10_000 });
-  } catch {
-    return null;
+  for (const point of points) {
+    await page.mouse.move(point.x, point.y);
+    try {
+      await page
+        .locator(".js-plotly-plot .hoverlayer .hovertext")
+        .first()
+        .waitFor({ state: "visible", timeout: 2_000 });
+      return (await page.evaluate(() => performance.now())) - startedAt;
+    } catch {
+      // Try another retained SVG vertex before declaring hover unavailable.
+    }
   }
-  return (await page.evaluate(() => performance.now())) - startedAt;
+  return null;
 }
 
 async function measureDrag(
@@ -175,24 +249,24 @@ test.describe("Signal display perf", () => {
       await resetPlotlyMetrics(page);
       const selectedAt = await page.evaluate(() => performance.now());
       await treeItems.filter({ hasText: entry.title }).first().click();
-      const render = await waitForNextPlotRender(page, 0, "signal", 120_000);
+      const render = await waitForSignalRender(page, entry.title, selectedAt);
       const renderMetrics = await readPlotlyMetrics(page);
-      const plotted = await page.evaluate((title: string) => {
-        const graph = document.querySelector(".js-plotly-plot") as
-          | (Element & {
-              data?: Array<{ name?: string; x?: ArrayLike<number> }>;
-            })
-          | null;
-        const traces = graph?.data ?? [];
-        const trace = traces.find((candidate) => candidate.name === title);
-        return {
-          traceCount: traces.length,
-          plottedPoints: trace?.x?.length ?? 0,
-        };
-      }, entry.title);
+      await expect
+        .poll(async () => {
+          const plotted = await readSignalPlot(page, entry.title);
+          return (
+            plotted.plotWidth > 0 &&
+            plotted.plottedPoints > 0 &&
+            plotted.plottedPoints <= plotted.plotWidth * 2 + 2
+          );
+        })
+        .toBe(true);
+      const plotted = await readSignalPlot(page, entry.title);
       expect(plotted.traceCount).toBe(1);
       expect(plotted.plottedPoints).toBeGreaterThan(0);
-      expect(plotted.plottedPoints).toBeLessThanOrEqual(entry.size);
+      expect(plotted.plottedPoints).toBeLessThanOrEqual(
+        plotted.plotWidth * 2 + 2,
+      );
 
       await waitForGraphHook(page);
       const hoverMs = await measureHover(page);
@@ -218,6 +292,7 @@ test.describe("Signal display perf", () => {
         selectToVisibleMs: render.startTime - selectedAt,
         plotRenderCount: renderMetrics.plotRenders.length,
         traceCount: plotted.traceCount,
+        plotWidth: plotted.plotWidth,
         plottedPoints: plotted.plottedPoints,
         longTaskCount: renderMetrics.longTasks.length,
         longTaskTotalMs,
