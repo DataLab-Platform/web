@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784366324446,
+  "lastUpdate": 1785696182494,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -962,6 +962,105 @@ window.BENCHMARK_DATA = {
           {
             "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
             "value": 51.6,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": false,
+          "id": "15720f092e23593256e1b5cd5968fed6c7153536",
+          "message": "perf(startup): defer heavy runtime and plotting bundles\n\nLazy-load Plotly views and prewarm primary plots during Pyodide startup.\nKeep the main runtime, Python payloads, and CodeMirror out of worker startup.\nShare Plotly loading and extract lightweight OPFS capability detection.\nEnforce preload invariants and a 375 KiB gzip initial-JS budget at build time.",
+          "timestamp": "2026-08-02T19:53:58+02:00",
+          "tree_id": "6598aac9f33feb409071bcd0ea083b747df2d3a2",
+          "url": "https://github.com/DataLab-Platform/web/commit/15720f092e23593256e1b5cd5968fed6c7153536"
+        },
+        "date": 1785696181771,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 16.777,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · payload [10000 pts]",
+            "value": 0.16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [10000 pts]",
+            "value": 1101,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [100000 pts]",
+            "value": 1.6,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [100000 pts]",
+            "value": 1101,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [500000 pts]",
+            "value": 8,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [500000 pts]",
+            "value": 1102,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [1000000 pts]",
+            "value": 16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [1000000 pts]",
+            "value": 1102,
+            "unit": "points"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 44.2,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 44,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 53,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 52.8,
             "unit": "MiB"
           }
         ]
