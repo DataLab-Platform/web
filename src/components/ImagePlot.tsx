@@ -1392,7 +1392,10 @@ export function ImagePlot({
           // continuous feedback. The drawrect/drawcircle/drawclosedpath
           // modebar tools still create new ROIs (they are dragmode-based and
           // do not require ``editable``).
-          editable: tool === "stats",
+          editable: false,
+          edits: {
+            shapePosition: tool === "stats",
+          },
           modeBarButtonsToAdd: roiEditMode
             ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
             : tool === "stats"

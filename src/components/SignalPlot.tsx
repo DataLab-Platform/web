@@ -437,7 +437,13 @@ export function SignalPlot({
           modeBarButtonsToAdd: roiEditMode
             ? ["drawrect", "eraseshape"]
             : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
-          editable: true,
+          editable: false,
+          edits: {
+            annotationPosition: true,
+            annotationTail: true,
+            annotationText: true,
+            shapePosition: true,
+          },
         } as never
       }
       onRelayout={handleRelayout}
