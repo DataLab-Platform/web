@@ -10,7 +10,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ObjectStats, RuntimeApi } from "../runtime/runtime";
+import type {
+  ObjectStats,
+  RuntimeApi,
+  SignalData,
+  SignalDataPreview,
+} from "../runtime/runtime";
 import { t } from "../i18n/translate";
 import { acceptFromExtensions, saveBytesToFile } from "../utils/saveFile";
 import { useToast } from "./Toast";
@@ -78,21 +83,22 @@ function SignalArrayPreview({
   refreshNonce: number;
   onApplied: () => void;
 }) {
-  const [data, setData] = useState<{
-    x: ArrayLike<number>;
-    y: ArrayLike<number>;
-  } | null>(null);
+  const [preview, setPreview] = useState<SignalDataPreview | null>(null);
+  const [fullData, setFullData] = useState<SignalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [loadingAction, setLoadingAction] = useState(false);
   const pushToast = useToast();
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
+    setPreview(null);
+    setFullData(null);
     runtime
-      .getSignalData(oid)
+      .getSignalDataPreview(oid, HEAD_ROWS, TAIL_ROWS)
       .then((d) => {
-        if (!cancelled) setData({ x: d.x, y: d.y });
+        if (!cancelled) setPreview(d);
       })
       .catch((err) => {
         if (!cancelled)
@@ -103,54 +109,78 @@ function SignalArrayPreview({
     };
   }, [runtime, oid, refreshNonce]);
 
+  const loadFullData = useCallback(async () => {
+    if (fullData) return fullData;
+    const loaded = await runtime.getSignalData(oid);
+    setFullData(loaded);
+    return loaded;
+  }, [runtime, oid, fullData]);
+
   const handleCopyCsv = useCallback(async () => {
-    if (!data) return;
-    const csv = buildCsv(data.x, data.y);
     try {
-      await navigator.clipboard.writeText(csv);
-    } catch {
-      // ignore — clipboard may be blocked outside secure contexts
+      setLoadingAction(true);
+      const data = await loadFullData();
+      try {
+        await navigator.clipboard.writeText(buildCsv(data.x, data.y));
+      } catch {
+        // Clipboard access may be blocked outside secure contexts.
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingAction(false);
     }
-  }, [data]);
+  }, [loadFullData]);
 
   const handleDownload = useCallback(async () => {
-    if (!data) return;
-    const csv = buildCsv(data.x, data.y);
-    const bytes = new TextEncoder().encode(csv);
-    const result = await saveBytesToFile(
-      bytes,
-      `${oid}.csv`,
-      [acceptFromExtensions(t("CSV files"), ["csv"], "text/csv")],
-      "text/csv",
-    );
-    if (result.outcome === "downloaded") {
-      pushToast({
-        kind: "success",
-        message: t("Saved {name} to your browser's Downloads folder.", {
-          name: result.filename,
-        }),
-      });
+    try {
+      setLoadingAction(true);
+      const data = await loadFullData();
+      const bytes = new TextEncoder().encode(buildCsv(data.x, data.y));
+      const result = await saveBytesToFile(
+        bytes,
+        `${oid}.csv`,
+        [acceptFromExtensions(t("CSV files"), ["csv"], "text/csv")],
+        "text/csv",
+      );
+      if (result.outcome === "downloaded") {
+        pushToast({
+          kind: "success",
+          message: t("Saved {name} to your browser's Downloads folder.", {
+            name: result.filename,
+          }),
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingAction(false);
     }
-  }, [data, oid, pushToast]);
+  }, [loadFullData, oid, pushToast]);
+
+  const handleEdit = useCallback(async () => {
+    try {
+      setError(null);
+      setLoadingAction(true);
+      await loadFullData();
+      setEditing(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingAction(false);
+    }
+  }, [loadFullData]);
 
   if (error) return <div className="array-preview-error">{error}</div>;
-  if (!data)
+  if (!preview)
     return <div className="array-preview-loading">{t("Loading data…")}</div>;
 
-  // Compute head + tail (with an ellipsis row when the array is long
-  // enough to justify it).
-  const total = data.x.length;
-  const showEllipsis = total > HEAD_ROWS + TAIL_ROWS;
-  const headEnd = showEllipsis ? HEAD_ROWS : Math.min(total, HEAD_ROWS);
-  const tailStart = showEllipsis ? total - TAIL_ROWS : headEnd;
-
-  const rows: { idx: number; x: number; y: number }[] = [];
-  for (let i = 0; i < headEnd; i += 1) {
-    rows.push({ idx: i, x: data.x[i], y: data.y[i] });
-  }
-  for (let i = tailStart; i < total; i += 1) {
-    rows.push({ idx: i, x: data.x[i], y: data.y[i] });
-  }
+  const total = preview.size;
+  const rows = preview.indices.map((idx, index) => ({
+    idx,
+    x: preview.x[index],
+    y: preview.y[index],
+  }));
 
   // The editor materialises an N×2 string grid, so it is only offered for
   // arrays at/under the cell cap. Larger signals are still viewable via the
@@ -169,8 +199,8 @@ function SignalArrayPreview({
         <div className="array-preview-actions">
           <button
             type="button"
-            onClick={() => setEditing(true)}
-            disabled={!editable}
+            onClick={() => void handleEdit()}
+            disabled={!editable || loadingAction}
             title={
               editable
                 ? t("Edit X / Y values in a spreadsheet")
@@ -179,10 +209,18 @@ function SignalArrayPreview({
           >
             {t("Edit data…")}
           </button>
-          <button type="button" onClick={handleCopyCsv}>
+          <button
+            type="button"
+            onClick={() => void handleCopyCsv()}
+            disabled={loadingAction}
+          >
             {t("Copy CSV")}
           </button>
-          <button type="button" onClick={handleDownload}>
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={loadingAction}
+          >
             {t("Download")}
           </button>
         </div>
@@ -198,7 +236,7 @@ function SignalArrayPreview({
           </thead>
           <tbody>
             {rows.map((row, i) => {
-              const ellipsisHere = showEllipsis && i === HEAD_ROWS;
+              const ellipsisHere = i > 0 && row.idx > rows[i - 1].idx + 1;
               return [
                 ellipsisHere ? (
                   <tr key={`ell-${row.idx}`} className="array-preview-ellipsis">
@@ -215,11 +253,11 @@ function SignalArrayPreview({
           </tbody>
         </table>
       </div>
-      {editing && (
+      {editing && fullData && (
         <ArrayEditorDialog
-          value={Array.from({ length: data.x.length }, (_, i) => [
-            data.x[i],
-            data.y[i],
+          value={Array.from({ length: fullData.x.length }, (_, i) => [
+            fullData.x[i],
+            fullData.y[i],
           ])}
           format="%g"
           onCancel={() => setEditing(false)}

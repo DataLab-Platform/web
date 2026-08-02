@@ -1105,6 +1105,33 @@ def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
     return payload
 
 
+def get_signal_data_preview(oid: str, head: int = 5, tail: int = 5) -> dict[str, Any]:
+    """Return a bounded head/tail preview of a signal's X/Y arrays.
+
+    Args:
+        oid: Signal identifier in the in-memory store.
+        head: Maximum number of rows selected from the beginning.
+        tail: Maximum number of rows selected from the end.
+
+    Returns:
+        Total size and matching ``indices``/``x``/``y`` preview lists.
+    """
+    obj = _MODEL.get(oid)
+    size = int(obj.x.size)
+    head_count = min(max(int(head), 0), size)
+    tail_count = min(max(int(tail), 0), size - head_count)
+    indices = list(range(head_count))
+    if tail_count:
+        indices.extend(range(size - tail_count, size))
+    y_arr = obj.y.real if np.iscomplexobj(obj.y) else obj.y
+    return {
+        "size": size,
+        "indices": indices,
+        "x": np.asarray(obj.x[indices], dtype=np.float64).tolist(),
+        "y": np.asarray(y_arr[indices], dtype=np.float64).tolist(),
+    }
+
+
 def get_signals_xy(oids: list[str], encoding: str = "list") -> list[dict[str, Any]]:
     """Batched variant of :func:`get_signal_xy`.
 
@@ -1467,8 +1494,12 @@ def get_object_property_schema(oid: str) -> dict[str, Any]:
     )
 
     obj = _MODEL.get(oid)
-    payload = dataset_to_schema_with_values(obj)
+    hidden_value_kinds = {"float_array", "dict"}
+    payload = dataset_to_schema_with_values(obj, exclude_value_kinds=hidden_value_kinds)
     properties = payload["schema"].get("properties", {})
+    for prop in properties.values():
+        if prop.get("x-guidata-kind") in hidden_value_kinds:
+            prop["x-guidata-hide"] = True
     for name, active in resolve_dataset_active(obj).items():
         if not active and name in properties:
             properties[name]["readOnly"] = True
@@ -1483,14 +1514,11 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
     if hasattr(values, "to_py"):
         values = values.to_py()
     obj = _MODEL.get(oid)
-    # The Properties side panel hides ``float_array`` fields from the
-    # generic form but still echoes their values back unchanged on
-    # Apply.  Those round-trip through JS as nested lists; assigning
-    # them raw to a :class:`FloatArrayItem` would silently demote
-    # ``obj.data`` / ``obj.x`` / ... to a Python list and break every
-    # downstream ``.shape`` access (see ``_object_meta``,
-    # ``get_image_data``).  Coerce them back to ``np.ndarray`` here so
-    # the model invariant is preserved regardless of the caller.
+    # The Properties side panel omits ``float_array`` fields, but remote or
+    # older callers may still supply them as nested lists. Assigning those
+    # raw to a :class:`FloatArrayItem` would silently demote ``obj.data`` /
+    # ``obj.x`` / ... to a Python list and break downstream ``.shape``
+    # accesses. Coerce them back to ``np.ndarray`` defensively.
     array_fields = {
         item.get_name() for item in obj.get_items() if isinstance(item, FloatArrayItem)
     }
@@ -6288,6 +6316,7 @@ __all__ = [
     "get_object",
     "get_object_uuids",
     "get_signal_xy",
+    "get_signal_data_preview",
     "get_signals_xy",
     "set_signal_style",
     "create_image",

@@ -180,11 +180,15 @@ def dataset_to_schema(dataset_cls: type[gdt.DataSet]) -> dict[str, Any]:
     return schema
 
 
-def dataset_to_schema_with_values(instance: gdt.DataSet) -> dict[str, Any]:
+def dataset_to_schema_with_values(
+    instance: gdt.DataSet, exclude_value_kinds: set[str] | None = None
+) -> dict[str, Any]:
     """Return both the schema and the current values of *instance*.
 
     Args:
         instance: A :class:`DataSet` instance.
+        exclude_value_kinds: Optional ``x-guidata-kind`` values whose current
+         values must not be serialised. Their schema properties are preserved.
 
     Returns:
         ``{"schema": <schema>, "values": <values>}`` where ``values`` is
@@ -210,6 +214,10 @@ def dataset_to_schema_with_values(instance: gdt.DataSet) -> dict[str, Any]:
             continue
         name = item.get_name()
         if not name:
+            continue
+        if properties.get(name, {}).get("x-guidata-kind") in (
+            exclude_value_kinds or ()
+        ):
             continue
         values[name] = _serialise_value(item, item.get_value(instance))
     return {"schema": schema, "values": values}

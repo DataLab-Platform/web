@@ -145,6 +145,14 @@ export interface SignalData extends SignalMeta {
   style?: SignalStyle;
 }
 
+/** Bounded head/tail sample used by the Properties panel. */
+export interface SignalDataPreview {
+  size: number;
+  indices: number[];
+  x: number[];
+  y: number[];
+}
+
 export interface ProcessingDescriptor {
   id: string;
   label: string;
@@ -2154,6 +2162,19 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
       encoding: "bytes",
     })) as SignalData & { encoding?: string };
     return decodeSignalPayload(raw);
+  }
+
+  /** Return at most ``head + tail`` rows without transferring the full signal. */
+  async getSignalDataPreview(
+    id: string,
+    head = 5,
+    tail = 5,
+  ): Promise<SignalDataPreview> {
+    return (await this.callPy("get_signal_data_preview", {
+      oid: id,
+      head,
+      tail,
+    })) as SignalDataPreview;
   }
 
   /** Overwrite the X / Y arrays of signal *id* with edited values
