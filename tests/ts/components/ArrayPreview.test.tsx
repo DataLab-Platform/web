@@ -31,13 +31,13 @@ afterEach(() => {
 });
 
 describe("ArrayPreview", () => {
-  it("loads only the bounded preview on mount", async () => {
-    const getSignalDataPreview = vi.fn(async () => ({
+  it("uses the preloaded preview and keeps full data lazy", async () => {
+    const signalPreview = {
       size: 20,
       indices: [0, 1, 18, 19],
       x: [0, 1, 18, 19],
       y: [0, 1, 324, 361],
-    }));
+    };
     const getSignalData = vi.fn(async () => ({
       id: "signal-1",
       title: "Signal",
@@ -50,7 +50,6 @@ describe("ArrayPreview", () => {
       y: new Float64Array(20),
     }));
     const runtime = {
-      getSignalDataPreview,
       getSignalData,
       setSignalData: vi.fn(),
     } as unknown as RuntimeApi;
@@ -61,6 +60,7 @@ describe("ArrayPreview", () => {
           runtime={runtime}
           oid="signal-1"
           stats={STATS}
+          signalPreview={signalPreview}
           refreshNonce={0}
           onApplied={vi.fn()}
         />
@@ -68,7 +68,6 @@ describe("ArrayPreview", () => {
     );
 
     await screen.findByText("361");
-    expect(getSignalDataPreview).toHaveBeenCalledWith("signal-1", 5, 5);
     expect(getSignalData).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit data…" }));

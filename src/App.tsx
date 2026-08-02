@@ -66,12 +66,9 @@ import {
 } from "./components/CentralViewSwitcher";
 import { SignalPlot } from "./components/SignalPlot";
 import { ImagePlot } from "./components/ImagePlot";
-import {
-  MultiImagePlot,
-  MULTI_IMAGE_LIMIT,
-  MULTI_IMAGE_MAX_SIZE,
-} from "./components/MultiImagePlot";
+import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
 import { MultiImageSpatialPlot } from "./components/MultiImageSpatialPlot";
+import { useSelectionView } from "./hooks/useSelectionView";
 import { DataSetDialog } from "./components/DataSetDialog";
 import {
   ProfileDefinitionDialog,
@@ -642,14 +639,8 @@ export default function App() {
    *  non-empty, applying a processing creates new result group(s). */
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [data, setData] = useState<SignalData | null>(null);
-  /** Other signals selected alongside ``currentId`` — overlaid on top
-   *  of ``data`` in :class:`SignalPlot` to mirror DataLab desktop's
-   *  multi-curve plot. */
   const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
   const [imageData, setImageData] = useState<ImageData | null>(null);
-  /** Other images selected alongside ``currentId`` - laid out as a
-   *  read-only grid in :class:`MultiImagePlot` to mirror DataLab
-   *  desktop's multi-image viewer. */
   const [extraImages, setExtraImages] = useState<ImageData[]>([]);
   /** Multi-image view mode: ``false`` = thumbnail grid (default),
    *  ``true`` = spatial overlay honouring each image's origin so the
@@ -776,9 +767,6 @@ export default function App() {
   /** Vertex index of the selected polygon ROI whose coordinate cell is being
    *  edited in the ROI panel (``null`` ⇒ none). Highlighted on the plot. */
   const [activeRoiVertex, setActiveRoiVertex] = useState<number | null>(null);
-  /** Persisted LUT range override for the current image (``null`` ⇒
-   *  fall back to the image's intrinsic ``data_min``/``data_max``).
-   *  Driven by the contrast tool inside :class:`ImagePlot`. */
   const [imageLutRange, setImageLutRange] = useState<[number, number] | null>(
     null,
   );
@@ -801,11 +789,6 @@ export default function App() {
   const [pendingPlotResults, setPendingPlotResults] =
     useState<PendingPlotResults | null>(null);
   const [results, setResults] = useState<AnalysisResult[]>([]);
-  /** Analysis results attached to the other selected signals (excluding
-   *  ``currentId``).  Merged with ``results`` in :class:`SignalPlot` so
-   *  geometry overlays (FWHM segments, peak markers, …) are drawn for
-   *  every selected signal, not just the displayed one.  The right-hand
-   *  Results panel keeps showing ``currentId``'s results only. */
   const [extraResults, setExtraResults] = useState<AnalysisResult[]>([]);
   const [sideRefreshNonce, setSideRefreshNonce] = useState(0);
   // Bumped after any action that mutates the *current* object's
@@ -815,6 +798,26 @@ export default function App() {
   // this counter changes — mirroring DataLab desktop's "refresh the
   // selected object's plot after a metadata action".
   const [plotRefreshNonce, setPlotRefreshNonce] = useState(0);
+  const selectionView = useSelectionView({
+    runtime,
+    currentId,
+    selectedIds,
+    treeKind,
+    refreshNonce: plotRefreshNonce,
+    maxImages: MULTI_IMAGE_LIMIT,
+  });
+  useEffect(() => {
+    setData(selectionView.data);
+    setExtraSignals(selectionView.extraSignals);
+    setImageData(selectionView.imageData);
+    setExtraImages(selectionView.extraImages);
+    setAnnotations(selectionView.annotations);
+    setRoi(selectionView.roi);
+    setImageRoi(selectionView.imageRoi);
+    setImageLutRange(selectionView.imageLutRange);
+    setResults(selectionView.results);
+    setExtraResults(selectionView.extraResults);
+  }, [selectionView]);
   // ``true`` when at least one selected object has a ROI.  Drives the
   // enablement of the ROI "Remove all" action so it matches DataLab
   // desktop's ``SelectCond.with_roi`` (enabled when *any* selected
@@ -1060,151 +1063,6 @@ export default function App() {
       cancelled = true;
     };
   }, [status, runtime, refresh]);
-
-  useEffect(() => {
-    if (!runtime || !currentId) {
-      setData(null);
-      setExtraSignals([]);
-      setImageData(null);
-      setExtraImages([]);
-      setAnnotations({ shapes: [], annotations: [] });
-      setRoi([]);
-      setImageRoi([]);
-      setImageLutRange(null);
-      setResults([]);
-      setExtraResults([]);
-      return;
-    }
-    let cancelled = false;
-    if (treeKind === "image") {
-      // Image panel: viewer + ROI + analysis results.
-      setData(null);
-      setExtraSignals([]);
-      setExtraResults([]);
-      setAnnotations({ shapes: [], annotations: [] });
-      setRoi([]);
-      setImageLutRange(null);
-      runtime
-        .getImageData(currentId)
-        .then((d) => {
-          if (!cancelled) setImageData(d);
-        })
-        .catch(() => {
-          if (!cancelled) setImageData(null);
-        });
-      // Fetch the other selected images (excluding the current one) so
-      // they can be laid out side-by-side in MultiImagePlot.  We cap
-      // the request at MULTI_IMAGE_LIMIT to keep the bridge payload
-      // bounded; the component renders a "+N more" banner when the
-      // selection exceeds that limit.
-      const extraImgIds = selectedIds
-        .filter((id) => id !== currentId)
-        .slice(0, MULTI_IMAGE_LIMIT - 1);
-      if (extraImgIds.length === 0) {
-        setExtraImages([]);
-      } else {
-        runtime
-          .getImagesData(extraImgIds, MULTI_IMAGE_MAX_SIZE)
-          .then((imgs) => {
-            if (!cancelled) setExtraImages(imgs);
-          })
-          .catch(() => {
-            if (!cancelled) setExtraImages([]);
-          });
-      }
-      runtime
-        .getImageRoi(currentId)
-        .then((segs) => {
-          if (!cancelled) setImageRoi(segs);
-        })
-        .catch(() => {
-          if (!cancelled) setImageRoi([]);
-        });
-      runtime
-        .getLutRange(currentId)
-        .then((r) => {
-          if (!cancelled) setImageLutRange(r);
-        })
-        .catch(() => {
-          if (!cancelled) setImageLutRange(null);
-        });
-      runtime
-        .listImageResults(currentId)
-        .then((rs) => {
-          if (!cancelled) setResults(rs);
-        })
-        .catch(() => {
-          if (!cancelled) setResults([]);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-    setImageData(null);
-    setExtraImages([]);
-    setImageRoi([]);
-    runtime
-      .getSignalData(currentId)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch(() => {
-        if (!cancelled) setData(null);
-      });
-    // Fetch the other selected signals (excluding the current one) so
-    // they can be overlaid on the same plot.
-    const extraIds = selectedIds.filter((id) => id !== currentId);
-    if (extraIds.length === 0) {
-      setExtraSignals([]);
-      setExtraResults([]);
-    } else {
-      runtime
-        .getSignalsData(extraIds)
-        .then((sigs) => {
-          if (!cancelled) setExtraSignals(sigs);
-        })
-        .catch(() => {
-          if (!cancelled) setExtraSignals([]);
-        });
-      // Also fetch their analysis results so geometry overlays (FWHM
-      // segments, peak markers, …) are drawn for every selected signal,
-      // not only the displayed one.
-      Promise.all(extraIds.map((id) => runtime.listSignalResults(id)))
-        .then((lists) => {
-          if (!cancelled) setExtraResults(lists.flat());
-        })
-        .catch(() => {
-          if (!cancelled) setExtraResults([]);
-        });
-    }
-    runtime
-      .getPlotlyAnnotations(currentId)
-      .then((a) => {
-        if (!cancelled) setAnnotations(a);
-      })
-      .catch(() => {
-        if (!cancelled) setAnnotations({ shapes: [], annotations: [] });
-      });
-    runtime
-      .getSignalRoi(currentId)
-      .then((segs) => {
-        if (!cancelled) setRoi(segs);
-      })
-      .catch(() => {
-        if (!cancelled) setRoi([]);
-      });
-    runtime
-      .listSignalResults(currentId)
-      .then((rs) => {
-        if (!cancelled) setResults(rs);
-      })
-      .catch(() => {
-        if (!cancelled) setResults([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, currentId, treeKind, selectedIds, plotRefreshNonce]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null, groupIds?: string[]) => {

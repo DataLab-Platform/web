@@ -5664,6 +5664,84 @@ list_image_results = list_signal_results
 clear_image_results = clear_signal_results
 
 
+def _ordered_selection(current_oid: str, selected_oids: list[str]) -> list[str]:
+    """Return a unique selection with *current_oid* first."""
+    ordered = [current_oid]
+    ordered.extend(oid for oid in selected_oids if oid != current_oid)
+    return list(dict.fromkeys(ordered))
+
+
+def get_signal_view_snapshot(
+    current_oid: str,
+    selected_oids: list[str],
+    encoding: str = "bytes",
+) -> dict[str, Any]:
+    """Return every payload needed to render the selected signal view."""
+    ordered = _ordered_selection(current_oid, selected_oids)
+    extra_oids = ordered[1:]
+    extra_results: list[dict[str, Any]] = []
+    for oid in extra_oids:
+        try:
+            extra_results.extend(list_signal_results(oid))
+        except KeyError:
+            continue
+    return {
+        "kind": "signal",
+        "current": get_signal_xy(current_oid, encoding=encoding),
+        "extras": get_signals_xy(extra_oids, encoding=encoding),
+        "annotations": get_plotly_annotations(current_oid),
+        "roi": get_signal_roi(current_oid),
+        "results": list_signal_results(current_oid),
+        "extra_results": extra_results,
+    }
+
+
+def get_image_view_snapshot(
+    current_oid: str,
+    selected_oids: list[str],
+    max_size: int = 512,
+    encoding: str = "bytes",
+) -> dict[str, Any]:
+    """Return every payload needed to render the selected image view.
+
+    A single selection keeps the full-resolution image. A multi-selection
+    uses one bounded batch containing the current image and every preview, so
+    the grid never pays for an unused full-resolution transfer.
+    """
+    ordered = _ordered_selection(current_oid, selected_oids)
+    is_multi = len(ordered) > 1
+    return {
+        "kind": "image",
+        "mode": "multi" if is_multi else "single",
+        "images": (
+            get_images_data(ordered, max_size=max_size, encoding=encoding)
+            if is_multi
+            else [get_image_data(current_oid, encoding=encoding)]
+        ),
+        "roi": get_image_roi(current_oid),
+        "lut_range": get_lut_range(current_oid),
+        "results": list_image_results(current_oid),
+    }
+
+
+def get_properties_snapshot(
+    oid: str,
+    preview_head: int = 5,
+    preview_tail: int = 5,
+) -> dict[str, Any]:
+    """Return the property schema, statistics and bounded signal preview."""
+    return {
+        "oid": oid,
+        "schema": get_object_property_schema(oid),
+        "stats": get_object_stats(oid),
+        "signal_preview": (
+            get_signal_data_preview(oid, head=preview_head, tail=preview_tail)
+            if _MODEL.kind_of(oid) == "signal"
+            else None
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Plugin loader (browser counterpart of ``datalab.plugins`` discovery).
 # ---------------------------------------------------------------------------
@@ -6497,6 +6575,9 @@ __all__ = [
     "run_image_analysis",
     "list_image_results",
     "clear_image_results",
+    "get_signal_view_snapshot",
+    "get_image_view_snapshot",
+    "get_properties_snapshot",
     "get_plot_results_schemas",
     "plot_results",
     "set_dialog_bridge",

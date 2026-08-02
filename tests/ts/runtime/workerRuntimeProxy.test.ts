@@ -159,6 +159,16 @@ describe("WorkerRuntimeProxy", () => {
     });
   });
 
+  it("forwards atomic view snapshot methods through the generic proxy", () => {
+    const { worker, runtime } = setup();
+    void runtime.getSignalViewSnapshot("signal-2", ["signal-1", "signal-2"]);
+    expect(worker.last()).toMatchObject({
+      type: "call",
+      method: "getSignalViewSnapshot",
+      args: ["signal-2", ["signal-1", "signal-2"]],
+    });
+  });
+
   it("transfers ArrayBuffers in the arguments instead of cloning them", () => {
     const { worker, runtime } = setup();
     const data = new Float64Array([1, 2, 3, 4]);

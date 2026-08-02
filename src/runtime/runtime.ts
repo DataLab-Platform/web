@@ -600,6 +600,35 @@ export type ObjectStats =
       median: number | null;
     };
 
+/** Atomic payload needed to render one signal selection. */
+export interface SignalViewSnapshot {
+  kind: "signal";
+  current: SignalData;
+  extras: SignalData[];
+  annotations: PlotlyAnnotations;
+  roi: SignalRoiSegment[];
+  results: AnalysisResult[];
+  extra_results: AnalysisResult[];
+}
+
+/** Atomic payload needed to render one image selection. */
+export interface ImageViewSnapshot {
+  kind: "image";
+  mode: "single" | "multi";
+  images: ImageData[];
+  roi: ImageRoiSegment[];
+  lut_range: [number, number] | null;
+  results: AnalysisResult[];
+}
+
+/** Atomic payload needed by the Properties side panel. */
+export interface PropertiesSnapshot {
+  oid: string;
+  schema: SchemaWithValues;
+  stats: ObjectStats;
+  signal_preview: SignalDataPreview | null;
+}
+
 /** Discriminator for the metadata-editor widgets. */
 export type MetadataValueType = "string" | "number" | "bool" | "json";
 
@@ -1262,6 +1291,8 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
    * rebuilt with ``.catch(() => undefined)``.
    */
   private _queue: Promise<unknown> = Promise.resolve();
+  /** Latest generation requested for each coalesced read family. */
+  private readonly _latestReadGenerations = new Map<string, number>();
 
   // ------------------------------------------------------------------
   // On-disk storage mode state (OPFS spill / page-in)
@@ -1431,26 +1462,58 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
     kwargs: Record<string, unknown> = {},
     options: { silent?: boolean } = {},
   ): Promise<T> {
-    const doCall = async (): Promise<T> => {
-      if (this.storageMode !== "disk") {
-        return this.invokePy<T>(name, kwargs, options);
-      }
-      const pagedIn = await this.diskGuardBefore(name, kwargs);
-      let value: T;
-      try {
-        value = await this.invokePy<T>(name, kwargs, options);
-      } finally {
-        // Re-spill anything we paged in even when the call throws, so a
-        // failed op never leaves the heap inflated.
-        await this.diskGuardReleaseFailsafe(name, pagedIn);
-      }
-      await this.diskGuardAfter(name, kwargs, value, pagedIn);
-      return value;
-    };
+    const doCall = () => this.executePyCall<T>(name, kwargs, options);
     const next = this._queue.then(doCall, doCall);
     // Keep the chain alive even if this call rejects.
     this._queue = next.catch(() => undefined);
     return next;
+  }
+
+  /**
+   * Queue a read for which only the latest request still waiting matters.
+   *
+   * A request that has already entered Python always finishes. Superseded
+   * requests still waiting in {@link _queue} return ``null`` immediately,
+   * before disk paging or Python execution. Ordinary {@link callPy} calls are
+   * never inspected, skipped, or reordered, so mutations retain their strict
+   * serial semantics.
+   */
+  private async callPyLatest<T = unknown>(
+    key: string,
+    name: string,
+    kwargs: Record<string, unknown> = {},
+  ): Promise<T | null> {
+    const generation = (this._latestReadGenerations.get(key) ?? 0) + 1;
+    this._latestReadGenerations.set(key, generation);
+    const doCall = async (): Promise<T | null> => {
+      if (this._latestReadGenerations.get(key) !== generation) return null;
+      return this.executePyCall<T>(name, kwargs);
+    };
+    const next = this._queue.then(doCall, doCall);
+    this._queue = next.catch(() => undefined);
+    return next;
+  }
+
+  /** Execute one call after its position in the serial queue is acquired. */
+  private async executePyCall<T>(
+    name: string,
+    kwargs: Record<string, unknown>,
+    options: { silent?: boolean } = {},
+  ): Promise<T> {
+    if (this.storageMode !== "disk") {
+      return this.invokePy<T>(name, kwargs, options);
+    }
+    const pagedIn = await this.diskGuardBefore(name, kwargs);
+    let value: T;
+    try {
+      value = await this.invokePy<T>(name, kwargs, options);
+    } finally {
+      // Re-spill anything we paged in even when the call throws, so a failed
+      // operation never leaves the WASM heap inflated.
+      await this.diskGuardReleaseFailsafe(name, pagedIn);
+    }
+    await this.diskGuardAfter(name, kwargs, value, pagedIn);
+    return value;
   }
 
   // ------------------------------------------------------------------
@@ -1802,6 +1865,17 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
    *  of the underlying object array.  Used by the Properties panel. */
   async getObjectStats(id: string): Promise<ObjectStats> {
     return (await this.callPy("get_object_stats", { oid: id })) as ObjectStats;
+  }
+
+  /** Fetch all lightweight Properties-panel data in one bridge crossing. */
+  async getPropertiesSnapshot(id: string): Promise<PropertiesSnapshot | null> {
+    return (await this.callPyLatest(
+      "properties-view",
+      "get_properties_snapshot",
+      {
+        oid: id,
+      },
+    )) as PropertiesSnapshot | null;
   }
 
   /** Visible metadata entries of *id* (sorted, internal keys filtered out). */
@@ -2203,6 +2277,33 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
       encoding: "bytes",
     })) as Array<SignalData & { encoding?: string }>;
     return raw.map(decodeSignalPayload);
+  }
+
+  /** Fetch and atomically decode every payload for the selected signal view. */
+  async getSignalViewSnapshot(
+    currentId: string,
+    selectedIds: string[],
+  ): Promise<SignalViewSnapshot | null> {
+    const raw = (await this.callPyLatest(
+      "selection-view",
+      "get_signal_view_snapshot",
+      {
+        current_oid: currentId,
+        selected_oids: selectedIds,
+        encoding: "bytes",
+      },
+    )) as
+      | (Omit<SignalViewSnapshot, "current" | "extras"> & {
+          current: SignalData & { encoding?: string };
+          extras: Array<SignalData & { encoding?: string }>;
+        })
+      | null;
+    if (raw === null) return null;
+    return {
+      ...raw,
+      current: decodeSignalPayload(raw.current),
+      extras: raw.extras.map(decodeSignalPayload),
+    };
   }
 
   /** Persist per-curve render style on a signal.  Each field follows
@@ -2617,6 +2718,29 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
       encoding: "bytes",
     })) as Array<ImageData & { encoding?: string }>;
     return raw.map(decodeImagePayload);
+  }
+
+  /** Fetch and atomically decode every payload for the selected image view. */
+  async getImageViewSnapshot(
+    currentId: string,
+    selectedIds: string[],
+  ): Promise<ImageViewSnapshot | null> {
+    const raw = (await this.callPyLatest(
+      "selection-view",
+      "get_image_view_snapshot",
+      {
+        current_oid: currentId,
+        selected_oids: selectedIds,
+        max_size: 512,
+        encoding: "bytes",
+      },
+    )) as
+      | (Omit<ImageViewSnapshot, "images"> & {
+          images: Array<ImageData & { encoding?: string }>;
+        })
+      | null;
+    if (raw === null) return null;
+    return { ...raw, images: raw.images.map(decodeImagePayload) };
   }
 
   /** Return the catalog of image creation types (mirrors signals). */

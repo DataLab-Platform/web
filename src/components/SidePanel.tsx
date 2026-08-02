@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
   LastProcessingInfo,
-  ObjectStats,
+  PropertiesSnapshot,
   SchemaWithValues,
   RuntimeApi,
 } from "../runtime/runtime";
@@ -508,12 +508,10 @@ function PropertiesPanel({
   refreshNonce,
   onApplied,
 }: PropertiesProps) {
-  // See ``CreationPanel`` for the rationale of clearing ``payload`` /
-  // ``stats`` at the start of each fetch (avoids leaking the previous
-  // object's values into the inner stateful form).
-  const [payload, setPayload] = useState<SchemaWithValues | null>(null);
-  const [stats, setStats] = useState<ObjectStats | null>(null);
-  const [statsError, setStatsError] = useState<string | null>(null);
+  // See ``CreationPanel`` for the rationale of clearing the snapshot at the
+  // start of each fetch (avoids leaking the previous object's values into
+  // the inner stateful form).
+  const [snapshot, setSnapshot] = useState<PropertiesSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Derived-state pattern: clear payload synchronously when ``oid`` or
@@ -522,9 +520,7 @@ function PropertiesPanel({
   const currentKey = `${oid}:${refreshNonce}`;
   if (shownKey !== currentKey) {
     setShownKey(currentKey);
-    setPayload(null);
-    setStats(null);
-    setStatsError(null);
+    setSnapshot(null);
     setLoading(true);
     setError(null);
   }
@@ -533,11 +529,11 @@ function PropertiesPanel({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setPayload(null);
+    setSnapshot(null);
     runtime
-      .getObjectPropertySchema(oid)
+      .getPropertiesSnapshot(oid)
       .then((p) => {
-        if (!cancelled) setPayload(p);
+        if (!cancelled && p !== null) setSnapshot(p);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -546,24 +542,6 @@ function PropertiesPanel({
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, oid, refreshNonce]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setStatsError(null);
-    setStats(null);
-    runtime
-      .getObjectStats(oid)
-      .then((s) => {
-        if (!cancelled) setStats(s);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setStatsError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
@@ -579,24 +557,23 @@ function PropertiesPanel({
   );
 
   if (loading) return <div className="side-panel-info">Loading…</div>;
-  if (error && !payload) return <div className="error">{error}</div>;
-  if (!payload) return null;
+  if (error && !snapshot) return <div className="error">{error}</div>;
+  if (!snapshot) return null;
   return (
     <div className="properties-panel">
-      <ObjectStatsCard stats={stats} error={statsError} />
-      {stats && (
-        <ArrayPreview
-          runtime={runtime}
-          oid={oid}
-          stats={stats}
-          refreshNonce={refreshNonce}
-          onApplied={onApplied}
-        />
-      )}
+      <ObjectStatsCard stats={snapshot.stats} error={null} />
+      <ArrayPreview
+        runtime={runtime}
+        oid={oid}
+        stats={snapshot.stats}
+        signalPreview={snapshot.signal_preview}
+        refreshNonce={refreshNonce}
+        onApplied={onApplied}
+      />
       <EditableForm
         key={`properties:${oid}:${refreshNonce}`}
-        schema={payload.schema}
-        values={payload.values}
+        schema={snapshot.schema.schema}
+        values={snapshot.schema.values}
         onApply={apply}
         initialError={error}
       />

@@ -25,14 +25,12 @@ interface Props {
   runtime: RuntimeApi;
   oid: string;
   stats: ObjectStats;
+  signalPreview: SignalDataPreview | null;
   refreshNonce: number;
   /** Called after the underlying data was edited so the parent can
    *  refresh plots / stats. */
   onApplied: () => void;
 }
-
-const HEAD_ROWS = 5;
-const TAIL_ROWS = 5;
 
 /** Build a CSV string from X / Y arrays via index access so it works
  *  on both ``Float64Array`` (the bytes-encoded payload) and plain
@@ -49,6 +47,7 @@ export function ArrayPreview({
   runtime,
   oid,
   stats,
+  signalPreview,
   refreshNonce,
   onApplied,
 }: Props) {
@@ -66,6 +65,7 @@ export function ArrayPreview({
     <SignalArrayPreview
       runtime={runtime}
       oid={oid}
+      preview={signalPreview}
       refreshNonce={refreshNonce}
       onApplied={onApplied}
     />
@@ -75,15 +75,16 @@ export function ArrayPreview({
 function SignalArrayPreview({
   runtime,
   oid,
+  preview,
   refreshNonce,
   onApplied,
 }: {
   runtime: RuntimeApi;
   oid: string;
+  preview: SignalDataPreview | null;
   refreshNonce: number;
   onApplied: () => void;
 }) {
-  const [preview, setPreview] = useState<SignalDataPreview | null>(null);
   const [fullData, setFullData] = useState<SignalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -91,23 +92,9 @@ function SignalArrayPreview({
   const pushToast = useToast();
 
   useEffect(() => {
-    let cancelled = false;
     setError(null);
-    setPreview(null);
     setFullData(null);
-    runtime
-      .getSignalDataPreview(oid, HEAD_ROWS, TAIL_ROWS)
-      .then((d) => {
-        if (!cancelled) setPreview(d);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, oid, refreshNonce]);
+  }, [oid, refreshNonce]);
 
   const loadFullData = useCallback(async () => {
     if (fullData) return fullData;
