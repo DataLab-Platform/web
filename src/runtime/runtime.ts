@@ -36,6 +36,7 @@ import {
 } from "../utils/memory";
 import { OpfsObjectStore } from "../storage/opfsObjectStore";
 import type { ObjectByteStore } from "../storage/opfsObjectStore";
+import { isDiskStorageSupported } from "./storageCapabilities";
 import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
@@ -1684,7 +1685,7 @@ await micropip.install(["sigima", "guidata", "tifffile<2025"])
 
   /** Whether the on-disk storage mode can be enabled in this context. */
   static isDiskStorageSupported(): boolean {
-    return OpfsObjectStore.isSupported();
+    return isDiskStorageSupported();
   }
 
   /**

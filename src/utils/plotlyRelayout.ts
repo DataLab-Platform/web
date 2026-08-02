@@ -1,17 +1,5 @@
 import type { ViewRange } from "./imageLod";
-
-type PlotlyModule = typeof import("plotly.js-dist-min");
-type PlotlyImport = PlotlyModule & { default?: PlotlyModule };
-
-let plotlyPromise: Promise<PlotlyModule> | null = null;
-
-function loadPlotly() {
-  plotlyPromise ??= import("plotly.js-dist-min").then((module) => {
-    const imported = module as PlotlyImport;
-    return imported.default ?? imported;
-  });
-  return plotlyPromise;
-}
+import { loadPlotly } from "./plotlyLoader";
 
 /** Apply a visible axis range directly without rerendering the React owner. */
 export function relayoutViewRange(

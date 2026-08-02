@@ -7,19 +7,15 @@
  * default — the user must opt in per turn.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, lineNumbers } from "@codemirror/view";
-import { python } from "@codemirror/lang-python";
-import { oneDark } from "@codemirror/theme-one-dark";
-import {
-  bracketMatching,
-  defaultHighlightStyle,
-  syntaxHighlighting,
-} from "@codemirror/language";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { Tool } from "../../aiassistant/types";
-import { useTheme } from "../../utils/theme";
 import { t } from "../../i18n/translate";
+
+const PythonCodeViewer = lazy(() =>
+  import("./PythonCodeViewer").then((module) => ({
+    default: module.PythonCodeViewer,
+  })),
+);
 
 export interface ToolConfirmRequest {
   tool: Tool;
@@ -133,7 +129,28 @@ export function ToolConfirmDialog({ request }: Props) {
                 <code>{name}</code>:
               </div>
               {name === "code" ? (
-                <PythonCodeViewer code={value} />
+                <Suspense
+                  fallback={
+                    <pre
+                      style={{
+                        margin: 0,
+                        fontSize: 12,
+                        maxHeight: 320,
+                        overflow: "auto",
+                        background: "var(--bg)",
+                        padding: 8,
+                        borderRadius: 4,
+                        whiteSpace: "pre",
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      }}
+                    >
+                      {value}
+                    </pre>
+                  }
+                >
+                  <PythonCodeViewer code={value} />
+                </Suspense>
               ) : (
                 <pre
                   style={{
@@ -181,45 +198,5 @@ export function ToolConfirmDialog({ request }: Props) {
         </div>
       </div>
     </div>
-  );
-}
-
-/** Read-only CodeMirror viewer with Python syntax highlighting. */
-function PythonCodeViewer({ code }: { code: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { theme } = useTheme();
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const state = EditorState.create({
-      doc: code,
-      extensions: [
-        lineNumbers(),
-        bracketMatching(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-        python(),
-        EditorView.editable.of(false),
-        EditorState.readOnly.of(true),
-        EditorView.theme({
-          "&": { fontSize: "12px", maxHeight: "320px" },
-          ".cm-scroller": { overflow: "auto" },
-        }),
-        ...(theme === "dark" ? [oneDark] : []),
-      ],
-    });
-    const view = new EditorView({ state, parent: container });
-    return () => view.destroy();
-  }, [code, theme]);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 4,
-        overflow: "hidden",
-      }}
-    />
   );
 }

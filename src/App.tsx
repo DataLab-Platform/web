@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
-import { DataLabRuntime } from "./runtime/runtime";
+import { isDiskStorageSupported } from "./runtime/storageCapabilities";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
@@ -64,16 +64,20 @@ import {
   CentralViewSwitcher,
   type CentralView,
 } from "./components/CentralViewSwitcher";
-import { SignalPlot } from "./components/SignalPlot";
-import { ImagePlot } from "./components/ImagePlot";
 import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
-import { MultiImageSpatialPlot } from "./components/MultiImageSpatialPlot";
+import {
+  LazyH5BrowserDialog as H5BrowserDialog,
+  LazyImagePlot as ImagePlot,
+  LazyInteractiveFitDialog as InteractiveFitDialog,
+  LazyMultiImageSpatialPlot as MultiImageSpatialPlot,
+  LazyProfileDefinitionDialog as ProfileDefinitionDialog,
+  LazyRoiGridDialog as RoiGridDialog,
+  LazySeparateViewDialog as SeparateViewDialog,
+  LazySignalPlot as SignalPlot,
+} from "./components/lazyPlotComponents";
 import { useSelectionView } from "./hooks/useSelectionView";
 import { DataSetDialog } from "./components/DataSetDialog";
-import {
-  ProfileDefinitionDialog,
-  type ProfileFeatureId,
-} from "./components/ProfileDefinitionDialog";
+import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
@@ -93,24 +97,17 @@ import {
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
 import { useToast } from "./components/Toast";
-import {
-  SeparateViewDialog,
-  type SeparateViewContent,
-} from "./components/SeparateViewDialog";
-import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
+import type { SeparateViewContent } from "./components/SeparateViewDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
-import { RoiGridDialog } from "./components/RoiGridDialog";
-import { H5BrowserDialog } from "./components/H5BrowserDialog";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import {
   SaveToDirectoryDialog,
   type SaveToDirectoryResult,
   type SaveToDirectorySource,
 } from "./components/SaveToDirectoryDialog";
-import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
 import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
@@ -165,6 +162,11 @@ const MacroPanel = lazy(() =>
 const NotebookPanel = lazy(() =>
   import("./components/notebook/NotebookPanel").then((m) => ({
     default: m.NotebookPanel,
+  })),
+);
+const TextImportWizard = lazy(() =>
+  import("./components/TextImportWizard").then((m) => ({
+    default: m.TextImportWizard,
   })),
 );
 
@@ -4207,7 +4209,7 @@ export default function App() {
             onFreeMemory={handleFreeMemory}
             storeOnDisk={storeOnDisk}
             storageBusy={storageBusy}
-            diskStorageSupported={DataLabRuntime.isDiskStorageSupported()}
+            diskStorageSupported={isDiskStorageSupported()}
             onToggleStoreOnDisk={() => {
               void handleToggleStoreOnDisk();
             }}
@@ -4422,21 +4424,23 @@ export default function App() {
                 );
               })()}
             {centralView === "plot" && treeKind === "signal" && data && (
-              <SignalPlot
-                data={data}
-                oid={currentId}
-                annotations={annotations}
-                onAnnotationsChange={handleAnnotationsChange}
-                roi={roi}
-                roiEditMode={roiEditMode}
-                onRoiChange={handleRoiChangeFromPlot}
-                drawGeometry={roiEditMode ? roiDrawGeometry : null}
-                results={results}
-                showResultsOverlay={showResultsOverlay}
-                showGraphicalTitles={showGraphicalTitles}
-                extraSignals={extraSignals}
-                extraResults={extraResults}
-              />
+              <Suspense fallback={null}>
+                <SignalPlot
+                  data={data}
+                  oid={currentId}
+                  annotations={annotations}
+                  onAnnotationsChange={handleAnnotationsChange}
+                  roi={roi}
+                  roiEditMode={roiEditMode}
+                  onRoiChange={handleRoiChangeFromPlot}
+                  drawGeometry={roiEditMode ? roiDrawGeometry : null}
+                  results={results}
+                  showResultsOverlay={showResultsOverlay}
+                  showGraphicalTitles={showGraphicalTitles}
+                  extraSignals={extraSignals}
+                  extraResults={extraResults}
+                />
+              </Suspense>
             )}
             {centralView === "plot" &&
               treeKind === "image" &&
@@ -4464,10 +4468,12 @@ export default function App() {
                     </button>
                   </div>
                   {spatialMultiImage ? (
-                    <MultiImageSpatialPlot
-                      images={[imageData, ...extraImages]}
-                      totalSelected={selectedIds.length}
-                    />
+                    <Suspense fallback={null}>
+                      <MultiImageSpatialPlot
+                        images={[imageData, ...extraImages]}
+                        totalSelected={selectedIds.length}
+                      />
+                    </Suspense>
                   ) : (
                     <MultiImagePlot
                       images={[imageData, ...extraImages]}
@@ -4480,65 +4486,69 @@ export default function App() {
               treeKind === "image" &&
               imageData &&
               extraImages.length === 0 && (
-                <ImagePlot
-                  data={imageData}
-                  roi={imageEraseMode ? eraseRegions : imageRoi}
-                  roiEditMode={imageEraseMode || imageRoiEditMode}
-                  onRoiChange={
-                    imageEraseMode
-                      ? handleEraseChangeFromPlot
-                      : handleImageRoiChangeFromPlot
-                  }
-                  drawGeometry={
-                    imageEraseMode || imageRoiEditMode ? roiDrawGeometry : null
-                  }
-                  highlightedVertex={
-                    (imageEraseMode || imageRoiEditMode) &&
-                    selectedRoiIndex !== null &&
-                    activeRoiVertex !== null
-                      ? {
-                          roiIndex: selectedRoiIndex,
-                          vertexIndex: activeRoiVertex,
-                        }
-                      : null
-                  }
-                  results={results}
-                  showResultsOverlay={showResultsOverlay}
-                  showGraphicalTitles={showGraphicalTitles}
-                  lutRange={imageLutRange}
-                  onLutRangeChange={(r) => {
-                    setImageLutRange(r);
-                    if (runtime && currentId) {
-                      runtime
-                        .setLutRange(currentId, r)
-                        .catch((e) =>
-                          console.error("Failed to persist LUT range:", e),
-                        );
+                <Suspense fallback={null}>
+                  <ImagePlot
+                    data={imageData}
+                    roi={imageEraseMode ? eraseRegions : imageRoi}
+                    roiEditMode={imageEraseMode || imageRoiEditMode}
+                    onRoiChange={
+                      imageEraseMode
+                        ? handleEraseChangeFromPlot
+                        : handleImageRoiChangeFromPlot
                     }
-                  }}
-                  onColormapChange={(name, inverted) => {
-                    if (runtime && currentId) {
-                      runtime
-                        .setColormap(currentId, name, inverted)
-                        .catch((e) =>
-                          console.error("Failed to persist colormap:", e),
-                        );
+                    drawGeometry={
+                      imageEraseMode || imageRoiEditMode
+                        ? roiDrawGeometry
+                        : null
                     }
-                  }}
-                  onResampleChange={(method) => {
-                    if (runtime && currentId) {
-                      runtime
-                        .setResampleMethod(currentId, method)
-                        .catch((e) =>
-                          console.error(
-                            "Failed to persist resample method:",
-                            e,
-                          ),
-                        );
+                    highlightedVertex={
+                      (imageEraseMode || imageRoiEditMode) &&
+                      selectedRoiIndex !== null &&
+                      activeRoiVertex !== null
+                        ? {
+                            roiIndex: selectedRoiIndex,
+                            vertexIndex: activeRoiVertex,
+                          }
+                        : null
                     }
-                  }}
-                  onExtractProfile={handleExtractProfile}
-                />
+                    results={results}
+                    showResultsOverlay={showResultsOverlay}
+                    showGraphicalTitles={showGraphicalTitles}
+                    lutRange={imageLutRange}
+                    onLutRangeChange={(r) => {
+                      setImageLutRange(r);
+                      if (runtime && currentId) {
+                        runtime
+                          .setLutRange(currentId, r)
+                          .catch((e) =>
+                            console.error("Failed to persist LUT range:", e),
+                          );
+                      }
+                    }}
+                    onColormapChange={(name, inverted) => {
+                      if (runtime && currentId) {
+                        runtime
+                          .setColormap(currentId, name, inverted)
+                          .catch((e) =>
+                            console.error("Failed to persist colormap:", e),
+                          );
+                      }
+                    }}
+                    onResampleChange={(method) => {
+                      if (runtime && currentId) {
+                        runtime
+                          .setResampleMethod(currentId, method)
+                          .catch((e) =>
+                            console.error(
+                              "Failed to persist resample method:",
+                              e,
+                            ),
+                          );
+                      }
+                    }}
+                    onExtractProfile={handleExtractProfile}
+                  />
+                </Suspense>
               )}
           </main>
           {runtime && centralView === "plot" && (
@@ -4734,39 +4744,41 @@ export default function App() {
           />
         )}
         {pendingProfile && runtime && (
-          <ProfileDefinitionDialog
-            title={pendingProfile.feature.label.replace(/\u2026$/, "")}
-            featureId={
-              pendingProfile.feature.id.replace(
-                /^image:/,
-                "",
-              ) as ProfileFeatureId
-            }
-            payload={pendingProfile.schema}
-            imageData={pendingProfile.imageData}
-            resolveChoices={(itemName, currentValues) =>
-              runtime.resolveFeatureChoices(
-                pendingProfile.feature.id,
-                itemName,
-                currentValues,
-              )
-            }
-            resolveCallbacks={(itemName, currentValues) =>
-              runtime.resolveFeatureCallbacks(
-                pendingProfile.feature.id,
-                itemName,
-                currentValues,
-              )
-            }
-            resolveActive={(currentValues) =>
-              runtime.resolveFeatureActive(
-                pendingProfile.feature.id,
-                currentValues,
-              )
-            }
-            onSubmit={handleSubmitProfile}
-            onCancel={() => setPendingProfile(null)}
-          />
+          <Suspense fallback={null}>
+            <ProfileDefinitionDialog
+              title={pendingProfile.feature.label.replace(/\u2026$/, "")}
+              featureId={
+                pendingProfile.feature.id.replace(
+                  /^image:/,
+                  "",
+                ) as ProfileFeatureId
+              }
+              payload={pendingProfile.schema}
+              imageData={pendingProfile.imageData}
+              resolveChoices={(itemName, currentValues) =>
+                runtime.resolveFeatureChoices(
+                  pendingProfile.feature.id,
+                  itemName,
+                  currentValues,
+                )
+              }
+              resolveCallbacks={(itemName, currentValues) =>
+                runtime.resolveFeatureCallbacks(
+                  pendingProfile.feature.id,
+                  itemName,
+                  currentValues,
+                )
+              }
+              resolveActive={(currentValues) =>
+                runtime.resolveFeatureActive(
+                  pendingProfile.feature.id,
+                  currentValues,
+                )
+              }
+              onSubmit={handleSubmitProfile}
+              onCancel={() => setPendingProfile(null)}
+            />
+          </Suspense>
         )}
         {pendingAnalysis && (
           <DataSetDialog
@@ -4816,20 +4828,24 @@ export default function App() {
           />
         )}
         {pendingRoiGrid && imageData && (
-          <RoiGridDialog
-            imageData={imageData}
-            payload={pendingRoiGrid.schema}
-            onSubmit={handleSubmitRoiGrid}
-            onCancel={() => setPendingRoiGrid(null)}
-          />
+          <Suspense fallback={null}>
+            <RoiGridDialog
+              imageData={imageData}
+              payload={pendingRoiGrid.schema}
+              onSubmit={handleSubmitRoiGrid}
+              onCancel={() => setPendingRoiGrid(null)}
+            />
+          </Suspense>
         )}
         {pendingFit && (
-          <InteractiveFitDialog
-            oid={pendingFit.oid}
-            fit={pendingFit.fit}
-            onCommit={handleInteractiveFitCommit}
-            onCancel={() => setPendingFit(null)}
-          />
+          <Suspense fallback={null}>
+            <InteractiveFitDialog
+              oid={pendingFit.oid}
+              fit={pendingFit.fit}
+              onCommit={handleInteractiveFitCommit}
+              onCancel={() => setPendingFit(null)}
+            />
+          </Suspense>
         )}
         {editingMeta && (
           <ObjectPropertiesDialog
@@ -4852,17 +4868,21 @@ export default function App() {
           />
         )}
         {h5BrowserFiles !== null && (
-          <H5BrowserDialog
-            initial={h5BrowserFiles}
-            onImport={handleH5BrowserImport}
-            onCancel={() => setH5BrowserFiles(null)}
-          />
+          <Suspense fallback={null}>
+            <H5BrowserDialog
+              initial={h5BrowserFiles}
+              onImport={handleH5BrowserImport}
+              onCancel={() => setH5BrowserFiles(null)}
+            />
+          </Suspense>
         )}
         {textImportOpen && (
-          <TextImportWizard
-            onImport={handleTextImportFinished}
-            onCancel={() => setTextImportOpen(false)}
-          />
+          <Suspense fallback={null}>
+            <TextImportWizard
+              onImport={handleTextImportFinished}
+              onCancel={() => setTextImportOpen(false)}
+            />
+          </Suspense>
         )}
         {pendingSaveToDir && runtime && (
           <SaveToDirectoryDialog
@@ -4914,12 +4934,14 @@ export default function App() {
             }
             if (!content) return null;
             return (
-              <SeparateViewDialog
-                content={content}
-                showResultsOverlay={showResultsOverlay}
-                showGraphicalTitles={showGraphicalTitles}
-                onClose={closeSeparateView}
-              />
+              <Suspense fallback={null}>
+                <SeparateViewDialog
+                  content={content}
+                  showResultsOverlay={showResultsOverlay}
+                  showGraphicalTitles={showGraphicalTitles}
+                  onClose={closeSeparateView}
+                />
+              </Suspense>
             );
           })()}
         <DialogBridge />
