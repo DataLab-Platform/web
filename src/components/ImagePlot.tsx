@@ -26,18 +26,19 @@ import {
   COLORMAP_CATEGORIES,
   buildColorscale,
   colormapLabel,
-  paintImageWindow,
 } from "../utils/colormap";
 import {
-  type ImageGeometry,
   type ResampleMethod,
   type ViewRange,
   aspectFitRanges,
-  rasterPlan,
   shouldUseLod,
-  visibleWindow,
-  windowPlacement,
 } from "../utils/imageLod";
+import {
+  type ImageRasterPlacement,
+  RASTER_DEBOUNCE_MS,
+  normalizeResampleMethod,
+  rasterizeImage,
+} from "../utils/imageRaster";
 import { toBins, binSearchCell } from "../utils/imageCoords";
 import { relayoutViewRange } from "../utils/plotlyRelayout";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
@@ -255,10 +256,10 @@ export function ImagePlot({
   // Display resampling method (downsampled large images only). Resync'd
   // from metadata when the image changes.
   const [resampleMethod, setResampleMethod] = useState<ResampleMethod>(
-    normalizeResample(data.resample_method),
+    normalizeResampleMethod(data.resample_method),
   );
   useEffect(() => {
-    setResampleMethod(normalizeResample(data.resample_method));
+    setResampleMethod(normalizeResampleMethod(data.resample_method));
   }, [data.id, data.resample_method]);
   useEffect(() => {
     setCursor(null);
@@ -372,14 +373,8 @@ export function ImagePlot({
   // Physical placement of the (possibly windowed) bitmap, plus its pixel
   // dimensions (``cw``/``ch``) so it can be sized as a ``layout.images``
   // background image. ``null`` falls back to the full-image geometry.
-  const [bitmapPlacement, setBitmapPlacement] = useState<{
-    x0: number;
-    dx: number;
-    y0: number;
-    dy: number;
-    cw: number;
-    ch: number;
-  } | null>(null);
+  const [bitmapPlacement, setBitmapPlacement] =
+    useState<ImageRasterPlacement | null>(null);
   // Reset the view whenever the underlying image changes so a new image
   // opens at full extent.
   useEffect(() => {
@@ -415,7 +410,7 @@ export function ImagePlot({
     const w = data.width;
     const h = data.height;
     if (w <= 0 || h <= 0) return;
-    const geom: ImageGeometry = {
+    const geometry = {
       width: w,
       height: h,
       x0: data.x0,
@@ -423,42 +418,23 @@ export function ImagePlot({
       dx: data.dx,
       dy: data.dy,
     };
-    const useLod = shouldUseLod(w, h);
-    const win = useLod
-      ? visibleWindow(geom, displayRange)
-      : { i0: 0, i1: w, j0: 0, j1: h };
-    const dpr = window.devicePixelRatio || 1;
-    const plan = useLod
-      ? rasterPlan(win, plotPx.w, plotPx.h, dpr)
-      : { i0: 0, j0: 0, cw: w, ch: h, strideX: 1, strideY: 1 };
     const rows = data.data as ArrayLike<ArrayLike<number>>;
     // Debounce the heavy raster: rapid pan/zoom re-runs this effect and
     // clears the pending timeout, so we only encode the final view.
     const handle = window.setTimeout(() => {
-      const canvas = document.createElement("canvas");
-      canvas.width = plan.cw;
-      canvas.height = plan.ch;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const img = paintImageWindow(
-        ctx,
+      const raster = rasterizeImage({
         rows,
-        w,
-        h,
-        plan,
-        effectiveLut[0],
-        effectiveLut[1],
-        colormapName,
-        colormapInverted,
+        geometry,
+        view: displayRange,
+        plotPx,
+        dpr: window.devicePixelRatio || 1,
+        lut: effectiveLut,
+        colormap: colormapName,
+        inverted: colormapInverted,
         resampleMethod,
-      );
-      ctx.putImageData(img, 0, 0);
-      setBitmapUrl(canvas.toDataURL("image/png"));
-      setBitmapPlacement({
-        ...windowPlacement(plan, geom),
-        cw: plan.cw,
-        ch: plan.ch,
       });
+      setBitmapUrl(raster?.source ?? null);
+      setBitmapPlacement(raster?.placement ?? null);
     }, RASTER_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
   }, [
@@ -2030,17 +2006,6 @@ const CROSSHAIR_COLOR = "#3da4ff";
 const STATS_COLOR = "#00c8c8";
 /** Foreground color for Plotly text (axes ticks/labels) — now provided by
  *  the per-theme helper :func:`getPlotlyThemeLayout`. */
-
-/** Debounce (ms) before re-encoding the display bitmap on pan/zoom/LUT
- *  changes.  Short enough to feel immediate, long enough to skip the
- *  intermediate frames of a drag. */
-const RASTER_DEBOUNCE_MS = 80;
-
-/** Coerce a persisted ``resample_method`` metadata value to a valid
- *  :type:`ResampleMethod`, defaulting to ``"nearest"``. */
-function normalizeResample(value: string | null | undefined): ResampleMethod {
-  return value === "max" || value === "mean" ? value : "nearest";
-}
 
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return String(v);

@@ -1103,7 +1103,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
     onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    await py.loadPackage(["numpy", "scipy", "h5py", "micropip"]);
+    await py.loadPackage(["numpy", "scipy", "h5py", "pandas", "micropip"]);
 
     onProgress?.(t("Installing Sigima…"));
     // ``tifffile`` is a pure-Python PyPI wheel that scikit-image needs for

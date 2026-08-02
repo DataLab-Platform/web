@@ -474,6 +474,34 @@ def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
 
 # Preserve the live model & catalogue across HMR re-executions of this file.
 _MODEL: ObjectModel = globals().get("_MODEL", ObjectModel())  # type: ignore[assignment]
+
+# Data-derived summaries are kept across ordinary reads and HMR reloads.  The
+# object id plus its explicit revision form the cache key; display metadata
+# such as colormap and user LUT preferences deliberately stay outside.
+_DATA_REVISIONS: dict[str, int] = globals().get("_DATA_REVISIONS", {})
+_DATA_SUMMARY_CACHE: dict[str, tuple[int, dict[str, Any]]] = globals().get(
+    "_DATA_SUMMARY_CACHE", {}
+)
+
+
+def _mark_object_data_changed(oid: str) -> None:
+    """Increment *oid*'s data revision and discard its derived summary."""
+    _DATA_REVISIONS[oid] = _DATA_REVISIONS.get(oid, 0) + 1
+    _DATA_SUMMARY_CACHE.pop(oid, None)
+
+
+def _drop_object_data_state(oid: str) -> None:
+    """Discard all revision and summary state associated with *oid*."""
+    _DATA_REVISIONS.pop(oid, None)
+    _DATA_SUMMARY_CACHE.pop(oid, None)
+
+
+def _clear_data_summary_cache() -> None:
+    """Discard every cached data revision and summary."""
+    _DATA_REVISIONS.clear()
+    _DATA_SUMMARY_CACHE.clear()
+
+
 _CATALOG: dict[str, _proc.FeatureSpec] = globals().get(
     "_CATALOG", _build_full_catalog()
 )
@@ -1180,6 +1208,7 @@ def set_signal_xydata(oid: str, x: Any, y: Any) -> dict[str, Any]:
         )
     obj = _MODEL.get(oid)
     obj.set_xydata(x_arr, y_arr)
+    _mark_object_data_changed(oid)
     return {"size": int(obj.x.size)}
 
 
@@ -1207,6 +1236,7 @@ def set_image_data(oid: str, data: Any) -> dict[str, Any]:
         raise ValueError(f"Image data must be 2D (got {arr.ndim}D)")
     obj = _MODEL.get(oid)
     obj.data = arr.astype(obj.data.dtype, copy=False)
+    _mark_object_data_changed(oid)
     return {"width": int(obj.data.shape[1]), "height": int(obj.data.shape[0])}
 
 
@@ -1467,6 +1497,7 @@ def update_signal_creation_params(oid: str, values: dict[str, Any]) -> dict[str,
     obj.ylabel = param.ylabel
     obj.xunit = param.xunit
     obj.yunit = param.yunit
+    _mark_object_data_changed(oid)
     return {"size": int(obj.x.size), "title": obj.title}
 
 
@@ -1527,6 +1558,8 @@ def set_object_property_values(oid: str, values: dict[str, Any]) -> None:
         if value is not None and not isinstance(value, np.ndarray):
             values[name] = np.asarray(value)
     update_dataset(obj, values)
+    if array_fields & values.keys():
+        _mark_object_data_changed(oid)
 
 
 # ---------------------------------------------------------------------------
@@ -1554,35 +1587,7 @@ def get_object_stats(oid: str) -> dict[str, Any]:
     Mirrors the "Statistics" panel of DataLab desktop — a compact
     read-only dashboard shown above the editable Properties form.
     """
-    obj = _MODEL.get(oid)
-    kind = _MODEL.kind_of(oid)
-    if kind == "signal":
-        x, y = obj.x, obj.y
-        return {
-            "kind": "signal",
-            "n_points": int(x.size),
-            "x_dtype": str(x.dtype),
-            "y_dtype": str(y.dtype),
-            "x_min": _safe_stat(np.min, x),
-            "x_max": _safe_stat(np.max, x),
-            "y_min": _safe_stat(np.min, y),
-            "y_max": _safe_stat(np.max, y),
-            "y_mean": _safe_stat(np.mean, y),
-            "y_std": _safe_stat(np.std, y),
-            "y_median": _safe_stat(np.median, y),
-        }
-    # image
-    data = obj.data
-    return {
-        "kind": "image",
-        "shape": list(data.shape),
-        "dtype": str(data.dtype),
-        "min": _safe_stat(np.min, data),
-        "max": _safe_stat(np.max, data),
-        "mean": _safe_stat(np.mean, data),
-        "std": _safe_stat(np.std, data),
-        "median": _safe_stat(np.median, data),
-    }
+    return dict(_get_data_summary(oid)["stats"])
 
 
 # Internal metadata keys that should not be shown to the user.
@@ -2503,7 +2508,10 @@ def rename_group(gid: str, name: str, kind: str = "signal") -> None:
 
 def delete_group(gid: str, kind: str = "signal") -> None:
     """Delete group *gid* (and all its objects) in *kind* panel."""
+    oids = list(_MODEL.panel(kind).find_group(gid).object_ids)
     _MODEL.delete_group(kind, gid)
+    for oid in oids:
+        _drop_object_data_state(oid)
 
 
 def rename_object(oid: str, name: str) -> None:
@@ -2534,6 +2542,7 @@ def duplicate_object(oid: str) -> str:
 def delete_object(oid: str) -> None:
     """Delete object *oid* from its panel."""
     _MODEL.delete_object(oid)
+    _drop_object_data_state(oid)
     _LAST_PROCESSING.pop(oid, None)
     _CREATION_PARAMS.pop(oid, None)
     _SPILLED.pop(oid, None)
@@ -2552,6 +2561,7 @@ def delete_all_objects(kind: str = "signal") -> None:
     ]
     for oid in oids:
         _MODEL.delete_object(oid)
+        _drop_object_data_state(oid)
         _LAST_PROCESSING.pop(oid, None)
         _CREATION_PARAMS.pop(oid, None)
         _SPILLED.pop(oid, None)
@@ -2592,6 +2602,7 @@ def set_object_pickled(pickled_b64: str) -> str:
     for entry in _MODEL._objects.values():  # noqa: SLF001
         if getattr(entry.obj, "uuid", None) == target_uuid:
             entry.obj = obj
+            _mark_object_data_changed(entry.oid)
             return entry.oid
     raise KeyError(f"No object with UUID {target_uuid!r} in the workspace")
 
@@ -2667,6 +2678,7 @@ def reset_all() -> None:
         panel.ensure_default_group()
     _LAST_PROCESSING.clear()
     _CREATION_PARAMS.clear()
+    _clear_data_summary_cache()
     _MACROS.clear()
     _NOTEBOOKS.clear()
 
@@ -3061,6 +3073,7 @@ def update_image_creation_params(oid: str, values: dict[str, Any]) -> dict[str, 
     obj.xunit = param.xunit
     obj.yunit = param.yunit
     obj.zunit = param.zunit
+    _mark_object_data_changed(oid)
     return {
         "shape": [int(obj.data.shape[0]), int(obj.data.shape[1])],
         "title": obj.title,
@@ -3113,6 +3126,7 @@ def _eliminate_outliers_range(
     data_min: float,
     data_max: float,
     percent: float = IMAGE_ELIMINATE_OUTLIERS_PERCENT,
+    histogram: tuple["np.ndarray", "np.ndarray"] | None = None,
 ) -> tuple[float, float]:
     """Return the LUT range with the outlier tails of the histogram removed.
 
@@ -3135,10 +3149,13 @@ def _eliminate_outliers_range(
         return data_min, data_max
     if data_max <= data_min:
         return data_min, data_max
-    finite = data[np.isfinite(data)]
-    if finite.size == 0:
-        return data_min, data_max
-    hist, bin_edges = np.histogram(finite, bins=_LUT_HIST_BINS)
+    if histogram is None:
+        finite = data[np.isfinite(data)]
+        if finite.size == 0:
+            return data_min, data_max
+        hist, bin_edges = np.histogram(finite, bins=_LUT_HIST_BINS)
+    else:
+        hist, bin_edges = histogram
     i_offset = 0
     # Integer images: ignore the first bin (typically corresponding to 0),
     # mirroring PlotPy's handling of integer-valued histograms.
@@ -3159,6 +3176,72 @@ def _eliminate_outliers_range(
     if vmax <= vmin:
         return data_min, data_max
     return vmin, vmax
+
+
+def _build_data_summary(oid: str) -> dict[str, Any]:
+    """Build the complete data-derived summary for *oid*."""
+    obj = _MODEL.get(oid)
+    kind = _MODEL.kind_of(oid)
+    if kind == "signal":
+        x, y = obj.x, obj.y
+        return {
+            "stats": {
+                "kind": "signal",
+                "n_points": int(x.size),
+                "x_dtype": str(x.dtype),
+                "y_dtype": str(y.dtype),
+                "x_min": _safe_stat(np.min, x),
+                "x_max": _safe_stat(np.max, x),
+                "y_min": _safe_stat(np.min, y),
+                "y_max": _safe_stat(np.max, y),
+                "y_mean": _safe_stat(np.mean, y),
+                "y_std": _safe_stat(np.std, y),
+                "y_median": _safe_stat(np.median, y),
+            }
+        }
+
+    data = obj.data
+    data_min = float(np.nanmin(data))
+    data_max = float(np.nanmax(data))
+    finite = data[np.isfinite(data)]
+    histogram = (
+        np.histogram(finite, bins=_LUT_HIST_BINS)
+        if finite.size and data_max > data_min
+        else (np.array([], dtype=np.int64), np.array([], dtype=float))
+    )
+    lut_min, lut_max = _eliminate_outliers_range(
+        data,
+        data_min,
+        data_max,
+        histogram=histogram if histogram[0].size else None,
+    )
+    return {
+        "data_min": data_min,
+        "data_max": data_max,
+        "histogram": histogram,
+        "lut_default": (lut_min, lut_max),
+        "stats": {
+            "kind": "image",
+            "shape": list(data.shape),
+            "dtype": str(data.dtype),
+            "min": _safe_stat(np.min, data),
+            "max": _safe_stat(np.max, data),
+            "mean": _safe_stat(np.mean, data),
+            "std": _safe_stat(np.std, data),
+            "median": _safe_stat(np.median, data),
+        },
+    }
+
+
+def _get_data_summary(oid: str) -> dict[str, Any]:
+    """Return *oid*'s cached summary for its current data revision."""
+    revision = _DATA_REVISIONS.setdefault(oid, 0)
+    cached = _DATA_SUMMARY_CACHE.get(oid)
+    if cached is not None and cached[0] == revision:
+        return cached[1]
+    summary = _build_data_summary(oid)
+    _DATA_SUMMARY_CACHE[oid] = (revision, summary)
+    return summary
 
 
 def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
@@ -3214,13 +3297,14 @@ def get_image_data(
     resample = md.get("resample_method")
     # LUT extrema are computed on the *full* resolution so the colour
     # range stays representative even when we ship a downsampled view.
-    data_min = float(np.nanmin(raw))
-    data_max = float(np.nanmax(raw))
+    summary = _get_data_summary(oid)
+    data_min = summary["data_min"]
+    data_max = summary["data_max"]
     # Default LUT range with the histogram outlier tails removed, mirroring
     # DataLab desktop's ``ima_eliminate_outliers`` auto-contrast.  Computed on
     # the full-resolution data; the front-end uses it as the default range
     # while ``data_min``/``data_max`` still bound the contrast slider.
-    lut_min, lut_max = _eliminate_outliers_range(raw, data_min, data_max)
+    lut_min, lut_max = summary["lut_default"]
     data = _maybe_downsample(raw, max_size)
     # Non-uniform images carry explicit per-column / per-row pixel-center
     # coordinates (``is_uniform_coords`` is ``False``).  The front-end needs
@@ -4641,6 +4725,7 @@ def reapply_last_processing(oid: str, values: dict[str, Any] | None = None) -> s
     # downstream references the UI may hold.
     _, new_obj = result.items[0]
     _MODEL._objects[oid].obj = new_obj  # noqa: SLF001
+    _mark_object_data_changed(oid)
     # Update the recorded params so subsequent edits start from the new
     # baseline (mirrors how DataLab desktop persists the edited DataSet).
     _LAST_PROCESSING[oid] = {
@@ -5798,6 +5883,7 @@ def open_workspace_from_bytes(
             if replace:
                 _MODEL._panels.clear()  # noqa: SLF001
                 _MODEL._objects.clear()  # noqa: SLF001
+                _clear_data_summary_cache()
                 _MACROS.clear()
                 _NOTEBOOKS.clear()
             klass_for_kind = {"signal": SignalObj, "image": _ImageObj}

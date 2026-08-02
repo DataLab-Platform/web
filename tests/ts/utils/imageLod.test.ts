@@ -18,6 +18,10 @@ import {
   visibleWindow,
   windowPlacement,
 } from "../../../src/utils/imageLod";
+import {
+  planImageRaster,
+  visibleRasterBudget,
+} from "../../../src/utils/imageRaster";
 import { paintImageWindow } from "../../../src/utils/colormap";
 
 const GEOM: ImageGeometry = {
@@ -167,6 +171,61 @@ describe("windowPlacement", () => {
       dx: 0.5 * 2,
       y0: 20 + 10 * 2,
       dy: 2 * 3,
+    });
+  });
+});
+
+describe("shared spatial raster planning", () => {
+  it("assigns four 2048² images their on-screen share of the viewport", () => {
+    const view = {
+      x: [0, 4096] as [number, number],
+      y: [4096, 0] as [number, number],
+    };
+    const origins = [
+      [0, 0],
+      [2048, 0],
+      [0, 2048],
+      [2048, 2048],
+    ];
+    for (const [x0, y0] of origins) {
+      const geometry = { ...GEOM, width: 2048, height: 2048, x0, y0 };
+      const window = visibleWindow(geometry, view);
+      expect(
+        visibleRasterBudget(geometry, window, view, { w: 1000, h: 800 }),
+      ).toEqual({ w: 500, h: 400 });
+      const raster = planImageRaster(geometry, view, { w: 1000, h: 800 }, 1);
+      expect(raster).not.toBeNull();
+      expect(raster!.plan.cw).toBeLessThanOrEqual(500);
+      expect(raster!.plan.ch).toBeLessThanOrEqual(400);
+      expect(raster!.placement.x0).toBe(x0);
+      expect(raster!.placement.y0).toBe(y0);
+    }
+  });
+
+  it("skips off-screen images and restores exact pixels after zoom", () => {
+    const zoom = {
+      x: [2058, 2074] as [number, number],
+      y: [16, 0] as [number, number],
+    };
+    const visible = { ...GEOM, width: 2048, height: 2048, x0: 2048 };
+    const hidden = { ...GEOM, width: 2048, height: 2048, x0: 0 };
+    expect(planImageRaster(hidden, zoom, { w: 1000, h: 800 }, 1)).toBeNull();
+    const raster = planImageRaster(visible, zoom, { w: 1000, h: 800 }, 1);
+    expect(raster?.plan).toEqual({
+      i0: 10,
+      j0: 0,
+      cw: 16,
+      ch: 16,
+      strideX: 1,
+      strideY: 1,
+    });
+    expect(raster?.placement).toEqual({
+      x0: 2058,
+      dx: 1,
+      y0: 0,
+      dy: 1,
+      cw: 16,
+      ch: 16,
     });
   });
 });

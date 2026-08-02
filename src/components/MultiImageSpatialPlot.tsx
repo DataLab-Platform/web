@@ -39,8 +39,14 @@ import {
 } from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
-import { paintImageData, buildColorscale } from "../utils/colormap";
+import { buildColorscale } from "../utils/colormap";
 import { aspectFitRanges, type ViewRange } from "../utils/imageLod";
+import {
+  type ImageRasterResult,
+  RASTER_DEBOUNCE_MS,
+  normalizeResampleMethod,
+  rasterizeImage,
+} from "../utils/imageRaster";
 import { relayoutViewRange } from "../utils/plotlyRelayout";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import { t } from "../i18n/translate";
@@ -114,47 +120,6 @@ function imageExtent(img: ImageData): Extent {
   };
 }
 
-/** Flatten the bridge payload (list of ``Float32Array`` rows sharing one
- *  buffer) into a single contiguous view, or fall back to the nested
- *  ``number[][]`` form.  Same fast path as :class:`MultiImagePlot`. */
-function flatten(
-  data: ImageData["data"],
-  w: number,
-  h: number,
-): Float32Array | ArrayLike<ArrayLike<number>> {
-  if (Array.isArray(data) && data[0] instanceof Float32Array) {
-    const first = data[0] as Float32Array;
-    return new Float32Array(first.buffer, first.byteOffset, w * h);
-  }
-  return data as ArrayLike<ArrayLike<number>>;
-}
-
-/** Rasterise a uniform image into a PNG ``data:`` URL using its own
- *  colormap / LUT.  Returns ``null`` for degenerate sizes. */
-function rasterise(img: ImageData): string | null {
-  const w = img.width;
-  const h = img.height;
-  if (w <= 0 || h <= 0) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  const flat = flatten(img.data, w, h);
-  const painted = paintImageData(
-    ctx,
-    flat,
-    w,
-    h,
-    img.data_min,
-    img.data_max,
-    img.colormap || "Viridis",
-    Boolean(img.invert_colormap),
-  );
-  ctx.putImageData(painted, 0, 0);
-  return canvas.toDataURL("image/png");
-}
-
 function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
   const plotlyTheme = usePlotlyTheme();
 
@@ -166,29 +131,6 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
       (img, i) => images.findIndex((o) => o.id === img.id) === i,
     );
   }, [images]);
-
-  // Rasterise every uniform image to a data URL.  Keyed by image id plus
-  // the LUT-relevant fields so a contrast / colormap tweak from the
-  // focused viewer re-rasterises on return.  Non-uniform images are left
-  // out (rendered by a heatmap trace instead).
-  const rasterKey = uniqueImages
-    .map(
-      (i) =>
-        `${i.id}:${i.data_min}:${i.data_max}:${i.colormap}:${i.invert_colormap}`,
-    )
-    .join("|");
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const next: Record<string, string> = {};
-    for (const img of uniqueImages) {
-      if (img.is_uniform_coords === false) continue;
-      const url = rasterise(img);
-      if (url) next[img.id] = url;
-    }
-    setUrls(next);
-    // ``rasterKey`` captures every field that affects the bitmap.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rasterKey]);
 
   // Global bounding box across all images, with a small margin so edges
   // are not flush against the axes.
@@ -252,6 +194,41 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     return aspectFitRanges(winX, winY, plotPx, 1);
   }, [range, viewRange, plotPx]);
 
+  // Rasterise each uniform image only after the shared range stabilises.
+  // Every image receives a budget proportional to the portion of the plot it
+  // occupies; off-screen images are skipped. Non-uniform images stay on the
+  // heatmap fallback below.
+  const [rasters, setRasters] = useState<Record<string, ImageRasterResult>>({});
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next: Record<string, ImageRasterResult> = {};
+      for (const img of uniqueImages) {
+        if (img.is_uniform_coords === false) continue;
+        const raster = rasterizeImage({
+          rows: img.data as ArrayLike<ArrayLike<number>>,
+          geometry: {
+            width: img.width,
+            height: img.height,
+            x0: img.x0,
+            y0: img.y0,
+            dx: img.dx,
+            dy: img.dy,
+          },
+          view: displayRange,
+          plotPx,
+          dpr: window.devicePixelRatio || 1,
+          lut: [img.data_min, img.data_max],
+          colormap: img.colormap || "Viridis",
+          inverted: Boolean(img.invert_colormap),
+          resampleMethod: normalizeResampleMethod(img.resample_method),
+        });
+        if (raster) next[img.id] = raster;
+      }
+      setRasters(next);
+    }, RASTER_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [uniqueImages, displayRange, plotPx]);
+
   const traces = useMemo(() => {
     const out: unknown[] = [];
     for (const img of uniqueImages) {
@@ -297,16 +274,17 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     const out: unknown[] = [];
     for (const img of uniqueImages) {
       if (img.is_uniform_coords === false) continue;
-      const url = urls[img.id];
-      if (!url) continue;
+      const raster = rasters[img.id];
+      if (!raster) continue;
+      const placement = raster.placement;
       out.push({
-        source: url,
+        source: raster.source,
         xref: "x" as const,
         yref: "y" as const,
-        x: img.x0,
-        y: img.y0,
-        sizex: img.width * img.dx,
-        sizey: img.height * img.dy,
+        x: placement.x0,
+        y: placement.y0,
+        sizex: placement.cw * placement.dx,
+        sizey: placement.ch * placement.dy,
         xanchor: "left" as const,
         yanchor: "top" as const,
         sizing: "stretch" as const,
@@ -314,7 +292,7 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
       });
     }
     return out;
-  }, [uniqueImages, urls]);
+  }, [uniqueImages, rasters]);
 
   // ------------------------------------------------------------------
   // Custom hover: ``image`` traces emit no ``plotly_hover`` events, so
