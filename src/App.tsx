@@ -275,7 +275,7 @@ function buildPlotResultsSchema(
 function usePersistedSize(
   key: string,
   defaultValue: number,
-): [number, (next: number) => void] {
+): [number, (next: number) => void, (next: number) => void] {
   const [value, setValue] = useState<number>(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -286,9 +286,8 @@ function usePersistedSize(
       return defaultValue;
     }
   });
-  const update = useCallback(
+  const persist = useCallback(
     (next: number) => {
-      setValue(next);
       try {
         window.localStorage.setItem(key, String(next));
       } catch {
@@ -297,7 +296,7 @@ function usePersistedSize(
     },
     [key],
   );
-  return [value, update];
+  return [value, setValue, persist];
 }
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
@@ -383,14 +382,10 @@ export default function App() {
   const [centralView, setCentralView] = useState<CentralView>("plot");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = usePersistedSize(
-    "datalab-web.leftPanelWidth",
-    280,
-  );
-  const [sidePanelWidth, setSidePanelWidth] = usePersistedSize(
-    "datalab-web.sidePanelWidth",
-    360,
-  );
+  const [leftPanelWidth, setLeftPanelWidth, persistLeftPanelWidth] =
+    usePersistedSize("datalab-web.leftPanelWidth", 280);
+  const [sidePanelWidth, setSidePanelWidth, persistSidePanelWidth] =
+    usePersistedSize("datalab-web.sidePanelWidth", 360);
   const [aiPanelVisible, setAIPanelVisible] = usePersistedBool(
     "datalab-web.aiPanelVisible",
     false,
@@ -4409,6 +4404,7 @@ export default function App() {
             min={180}
             max={500}
             onChange={setLeftPanelWidth}
+            onCommit={persistLeftPanelWidth}
             ariaLabel={t("Resize left panel")}
           />
           <main className="plot-area" data-tour="plot-host">
@@ -4695,6 +4691,7 @@ export default function App() {
                 min={260}
                 max={900}
                 onChange={setSidePanelWidth}
+                onCommit={persistSidePanelWidth}
                 ariaLabel="Resize results panel"
               />
               <SidePanel

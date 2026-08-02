@@ -18,6 +18,14 @@ import type { PanelKind } from "../runtime/runtime";
 
 export type { PanelKind };
 
+export const PLOT_RENDERED_EVENT = "datalab-web:plot-rendered";
+
+export interface PlotRenderedEventDetail {
+  kind: PanelKind;
+  phase: "initialized" | "updated";
+  sequence: number;
+}
+
 /** Minimal subset of the Plotly module surface we depend on. */
 interface PlotlyModule {
   toImage: (
@@ -50,8 +58,14 @@ export function registerActivePlot(
     REGISTRY.delete(kind);
     return;
   }
+  const phase = REGISTRY.get(kind)?.gd === gd ? "updated" : "initialized";
   SEQ += 1;
   REGISTRY.set(kind, { gd, seq: SEQ });
+  window.dispatchEvent(
+    new CustomEvent<PlotRenderedEventDetail>(PLOT_RENDERED_EVENT, {
+      detail: { kind, phase, sequence: SEQ },
+    }),
+  );
 }
 
 /** Returns the most-recently-registered panel kind, or ``null`` when no

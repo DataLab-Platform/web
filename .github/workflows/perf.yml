@@ -58,8 +58,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run perf benchmarks
-        # ``test:e2e:perf`` is ``playwright test --project=perf`` (image_perf
-        # + opfs_*); the comparative ``benchmark`` project is never run here.
+        # ``test:e2e:perf`` is ``playwright test --project=perf`` (image_perf,
+        # signal_perf + opfs_*); the comparative ``benchmark`` project is never
+        # run here.
         # PW_PERF is redundant with the ``--project=perf`` flag but makes the
         # opt-in explicit.
         env:
