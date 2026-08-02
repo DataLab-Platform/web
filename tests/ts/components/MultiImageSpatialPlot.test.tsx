@@ -12,23 +12,32 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, cleanup } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 
 import { MultiImageSpatialPlot } from "../../../src/components/MultiImageSpatialPlot";
 import { ThemeProvider } from "../../../src/utils/theme";
 import type { ImageData } from "../../../src/runtime/runtime";
 
+const plotState = vi.hoisted(() => ({
+  props: null as Record<string, unknown> | null,
+  renderCount: 0,
+}));
+
 // Capture the props handed to the Plotly component so we can assert on
 // the traces / layout without loading the (heavy, jsdom-unfriendly)
 // real plotly.js bundle.
 vi.mock("react-plotly.js", () => ({
-  default: (props: { data: unknown[]; layout: unknown }) => (
-    <div
-      data-testid="plot"
-      data-traces={JSON.stringify(props.data)}
-      data-layout={JSON.stringify(props.layout)}
-    />
-  ),
+  default: (props: Record<string, unknown>) => {
+    plotState.props = props;
+    plotState.renderCount += 1;
+    return (
+      <div
+        data-testid="plot"
+        data-traces={JSON.stringify(props.data)}
+        data-layout={JSON.stringify(props.layout)}
+      />
+    );
+  },
 }));
 
 // jsdom ships no 2D canvas context, so the rasterisation path returns
@@ -51,6 +60,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  plotState.props = null;
+  plotState.renderCount = 0;
 });
 
 function makeImage(id: string, x0: number, y0: number): ImageData {
@@ -123,5 +134,72 @@ describe("MultiImageSpatialPlot", () => {
     expect(container.querySelector(".multi-image-banner")?.textContent).toMatch(
       /2.*5/,
     );
+  });
+
+  it("keeps Plotly props stable across an equivalent rerender", () => {
+    const images = [makeImage("a", 0, 0), makeImage("b", 10, 5)];
+    const { rerender } = renderSpatial(images, 2);
+    const initial = plotState.props as {
+      data: unknown;
+      layout: { uirevision: string };
+      config: unknown;
+    };
+
+    rerender(
+      <ThemeProvider>
+        <MultiImageSpatialPlot images={images} totalSelected={2} />
+      </ThemeProvider>,
+    );
+
+    expect(plotState.props?.data).toBe(initial.data);
+    expect(plotState.props?.layout).toBe(initial.layout);
+    expect(plotState.props?.config).toBe(initial.config);
+    expect(initial.layout.uirevision).toBe("a|b");
+  });
+
+  it("updates the hover tooltip without rerendering Plot", () => {
+    const images = [makeImage("a", 0, 0), makeImage("b", 10, 5)];
+    const { container } = renderSpatial(images, 2);
+    const graphDiv = Object.assign(document.createElement("div"), {
+      _fullLayout: {
+        xaxis: {
+          p2c: (value: number) => value,
+          _offset: 0,
+          _length: 100,
+          range: [0, 12],
+        },
+        yaxis: {
+          p2c: (value: number) => value,
+          _offset: 0,
+          _length: 100,
+          range: [7, 0],
+        },
+      },
+    });
+    vi.spyOn(graphDiv, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const plot = plotState.props as {
+      onInitialized: (figure: unknown, graphDiv: unknown) => void;
+    };
+    act(() => plot.onInitialized({}, graphDiv));
+    const renderCount = plotState.renderCount;
+
+    fireEvent.mouseMove(container.querySelector(".multi-image-spatial-wrap")!, {
+      clientX: 1,
+      clientY: 1,
+      buttons: 0,
+    });
+
+    expect(container.querySelector(".multi-image-hover")).not.toBeNull();
+    expect(plotState.renderCount).toBe(renderCount);
   });
 });

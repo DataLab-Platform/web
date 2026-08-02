@@ -27,11 +27,21 @@
  * back the full :class:`ImagePlot`.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Plot from "react-plotly.js";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { paintImageData, buildColorscale } from "../utils/colormap";
 import { aspectFitRanges, type ViewRange } from "../utils/imageLod";
+import { relayoutViewRange } from "../utils/plotlyRelayout";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import { t } from "../i18n/translate";
 import type { ImageData } from "../runtime/runtime";
@@ -45,6 +55,35 @@ interface Props {
    *  capped upstream).  Drives the "+N more" banner. */
   totalSelected: number;
 }
+
+const SPATIAL_PLOT_CONFIG = { displaylogo: false, responsive: true } as const;
+const SPATIAL_PLOT_STYLE = { width: "100%", height: "100%" } as const;
+
+interface SpatialHoverInfo {
+  x: number;
+  y: number;
+  z: number;
+  img: ImageData;
+}
+
+interface SpatialHoverOverlayHandle {
+  setHover: (info: SpatialHoverInfo | null) => void;
+}
+
+const SpatialHoverOverlay = memo(
+  forwardRef<SpatialHoverOverlayHandle>(function SpatialHoverOverlay(_, ref) {
+    const [hover, setHover] = useState<SpatialHoverInfo | null>(null);
+    useImperativeHandle(ref, () => ({ setHover }), []);
+    if (!hover) return null;
+    return (
+      <div className="multi-image-hover">
+        {hover.img.xlabel || "x"}: {formatNum(hover.x)} ·{" "}
+        {hover.img.ylabel || "y"}: {formatNum(hover.y)} ·{" "}
+        {hover.img.zlabel || "z"}: {formatNum(hover.z)}
+      </div>
+    );
+  }),
+);
 
 /** Physical extent of an image in data coordinates. */
 interface Extent {
@@ -301,12 +340,7 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
       })
     | null
   >(null);
-  const [hover, setHover] = useState<{
-    x: number;
-    y: number;
-    z: number;
-    img: ImageData;
-  } | null>(null);
+  const hoverOverlayRef = useRef<SpatialHoverOverlayHandle>(null);
 
   // Read the on-screen plot-area size so the aspect-fit targets the real
   // display resolution; only update state on a material change.
@@ -378,7 +412,17 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     y1: number;
     xLen: number;
     yLen: number;
+    latestRange: ViewRange | null;
   } | null>(null);
+  const panFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (panFrameRef.current !== null) {
+        cancelAnimationFrame(panFrameRef.current);
+      }
+    },
+    [],
+  );
   const handlePanMouseDown = useCallback(
     (evt: React.MouseEvent<HTMLDivElement>) => {
       if (evt.button !== 0 || userDragmode !== "pan") return;
@@ -399,19 +443,36 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
         y1: yr[1],
         xLen,
         yLen,
+        latestRange: null,
       };
       const onMove = (e: MouseEvent) => {
         const p = panRef.current;
         if (!p) return;
         const dxData = ((e.clientX - p.startX) * (p.x1 - p.x0)) / p.xLen;
         const dyData = ((e.clientY - p.startY) * (p.y0 - p.y1)) / p.yLen;
-        setViewRange({
+        p.latestRange = {
           x: [p.x0 - dxData, p.x1 - dxData],
           y: [p.y0 - dyData, p.y1 - dyData],
-        });
+        };
+        if (panFrameRef.current === null) {
+          panFrameRef.current = requestAnimationFrame(() => {
+            panFrameRef.current = null;
+            const active = panRef.current;
+            const activeGraph = gdRef.current;
+            if (active?.latestRange && activeGraph) {
+              relayoutViewRange(activeGraph, active.latestRange);
+            }
+          });
+        }
       };
       const onUp = () => {
+        if (panFrameRef.current !== null) {
+          cancelAnimationFrame(panFrameRef.current);
+          panFrameRef.current = null;
+        }
+        const finalRange = panRef.current?.latestRange;
         panRef.current = null;
+        if (finalRange) setViewRange(finalRange);
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
       };
@@ -421,44 +482,87 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     [userDragmode],
   );
 
-  const handleMouseMove = (evt: React.MouseEvent<HTMLDivElement>) => {
-    // Skip the hover read-out while a button is held (zoom rubber band /
-    // manual pan): the ``setHover`` re-render would re-apply the layout and
-    // disrupt the in-progress gesture.
-    if (evt.buttons !== 0) {
-      if (hover) setHover(null);
-      return;
-    }
-    const gd = gdRef.current;
-    const fl = gd?._fullLayout;
-    const xa = fl?.xaxis;
-    const ya = fl?.yaxis;
-    if (!gd || !xa || !ya || xa._offset == null || ya._offset == null) return;
-    const rect = gd.getBoundingClientRect();
-    const dataX = xa.p2c(evt.clientX - rect.left - xa._offset);
-    const dataY = ya.p2c(evt.clientY - rect.top - ya._offset);
-    // Topmost image (last drawn) wins.
-    for (let k = uniqueImages.length - 1; k >= 0; k -= 1) {
-      const img = uniqueImages[k];
-      const e = imageExtent(img);
-      if (dataX < e.xLo || dataX > e.xHi || dataY < e.yLo || dataY > e.yHi) {
-        continue;
+  const handleMouseMove = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      // Skip the hover read-out while a button is held (zoom rubber band /
+      // manual pan): neither gesture needs tooltip updates.
+      if (evt.buttons !== 0) {
+        hoverOverlayRef.current?.setHover(null);
+        return;
       }
-      const i = Math.floor((dataX - img.x0) / img.dx);
-      const j = Math.floor((dataY - img.y0) / img.dy);
-      if (i < 0 || i >= img.width || j < 0 || j >= img.height) continue;
-      const d = img.data;
-      let z: number;
-      if (Array.isArray(d) && d[0] instanceof Float32Array) {
-        z = (d[j] as Float32Array)[i];
-      } else {
-        z = (d as number[][])[j][i];
+      const gd = gdRef.current;
+      const fl = gd?._fullLayout;
+      const xa = fl?.xaxis;
+      const ya = fl?.yaxis;
+      if (!gd || !xa || !ya || xa._offset == null || ya._offset == null) return;
+      const rect = gd.getBoundingClientRect();
+      const dataX = xa.p2c(evt.clientX - rect.left - xa._offset);
+      const dataY = ya.p2c(evt.clientY - rect.top - ya._offset);
+      // Topmost image (last drawn) wins.
+      for (let k = uniqueImages.length - 1; k >= 0; k -= 1) {
+        const img = uniqueImages[k];
+        const e = imageExtent(img);
+        if (dataX < e.xLo || dataX > e.xHi || dataY < e.yLo || dataY > e.yHi) {
+          continue;
+        }
+        const i = Math.floor((dataX - img.x0) / img.dx);
+        const j = Math.floor((dataY - img.y0) / img.dy);
+        if (i < 0 || i >= img.width || j < 0 || j >= img.height) continue;
+        const d = img.data;
+        let z: number;
+        if (Array.isArray(d) && d[0] instanceof Float32Array) {
+          z = (d[j] as Float32Array)[i];
+        } else {
+          z = (d as number[][])[j][i];
+        }
+        hoverOverlayRef.current?.setHover({ x: dataX, y: dataY, z, img });
+        return;
       }
-      setHover({ x: dataX, y: dataY, z, img });
-      return;
-    }
-    setHover(null);
-  };
+      hoverOverlayRef.current?.setHover(null);
+    },
+    [uniqueImages],
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    hoverOverlayRef.current?.setHover(null);
+  }, []);
+
+  const layout = useMemo(
+    () => ({
+      ...plotlyTheme,
+      autosize: true,
+      uirevision: imagesKey,
+      margin: { l: 60, r: 30, t: 20, b: 50 },
+      images: layoutImages,
+      xaxis: {
+        ...plotlyTheme.xaxis,
+        range: displayRange.x,
+        autorange: false as const,
+        // Bitmaps are ``layout.images`` backgrounds drawn below the grid, so a
+        // visible grid sits on top of the images. Off by default (toggled from
+        // the single-image toolbar), matching the single-image viewer.
+        showgrid: showGrid,
+        zeroline: showGrid,
+      },
+      yaxis: {
+        ...plotlyTheme.yaxis,
+        range: displayRange.y,
+        autorange: false as const,
+        showgrid: showGrid,
+        zeroline: showGrid,
+      },
+      dragmode: userDragmode ?? undefined,
+      showlegend: false,
+    }),
+    [
+      plotlyTheme,
+      imagesKey,
+      layoutImages,
+      displayRange,
+      showGrid,
+      userDragmode,
+    ],
+  );
 
   if (uniqueImages.length === 0 || !range) {
     return (
@@ -469,32 +573,6 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
   }
 
   const omitted = Math.max(0, totalSelected - uniqueImages.length);
-
-  const layout = {
-    ...plotlyTheme,
-    autosize: true,
-    margin: { l: 60, r: 30, t: 20, b: 50 },
-    images: layoutImages,
-    xaxis: {
-      ...plotlyTheme.xaxis,
-      range: displayRange.x,
-      autorange: false as const,
-      // Bitmaps are ``layout.images`` backgrounds drawn below the grid, so a
-      // visible grid sits on top of the images.  Off by default (toggled from
-      // the single-image toolbar), matching the single-image viewer.
-      showgrid: showGrid,
-      zeroline: showGrid,
-    },
-    yaxis: {
-      ...plotlyTheme.yaxis,
-      range: displayRange.y,
-      autorange: false as const,
-      showgrid: showGrid,
-      zeroline: showGrid,
-    },
-    dragmode: userDragmode ?? undefined,
-    showlegend: false,
-  };
 
   return (
     <div className="multi-image-area">
@@ -510,13 +588,13 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
         className="multi-image-spatial-wrap"
         onMouseDownCapture={handlePanMouseDown}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={handleMouseLeave}
       >
         <Plot
           data={traces as never}
           layout={layout as never}
-          config={{ displaylogo: false, responsive: true } as never}
-          style={{ width: "100%", height: "100%" }}
+          config={SPATIAL_PLOT_CONFIG as never}
+          style={SPATIAL_PLOT_STYLE}
           useResizeHandler
           onRelayout={handleRelayout}
           onInitialized={(_fig, gd) => {
@@ -528,13 +606,7 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
             readPlotPx(gdRef.current);
           }}
         />
-        {hover && (
-          <div className="multi-image-hover">
-            {hover.img.xlabel || "x"}: {formatNum(hover.x)} ·{" "}
-            {hover.img.ylabel || "y"}: {formatNum(hover.y)} ·{" "}
-            {hover.img.zlabel || "z"}: {formatNum(hover.z)}
-          </div>
-        )}
+        <SpatialHoverOverlay ref={hoverOverlayRef} />
       </div>
     </div>
   );

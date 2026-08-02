@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
@@ -30,6 +39,7 @@ import {
   windowPlacement,
 } from "../utils/imageLod";
 import { toBins, binSearchCell } from "../utils/imageCoords";
+import { relayoutViewRange } from "../utils/plotlyRelayout";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import type {
   AnalysisResult,
@@ -118,6 +128,57 @@ interface ImagePlotProps {
   }) => void;
 }
 
+const IMAGE_PLOT_STYLE = { width: "100%", height: "100%" } as const;
+const EMPTY_IMAGE_RESULTS: AnalysisResult[] = [];
+const EMPTY_IMAGE_ROI: ImageRoiSegment[] = [];
+
+interface ImageHoverInfo {
+  x: number;
+  y: number;
+  z: number;
+  px: number;
+  py: number;
+}
+
+interface ImageHoverOverlayHandle {
+  setHover: (info: ImageHoverInfo | null) => void;
+}
+
+const ImageHoverOverlay = memo(
+  forwardRef<ImageHoverOverlayHandle, { data: ImageData }>(
+    function ImageHoverOverlay({ data }, ref) {
+      const [hover, setHover] = useState<ImageHoverInfo | null>(null);
+      useImperativeHandle(ref, () => ({ setHover }), []);
+      if (!hover) return null;
+      return (
+        <div
+          className="image-hover-tooltip"
+          style={{
+            position: "absolute",
+            left: hover.px + 14,
+            top: hover.py + 14,
+            pointerEvents: "none",
+            background: "var(--plot-tooltip-bg, rgba(20,20,20,0.85))",
+            color: "var(--plot-tooltip-fg, #fff)",
+            padding: "4px 6px",
+            borderRadius: 3,
+            fontSize: 11,
+            lineHeight: 1.3,
+            whiteSpace: "nowrap",
+            zIndex: 5,
+          }}
+        >
+          {data.xlabel || "x"}: {fmt(hover.x)}
+          <br />
+          {data.ylabel || "y"}: {fmt(hover.y)}
+          <br />
+          {data.zlabel || "z"}: {fmt(hover.z)}
+        </div>
+      );
+    },
+  ),
+);
+
 /**
  * Read-only image viewer using Plotly.js's ``heatmap`` trace.
  *
@@ -133,12 +194,12 @@ interface ImagePlotProps {
  */
 export function ImagePlot({
   data,
-  roi = [],
+  roi = EMPTY_IMAGE_ROI,
   roiEditMode = false,
   onRoiChange,
   drawGeometry = null,
   highlightedVertex = null,
-  results = [],
+  results = EMPTY_IMAGE_RESULTS,
   showResultsOverlay = false,
   showGraphicalTitles = true,
   lutRange = null,
@@ -449,17 +510,7 @@ export function ImagePlot({
       })
     | null
   >(null);
-  // Hover state for the custom tooltip and the profiles tool.
-  const [hoverInfo, setHoverInfo] = useState<{
-    x: number;
-    y: number;
-    z: number;
-    px: number;
-    py: number;
-  } | null>(null);
-  useEffect(() => {
-    setHoverInfo(null);
-  }, [data.id]);
+  const hoverOverlayRef = useRef<ImageHoverOverlayHandle>(null);
 
   // Read the on-screen plot-area size (in CSS px) from Plotly's resolved
   // layout so the LOD raster targets the actual display resolution. Only
@@ -732,6 +783,7 @@ export function ImagePlot({
       ...plotlyTheme,
       title: { text: data.title || "" },
       autosize: true,
+      uirevision: data.id,
       margin: {
         l: 60,
         // Reserve extra room on the right so the legend can sit past
@@ -833,6 +885,29 @@ export function ImagePlot({
     drawGeometry,
   ]);
 
+  const plotConfig = useMemo(
+    () => ({
+      responsive: true,
+      displaylogo: false,
+      // Native shape editing is disabled in ROI mode: Plotly streams no
+      // live geometry for image-trace shapes, so move/resize is handled
+      // by the manual drag handler (handleHostMouseDownCapture) for
+      // continuous feedback. The drawrect/drawcircle/drawclosedpath
+      // modebar tools still create new ROIs (they are dragmode-based and
+      // do not require ``editable``).
+      editable: false,
+      edits: {
+        shapePosition: tool === "stats",
+      },
+      modeBarButtonsToAdd: roiEditMode
+        ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
+        : tool === "stats"
+          ? ["drawrect", "eraseshape"]
+          : [],
+    }),
+    [roiEditMode, tool],
+  );
+
   const handleHover = useCallback(
     (event: Record<string, unknown>) => {
       if (tool !== "profiles" || frozen) return;
@@ -861,12 +936,10 @@ export function ImagePlot({
   const handleWrapperMouseMove = useCallback(
     (evt: React.MouseEvent<HTMLDivElement>) => {
       // While a mouse button is held (zoom rubber band, manual pan, ROI
-      // drag), skip the hover read-out: every ``setHoverInfo`` re-renders the
-      // component and ``Plotly.react`` re-applies the layout, which disrupts
-      // the in-progress gesture (box-zoom used to behave erratically).  The
-      // manual pan does not need hover — it tracks the pointer itself.
+      // drag), skip the hover read-out. The manual pan tracks the pointer
+      // itself and does not need tooltip updates.
       if (evt.buttons !== 0) {
-        if (hoverInfo) setHoverInfo(null);
+        hoverOverlayRef.current?.setHover(null);
         return;
       }
       const gd = gdRef.current;
@@ -882,7 +955,7 @@ export function ImagePlot({
       const xData = xa.p2c(px - xOff);
       const yData = ya.p2c(py - yOff);
       if (!Number.isFinite(xData) || !Number.isFinite(yData)) {
-        if (hoverInfo) setHoverInfo(null);
+        hoverOverlayRef.current?.setHover(null);
         return;
       }
       // ROI edit affordance: when hovering a ROI (or one of its resize
@@ -922,19 +995,19 @@ export function ImagePlot({
         ? binSearchCell(yEdges, yData)
         : Math.floor((yData - data.y0) / data.dy);
       if (i < 0 || i >= data.width || j < 0 || j >= data.height) {
-        if (hoverInfo) setHoverInfo(null);
+        hoverOverlayRef.current?.setHover(null);
         return;
       }
       const row = data.data[j] as Float32Array | number[];
       const z = row ? row[i] : NaN;
-      setHoverInfo({ x: xData, y: yData, z, px, py });
+      hoverOverlayRef.current?.setHover({ x: xData, y: yData, z, px, py });
       if (tool === "profiles" && !frozen) setCursor({ x: xData, y: yData });
     },
-    [data, tool, hoverInfo, xEdges, yEdges, frozen, roiEditMode, roi],
+    [data, tool, xEdges, yEdges, frozen, roiEditMode, roi],
   );
 
   const handleWrapperMouseLeave = useCallback(() => {
-    setHoverInfo(null);
+    hoverOverlayRef.current?.setHover(null);
     // Drop any ROI move/resize cursor we set on Plotly's drag layer.
     const dragEl = gdRef.current?.querySelector<SVGElement>(".nsewdrag");
     if (dragEl) dragEl.style.removeProperty("cursor");
@@ -962,8 +1035,8 @@ export function ImagePlot({
   // and the two fight — in practice native pan moved X but reset Y.  On
   // mousedown (capture phase) we record the gesture anchor and the current
   // axis ranges and stop the event so Plotly's own pan never starts; each
-  // mousemove then translates ``viewRange`` from the fixed anchor (not
-  // incrementally, so there is no runaway amplification).
+  // animation frame then translates the visible Plotly range from the fixed
+  // anchor. React receives only the final range on release.
   // ------------------------------------------------------------------
   const panRef = useRef<{
     startX: number;
@@ -974,7 +1047,17 @@ export function ImagePlot({
     y1: number;
     xLen: number;
     yLen: number;
+    latestRange: ViewRange | null;
   } | null>(null);
+  const panFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (panFrameRef.current !== null) {
+        cancelAnimationFrame(panFrameRef.current);
+      }
+    },
+    [],
+  );
   const handleHostMouseDownCapture = useCallback(
     (evt: React.MouseEvent<HTMLDivElement>) => {
       if (evt.button !== 0) return;
@@ -1098,6 +1181,7 @@ export function ImagePlot({
         y1: yr[1],
         xLen,
         yLen,
+        latestRange: null,
       };
       const onMove = (e: MouseEvent) => {
         const p = panRef.current;
@@ -1108,13 +1192,29 @@ export function ImagePlot({
         // (range[0]−range[1]).  "Grab" pan subtracts the dragged delta.
         const dxData = ((e.clientX - p.startX) * (p.x1 - p.x0)) / p.xLen;
         const dyData = ((e.clientY - p.startY) * (p.y0 - p.y1)) / p.yLen;
-        setViewRange({
+        p.latestRange = {
           x: [p.x0 - dxData, p.x1 - dxData],
           y: [p.y0 - dyData, p.y1 - dyData],
-        });
+        };
+        if (panFrameRef.current === null) {
+          panFrameRef.current = requestAnimationFrame(() => {
+            panFrameRef.current = null;
+            const active = panRef.current;
+            const activeGraph = gdRef.current;
+            if (active?.latestRange && activeGraph) {
+              relayoutViewRange(activeGraph, active.latestRange);
+            }
+          });
+        }
       };
       const onUp = () => {
+        if (panFrameRef.current !== null) {
+          cancelAnimationFrame(panFrameRef.current);
+          panFrameRef.current = null;
+        }
+        const finalRange = panRef.current?.latestRange;
         panRef.current = null;
+        if (finalRange) setViewRange(finalRange);
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
       };
@@ -1380,29 +1480,9 @@ export function ImagePlot({
     <Plot
       data={allTraces as never}
       layout={layout as never}
-      style={{ width: "100%", height: "100%" }}
+      style={IMAGE_PLOT_STYLE}
       useResizeHandler
-      config={
-        {
-          responsive: true,
-          displaylogo: false,
-          // Native shape editing is disabled in ROI mode: Plotly streams no
-          // live geometry for image-trace shapes, so move/resize is handled
-          // by the manual drag handler (handleHostMouseDownCapture) for
-          // continuous feedback. The drawrect/drawcircle/drawclosedpath
-          // modebar tools still create new ROIs (they are dragmode-based and
-          // do not require ``editable``).
-          editable: false,
-          edits: {
-            shapePosition: tool === "stats",
-          },
-          modeBarButtonsToAdd: roiEditMode
-            ? ["drawrect", "drawcircle", "drawclosedpath", "eraseshape"]
-            : tool === "stats"
-              ? ["drawrect", "eraseshape"]
-              : [],
-        } as never
-      }
+      config={plotConfig as never}
       onRelayout={handleRelayout}
       onHover={handleHover}
       onInitialized={(_fig, gd) => {
@@ -1431,35 +1511,6 @@ export function ImagePlot({
     />
   );
 
-  // Custom hover tooltip — small overlay positioned next to the
-  // cursor, mirroring Plotly's default look but driven by the typed
-  // array lookup so we always show the original ``z`` value.
-  const hoverTooltip = hoverInfo ? (
-    <div
-      className="image-hover-tooltip"
-      style={{
-        position: "absolute",
-        left: hoverInfo.px + 14,
-        top: hoverInfo.py + 14,
-        pointerEvents: "none",
-        background: "var(--plot-tooltip-bg, rgba(20,20,20,0.85))",
-        color: "var(--plot-tooltip-fg, #fff)",
-        padding: "4px 6px",
-        borderRadius: 3,
-        fontSize: 11,
-        lineHeight: 1.3,
-        whiteSpace: "nowrap",
-        zIndex: 5,
-      }}
-    >
-      {data.xlabel || "x"}: {fmt(hoverInfo.x)}
-      <br />
-      {data.ylabel || "y"}: {fmt(hoverInfo.y)}
-      <br />
-      {data.zlabel || "z"}: {fmt(hoverInfo.z)}
-    </div>
-  ) : null;
-
   const imagePlotEl = (
     <div
       className={`image-plot-host${
@@ -1476,7 +1527,7 @@ export function ImagePlot({
       onClick={handleHostClick}
     >
       {heatmapPlot}
-      {hoverTooltip}
+      <ImageHoverOverlay key={data.id} ref={hoverOverlayRef} data={data} />
     </div>
   );
 

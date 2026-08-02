@@ -8,6 +8,7 @@
  *     const plotlyTheme = usePlotlyTheme();
  *     <Plot layout={{ ...plotlyTheme, title: ... }} />
  */
+import { useMemo } from "react";
 import { useTheme, type ResolvedTheme } from "./theme";
 
 export interface PlotlyThemeLayout {
@@ -73,7 +74,7 @@ export function getPlotlyThemeLayout(theme: ResolvedTheme): PlotlyThemeLayout {
 /** React hook returning Plotly layout fragments matching the active theme. */
 export function usePlotlyTheme(): PlotlyThemeLayout {
   const { theme } = useTheme();
-  return getPlotlyThemeLayout(theme);
+  return useMemo(() => getPlotlyThemeLayout(theme), [theme]);
 }
 
 /** Merge a per-axis theme partial with caller-supplied axis options. */

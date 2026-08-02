@@ -33,18 +33,24 @@ const SIGNAL: SignalData = {
   x: [0, 1, 2],
   y: [0, 1, 0],
 };
+const ANNOTATIONS = { shapes: [], annotations: [] };
+const onAnnotationsChange = vi.fn();
 
-function renderPlot() {
-  render(
+function plotElement() {
+  return (
     <ThemeProvider>
       <SignalPlot
         data={SIGNAL}
         oid={SIGNAL.id}
-        annotations={{ shapes: [], annotations: [] }}
-        onAnnotationsChange={() => {}}
+        annotations={ANNOTATIONS}
+        onAnnotationsChange={onAnnotationsChange}
       />
-    </ThemeProvider>,
+    </ThemeProvider>
   );
+}
+
+function renderPlot() {
+  render(plotElement());
   return plotState.props as {
     config: {
       editable: boolean;
@@ -68,5 +74,21 @@ describe("SignalPlot title editing", () => {
     expect(plot.config.edits.titleText).toBeUndefined();
     expect(plot.config.edits.axisTitleText).toBeUndefined();
     expect(plot.config.edits.legendText).toBeUndefined();
+  });
+
+  it("keeps Plotly props stable across an equivalent rerender", () => {
+    const { rerender } = render(plotElement());
+    const initial = plotState.props as {
+      data: unknown;
+      layout: { uirevision: string };
+      config: unknown;
+    };
+
+    rerender(plotElement());
+
+    expect(plotState.props?.data).toBe(initial.data);
+    expect(plotState.props?.layout).toBe(initial.layout);
+    expect(plotState.props?.config).toBe(initial.config);
+    expect(initial.layout.uirevision).toBe(SIGNAL.id);
   });
 });

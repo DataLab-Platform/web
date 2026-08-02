@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ImagePlot } from "../../../src/components/ImagePlot";
@@ -7,11 +13,13 @@ import { ThemeProvider } from "../../../src/utils/theme";
 
 const plotState = vi.hoisted(() => ({
   props: null as Record<string, unknown> | null,
+  renderCount: 0,
 }));
 
 vi.mock("react-plotly.js", () => ({
   default: (props: Record<string, unknown>) => {
     plotState.props = props;
+    plotState.renderCount += 1;
     return <div data-testid="plot" />;
   },
 }));
@@ -34,6 +42,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   plotState.props = null;
+  plotState.renderCount = 0;
 });
 
 const IMAGE: ImageData = {
@@ -60,12 +69,16 @@ const IMAGE: ImageData = {
   zunit: "",
 };
 
-function renderPlot() {
-  render(
+function plotElement() {
+  return (
     <ThemeProvider>
       <ImagePlot data={IMAGE} />
-    </ThemeProvider>,
+    </ThemeProvider>
   );
+}
+
+function renderPlot() {
+  render(plotElement());
   return currentPlot();
 }
 
@@ -76,6 +89,7 @@ function currentPlot() {
       edits: Record<string, boolean>;
     };
     onRelayout: (event: Record<string, unknown>) => void;
+    onInitialized: (figure: unknown, graphDiv: unknown) => void;
   };
 }
 
@@ -98,5 +112,54 @@ describe("ImagePlot title editing", () => {
       shapePosition: true,
     });
     expect(currentPlot().config.edits.titleText).toBeUndefined();
+  });
+
+  it("keeps Plotly props stable across an equivalent rerender", () => {
+    const { rerender } = render(plotElement());
+    const initial = plotState.props as {
+      data: unknown;
+      layout: { uirevision: string };
+      config: unknown;
+    };
+
+    rerender(plotElement());
+
+    expect(plotState.props?.data).toBe(initial.data);
+    expect(plotState.props?.layout).toBe(initial.layout);
+    expect(plotState.props?.config).toBe(initial.config);
+    expect(initial.layout.uirevision).toBe(IMAGE.id);
+  });
+
+  it("updates the hover tooltip without rerendering Plot", () => {
+    renderPlot();
+    const graphDiv = Object.assign(document.createElement("div"), {
+      _fullLayout: {
+        xaxis: { p2c: (value: number) => value, _offset: 0, _length: 100 },
+        yaxis: { p2c: (value: number) => value, _offset: 0, _length: 100 },
+      },
+      on: vi.fn(),
+    });
+    vi.spyOn(graphDiv, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    act(() => currentPlot().onInitialized({}, graphDiv));
+    const renderCount = plotState.renderCount;
+
+    fireEvent.mouseMove(document.querySelector(".image-plot-host")!, {
+      clientX: 1,
+      clientY: 1,
+      buttons: 0,
+    });
+
+    expect(document.querySelector(".image-hover-tooltip")).not.toBeNull();
+    expect(plotState.renderCount).toBe(renderCount);
   });
 });

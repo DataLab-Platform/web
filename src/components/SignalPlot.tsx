@@ -58,20 +58,25 @@ interface Props {
   extraSignals?: SignalData[];
 }
 
+const SIGNAL_PLOT_STYLE = { width: "100%", height: "100%" } as const;
+const EMPTY_RESULTS: AnalysisResult[] = [];
+const EMPTY_ROI: SignalRoiSegment[] = [];
+const EMPTY_SIGNALS: SignalData[] = [];
+
 export function SignalPlot({
   data,
   oid,
   annotations,
   onAnnotationsChange,
-  roi = [],
+  roi = EMPTY_ROI,
   roiEditMode = false,
   onRoiChange,
   drawGeometry = null,
-  results = [],
-  extraResults = [],
+  results = EMPTY_RESULTS,
+  extraResults = EMPTY_RESULTS,
   showResultsOverlay = false,
   showGraphicalTitles = true,
-  extraSignals = [],
+  extraSignals = EMPTY_SIGNALS,
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
   const xAxisTitle = useMemo(
@@ -378,74 +383,94 @@ export function SignalPlot({
     return [...roiFillTraces, ...curveTraces, ...resultTraces];
   }, [data, extraSignals, roiFillTraces, resultTraces]);
 
+  const layout = useMemo(
+    () => ({
+      ...plotlyTheme,
+      title: { text: data.title },
+      autosize: true,
+      uirevision: oid ?? data.id,
+      margin: { l: 60, r: 20, t: 40, b: 50 },
+      xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
+      yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
+      showlegend: resultTraces.length > 0 || extraSignals.length > 0,
+      // Legend inside the plot, anchored top-right, mirroring the
+      // DataLab desktop layout. A semi-transparent background keeps it
+      // readable when it overlaps the curves.
+      legend: {
+        ...plotlyTheme.legend,
+        x: 1,
+        y: 1,
+        xanchor: "right" as const,
+        yanchor: "top" as const,
+        bgcolor:
+          theme === "dark" ? "rgba(30,30,30,0.7)" : "rgba(255,255,255,0.7)",
+        bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
+        borderwidth: 1,
+      },
+      // In ROI edit mode, the newshape default uses the next ROI's
+      // color so the freshly drawn rectangle matches its position in
+      // the cycling palette as soon as it is committed.
+      newshape: roiEditMode
+        ? {
+            line: {
+              color: roiLineColor(roi.length),
+              width: 2,
+              dash: "dot",
+            },
+            fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
+            opacity: 1,
+          }
+        : undefined,
+      // Auto-arm the rectangle-draw tool when the ROI panel requests it
+      // so the user can trace a first ROI without hunting for a modebar
+      // button (otherwise dragging would just pan/zoom).
+      ...(roiEditMode && drawGeometry ? { dragmode: "drawrect" as const } : {}),
+      shapes: allShapes,
+      annotations: allAnnotations,
+    }),
+    [
+      plotlyTheme,
+      data.title,
+      data.id,
+      oid,
+      xAxisTitle,
+      yAxisTitle,
+      resultTraces.length,
+      extraSignals.length,
+      theme,
+      roiEditMode,
+      roi.length,
+      drawGeometry,
+      allShapes,
+      allAnnotations,
+    ],
+  );
+
+  const config = useMemo(
+    () => ({
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToAdd: roiEditMode
+        ? ["drawrect", "eraseshape"]
+        : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
+      editable: false,
+      edits: {
+        annotationPosition: true,
+        annotationTail: true,
+        annotationText: true,
+        shapePosition: true,
+      },
+    }),
+    [roiEditMode],
+  );
+
   return (
     <Plot
       data={allTraces as never}
-      layout={
-        {
-          ...plotlyTheme,
-          title: { text: data.title },
-          autosize: true,
-          margin: { l: 60, r: 20, t: 40, b: 50 },
-          xaxis: { ...plotlyTheme.xaxis, title: { text: xAxisTitle } },
-          yaxis: { ...plotlyTheme.yaxis, title: { text: yAxisTitle } },
-          showlegend: resultTraces.length > 0 || extraSignals.length > 0,
-          // Legend inside the plot, anchored top-right, mirroring the
-          // DataLab desktop layout. A semi-transparent background keeps it
-          // readable when it overlaps the curves.
-          legend: {
-            ...plotlyTheme.legend,
-            x: 1,
-            y: 1,
-            xanchor: "right",
-            yanchor: "top",
-            bgcolor:
-              theme === "dark" ? "rgba(30,30,30,0.7)" : "rgba(255,255,255,0.7)",
-            bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
-            borderwidth: 1,
-          },
-          // In ROI edit mode, the newshape default uses the next ROI's
-          // color so the freshly drawn rectangle matches its position in
-          // the cycling palette as soon as it is committed.
-          newshape: roiEditMode
-            ? {
-                line: {
-                  color: roiLineColor(roi.length),
-                  width: 2,
-                  dash: "dot",
-                },
-                fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
-                opacity: 1,
-              }
-            : undefined,
-          // Auto-arm the rectangle-draw tool when the ROI panel requests it
-          // so the user can trace a first ROI without hunting for a modebar
-          // button (otherwise dragging would just pan/zoom).
-          ...(roiEditMode && drawGeometry
-            ? { dragmode: "drawrect" as const }
-            : {}),
-          shapes: allShapes,
-          annotations: allAnnotations,
-        } as never
-      }
-      style={{ width: "100%", height: "100%" }}
+      layout={layout as never}
+      style={SIGNAL_PLOT_STYLE}
       useResizeHandler
-      config={
-        {
-          responsive: true,
-          displaylogo: false,
-          modeBarButtonsToAdd: roiEditMode
-            ? ["drawrect", "eraseshape"]
-            : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
-          editable: false,
-          edits: {
-            annotationPosition: true,
-            annotationTail: true,
-            annotationText: true,
-            shapePosition: true,
-          },
-        } as never
-      }
+      config={config as never}
       onRelayout={handleRelayout}
       onInitialized={(_fig, gd) => {
         registerActivePlot("signal", gd);
