@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
-import { DataLabRuntime } from "./runtime/runtime";
+import { isDiskStorageSupported } from "./runtime/storageCapabilities";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
@@ -64,25 +64,26 @@ import {
   CentralViewSwitcher,
   type CentralView,
 } from "./components/CentralViewSwitcher";
-import { SignalPlot } from "./components/SignalPlot";
+import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
 import {
   bundleSignalResults,
   normalizeSignalLayoutMode,
   type SignalLayoutMode,
   type SignalResultBundle,
 } from "./components/signalPlotLayout";
-import { ImagePlot } from "./components/ImagePlot";
 import {
-  MultiImagePlot,
-  MULTI_IMAGE_LIMIT,
-  MULTI_IMAGE_MAX_SIZE,
-} from "./components/MultiImagePlot";
-import { MultiImageSpatialPlot } from "./components/MultiImageSpatialPlot";
+  LazyH5BrowserDialog as H5BrowserDialog,
+  LazyImagePlot as ImagePlot,
+  LazyInteractiveFitDialog as InteractiveFitDialog,
+  LazyMultiImageSpatialPlot as MultiImageSpatialPlot,
+  LazyProfileDefinitionDialog as ProfileDefinitionDialog,
+  LazyRoiGridDialog as RoiGridDialog,
+  LazySeparateViewDialog as SeparateViewDialog,
+  LazySignalPlot as SignalPlot,
+} from "./components/lazyPlotComponents";
+import { useSelectionView } from "./hooks/useSelectionView";
 import { DataSetDialog } from "./components/DataSetDialog";
-import {
-  ProfileDefinitionDialog,
-  type ProfileFeatureId,
-} from "./components/ProfileDefinitionDialog";
+import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
 import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
@@ -102,24 +103,17 @@ import {
 import { EdgeSlowLoadHint } from "./components/EdgeSlowLoadHint";
 import { useProgress } from "./components/ProgressDialog";
 import { useToast } from "./components/Toast";
-import {
-  SeparateViewDialog,
-  type SeparateViewContent,
-} from "./components/SeparateViewDialog";
-import { InteractiveFitDialog } from "./components/InteractiveFitDialog";
+import type { SeparateViewContent } from "./components/SeparateViewDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
-import { RoiGridDialog } from "./components/RoiGridDialog";
-import { H5BrowserDialog } from "./components/H5BrowserDialog";
 import { RecoveryBanner } from "./components/RecoveryBanner";
 import {
   SaveToDirectoryDialog,
   type SaveToDirectoryResult,
   type SaveToDirectorySource,
 } from "./components/SaveToDirectoryDialog";
-import { TextImportWizard } from "./components/TextImportWizard";
 import { SidePanel } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
 import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
@@ -174,6 +168,11 @@ const MacroPanel = lazy(() =>
 const NotebookPanel = lazy(() =>
   import("./components/notebook/NotebookPanel").then((m) => ({
     default: m.NotebookPanel,
+  })),
+);
+const TextImportWizard = lazy(() =>
+  import("./components/TextImportWizard").then((m) => ({
+    default: m.TextImportWizard,
   })),
 );
 
@@ -281,7 +280,7 @@ function buildPlotResultsSchema(
 function usePersistedSize(
   key: string,
   defaultValue: number,
-): [number, (next: number) => void] {
+): [number, (next: number) => void, (next: number) => void] {
   const [value, setValue] = useState<number>(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -292,9 +291,8 @@ function usePersistedSize(
       return defaultValue;
     }
   });
-  const update = useCallback(
+  const persist = useCallback(
     (next: number) => {
-      setValue(next);
       try {
         window.localStorage.setItem(key, String(next));
       } catch {
@@ -303,7 +301,7 @@ function usePersistedSize(
     },
     [key],
   );
-  return [value, update];
+  return [value, setValue, persist];
 }
 
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
@@ -414,14 +412,10 @@ export default function App() {
   const [centralView, setCentralView] = useState<CentralView>("plot");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
   const macroPanelRef = useRef<MacroPanelHandle | null>(null);
-  const [leftPanelWidth, setLeftPanelWidth] = usePersistedSize(
-    "datalab-web.leftPanelWidth",
-    280,
-  );
-  const [sidePanelWidth, setSidePanelWidth] = usePersistedSize(
-    "datalab-web.sidePanelWidth",
-    360,
-  );
+  const [leftPanelWidth, setLeftPanelWidth, persistLeftPanelWidth] =
+    usePersistedSize("datalab-web.leftPanelWidth", 280);
+  const [sidePanelWidth, setSidePanelWidth, persistSidePanelWidth] =
+    usePersistedSize("datalab-web.sidePanelWidth", 360);
   const [aiPanelVisible, setAIPanelVisible] = usePersistedBool(
     "datalab-web.aiPanelVisible",
     false,
@@ -684,9 +678,6 @@ export default function App() {
    *  to the persisted multi-signal layout preference. */
   const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
   const [imageData, setImageData] = useState<ImageData | null>(null);
-  /** Other images selected alongside ``currentId`` - laid out as a
-   *  read-only grid in :class:`MultiImagePlot` to mirror DataLab
-   *  desktop's multi-image viewer. */
   const [extraImages, setExtraImages] = useState<ImageData[]>([]);
   /** Multi-image view mode: ``false`` = thumbnail grid (default),
    *  ``true`` = spatial overlay honouring each image's origin so the
@@ -813,9 +804,6 @@ export default function App() {
   /** Vertex index of the selected polygon ROI whose coordinate cell is being
    *  edited in the ROI panel (``null`` ⇒ none). Highlighted on the plot. */
   const [activeRoiVertex, setActiveRoiVertex] = useState<number | null>(null);
-  /** Persisted LUT range override for the current image (``null`` ⇒
-   *  fall back to the image's intrinsic ``data_min``/``data_max``).
-   *  Driven by the contrast tool inside :class:`ImagePlot`. */
   const [imageLutRange, setImageLutRange] = useState<[number, number] | null>(
     null,
   );
@@ -849,6 +837,26 @@ export default function App() {
   // this counter changes — mirroring DataLab desktop's "refresh the
   // selected object's plot after a metadata action".
   const [plotRefreshNonce, setPlotRefreshNonce] = useState(0);
+  const selectionView = useSelectionView({
+    runtime,
+    currentId,
+    selectedIds,
+    treeKind,
+    refreshNonce: plotRefreshNonce,
+    maxImages: MULTI_IMAGE_LIMIT,
+  });
+  useEffect(() => {
+    setData(selectionView.data);
+    setExtraSignals(selectionView.extraSignals);
+    setImageData(selectionView.imageData);
+    setExtraImages(selectionView.extraImages);
+    setAnnotations(selectionView.annotations);
+    setRoi(selectionView.roi);
+    setImageRoi(selectionView.imageRoi);
+    setImageLutRange(selectionView.imageLutRange);
+    setResults(selectionView.results);
+    setExtraResults(selectionView.extraResults);
+  }, [selectionView]);
   // ``true`` when at least one selected object has a ROI.  Drives the
   // enablement of the ROI "Remove all" action so it matches DataLab
   // desktop's ``SelectCond.with_roi`` (enabled when *any* selected
@@ -1094,153 +1102,6 @@ export default function App() {
       cancelled = true;
     };
   }, [status, runtime, refresh]);
-
-  useEffect(() => {
-    if (!runtime || !currentId) {
-      setData(null);
-      setExtraSignals([]);
-      setImageData(null);
-      setExtraImages([]);
-      setAnnotations({ shapes: [], annotations: [] });
-      setRoi([]);
-      setImageRoi([]);
-      setImageLutRange(null);
-      setResults([]);
-      setExtraResults([]);
-      return;
-    }
-    let cancelled = false;
-    if (treeKind === "image") {
-      // Image panel: viewer + ROI + analysis results.
-      setData(null);
-      setExtraSignals([]);
-      setExtraResults([]);
-      setAnnotations({ shapes: [], annotations: [] });
-      setRoi([]);
-      setImageLutRange(null);
-      runtime
-        .getImageData(currentId)
-        .then((d) => {
-          if (!cancelled) setImageData(d);
-        })
-        .catch(() => {
-          if (!cancelled) setImageData(null);
-        });
-      // Fetch the other selected images (excluding the current one) so
-      // they can be laid out side-by-side in MultiImagePlot.  We cap
-      // the request at MULTI_IMAGE_LIMIT to keep the bridge payload
-      // bounded; the component renders a "+N more" banner when the
-      // selection exceeds that limit.
-      const extraImgIds = selectedIds
-        .filter((id) => id !== currentId)
-        .slice(0, MULTI_IMAGE_LIMIT - 1);
-      if (extraImgIds.length === 0) {
-        setExtraImages([]);
-      } else {
-        runtime
-          .getImagesData(extraImgIds, MULTI_IMAGE_MAX_SIZE)
-          .then((imgs) => {
-            if (!cancelled) setExtraImages(imgs);
-          })
-          .catch(() => {
-            if (!cancelled) setExtraImages([]);
-          });
-      }
-      runtime
-        .getImageRoi(currentId)
-        .then((segs) => {
-          if (!cancelled) setImageRoi(segs);
-        })
-        .catch(() => {
-          if (!cancelled) setImageRoi([]);
-        });
-      runtime
-        .getLutRange(currentId)
-        .then((r) => {
-          if (!cancelled) setImageLutRange(r);
-        })
-        .catch(() => {
-          if (!cancelled) setImageLutRange(null);
-        });
-      runtime
-        .listImageResults(currentId)
-        .then((rs) => {
-          if (!cancelled) setResults(rs);
-        })
-        .catch(() => {
-          if (!cancelled) setResults([]);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-    setImageData(null);
-    setExtraImages([]);
-    setImageRoi([]);
-    runtime
-      .getSignalData(currentId)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch(() => {
-        if (!cancelled) setData(null);
-      });
-    // Fetch the other selected signals (excluding the current one) for
-    // overlay, vertical, or horizontal multi-signal rendering.
-    const extraIds = selectedIds.filter((id) => id !== currentId);
-    if (extraIds.length === 0) {
-      setExtraSignals([]);
-      setExtraResults([]);
-    } else {
-      runtime
-        .getSignalsData(extraIds)
-        .then((sigs) => {
-          if (!cancelled) setExtraSignals(sigs);
-        })
-        .catch(() => {
-          if (!cancelled) setExtraSignals([]);
-        });
-      // Also fetch their analysis results so geometry overlays (FWHM
-      // segments, peak markers, …) are drawn for every selected signal,
-      // not only the displayed one.
-      Promise.all(extraIds.map((id) => runtime.listSignalResults(id)))
-        .then((lists) => {
-          if (!cancelled) {
-            setExtraResults(bundleSignalResults(extraIds, lists));
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setExtraResults([]);
-        });
-    }
-    runtime
-      .getPlotlyAnnotations(currentId)
-      .then((a) => {
-        if (!cancelled) setAnnotations(a);
-      })
-      .catch(() => {
-        if (!cancelled) setAnnotations({ shapes: [], annotations: [] });
-      });
-    runtime
-      .getSignalRoi(currentId)
-      .then((segs) => {
-        if (!cancelled) setRoi(segs);
-      })
-      .catch(() => {
-        if (!cancelled) setRoi([]);
-      });
-    runtime
-      .listSignalResults(currentId)
-      .then((rs) => {
-        if (!cancelled) setResults(rs);
-      })
-      .catch(() => {
-        if (!cancelled) setResults([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, currentId, treeKind, selectedIds, plotRefreshNonce]);
 
   const handleSelectionChange = useCallback(
     (ids: string[], current: string | null, groupIds?: string[]) => {
@@ -4394,7 +4255,7 @@ export default function App() {
             onFreeMemory={handleFreeMemory}
             storeOnDisk={storeOnDisk}
             storageBusy={storageBusy}
-            diskStorageSupported={DataLabRuntime.isDiskStorageSupported()}
+            diskStorageSupported={isDiskStorageSupported()}
             onToggleStoreOnDisk={() => {
               void handleToggleStoreOnDisk();
             }}
@@ -4449,6 +4310,7 @@ export default function App() {
             min={180}
             max={500}
             onChange={setLeftPanelWidth}
+            onCommit={persistLeftPanelWidth}
             ariaLabel={t("Resize left panel")}
           />
           <main className="plot-area" data-tour="plot-host">
@@ -4608,23 +4470,25 @@ export default function App() {
                 );
               })()}
             {centralView === "plot" && treeKind === "signal" && data && (
-              <SignalPlot
-                data={data}
-                oid={currentId}
-                annotations={annotations}
-                onAnnotationsChange={handleAnnotationsChange}
-                roi={roi}
-                roiEditMode={roiEditMode}
-                onRoiChange={handleRoiChangeFromPlot}
-                drawGeometry={roiEditMode ? roiDrawGeometry : null}
-                results={results}
-                showResultsOverlay={showResultsOverlay}
-                showGraphicalTitles={showGraphicalTitles}
-                extraSignals={extraSignals}
-                extraResults={extraResults}
-                layoutMode={signalLayoutMode}
-                onLayoutModeChange={setSignalLayoutMode}
-              />
+              <Suspense fallback={null}>
+                <SignalPlot
+                  data={data}
+                  oid={currentId}
+                  annotations={annotations}
+                  onAnnotationsChange={handleAnnotationsChange}
+                  roi={roi}
+                  roiEditMode={roiEditMode}
+                  onRoiChange={handleRoiChangeFromPlot}
+                  drawGeometry={roiEditMode ? roiDrawGeometry : null}
+                  results={results}
+                  showResultsOverlay={showResultsOverlay}
+                  showGraphicalTitles={showGraphicalTitles}
+                  extraSignals={extraSignals}
+                  extraResults={extraResults}
+                  layoutMode={signalLayoutMode}
+                  onLayoutModeChange={setSignalLayoutMode}
+                />
+              </Suspense>
             )}
             {centralView === "plot" &&
               treeKind === "image" &&
@@ -4652,10 +4516,12 @@ export default function App() {
                     </button>
                   </div>
                   {spatialMultiImage ? (
-                    <MultiImageSpatialPlot
-                      images={[imageData, ...extraImages]}
-                      totalSelected={selectedIds.length}
-                    />
+                    <Suspense fallback={null}>
+                      <MultiImageSpatialPlot
+                        images={[imageData, ...extraImages]}
+                        totalSelected={selectedIds.length}
+                      />
+                    </Suspense>
                   ) : (
                     <MultiImagePlot
                       images={[imageData, ...extraImages]}
@@ -4668,65 +4534,69 @@ export default function App() {
               treeKind === "image" &&
               imageData &&
               extraImages.length === 0 && (
-                <ImagePlot
-                  data={imageData}
-                  roi={imageEraseMode ? eraseRegions : imageRoi}
-                  roiEditMode={imageEraseMode || imageRoiEditMode}
-                  onRoiChange={
-                    imageEraseMode
-                      ? handleEraseChangeFromPlot
-                      : handleImageRoiChangeFromPlot
-                  }
-                  drawGeometry={
-                    imageEraseMode || imageRoiEditMode ? roiDrawGeometry : null
-                  }
-                  highlightedVertex={
-                    (imageEraseMode || imageRoiEditMode) &&
-                    selectedRoiIndex !== null &&
-                    activeRoiVertex !== null
-                      ? {
-                          roiIndex: selectedRoiIndex,
-                          vertexIndex: activeRoiVertex,
-                        }
-                      : null
-                  }
-                  results={results}
-                  showResultsOverlay={showResultsOverlay}
-                  showGraphicalTitles={showGraphicalTitles}
-                  lutRange={imageLutRange}
-                  onLutRangeChange={(r) => {
-                    setImageLutRange(r);
-                    if (runtime && currentId) {
-                      runtime
-                        .setLutRange(currentId, r)
-                        .catch((e) =>
-                          console.error("Failed to persist LUT range:", e),
-                        );
+                <Suspense fallback={null}>
+                  <ImagePlot
+                    data={imageData}
+                    roi={imageEraseMode ? eraseRegions : imageRoi}
+                    roiEditMode={imageEraseMode || imageRoiEditMode}
+                    onRoiChange={
+                      imageEraseMode
+                        ? handleEraseChangeFromPlot
+                        : handleImageRoiChangeFromPlot
                     }
-                  }}
-                  onColormapChange={(name, inverted) => {
-                    if (runtime && currentId) {
-                      runtime
-                        .setColormap(currentId, name, inverted)
-                        .catch((e) =>
-                          console.error("Failed to persist colormap:", e),
-                        );
+                    drawGeometry={
+                      imageEraseMode || imageRoiEditMode
+                        ? roiDrawGeometry
+                        : null
                     }
-                  }}
-                  onResampleChange={(method) => {
-                    if (runtime && currentId) {
-                      runtime
-                        .setResampleMethod(currentId, method)
-                        .catch((e) =>
-                          console.error(
-                            "Failed to persist resample method:",
-                            e,
-                          ),
-                        );
+                    highlightedVertex={
+                      (imageEraseMode || imageRoiEditMode) &&
+                      selectedRoiIndex !== null &&
+                      activeRoiVertex !== null
+                        ? {
+                            roiIndex: selectedRoiIndex,
+                            vertexIndex: activeRoiVertex,
+                          }
+                        : null
                     }
-                  }}
-                  onExtractProfile={handleExtractProfile}
-                />
+                    results={results}
+                    showResultsOverlay={showResultsOverlay}
+                    showGraphicalTitles={showGraphicalTitles}
+                    lutRange={imageLutRange}
+                    onLutRangeChange={(r) => {
+                      setImageLutRange(r);
+                      if (runtime && currentId) {
+                        runtime
+                          .setLutRange(currentId, r)
+                          .catch((e) =>
+                            console.error("Failed to persist LUT range:", e),
+                          );
+                      }
+                    }}
+                    onColormapChange={(name, inverted) => {
+                      if (runtime && currentId) {
+                        runtime
+                          .setColormap(currentId, name, inverted)
+                          .catch((e) =>
+                            console.error("Failed to persist colormap:", e),
+                          );
+                      }
+                    }}
+                    onResampleChange={(method) => {
+                      if (runtime && currentId) {
+                        runtime
+                          .setResampleMethod(currentId, method)
+                          .catch((e) =>
+                            console.error(
+                              "Failed to persist resample method:",
+                              e,
+                            ),
+                          );
+                      }
+                    }}
+                    onExtractProfile={handleExtractProfile}
+                  />
+                </Suspense>
               )}
           </main>
           {runtime && centralView === "plot" && (
@@ -4737,6 +4607,7 @@ export default function App() {
                 min={260}
                 max={900}
                 onChange={setSidePanelWidth}
+                onCommit={persistSidePanelWidth}
                 ariaLabel="Resize results panel"
               />
               <SidePanel
@@ -4921,39 +4792,41 @@ export default function App() {
           />
         )}
         {pendingProfile && runtime && (
-          <ProfileDefinitionDialog
-            title={pendingProfile.feature.label.replace(/\u2026$/, "")}
-            featureId={
-              pendingProfile.feature.id.replace(
-                /^image:/,
-                "",
-              ) as ProfileFeatureId
-            }
-            payload={pendingProfile.schema}
-            imageData={pendingProfile.imageData}
-            resolveChoices={(itemName, currentValues) =>
-              runtime.resolveFeatureChoices(
-                pendingProfile.feature.id,
-                itemName,
-                currentValues,
-              )
-            }
-            resolveCallbacks={(itemName, currentValues) =>
-              runtime.resolveFeatureCallbacks(
-                pendingProfile.feature.id,
-                itemName,
-                currentValues,
-              )
-            }
-            resolveActive={(currentValues) =>
-              runtime.resolveFeatureActive(
-                pendingProfile.feature.id,
-                currentValues,
-              )
-            }
-            onSubmit={handleSubmitProfile}
-            onCancel={() => setPendingProfile(null)}
-          />
+          <Suspense fallback={null}>
+            <ProfileDefinitionDialog
+              title={pendingProfile.feature.label.replace(/\u2026$/, "")}
+              featureId={
+                pendingProfile.feature.id.replace(
+                  /^image:/,
+                  "",
+                ) as ProfileFeatureId
+              }
+              payload={pendingProfile.schema}
+              imageData={pendingProfile.imageData}
+              resolveChoices={(itemName, currentValues) =>
+                runtime.resolveFeatureChoices(
+                  pendingProfile.feature.id,
+                  itemName,
+                  currentValues,
+                )
+              }
+              resolveCallbacks={(itemName, currentValues) =>
+                runtime.resolveFeatureCallbacks(
+                  pendingProfile.feature.id,
+                  itemName,
+                  currentValues,
+                )
+              }
+              resolveActive={(currentValues) =>
+                runtime.resolveFeatureActive(
+                  pendingProfile.feature.id,
+                  currentValues,
+                )
+              }
+              onSubmit={handleSubmitProfile}
+              onCancel={() => setPendingProfile(null)}
+            />
+          </Suspense>
         )}
         {pendingAnalysis && (
           <DataSetDialog
@@ -5003,20 +4876,24 @@ export default function App() {
           />
         )}
         {pendingRoiGrid && imageData && (
-          <RoiGridDialog
-            imageData={imageData}
-            payload={pendingRoiGrid.schema}
-            onSubmit={handleSubmitRoiGrid}
-            onCancel={() => setPendingRoiGrid(null)}
-          />
+          <Suspense fallback={null}>
+            <RoiGridDialog
+              imageData={imageData}
+              payload={pendingRoiGrid.schema}
+              onSubmit={handleSubmitRoiGrid}
+              onCancel={() => setPendingRoiGrid(null)}
+            />
+          </Suspense>
         )}
         {pendingFit && (
-          <InteractiveFitDialog
-            oid={pendingFit.oid}
-            fit={pendingFit.fit}
-            onCommit={handleInteractiveFitCommit}
-            onCancel={() => setPendingFit(null)}
-          />
+          <Suspense fallback={null}>
+            <InteractiveFitDialog
+              oid={pendingFit.oid}
+              fit={pendingFit.fit}
+              onCommit={handleInteractiveFitCommit}
+              onCancel={() => setPendingFit(null)}
+            />
+          </Suspense>
         )}
         {editingMeta && (
           <ObjectPropertiesDialog
@@ -5039,17 +4916,21 @@ export default function App() {
           />
         )}
         {h5BrowserFiles !== null && (
-          <H5BrowserDialog
-            initial={h5BrowserFiles}
-            onImport={handleH5BrowserImport}
-            onCancel={() => setH5BrowserFiles(null)}
-          />
+          <Suspense fallback={null}>
+            <H5BrowserDialog
+              initial={h5BrowserFiles}
+              onImport={handleH5BrowserImport}
+              onCancel={() => setH5BrowserFiles(null)}
+            />
+          </Suspense>
         )}
         {textImportOpen && (
-          <TextImportWizard
-            onImport={handleTextImportFinished}
-            onCancel={() => setTextImportOpen(false)}
-          />
+          <Suspense fallback={null}>
+            <TextImportWizard
+              onImport={handleTextImportFinished}
+              onCancel={() => setTextImportOpen(false)}
+            />
+          </Suspense>
         )}
         {pendingSaveToDir && runtime && (
           <SaveToDirectoryDialog
@@ -5102,14 +4983,16 @@ export default function App() {
             }
             if (!content) return null;
             return (
-              <SeparateViewDialog
-                content={content}
-                showResultsOverlay={showResultsOverlay}
-                showGraphicalTitles={showGraphicalTitles}
-                signalLayoutMode={signalLayoutMode}
-                onSignalLayoutModeChange={setSignalLayoutMode}
-                onClose={closeSeparateView}
-              />
+              <Suspense fallback={null}>
+                <SeparateViewDialog
+                  content={content}
+                  showResultsOverlay={showResultsOverlay}
+                  showGraphicalTitles={showGraphicalTitles}
+                  signalLayoutMode={signalLayoutMode}
+                  onSignalLayoutModeChange={setSignalLayoutMode}
+                  onClose={closeSeparateView}
+                />
+              </Suspense>
             );
           })()}
         <DialogBridge />

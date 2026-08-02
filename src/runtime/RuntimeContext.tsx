@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { DataLabRuntime, type RuntimeApi } from "./runtime";
+import type { RuntimeApi } from "./runtime";
 import { createWorkerRuntime } from "./WorkerRuntimeProxy";
 import { getRuntimeMode } from "./runtimeMode";
 import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
@@ -35,7 +35,9 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     const boot =
       getRuntimeMode() === "worker"
         ? createWorkerRuntime(onProgress)
-        : DataLabRuntime.load(onProgress);
+        : import("./runtime").then(({ DataLabRuntime }) =>
+            DataLabRuntime.load(onProgress),
+          );
     boot
       .then((rt) => {
         if (cancelled) return;

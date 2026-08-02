@@ -1,8 +1,12 @@
+import { createElement, type ReactNode } from "react";
+import { renderHook } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import {
   getPlotlyThemeLayout,
   mergeAxis,
+  usePlotlyTheme,
 } from "../../../src/utils/plotlyTheme";
+import { ThemeProvider } from "../../../src/utils/theme";
 
 describe("getPlotlyThemeLayout", () => {
   it("returns dark palette for the dark theme", () => {
@@ -16,6 +20,21 @@ describe("getPlotlyThemeLayout", () => {
     const layout = getPlotlyThemeLayout("light");
     expect(layout.font.color).toBe("#1f1f1f");
     expect(layout.xaxis.gridcolor).toBe("#e0e0e0");
+  });
+});
+
+describe("usePlotlyTheme", () => {
+  it("preserves layout identity when the theme is unchanged", () => {
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(ThemeProvider, null, children);
+    const { result, rerender } = renderHook(() => usePlotlyTheme(), {
+      wrapper,
+    });
+    const initial = result.current;
+
+    rerender();
+
+    expect(result.current).toBe(initial);
   });
 });
 

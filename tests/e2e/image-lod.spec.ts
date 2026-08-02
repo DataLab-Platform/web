@@ -27,6 +27,10 @@ const TITLE = "lod_probe";
 interface TraceInfo {
   hasTrace: boolean;
   source: string;
+  x: number;
+  y: number;
+  sizex: number;
+  sizey: number;
   dx: number;
   dy: number;
   pngWidth: number;
@@ -48,6 +52,10 @@ async function readImageTrace(page: Page): Promise<TraceInfo> {
       return {
         hasTrace: false,
         source: "",
+        x: 0,
+        y: 0,
+        sizex: 0,
+        sizey: 0,
         dx: 0,
         dy: 0,
         pngWidth: 0,
@@ -66,6 +74,10 @@ async function readImageTrace(page: Page): Promise<TraceInfo> {
     return {
       hasTrace: true,
       source,
+      x: Number(img.x ?? 0),
+      y: Number(img.y ?? 0),
+      sizex,
+      sizey,
       dx: dims.w > 0 ? sizex / dims.w : 0,
       dy: dims.h > 0 ? sizey / dims.h : 0,
       pngWidth: dims.w,
@@ -130,6 +142,10 @@ test.describe("Image LOD display", () => {
     // The PNG is decimated to ~viewport size, far below the 2048² source.
     expect(zoomedOut.pngWidth).toBeGreaterThan(0);
     expect(zoomedOut.pngWidth).toBeLessThan(SIDE);
+    expect(zoomedOut.x).toBe(0);
+    expect(zoomedOut.y).toBe(0);
+    expect(zoomedOut.sizex).toBeGreaterThanOrEqual(SIDE);
+    expect(zoomedOut.sizey).toBeGreaterThanOrEqual(SIDE);
     // Stride > 1 → each display cell spans several native pixels.
     expect(zoomedOut.dx).toBeGreaterThan(1);
 
@@ -179,5 +195,7 @@ test.describe("Image LOD display", () => {
     expect(zoomedIn.dx).toBeLessThanOrEqual(1.5);
     expect(zoomedIn.pngWidth).toBeGreaterThan(0);
     expect(zoomedIn.pngWidth).toBeLessThan(zoomedOut.pngWidth);
+    expect(Number.isInteger(zoomedIn.x)).toBe(true);
+    expect(Number.isInteger(zoomedIn.y)).toBe(true);
   });
 });

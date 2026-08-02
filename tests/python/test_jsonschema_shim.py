@@ -13,6 +13,7 @@ size, formatting, transpose). These tests lock in that contract.
 from __future__ import annotations
 
 import guidata.dataset as gds
+import numpy as np
 
 
 def _schema_for(item: gds.FloatArrayItem) -> dict:
@@ -44,6 +45,28 @@ def test_float_array_variable_size_and_minmax():
 def test_float_array_fixed_size_omits_variable_flag():
     prop = _schema_for(gds.FloatArrayItem("A"))
     assert "x-guidata-variable-size" not in prop
+
+
+def test_excluded_value_kind_is_not_serialised():
+    """Excluded values keep their schema property without being inspected."""
+
+    class ExplodingArray(np.ndarray):
+        def tolist(self):
+            raise AssertionError("excluded array must not be serialised")
+
+    class _DS(gds.DataSet):
+        arr = gds.FloatArrayItem("A")
+        label = gds.StringItem("Label", default="visible")
+
+    instance = _DS()
+    instance.arr = np.array([1.0]).view(ExplodingArray)
+    payload = gds.dataset_to_schema_with_values(
+        instance, exclude_value_kinds={"float_array"}
+    )
+
+    assert payload["schema"]["properties"]["arr"]["x-guidata-kind"] == "float_array"
+    assert "arr" not in payload["values"]
+    assert payload["values"]["label"] == "visible"
 
 
 def test_display_callback_flag_and_resolution():

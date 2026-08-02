@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
+import { reduceSignalForPlot } from "../utils/signalLod";
 import {
   buildCurveTrace,
   getCurveStyle,
@@ -66,20 +67,29 @@ interface Props {
   onLayoutModeChange?: (mode: SignalLayoutMode) => void;
 }
 
+const SIGNAL_PLOT_STYLE = { width: "100%", height: "100%" } as const;
+const SIGNAL_PLOT_HOST_STYLE = { width: "100%", height: "100%" } as const;
+const DEFAULT_SIGNAL_PLOT_WIDTH = 800;
+const SIGNAL_PLOT_HORIZONTAL_MARGIN = 80;
+const EMPTY_RESULTS: AnalysisResult[] = [];
+const EMPTY_RESULT_BUNDLES: SignalResultBundle[] = [];
+const EMPTY_ROI: SignalRoiSegment[] = [];
+const EMPTY_SIGNALS: SignalData[] = [];
+
 export function SignalPlot({
   data,
   oid,
   annotations,
   onAnnotationsChange,
-  roi = [],
+  roi = EMPTY_ROI,
   roiEditMode = false,
   onRoiChange,
   drawGeometry = null,
-  results = [],
-  extraResults = [],
+  results = EMPTY_RESULTS,
+  extraResults = EMPTY_RESULT_BUNDLES,
   showResultsOverlay = false,
   showGraphicalTitles = true,
-  extraSignals = [],
+  extraSignals = EMPTY_SIGNALS,
   layoutMode = "overlay",
   onLayoutModeChange,
 }: Props) {
@@ -88,6 +98,23 @@ export function SignalPlot({
     () => [data, ...extraSignals],
     [data, extraSignals],
   );
+  const plotHostRef = useRef<HTMLDivElement>(null);
+  const [plotWidth, setPlotWidth] = useState(() =>
+    typeof window === "undefined"
+      ? DEFAULT_SIGNAL_PLOT_WIDTH
+      : Math.max(
+          1,
+          Math.min(
+            DEFAULT_SIGNAL_PLOT_WIDTH,
+            window.innerWidth - SIGNAL_PLOT_HORIZONTAL_MARGIN,
+          ),
+        ),
+  );
+  const [xRangeState, setXRangeState] = useState<{
+    id: string;
+    range: readonly [number, number] | null;
+  }>(() => ({ id: data.id, range: null }));
+  const xRange = xRangeState.id === data.id ? xRangeState.range : null;
   const signalLayout = useMemo(
     () => buildSignalPlotLayout(allSignals, layoutMode),
     [allSignals, layoutMode],
@@ -146,6 +173,29 @@ export function SignalPlot({
     annotations.annotations,
   );
 
+  useEffect(() => {
+    const host = plotHostRef.current;
+    if (!host) return;
+    const updateWidth = (hostWidth: number) => {
+      const usefulWidth = Math.max(
+        1,
+        Math.floor(hostWidth - SIGNAL_PLOT_HORIZONTAL_MARGIN),
+      );
+      setPlotWidth((current) =>
+        current === usefulWidth ? current : usefulWidth,
+      );
+    };
+    const initialWidth = host.getBoundingClientRect().width;
+    if (initialWidth > 0) updateWidth(initialWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width && width > 0) updateWidth(width);
+    });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
+
   // Sync from backend payload whenever the displayed signal or its
   // persisted annotations change.  The (oid, annotations) pair is the
   // authoritative source; any local edits are flushed back via the
@@ -173,6 +223,23 @@ export function SignalPlot({
   }, []);
 
   const handleRelayout = (event: Record<string, unknown>) => {
+    const nextXRange = relayoutXRange(event);
+    if (nextXRange !== undefined) {
+      setXRangeState((current) => {
+        const currentRange = current.id === data.id ? current.range : null;
+        if (nextXRange === null) {
+          return currentRange === null ? current : { id: data.id, range: null };
+        }
+        if (
+          currentRange &&
+          currentRange[0] === nextXRange[0] &&
+          currentRange[1] === nextXRange[1]
+        ) {
+          return current;
+        }
+        return { id: data.id, range: nextXRange };
+      });
+    }
     let touched = false;
     let nextShapes = localShapes;
     let nextAnns = localAnnotations;
@@ -351,6 +418,21 @@ export function SignalPlot({
     });
   }, [roi, roiEditMode, yMin, yMax, showGraphicalTitles]);
 
+  // Level of detail (LOD): reduce every selected signal to the current
+  // viewport before building Plotly traces, without changing its raw data.
+  const lodSignals = useMemo(
+    () =>
+      [data, ...extraSignals].map((signal) => ({
+        signal,
+        lod: reduceSignalForPlot(signal.x, signal.y, {
+          width: plotWidth,
+          xRange,
+        }),
+      })),
+    [data, extraSignals, plotWidth, xRange],
+  );
+  const primaryLod = lodSignals[0].lod;
+
   // View-mode "area under curve" overlay: one filled scatter trace per
   // ROI, clipping the primary signal between ``xmin`` and ``xmax`` and
   // filling down to ``y = 0``.  Mirrors the new desktop reference
@@ -362,9 +444,9 @@ export function SignalPlot({
   const roiFillTraces = useMemo(() => {
     if (roiEditMode) return [] as unknown[];
     return roi
-      .map((seg, i) => buildRoiAreaTrace(seg, i, data.x, data.y))
+      .map((seg, i) => buildRoiAreaTrace(seg, i, primaryLod.x, primaryLod.y))
       .filter((t): t is Record<string, unknown> => t !== null);
-  }, [roi, roiEditMode, data.x, data.y]);
+  }, [roi, roiEditMode, primaryLod]);
 
   // View-mode dashed vertical boundary lines: two per ROI (at ``xmin`` and
   // ``xmax``) spanning the full plotting area (``yref: "paper"``) so they
@@ -460,27 +542,31 @@ export function SignalPlot({
     [resultAnnotations, resultBoxAnnotations, displayLocalAnnotations],
   );
   const allTraces = useMemo(() => {
-    const curveTraces = allSignals.map((sig, i) => {
+    // Build one Scatter trace per signal (primary first, then any
+    // selected extras).  Style precedence: explicit metadata > cycling
+    // palette.  Index 0 always uses palette slot 0 so a single signal
+    // keeps the historical muted-blue look.
+    const curveTraces = lodSignals.map(({ signal, lod }, i) => {
       const axis = signalLayout.assignments[i];
       const auto = getCurveStyle(i);
-      const color = sig.style?.color ?? auto.color;
-      const dash = sig.style?.linestyle
-        ? plotlyDash(sig.style.linestyle)
+      const color = signal.style?.color ?? auto.color;
+      const dash = signal.style?.linestyle
+        ? plotlyDash(signal.style.linestyle)
         : auto.dash;
-      const width = sig.style?.linewidth ?? auto.width;
-      const mode = normalizeCurveStyle(sig.style?.curvestyle);
-      const partial = buildCurveTrace(sig.x, sig.y, color, width, dash, mode);
+      const width = signal.style?.linewidth ?? auto.width;
+      const mode = normalizeCurveStyle(signal.style?.curvestyle);
+      const partial = buildCurveTrace(lod.x, lod.y, color, width, dash, mode);
       return {
-        x: partial.x ?? sig.x,
-        y: partial.y ?? sig.y,
+        x: partial.x ?? lod.x,
+        y: partial.y ?? lod.y,
         type: partial.type,
         mode: partial.mode,
         ...(partial.line ? { line: partial.line } : {}),
         ...(partial.marker ? { marker: partial.marker } : {}),
-        name: sig.title,
+        name: signal.title,
         showlegend: true,
-        uid: sig.id,
-        legendgroup: sig.id,
+        uid: signal.id,
+        legendgroup: signal.id,
         xaxis: axis.xRef,
         yaxis: axis.yRef,
       };
@@ -493,8 +579,8 @@ export function SignalPlot({
     }));
     return [...scopedRoiTraces, ...curveTraces, ...resultTraces];
   }, [
-    allSignals,
     data.id,
+    lodSignals,
     primaryAxis,
     resultTraces,
     roiFillTraces,
@@ -502,9 +588,82 @@ export function SignalPlot({
   ]);
   const orderedSignalIds = allSignals.map((signal) => signal.id).join(",");
   const figureRevision = `${signalLayout.effectiveMode}:${orderedSignalIds}`;
+  const layout = useMemo(
+    () => ({
+      ...plotlyTheme,
+      ...themedAxes,
+      title: { text: data.title },
+      autosize: true,
+      margin: { l: 70, r: 30, t: 40, b: 55 },
+      showlegend: resultTraces.length > 0 || extraSignals.length > 0,
+      uirevision: figureRevision,
+      legend: {
+        ...plotlyTheme.legend,
+        x: 1,
+        y: 1,
+        xanchor: "right" as const,
+        yanchor: "top" as const,
+        bgcolor:
+          theme === "dark" ? "rgba(30,30,30,0.7)" : "rgba(255,255,255,0.7)",
+        bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
+        borderwidth: 1,
+        uirevision: orderedSignalIds,
+      },
+      newshape: roiEditMode
+        ? {
+            line: {
+              color: roiLineColor(roi.length),
+              width: 2,
+              dash: "dot",
+            },
+            fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
+            opacity: 1,
+          }
+        : undefined,
+      ...(roiEditMode && drawGeometry ? { dragmode: "drawrect" as const } : {}),
+      shapes: allShapes,
+      annotations: allAnnotations,
+    }),
+    [
+      plotlyTheme,
+      themedAxes,
+      data.title,
+      resultTraces.length,
+      extraSignals.length,
+      figureRevision,
+      theme,
+      orderedSignalIds,
+      roiEditMode,
+      roi.length,
+      drawGeometry,
+      allShapes,
+      allAnnotations,
+    ],
+  );
+  const config = useMemo(
+    () => ({
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToAdd: roiEditMode
+        ? ["drawrect", "eraseshape"]
+        : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
+      editable: false,
+      edits: {
+        annotationPosition: true,
+        annotationTail: true,
+        annotationText: true,
+        shapePosition: true,
+      },
+    }),
+    [roiEditMode],
+  );
 
   return (
-    <div className="signal-plot-host">
+    <div
+      ref={plotHostRef}
+      className="signal-plot-host"
+      style={SIGNAL_PLOT_HOST_STYLE}
+    >
       {extraSignals.length > 0 && onLayoutModeChange && (
         <div
           className="signal-layout-modebar"
@@ -546,68 +705,10 @@ export function SignalPlot({
         >
           <Plot
             data={allTraces as never}
-            layout={
-              {
-                ...plotlyTheme,
-                ...themedAxes,
-                title: { text: data.title },
-                autosize: true,
-                margin: { l: 70, r: 30, t: 40, b: 55 },
-                showlegend: resultTraces.length > 0 || extraSignals.length > 0,
-                uirevision: figureRevision,
-                // Legend inside the plot, anchored top-right, mirroring the
-                // DataLab desktop layout. A semi-transparent background keeps it
-                // readable when it overlaps the curves.
-                legend: {
-                  ...plotlyTheme.legend,
-                  x: 1,
-                  y: 1,
-                  xanchor: "right",
-                  yanchor: "top",
-                  bgcolor:
-                    theme === "dark"
-                      ? "rgba(30,30,30,0.7)"
-                      : "rgba(255,255,255,0.7)",
-                  bordercolor: theme === "dark" ? "#5a5a5a" : "#bdbdbd",
-                  borderwidth: 1,
-                  uirevision: orderedSignalIds,
-                },
-                // In ROI edit mode, the newshape default uses the next ROI's
-                // color so the freshly drawn rectangle matches its position in
-                // the cycling palette as soon as it is committed.
-                newshape: roiEditMode
-                  ? {
-                      line: {
-                        color: roiLineColor(roi.length),
-                        width: 2,
-                        dash: "dot",
-                      },
-                      fillcolor: hexToRgba(roiLineColor(roi.length), 0.1),
-                      opacity: 1,
-                    }
-                  : undefined,
-                // Auto-arm the rectangle-draw tool when the ROI panel requests it
-                // so the user can trace a first ROI without hunting for a modebar
-                // button (otherwise dragging would just pan/zoom).
-                ...(roiEditMode && drawGeometry
-                  ? { dragmode: "drawrect" as const }
-                  : {}),
-                shapes: allShapes,
-                annotations: allAnnotations,
-              } as never
-            }
-            style={{ width: "100%", height: "100%" }}
+            layout={layout as never}
+            style={SIGNAL_PLOT_STYLE}
             useResizeHandler
-            config={
-              {
-                responsive: true,
-                displaylogo: false,
-                modeBarButtonsToAdd: roiEditMode
-                  ? ["drawrect", "eraseshape"]
-                  : ["drawline", "drawrect", "drawopenpath", "eraseshape"],
-                editable: true,
-              } as never
-            }
+            config={config as never}
             onRelayout={handleRelayout}
             onInitialized={(_fig, gd) => {
               registerActivePlot("signal", gd);
@@ -619,10 +720,21 @@ export function SignalPlot({
                   ev: string,
                   cb: (e: Record<string, unknown>) => void,
                 ) => void;
+                _fullLayout?: { xaxis?: { _length?: number } };
               };
-              g.on?.("plotly_relayouting", (e) =>
-                relayoutHandlerRef.current(e),
-              );
+              const axisWidth = g._fullLayout?.xaxis?._length;
+              if (axisWidth && axisWidth > 0) {
+                const usefulWidth = Math.max(1, Math.floor(axisWidth));
+                setPlotWidth((current) =>
+                  current === usefulWidth ? current : usefulWidth,
+                );
+              }
+              g.on?.("plotly_relayouting", (event) => {
+                const overlayEvent = withoutAxisRelayout(event);
+                if (Object.keys(overlayEvent).length > 0) {
+                  relayoutHandlerRef.current(overlayEvent);
+                }
+              });
             }}
             onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
             onPurge={() => registerActivePlot("signal", null)}
@@ -670,6 +782,32 @@ function restorePrimaryPaperReferences(
         ? "paper"
         : value.yref,
   };
+}
+
+function relayoutXRange(
+  event: Record<string, unknown>,
+): readonly [number, number] | null | undefined {
+  if (event["xaxis.autorange"] === true) return null;
+  const fullRange = event["xaxis.range"];
+  const start = Array.isArray(fullRange)
+    ? Number(fullRange[0])
+    : Number(event["xaxis.range[0]"]);
+  const end = Array.isArray(fullRange)
+    ? Number(fullRange[1])
+    : Number(event["xaxis.range[1]"]);
+  return Number.isFinite(start) && Number.isFinite(end)
+    ? [start, end]
+    : undefined;
+}
+
+function withoutAxisRelayout(
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  const overlayEvent: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(event)) {
+    if (!/^[xy]axis\./.test(key)) overlayEvent[key] = value;
+  }
+  return overlayEvent;
 }
 
 // ---------------------------------------------------------------------------

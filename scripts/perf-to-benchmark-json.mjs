@@ -87,11 +87,11 @@ function cfgLabel(r) {
   if (got) {
     used.push(got.file);
     const r = got.data.result;
-    // Deterministic: approximate JSON payload for the batched fetch.
+    // Deterministic: actual typed-array bytes in the batched fetch.
     determinist.push({
       name: `image_perf · payload (${r.imageCount} imgs)`,
       unit: "MB",
-      value: +(r.payloadBytesApprox / 1e6).toFixed(3),
+      value: +(r.payloadBytes / 1e6).toFixed(3),
     });
     // Timings (trend only).
     timings.push({
@@ -102,13 +102,72 @@ function cfgLabel(r) {
     timings.push({
       name: "image_perf · getImagesData (×4)",
       unit: "ms",
-      value: +r.getImagesDataMs.toFixed(1),
+      value: +r.getImagesData.totalMs.toFixed(1),
     });
     timings.push({
-      name: "image_perf · plotly draw",
+      name: "image_perf · single Plotly render",
       unit: "ms",
-      value: +r.plotlyDrawMs.toFixed(1),
+      value: +r.singlePlotlyRenderMs.toFixed(1),
     });
+    timings.push({
+      name: "image_perf · grid React commit",
+      unit: "ms",
+      value: +r.multiSelectToCommitMs.toFixed(1),
+    });
+    timings.push({
+      name: "image_perf · grid canvas paint",
+      unit: "ms",
+      value: +r.commitToCanvasPaintMs.toFixed(1),
+    });
+  }
+}
+
+// --- signal_perf ----------------------------------------------------
+{
+  const got = latest("signal_perf_");
+  if (got) {
+    used.push(got.file);
+    for (const r of got.data.results) {
+      const label = `${r.size} pts`;
+      determinist.push({
+        name: `signal_perf · payload [${label}]`,
+        unit: "MB",
+        value: +(r.fetch.payloadBytes / 1e6).toFixed(3),
+      });
+      determinist.push({
+        name: `signal_perf · Plotly points [${label}]`,
+        unit: "points",
+        value: r.plottedPoints,
+      });
+      timings.push({
+        name: `signal_perf · select → visible [${label}]`,
+        unit: "ms",
+        value: +r.selectToVisibleMs.toFixed(1),
+      });
+      timings.push({
+        name: `signal_perf · binary fetch [${label}]`,
+        unit: "ms",
+        value: +r.fetch.totalMs.toFixed(1),
+      });
+      timings.push({
+        name: `signal_perf · longest task [${label}]`,
+        unit: "ms",
+        value: +r.longestTaskMs.toFixed(1),
+      });
+      for (const [interaction, value] of [
+        ["hover", r.hoverMs],
+        ["pan", r.panMs],
+        ["zoom", r.zoomMs],
+      ]) {
+        if (typeof value === "number") {
+          timings.push({
+            name: `signal_perf · ${interaction} [${label}]`,
+            unit: "ms",
+            value: +value.toFixed(1),
+          });
+        }
+      }
+    }
   }
 }
 

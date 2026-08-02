@@ -19,6 +19,7 @@ interface Props {
   min: number;
   max: number;
   onChange: (next: number) => void;
+  onCommit?: (next: number) => void;
   ariaLabel?: string;
 }
 
@@ -28,6 +29,7 @@ export function Splitter({
   min,
   max,
   onChange,
+  onCommit,
   ariaLabel,
 }: Props) {
   const dragging = useRef<{
@@ -35,7 +37,18 @@ export function Splitter({
     startY: number;
     startValue: number;
   } | null>(null);
+  const pendingValue = useRef<number | null>(null);
+  const latestValue = useRef(value);
+  const animationFrame = useRef<number | null>(null);
   const horizontal = side === "top" || side === "bottom";
+
+  const flushPendingValue = useCallback(() => {
+    animationFrame.current = null;
+    if (pendingValue.current === null) return;
+    const next = pendingValue.current;
+    pendingValue.current = null;
+    onChange(next);
+  }, [onChange]);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -45,6 +58,8 @@ export function Splitter({
         startY: event.clientY,
         startValue: value,
       };
+      latestValue.current = value;
+      pendingValue.current = null;
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       document.body.style.cursor = horizontal ? "row-resize" : "col-resize";
       document.body.style.userSelect = "none";
@@ -60,20 +75,37 @@ export function Splitter({
       if (horizontal) {
         delta = event.clientY - state.startY;
         const signed = side === "bottom" ? -delta : delta;
-        const next = Math.min(max, Math.max(min, state.startValue + signed));
-        onChange(next);
+        latestValue.current = Math.min(
+          max,
+          Math.max(min, state.startValue + signed),
+        );
       } else {
         delta = event.clientX - state.startX;
         const signed = side === "right" ? -delta : delta;
-        const next = Math.min(max, Math.max(min, state.startValue + signed));
-        onChange(next);
+        latestValue.current = Math.min(
+          max,
+          Math.max(min, state.startValue + signed),
+        );
+      }
+      pendingValue.current = latestValue.current;
+      if (animationFrame.current === null) {
+        animationFrame.current = requestAnimationFrame(flushPendingValue);
       }
     },
-    [side, min, max, onChange, horizontal],
+    [side, min, max, horizontal, flushPendingValue],
   );
 
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging.current) return;
+      if (animationFrame.current !== null) {
+        cancelAnimationFrame(animationFrame.current);
+        animationFrame.current = null;
+      }
+      if (pendingValue.current !== null) {
+        onChange(pendingValue.current);
+        pendingValue.current = null;
+      }
       dragging.current = null;
       try {
         (event.currentTarget as HTMLElement).releasePointerCapture(
@@ -84,14 +116,18 @@ export function Splitter({
       }
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      onCommit?.(latestValue.current);
     },
-    [],
+    [onChange, onCommit],
   );
 
   // Cleanup body cursor on unmount in case the pointer-up event was
   // missed (e.g. component unmounted mid-drag).
   useEffect(() => {
     return () => {
+      if (animationFrame.current !== null) {
+        cancelAnimationFrame(animationFrame.current);
+      }
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -113,7 +149,9 @@ export function Splitter({
       onDoubleClick={() => {
         // Reset to mid-range — handy escape hatch when the user has
         // dragged the panel outside the visible area.
-        onChange(Math.round((min + max) / 2));
+        const next = Math.round((min + max) / 2);
+        onChange(next);
+        onCommit?.(next);
       }}
     >
       <div className="splitter-grip" aria-hidden="true" />

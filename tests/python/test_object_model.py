@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -141,6 +143,62 @@ def test_signal_and_image_panels_are_isolated(fresh_bootstrap):
         sig_tree["groups"][0]["objects"][0]["id"]
         != img_tree["groups"][0]["objects"][0]["id"]
     )
+
+
+@pytest.mark.parametrize("kind", ["signal", "image"])
+def test_object_property_schema_omits_heavy_values(fresh_bootstrap, kind):
+    """Property payload size does not grow with the scientific data array."""
+    bs = fresh_bootstrap
+    if kind == "signal":
+        small_oid = bs.add_signal_from_arrays("Object", np.arange(3), np.arange(3))
+        large_oid = bs.add_signal_from_arrays(
+            "Object", np.arange(100_000), np.arange(100_000)
+        )
+    else:
+        small_oid = bs.add_image_from_array("Object", np.zeros((2, 2)))
+        large_oid = bs.add_image_from_array("Object", np.zeros((512, 512)))
+
+    small = bs.get_object_property_schema(small_oid)
+    large = bs.get_object_property_schema(large_oid)
+    properties = large["schema"]["properties"]
+    hidden_names = {
+        name
+        for name, prop in properties.items()
+        if prop.get("x-guidata-kind") in {"float_array", "dict"}
+    }
+
+    assert hidden_names
+    assert hidden_names.isdisjoint(large["values"])
+    assert all(properties[name]["x-guidata-hide"] is True for name in hidden_names)
+    small_size = len(json.dumps(small))
+    large_size = len(json.dumps(large))
+    assert large_size < 20_000
+    assert abs(large_size - small_size) < 100
+
+
+def test_signal_data_preview_is_bounded(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("Signal", np.arange(20), np.arange(20) ** 2)
+
+    preview = bs.get_signal_data_preview(oid, head=3, tail=2)
+
+    assert preview == {
+        "size": 20,
+        "indices": [0, 1, 2, 18, 19],
+        "x": [0.0, 1.0, 2.0, 18.0, 19.0],
+        "y": [0.0, 1.0, 4.0, 324.0, 361.0],
+    }
+
+
+def test_signal_data_preview_does_not_duplicate_short_signal(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("Signal", [0, 1, 2], [3, 4, 5])
+
+    preview = bs.get_signal_data_preview(oid)
+
+    assert preview["indices"] == [0, 1, 2]
+    assert preview["x"] == [0.0, 1.0, 2.0]
+    assert preview["y"] == [3.0, 4.0, 5.0]
 
 
 def test_rename_unknown_group_raises(fresh_bootstrap):

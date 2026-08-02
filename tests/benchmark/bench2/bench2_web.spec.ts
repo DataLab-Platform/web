@@ -27,6 +27,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { waitForRuntimeReady } from "../../e2e/fixtures";
+import {
+  installPlotlyMetrics,
+  readPlotlyMetrics,
+  waitForNextPlotRender,
+} from "../../e2e/helpers/plotlyMetrics";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SHARED = resolve(HERE, "..", "shared");
@@ -63,6 +68,7 @@ test.describe("bench2 — DataLab-Web full stack", () => {
   test(`web app × ${N_WARMUP} warmup + ${N_RUNS} measured runs`, async ({
     page,
   }) => {
+    await installPlotlyMetrics(page);
     page.on("console", (msg) => {
       if (msg.type() === "error" || msg.type() === "warning")
         console.log(`[browser:${msg.type()}]`, msg.text());
@@ -95,61 +101,6 @@ if "/home/pyodide" not in sys.path:
 import chain_runner  # warm import
 `);
     }, chainRunnerSrc);
-
-    // Hook plotly_afterplot once for the whole test (applies to every
-    // newly-mounted .js-plotly-plot via a MutationObserver).
-    await page.evaluate(() => {
-      type WinExt = Window & { __plotlyDrawCount?: number };
-      const w = window as unknown as WinExt;
-      w.__plotlyDrawCount = 0;
-      const hook = (node: Element) => {
-        const gd = node as unknown as {
-          on?: (ev: string, cb: () => void) => void;
-          __dlwHooked?: boolean;
-        };
-        if (!gd.on || gd.__dlwHooked) return;
-        gd.__dlwHooked = true;
-        gd.on("plotly_afterplot", () => {
-          w.__plotlyDrawCount = (w.__plotlyDrawCount ?? 0) + 1;
-        });
-      };
-      document.querySelectorAll(".js-plotly-plot").forEach(hook);
-      const obs = new MutationObserver((muts) => {
-        for (const m of muts) {
-          m.addedNodes.forEach((n) => {
-            if (!(n instanceof Element)) return;
-            if (n.classList?.contains("js-plotly-plot")) hook(n);
-            n.querySelectorAll?.(".js-plotly-plot").forEach(hook);
-          });
-        }
-      });
-      obs.observe(document.body, { childList: true, subtree: true });
-    });
-
-    const getDrawCount = (): Promise<number> =>
-      page.evaluate(
-        () =>
-          (window as unknown as { __plotlyDrawCount?: number })
-            .__plotlyDrawCount ?? 0,
-      );
-
-    const waitForNextDraw = async (
-      previousCount: number,
-      timeout = 5_000,
-    ): Promise<boolean> => {
-      try {
-        await page.waitForFunction(
-          (pc: number) =>
-            ((window as unknown as { __plotlyDrawCount?: number })
-              .__plotlyDrawCount ?? 0) > pc,
-          previousCount,
-          { timeout },
-        );
-        return true;
-      } catch {
-        return false;
-      }
-    };
 
     const dispatchModelChanged = (): Promise<void> =>
       page.evaluate((evtName: string) => {
@@ -201,10 +152,10 @@ import chain_runner  # warm import
       await waitForTreeCount(0);
 
       const perStepProcessMs: Record<string, number> = {};
-      const perStepRenderMs: Record<string, number> = {};
+      const perStepRenderMs: Record<string, number | null> = {};
       for (const s of chain.steps) {
         perStepProcessMs[s.name] = 0;
-        perStepRenderMs[s.name] = 0;
+        perStepRenderMs[s.name] = s.renders_image ? 0 : null;
       }
       let blobChecksum = 0;
       const tWall = Date.now();
@@ -251,15 +202,18 @@ _MODEL.add_object("image", __bench_images[__bench_idx])
 `)) as string;
         }, imgIdx)) as string;
 
-        // Render the source image: take draw count *before* dispatching
-        // so we catch the auto-render that ``refresh()`` triggers when
-        // it auto-selects the freshly-added image.
-        const drawCountBeforeSource = await getDrawCount();
+        // Render the source image and wait until the graph is both visible and
+        // instrumented. Result selections below reuse this graph, so their
+        // ``plotly_afterplot`` events cannot race the listener installation.
+        const sourceMetricsBefore = await readPlotlyMetrics(page);
         await dispatchModelChanged();
         await waitForTreeCount(1);
-        // Best-effort: tolerate a missed draw signal so the bench
-        // continues; wall_ms still captures end-to-end cost.
-        await waitForNextDraw(drawCountBeforeSource, 5_000);
+        await waitForNextPlotRender(
+          page,
+          sourceMetricsBefore.plotRenders.length,
+          "image",
+          30_000,
+        );
 
         for (const step of chain.steps) {
           // ── Process ──
@@ -356,23 +310,29 @@ _n
             blobChecksum += Number(n);
           }
 
-          // Best-effort per-step render measurement: dispatch the
-          // model-changed event, click the new result, time the next
-          // Plotly draw. We use a short timeout and swallow misses so
-          // a stuck draw cycle doesn't fail the whole bench — the
-          // wall_ms ground truth still captures end-to-end cost.
-          if (step.renders_image && processResult.newOids.length > 0) {
-            const drawCountBefore = await getDrawCount();
+          // A rendering step must produce an object and a real
+          // ``plotly_afterplot`` event. Missing redraws are instrumentation
+          // failures, not zero-duration samples.
+          if (step.renders_image) {
+            expect(processResult.newOids.length).toBeGreaterThan(0);
+            const metricsBefore = await readPlotlyMetrics(page);
             await dispatchModelChanged();
-            try {
-              await waitForTreeCount(2, 5_000);
-              const tRender0 = Date.now();
-              await treeItems.nth(1).click({ timeout: 2_000 });
-              const drew = await waitForNextDraw(drawCountBefore, 5_000);
-              if (drew) perStepRenderMs[step.name] += Date.now() - tRender0;
-            } catch {
-              /* skip render measurement for this iteration */
+            await waitForTreeCount(2, 30_000);
+            const tRender0 = await page.evaluate(() => performance.now());
+            await treeItems.nth(1).click({ timeout: 10_000 });
+            await waitForNextPlotRender(
+              page,
+              metricsBefore.plotRenders.length,
+              "image",
+              30_000,
+            );
+            const tRender1 = await page.evaluate(() => performance.now());
+            const currentRenderMs = perStepRenderMs[step.name];
+            if (currentRenderMs === null) {
+              throw new Error(`Missing render accumulator for ${step.name}`);
             }
+            perStepRenderMs[step.name] =
+              currentRenderMs + (tRender1 - tRender0);
             // Delete intermediate(s) so the next step starts clean.
             for (const oid of processResult.newOids) {
               await page.evaluate(async (id: string) => {
@@ -421,7 +381,7 @@ _n
       const wallMs = Date.now() - tWall;
       const totalMs =
         Object.values(perStepProcessMs).reduce((a, b) => a + b, 0) +
-        Object.values(perStepRenderMs).reduce((a, b) => a + b, 0);
+        Object.values(perStepRenderMs).reduce((a, b) => a + (b ?? 0), 0);
 
       const payload = {
         bench: "bench2",
@@ -445,7 +405,7 @@ _n
         `${isWarmup ? "_warmup" : ""}.json`;
       writeFileSync(resolve(RESULTS, fname), JSON.stringify(payload, null, 2));
       const renderTotal = Object.values(perStepRenderMs).reduce(
-        (a, b) => a + b,
+        (a, b) => a + (b ?? 0),
         0,
       );
       console.log(

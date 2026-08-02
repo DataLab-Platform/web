@@ -2,7 +2,9 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { GroupNode, ObjectNode, PanelTree } from "../runtime/runtime";
@@ -93,6 +95,74 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
     const [editValue, setEditValue] = useState("");
     const [draggedOids, setDraggedOids] = useState<string[] | null>(null);
     const [dropZone, setDropZone] = useState<DropZone | null>(null);
+    const previousTreeRef = useRef<{
+      kind: PanelTree["kind"];
+      ids: Set<string>;
+    } | null>(null);
+    const pendingRevealIdRef = useRef<string | null>(null);
+    const itemElementsRef = useRef<Map<string, HTMLLIElement>>(new Map());
+
+    useLayoutEffect(() => {
+      if (!tree) {
+        previousTreeRef.current = null;
+        pendingRevealIdRef.current = null;
+        return;
+      }
+
+      const orderedIds = tree.groups.flatMap((group) =>
+        group.objects.map((object) => object.id),
+      );
+      const previousTree = previousTreeRef.current;
+      previousTreeRef.current = {
+        kind: tree.kind,
+        ids: new Set(orderedIds),
+      };
+
+      if (!previousTree || previousTree.kind !== tree.kind) {
+        pendingRevealIdRef.current = null;
+        return;
+      }
+
+      const pendingId = pendingRevealIdRef.current;
+      if (pendingId) {
+        const pendingElement = itemElementsRef.current.get(pendingId);
+        if (pendingElement) {
+          pendingElement.scrollIntoView({
+            block: "nearest",
+            inline: "nearest",
+          });
+          pendingRevealIdRef.current = null;
+        }
+        return;
+      }
+
+      const addedIds = orderedIds.filter((id) => !previousTree.ids.has(id));
+      if (addedIds.length === 0) return;
+
+      const targetId =
+        currentId && addedIds.includes(currentId)
+          ? currentId
+          : addedIds[addedIds.length - 1];
+      pendingRevealIdRef.current = targetId;
+
+      const targetGroup = tree.groups.find((group) =>
+        group.objects.some((object) => object.id === targetId),
+      );
+      if (targetGroup && collapsed.has(targetGroup.gid)) {
+        setCollapsed((previous) => {
+          const next = new Set(previous);
+          next.delete(targetGroup.gid);
+          return next;
+        });
+        return;
+      }
+
+      const targetElement = itemElementsRef.current.get(targetId);
+      if (targetElement) {
+        targetElement.scrollIntoView({ block: "nearest", inline: "nearest" });
+        pendingRevealIdRef.current = null;
+      }
+    }, [tree, currentId, collapsed]);
 
     useImperativeHandle(
       ref,
@@ -427,6 +497,11 @@ export const ObjectTree = forwardRef<ObjectTreeHandle, Props>(
                     return (
                       <li
                         key={o.id}
+                        ref={(element) => {
+                          if (element)
+                            itemElementsRef.current.set(o.id, element);
+                          else itemElementsRef.current.delete(o.id);
+                        }}
                         className={cls}
                         draggable
                         onDragStart={(e) => handleDragStart(o.id, e)}

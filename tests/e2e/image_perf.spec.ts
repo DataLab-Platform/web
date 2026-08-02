@@ -18,6 +18,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { waitForRuntimeReady } from "./fixtures";
+import {
+  installPlotlyMetrics,
+  measureRuntimePayload,
+  readPlotlyMetrics,
+  resetPlotlyMetrics,
+  waitForNextPlotRender,
+  type RuntimePayloadMetric,
+} from "./helpers/plotlyMetrics";
 
 interface BenchResult {
   imageCount: number;
@@ -25,18 +33,29 @@ interface BenchResult {
   height: number;
   // Backend / bridge timings (ms)
   createMs: number[];
-  getImagesDataMs: number; // batched call (used by MultiImagePlot path)
-  getImageDataMsPerImage: number[]; // sequential, mirrors current App.tsx single + batch
-  payloadBytesApprox: number; // estimated JSON bytes for getImagesData payload
+  getImagesData: RuntimePayloadMetric;
+  getImageDataPerImage: RuntimePayloadMetric[];
+  payloadBytes: number;
   // Render timings (ms)
-  multiSelectToGridMs: number; // tree click → 4th heatmap visible
-  plotlyDrawMs: number; // sum of plotly_afterplot timings
+  singleSelectToPlotMs: number;
+  singlePlotlyRenderMs: number;
+  singleReactDrawCount: number;
+  multiSelectToCommitMs: number;
+  commitToCanvasPaintMs: number;
+  multiSelectToGridMs: number;
+  gridPlotlyRedrawMs: number | null;
+  gridPlotlyGraphCount: number;
+  plotlyReactCount: number;
+  longTaskCount: number;
+  longTaskTotalMs: number;
+  longestTaskMs: number;
 }
 
 test.describe("Image display perf", () => {
   test.setTimeout(300_000);
 
   test("4 × default-size images, multi-selected", async ({ page }) => {
+    await installPlotlyMetrics(page);
     // Capture browser console output to surface async errors / warnings
     // that may explain unexpected slowness.
     page.on("console", (msg) => {
@@ -54,18 +73,10 @@ test.describe("Image display perf", () => {
     // 1. Backend benchmark: create 4 images of different types and
     //    measure each backend round-trip.
     // ---------------------------------------------------------------
-    const backend = await page.evaluate(async () => {
+    const created = await page.evaluate(async () => {
       type Runtime = {
         listImageCreationTypes: () => Promise<{ value: string }[]>;
         createImageTyped: (s: string) => Promise<string>;
-        getImageData: (oid: string) => Promise<{
-          width: number;
-          height: number;
-          data: number[][];
-        }>;
-        getImagesData: (
-          oids: string[],
-        ) => Promise<{ width: number; height: number }[]>;
       };
       const runtime = (window as unknown as { runtime: Runtime }).runtime;
 
@@ -81,47 +92,24 @@ test.describe("Image display perf", () => {
         createMs.push(performance.now() - t0);
         ids.push(oid);
       }
-      // Single-image fetch per id (sequential; mirrors current
-      // App.tsx behaviour where the focused image is fetched
-      // separately from the extras).
-      const getImageDataMsPerImage: number[] = [];
-      let firstShape = { width: 0, height: 0 };
-      for (const oid of ids) {
-        const t0 = performance.now();
-        const d = await runtime.getImageData(oid);
-        getImageDataMsPerImage.push(performance.now() - t0);
-        firstShape = { width: d.width, height: d.height };
-      }
-      // Batched fetch (what MultiImagePlot ultimately consumes for
-      // the *extras*).
-      const tBatch = performance.now();
-      const batched = await runtime.getImagesData(ids);
-      const getImagesDataMs = performance.now() - tBatch;
-
-      // Approximate JSON payload size of the batched call.  A float
-      // serialised as decimal averages ~17 chars + ',' + brackets,
-      // so we use a representative character count from the first
-      // image's data.tolist().  Cheaper than JSON.stringify of all
-      // images.
-      const tStr = performance.now();
-      const sample = await runtime.getImageData(ids[0]);
-      const sampleStr = JSON.stringify(sample.data);
-      const stringifyMs = performance.now() - tStr;
-
-      return {
-        types: picked,
-        ids,
-        createMs,
-        getImageDataMsPerImage,
-        getImagesDataMs,
-        firstShape,
-        batchedCount: batched.length,
-        sampleBytes: sampleStr.length,
-        stringifyMs,
-      };
+      return { types: picked, ids, createMs };
     });
 
-    expect(backend.batchedCount).toBe(4);
+    const getImageDataPerImage: RuntimePayloadMetric[] = [];
+    for (const oid of created.ids) {
+      getImageDataPerImage.push(
+        await measureRuntimePayload(page, "getImageData", [oid]),
+      );
+    }
+    const getImagesData = await measureRuntimePayload(page, "getImagesData", [
+      created.ids,
+    ]);
+    expect(getImagesData.itemCount).toBe(4);
+    const expectedPayloadBytes = getImagesData.shapes.reduce(
+      (total, shape) => total + (shape.width ?? 0) * (shape.height ?? 0) * 4,
+      0,
+    );
+    expect(getImagesData.payloadBytes).toBe(expectedPayloadBytes);
 
     // Force the App to repopulate the object tree (it was rendered
     // before the images existed).  Toggling the panel switcher fires
@@ -130,8 +118,8 @@ test.describe("Image display perf", () => {
     await page.getByRole("tab", { name: "Images" }).click();
 
     // ---------------------------------------------------------------
-    // 2. UI benchmark: instrument plotly_afterplot, then ctrl-click
-    //    the 3 other images so the grid renders.
+    // 2. UI benchmark: measure the first Plotly viewer, then the React
+    //    commit and canvas paint of the multi-image grid separately.
     // ---------------------------------------------------------------
     const items = page.locator(".object-tree-item");
     await expect
@@ -141,66 +129,41 @@ test.describe("Image display perf", () => {
     // First click: focus image #0 (single ImagePlot).  We measure the
     // multi-select latency from the moment we add image #2/#3/#4 to
     // the selection until the 4-cell grid is on screen.
+    // Warm the initial mount. The graphDiv only exposes its event emitter
+    // after Plotly's first render, so this mount is deliberately not timed.
+    const warmMetrics = await readPlotlyMetrics(page);
     await items.nth(0).click();
-    await page.waitForSelector(".js-plotly-plot", { timeout: 30_000 });
+    await waitForNextPlotRender(page, warmMetrics.plotRenders.length, "image");
 
-    // Hook plotly's draw callback before we trigger the multi-select.
-    await page.evaluate(() => {
-      type WinExt = Window & {
-        __plotlyDrawMs?: number;
-        __plotlyDrawCount?: number;
-      };
-      const w = window as unknown as WinExt;
-      w.__plotlyDrawMs = 0;
-      w.__plotlyDrawCount = 0;
-      // react-plotly.js attaches the gd to the wrapper div; we hook
-      // into the Plotly events on each existing plot div and on any
-      // newly-mounted ones via a MutationObserver.
-      const hook = (node: Element) => {
-        const gd = node as unknown as {
-          on?: (ev: string, cb: () => void) => void;
-          __dlwHooked?: boolean;
-          __dlwStart?: number;
-        };
-        if (!gd.on || gd.__dlwHooked) return;
-        gd.__dlwHooked = true;
-        gd.on("plotly_beforeplot", () => {
-          gd.__dlwStart = performance.now();
-        });
-        gd.on("plotly_afterplot", () => {
-          if (gd.__dlwStart !== undefined) {
-            w.__plotlyDrawMs =
-              (w.__plotlyDrawMs ?? 0) + (performance.now() - gd.__dlwStart);
-            w.__plotlyDrawCount = (w.__plotlyDrawCount ?? 0) + 1;
-            gd.__dlwStart = undefined;
-          }
-        });
-      };
-      document.querySelectorAll(".js-plotly-plot").forEach(hook);
-      const obs = new MutationObserver((muts) => {
-        for (const m of muts) {
-          m.addedNodes.forEach((n) => {
-            if (!(n instanceof Element)) return;
-            if (n.classList?.contains("js-plotly-plot")) hook(n);
-            n.querySelectorAll?.(".js-plotly-plot").forEach(hook);
-          });
-        }
-      });
-      obs.observe(document.body, { childList: true, subtree: true });
-      (w as unknown as { __plotlyObs?: MutationObserver }).__plotlyObs = obs;
-    });
+    // Measure a React-driven update on the already-instrumented graph.
+    await resetPlotlyMetrics(page);
+    const tSingle = await page.evaluate(() => performance.now());
+    await items.nth(1).click();
+    const singleRender = await waitForNextPlotRender(page, 0, "image");
+    const tSingleDone = await page.evaluate(() => performance.now());
+    const singleMetrics = await readPlotlyMetrics(page);
 
-    // Trigger the multi-select by ctrl-clicking the 3 other images.
+    // Anchor the range on the first image before timing the transition.
+    await items.nth(0).click();
+    await waitForNextPlotRender(
+      page,
+      singleMetrics.plotRenders.length,
+      "image",
+    );
+
+    // Select the full contiguous range atomically. Sequential Ctrl-clicks
+    // would render intermediate two/three-image states and pollute this
+    // single-image-to-grid measurement.
+    await resetPlotlyMetrics(page);
     const tSel = await page.evaluate(() => performance.now());
-    for (let i = 1; i < 4; i += 1) {
-      await items.nth(i).click({ modifiers: ["Control"] });
-    }
+    await items.nth(3).click({ modifiers: ["Shift"] });
     // Wait for the grid to mount and contain 4 cells.
     await page.waitForFunction(
       () => document.querySelectorAll(".multi-image-cell").length >= 4,
       undefined,
       { timeout: 60_000 },
     );
+    const tCommit = await page.evaluate(() => performance.now());
     // Wait until each cell's canvas has been painted (``width`` is
     // only set once :func:`paintImageData` runs in our ``useEffect``).
     await page.waitForFunction(
@@ -215,6 +178,10 @@ test.describe("Image display perf", () => {
       { timeout: 120_000 },
     );
     const tDone = await page.evaluate(() => performance.now());
+    const gridMetrics = await readPlotlyMetrics(page);
+    const gridPlotlyGraphCount = await page
+      .locator(".multi-image-cell .js-plotly-plot")
+      .count();
 
     // Save a screenshot of the rendered grid for visual verification.
     await page.screenshot({
@@ -222,62 +189,78 @@ test.describe("Image display perf", () => {
       fullPage: false,
     });
 
-    const drawStats = await page.evaluate(() => {
-      const w = window as unknown as {
-        __plotlyDrawMs?: number;
-        __plotlyDrawCount?: number;
-      };
-      return {
-        ms: w.__plotlyDrawMs ?? 0,
-        count: w.__plotlyDrawCount ?? 0,
-      };
-    });
+    const firstShape = getImagesData.shapes[0] ?? {};
+    const singlePlotlyRenderMs = singleRender.startTime - tSingle;
+    const gridPlotlyRedrawMs =
+      gridMetrics.drawDurations.length > 0
+        ? gridMetrics.drawDurations.reduce((total, value) => total + value, 0)
+        : null;
+    const longTaskTotalMs = gridMetrics.longTasks.reduce(
+      (total, task) => total + task.duration,
+      0,
+    );
 
     const result: BenchResult = {
       imageCount: 4,
-      width: backend.firstShape.width,
-      height: backend.firstShape.height,
-      createMs: backend.createMs,
-      getImagesDataMs: backend.getImagesDataMs,
-      getImageDataMsPerImage: backend.getImageDataMsPerImage,
-      payloadBytesApprox: backend.sampleBytes * 4,
+      width: firstShape.width ?? 0,
+      height: firstShape.height ?? 0,
+      createMs: created.createMs,
+      getImagesData,
+      getImageDataPerImage,
+      payloadBytes: getImagesData.payloadBytes,
+      singleSelectToPlotMs: tSingleDone - tSingle,
+      singlePlotlyRenderMs,
+      singleReactDrawCount: singleMetrics.plotRenders.length,
+      multiSelectToCommitMs: tCommit - tSel,
+      commitToCanvasPaintMs: tDone - tCommit,
       multiSelectToGridMs: tDone - tSel,
-      plotlyDrawMs: drawStats.ms,
+      gridPlotlyRedrawMs,
+      gridPlotlyGraphCount,
+      plotlyReactCount: gridMetrics.plotRenders.length,
+      longTaskCount: gridMetrics.longTasks.length,
+      longTaskTotalMs,
+      longestTaskMs: Math.max(
+        0,
+        ...gridMetrics.longTasks.map((t) => t.duration),
+      ),
     };
+    expect(result.singleReactDrawCount).toBeGreaterThan(0);
+    expect(result.gridPlotlyGraphCount).toBe(0);
+    expect(result.gridPlotlyRedrawMs).toBeNull();
 
     console.log("\n=== Image display benchmark ===");
     console.log(
       `Image size:                ${result.width} × ${result.height}`,
     );
-    console.log(`Image kinds:               ${backend.types.join(", ")}`);
+    console.log(`Image kinds:               ${created.types.join(", ")}`);
     console.log(
       `create_image_typed (each): ${result.createMs.map((v) => v.toFixed(0)).join(", ")} ms`,
     );
     console.log(
-      `get_image_data (each):     ${result.getImageDataMsPerImage
-        .map((v) => v.toFixed(0))
+      `get_image_data (each):     ${result.getImageDataPerImage
+        .map((metric) => metric.totalMs.toFixed(0))
         .join(", ")} ms`,
     );
     console.log(
-      `get_images_data (×4):      ${result.getImagesDataMs.toFixed(0)} ms`,
+      `get_images_data (×4):      ${result.getImagesData.totalMs.toFixed(0)} ms`,
     );
     console.log(
-      `JSON.stringify(1 img):     ${backend.stringifyMs.toFixed(0)} ms (${(
-        backend.sampleBytes / 1e6
-      ).toFixed(2)} MB)`,
+      `  queue / bridge / decode: ${result.getImagesData.queueWaitMs?.toFixed(1) ?? "n/a"} / ${result.getImagesData.bridgeAndTransferMs?.toFixed(1) ?? "n/a"} / ${result.getImagesData.decodeMs?.toFixed(1) ?? "n/a"} ms`,
     );
     console.log(
-      `Approx payload (×4):       ${(result.payloadBytesApprox / 1e6).toFixed(
-        2,
-      )} MB`,
+      `Binary payload (×4):       ${(result.payloadBytes / 1e6).toFixed(2)} MB`,
     );
     console.log(
-      `Plotly draw (sum, n=${drawStats.count}):    ${result.plotlyDrawMs.toFixed(
-        0,
-      )} ms`,
+      `Single select → Plotly:    ${result.singleSelectToPlotMs.toFixed(0)} ms (render ${result.singlePlotlyRenderMs.toFixed(0)} ms, n=${result.singleReactDrawCount})`,
     );
     console.log(
-      `Multi-select → grid:       ${result.multiSelectToGridMs.toFixed(0)} ms`,
+      `Multi-select → commit:     ${result.multiSelectToCommitMs.toFixed(0)} ms`,
+    );
+    console.log(
+      `Commit → canvas paint:     ${result.commitToCanvasPaintMs.toFixed(0)} ms`,
+    );
+    console.log(
+      `Multi-select → grid:       ${result.multiSelectToGridMs.toFixed(0)} ms (${result.longTaskCount} long tasks, max ${result.longestTaskMs.toFixed(0)} ms)`,
     );
     console.log("================================\n");
 
@@ -296,7 +279,7 @@ test.describe("Image display perf", () => {
       JSON.stringify(
         {
           generatedAt: new Date().toISOString(),
-          imageKinds: backend.types,
+          imageKinds: created.types,
           result,
         },
         null,

@@ -11,6 +11,7 @@ import {
   _resetRegistryForTests,
   capturePlotPng,
   getMostRecentPanel,
+  PLOT_RENDERED_EVENT,
   registerActivePlot,
   resolveGraphDiv,
 } from "../../../src/aiassistant/plotCapture";
@@ -41,6 +42,22 @@ describe("plotCapture", () => {
     registerActivePlot("signal", null);
     expect(getMostRecentPanel()).toBeNull();
     expect(resolveGraphDiv("signal")).toBeNull();
+  });
+
+  it("announces initialized and updated plot renders", () => {
+    const details: unknown[] = [];
+    window.addEventListener(PLOT_RENDERED_EVENT, (event) => {
+      details.push((event as CustomEvent).detail);
+    });
+    const gd = document.createElement("div");
+
+    registerActivePlot("signal", gd);
+    registerActivePlot("signal", gd);
+
+    expect(details).toEqual([
+      { kind: "signal", phase: "initialized", sequence: 1 },
+      { kind: "signal", phase: "updated", sequence: 2 },
+    ]);
   });
 
   it("capturePlotPng forwards to window.Plotly.toImage and returns a data URL", async () => {

@@ -41,10 +41,9 @@ npm run test:cov
 npx playwright install chromium   # one-time
 npm run test:e2e
 
-# Performance benchmarks (opt-in — ~5 min). Includes the image-display
-# benchmark and the 50k-sample binary transfer probe.
+# Performance benchmarks (opt-in). Includes image and signal display
+# baselines plus the OPFS transfer/storage probes.
 npx playwright test --project=perf
-PERF=1 npm run test:e2e
 
 # Run a throwaway `_repro_*` probe (the default suite ignores them).
 $env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts
@@ -69,10 +68,9 @@ The default Playwright project (`chromium`) runs the regression suite and intent
 npm run test:e2e                       # default chromium suite (CI default)
 npm run test:e2e:perf                  # perf benchmarks only (--project=perf)
 npx playwright test --project=perf     # same, explicit form
-PERF=1 npm run test:e2e                # chromium suite + PERF-gated probes
 ```
 
-When you need a perf or budget-style probe, mark it with `test.skip(!process.env.PERF, "...")` (it then runs in `chromium` only under `PERF=1`) or add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`).
+When you need a perf or budget-style probe, add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `signal_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`). The default `chromium` project must ignore the same file so an ordinary E2E run remains cheap.
 
 ## Performance benchmarks: on-demand CI and regression tracking
 
@@ -85,8 +83,10 @@ Perf benchmarks are **deterministic with respect to the code**: if nothing chang
 
 Results are tracked over time with [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) on the orphan `benchmarks` branch (open `dev/bench/determinist/index.html` or `dev/bench/timings/index.html` from that branch to view the charts). [scripts/perf-to-benchmark-json.mjs](../scripts/perf-to-benchmark-json.mjs) converts the raw result JSON into the action's `customSmallerIsBetter` format, splitting metrics into two groups with different policies:
 
-- **Deterministic** (memory Δheap in MiB, approximate JSON payload in MB) — these make trustworthy gates. On a `run-perf` pull request, an increase beyond **125 %** of the baseline **fails the check** and comments on the PR. On `main` / tags the value is recorded but never fails (the change is already merged).
+- **Deterministic** (memory Δheap in MiB, actual typed-array payload bytes, points handed to Plotly) — these make trustworthy gates. On a `run-perf` pull request, an increase beyond **125 %** of the baseline **fails the check** and comments on the PR. On `main` / tags the value is recorded but never fails (the change is already merged).
 - **Timings** (milliseconds) — noisy on shared CI runners, so they are tracked with a wide **200 %** threshold and **never fail**; they exist purely for trend inspection.
+
+`image_perf.spec.ts` separates the runtime queue/bridge measurement from the React grid commit and canvas paint. `signal_perf.spec.ts` covers 10 k, 100 k, 500 k and 1 M samples and records visible latency, Plotly point count, long tasks, hover, pan and zoom. A small `datalab-web:plot-rendered` event is emitted from the existing active-plot registry after `react-plotly` finishes; the shared `tests/e2e/helpers/plotlyMetrics.ts` helper installs its observers before navigation so first renders are not lost.
 
 The cheap deterministic invariants encoded directly in the specs (data-integrity checksums, spill counts, the heap-decoupling `expect(...)`) still run wherever the `perf` project runs and fail fast on a broken guarantee, independent of the chart thresholds.
 

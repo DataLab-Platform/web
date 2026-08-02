@@ -18,7 +18,7 @@ import { defineConfig, devices } from "@playwright/test";
  *   * ``chromium`` (default) — the regression suite. Excludes
  *     performance benchmarks and ``_repro_*`` throwaway probes.
  *   * ``perf`` (opt-in) — performance-only specs (``image_perf``,
- *     ``opfs_*_bench``). Run with ``npx playwright test --project=perf``
+ *     ``signal_perf``, ``opfs_*_bench``). Run with ``npx playwright test --project=perf``
  *     or ``npm run test:e2e:perf``. The on-demand ``perf`` CI workflow
  *     drives this project (see ``.github/workflows/perf.yml``).
  *   * ``benchmark`` (opt-in) — comparative Web-vs-Qt suite under
@@ -89,6 +89,7 @@ export default defineConfig({
       // excluded so a forgotten reproduction probe never lands in CI.
       testIgnore: [
         /image_perf\.spec\.ts/,
+        /signal_perf\.spec\.ts/,
         /opfs_storage_bench\.spec\.ts/,
         /opfs_sync_spike\.spec\.ts/,
         /opfs_worker_bench\.spec\.ts/,
@@ -110,6 +111,7 @@ export default defineConfig({
             use: { ...devices["Desktop Chrome"] },
             testMatch: [
               /image_perf\.spec\.ts/,
+              /signal_perf\.spec\.ts/,
               /opfs_storage_bench\.spec\.ts/,
               /opfs_sync_spike\.spec\.ts/,
               /opfs_worker_bench\.spec\.ts/,
