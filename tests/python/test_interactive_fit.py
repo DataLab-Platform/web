@@ -16,6 +16,7 @@ import sys
 import dlw_interactive_fit as ifit
 import numpy as np
 import pytest
+from sigima.tools.signal import fitting
 
 
 def _gaussian_xy():
@@ -82,8 +83,11 @@ def test_evaluate_interactive_fit_matches_length(fit_session):
 
 def test_auto_fit_recovers_gaussian_params(fit_session):
     _bs, oid = fit_session
+    session = ifit.init_interactive_fit(oid, "gaussian_fit")
     result = ifit.auto_fit_interactive(oid, "gaussian_fit")
     assert len(result["y_fit"]) == 200
+    assert set(result["values"]) == {param["name"] for param in session["params"]}
+    assert all(isinstance(value, float) for value in result["values"].values())
     # The optimiser should fit clean synthetic data almost exactly.
     assert result["residual_rms"] < 1e-3
     # The fitted curve reproduces the source Gaussian (peak ≈ 3.1, the
@@ -105,7 +109,25 @@ def test_commit_interactive_fit_adds_signal(fit_session):
     assert new_oid in after
     # The committed signal carries interactive-fit metadata.
     obj = bs._MODEL.get(new_oid)
-    assert obj.metadata["fit_params"]["interactive"] is True
+    fit_params = obj.metadata["fit_params"]
+    assert fit_params["fit_type"] == "gaussian"
+    assert fit_params["interactive"] is True
+    assert fit_params["fit_params_version"] == fitting.FIT_PARAMS_VERSION
+    assert fit_params["peak_parameterization"] == fitting.PEAK_PARAMETERIZATION
+    assert fit_params["residual_rms"] >= 0.0
+    fitting.validate_fit_params(fit_params)
+
+
+def test_commit_piecewise_exponential_uses_sigima_fit_type(fit_session):
+    bs, oid = fit_session
+    session = ifit.init_interactive_fit(oid, "piecewiseexponential_fit")
+    values = {param["name"]: param["value"] for param in session["params"]}
+    new_oid = ifit.commit_interactive_fit(oid, "piecewiseexponential_fit", values)
+
+    fit_params = bs._MODEL.get(new_oid).metadata["fit_params"]
+    assert fit_params["fit_type"] == "doubleexponential"
+    assert fit_params["interactive"] is True
+    fitting.validate_fit_params(fit_params)
 
 
 def test_evaluate_polynomial_uses_degree(fit_session):

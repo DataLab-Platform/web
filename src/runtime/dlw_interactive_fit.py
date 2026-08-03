@@ -41,12 +41,14 @@ class _FitKind:
         computer: type[_fit.FitComputer],
         param_labels: dict[str, str] | None = None,
         needs_degree: bool = False,
+        fit_type: str | None = None,
     ) -> None:
         self.fit_id = fit_id
         self.label = label
         self.computer = computer
         self.param_labels = param_labels or {}
         self.needs_degree = needs_degree
+        self.fit_type = fit_type or fit_id.removesuffix("_fit")
 
     def make_computer(
         self, x: np.ndarray, y: np.ndarray, extras: dict[str, Any] | None
@@ -61,6 +63,7 @@ class _FitKind:
 # Common pretty parameter labels (Greek letters etc.).
 _PRETTY_PARAMS: dict[str, str] = {
     "amp": "A",
+    "amplitude": "A",
     "sigma": "σ",
     "x0": "μ",
     "y0": "y₀",
@@ -108,6 +111,7 @@ _INTERACTIVE_FITS: dict[str, _FitKind] = {
         "piecewiseexponential_fit",
         "Piecewise exponential fit",
         _fit.DoubleExponentialFitComputer,
+        fit_type="doubleexponential",
     ),
 }
 
@@ -286,10 +290,7 @@ def auto_fit_interactive(
     x_roi, y_roi = _roi_xy(obj)
     computer = kind.make_computer(x_roi, y_roi, extras)
     _y, params = computer.optimize_fit_with_scipy()
-    # Strip housekeeping keys added by ``create_params``.
-    clean = {
-        k: float(v) for k, v in params.items() if k not in {"fit_type", "residual_rms"}
-    }
+    clean = {name: float(params[name]) for name in computer.get_params_names()}
     x_full = np.asarray(obj.x, dtype=float)
     y_fit = _evaluate(kind, x_full, clean)
     return {
@@ -315,19 +316,22 @@ def commit_interactive_fit(
     kind = _INTERACTIVE_FITS[fit_id]
     src = model.get(oid)
     x_full = np.asarray(src.x, dtype=float)
-    y_fit = _evaluate(kind, x_full, {k: float(v) for k, v in values.items()})
+    float_values = {k: float(v) for k, v in values.items()}
+    y_fit = _evaluate(kind, x_full, float_values)
     dst = src.copy()
     dst.set_xydata(x_full, y_fit)
     # Title carries the fit kind and the parameter values for traceability.
-    pretty = ", ".join(f"{_pretty_label(k)}={v:g}" for k, v in values.items())
+    pretty = ", ".join(f"{_pretty_label(k)}={v:g}" for k, v in float_values.items())
     dst.title = f"{kind.label}({pretty})"
-    # Store fit metadata so the Properties tab can surface it (matches the
-    # auto-fit convention from sigima.proc.signal.fitting).
-    dst.metadata["fit_params"] = {
-        **{k: float(v) for k, v in values.items()},
-        "fit_type": fit_id.replace("_fit", ""),
-        "interactive": True,
-    }
+    x_roi, y_roi = _roi_xy(src)
+    y_fit_roi = _evaluate(kind, x_roi, float_values)
+    residual_rms = np.sqrt(np.mean((y_roi - y_fit_roi) ** 2))
+    dst.metadata["fit_params"] = _fit.create_fit_params(
+        kind.fit_type,
+        float_values,
+        residual_rms=residual_rms,
+        interactive=True,
+    )
     panel = model.panel("signal")
     group = panel.find_group_of(oid)
     return model.add_object("signal", dst, group_id=group.gid)
