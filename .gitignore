@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 release/
+.cache/
 packages/sdk/dist/
 *.tsbuildinfo
 
