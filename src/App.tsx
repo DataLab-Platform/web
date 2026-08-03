@@ -4101,6 +4101,7 @@ export default function App() {
       handleResetImagePositions,
       handleOpenErase,
       handleOpenFile,
+      handleOpenFromDirectory,
       handleSaveFile,
       handleSaveToDirectory,
       handleOpenWorkspaceHdf5,
