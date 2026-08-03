@@ -6,12 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Multi-signal plot layouts**: several selected signals can now be displayed as an overlay, as vertically stacked plots with a shared X axis, or as horizontal side-by-side plots. The arrangement is available from the **View** menu and is remembered across sessions.
+
 ### Changed
 
 - **Gaussian, Lorentzian and Voigt interactive fits**: amplitude now consistently means signed peak height above the baseline, in the signal's Y units. Committed fit curves store versioned Sigima parameters, and both the main Pyodide runtime and computation workers require Sigima 1.1.6 or later so an older area-based model cannot be loaded silently.
+- **Large-signal rendering**: dense curves now use viewport-aware level-of-detail rendering that keeps interaction responsive from 10,000 to 1,000,000 samples while preserving extrema, NaN gaps and endpoints; zooming in restores the exact samples for the visible range.
+- **Large-workspace responsiveness**: plots avoid redundant redraws, multi-image spatial views rasterise each image to the available display budget, and object properties load bounded previews before fetching full arrays on demand. Cached summaries and atomic selection snapshots also reduce repeated Pyodide transfers when navigating between objects.
+- **Startup performance**: the initial interface now defers the Pyodide runtime, Plotly views and code editors until needed, while preloading the primary plot during runtime startup. A build-time size budget protects the smaller initial JavaScript bundle from regressions.
 
 ### Fixed
 
+- **Interactive fit commits**: piecewise exponential fits and the other interactive fit types now store validated Sigima metadata, so committed fit curves can be re-evaluated reliably.
+- **Object tree navigation**: creating, importing or processing an object now expands its group when necessary and scrolls the new object into view.
+- **Plot title editing**: unreliable direct editing inside Plotly charts is now disabled, preventing temporary title changes that were lost or left the chart out of sync; object and axis titles remain editable from their standard property controls.
 - **Multi-image spatial zoom**: zooming into the current image now restores its native pixels instead of remaining limited to the 512-pixel multi-image preview resolution.
 - **Signal level-of-detail rendering**: dense curves now keep their display point budget aligned with the final plot width after panels resize, avoiding unnecessary points while preserving narrow extrema.
 - **Signal, image and HDF5 imports**: importing an object now switches to its matching panel before selecting it, avoiding transient internal errors when an image was imported while the Signals panel was active.
