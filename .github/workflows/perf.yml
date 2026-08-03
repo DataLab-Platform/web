@@ -98,10 +98,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: benchmarks
           benchmark-data-dir-path: dev/bench/timings
-          # Wall-clock timings are noisy on shared runners: keep a wide
-          # threshold and never fail — these are for trend inspection only.
+          # Wall-clock timings are noisy on shared runners and some complete
+          # below the useful timing floor. Keep their history and job summary
+          # for trend inspection, but do not turn relative fluctuations into
+          # PR comments; actionable alerts come from the deterministic suite.
           alert-threshold: "200%"
-          comment-on-alert: true
+          comment-on-alert: false
           summary-always: true
           fail-on-alert: false
           auto-push: ${{ github.event_name != 'pull_request' }}
