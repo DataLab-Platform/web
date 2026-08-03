@@ -312,10 +312,24 @@ test("spatial multi-image: four 2048² images use viewport LOD and exact zoom", 
   await page.mouse.up();
 
   await expect
-    .poll(async () => (await readSpatialBitmaps(page)).length, {
-      timeout: 15_000,
-    })
-    .toBe(1);
+    .poll(
+      async () => {
+        const bitmaps = await readSpatialBitmaps(page);
+        if (
+          bitmaps.length !== 1 ||
+          bitmaps[0].width <= 0 ||
+          bitmaps[0].height <= 0
+        ) {
+          return Number.POSITIVE_INFINITY;
+        }
+        return Math.max(
+          bitmaps[0].sizex / bitmaps[0].width,
+          bitmaps[0].sizey / bitmaps[0].height,
+        );
+      },
+      { timeout: 15_000 },
+    )
+    .toBeLessThanOrEqual(1.5);
   const zoomed = (await readSpatialBitmaps(page))[0];
   expect(zoomed.width).toBeGreaterThan(0);
   expect(zoomed.sizex / zoomed.width).toBeLessThanOrEqual(1.5);

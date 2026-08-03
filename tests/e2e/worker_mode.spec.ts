@@ -70,12 +70,16 @@ test.describe.serial("worker-mode runtime (E2E)", () => {
 
   let context: Awaited<ReturnType<Browser["newContext"]>>;
   let page: Page;
+  const browserErrors: string[] = [];
 
   test.beforeAll(async ({ browser }) => {
     context = await browser.newContext();
     page = await context.newPage();
     page.on("console", (msg) => {
-      if (msg.type() === "error") console.log("[browser:error]", msg.text());
+      if (msg.type() === "error") {
+        browserErrors.push(msg.text());
+        console.log("[browser:error]", msg.text());
+      }
     });
     page.on("pageerror", (err) => console.log("[pageerror]", err.message));
     // Opt into worker mode via the URL flag honoured by ``getRuntimeMode``.
@@ -313,5 +317,17 @@ test.describe.serial("worker-mode runtime (E2E)", () => {
         { timeout: 30_000 },
       )
       .toBeGreaterThan(0);
+    await expect(page.getByRole("tab", { name: "Images" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(
+      page.locator(".object-tree-item").filter({ hasText: "image" }).first(),
+    ).toBeVisible();
+    expect(
+      browserErrors.filter((message) =>
+        message.includes("get_signal_view_snapshot failed"),
+      ),
+    ).toEqual([]);
   });
 });

@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Gaussian, Lorentzian and Voigt interactive fits**: amplitude now consistently means signed peak height above the baseline, in the signal's Y units. Committed fit curves store versioned Sigima parameters, and both the main Pyodide runtime and computation workers require Sigima 1.1.6 or later so an older area-based model cannot be loaded silently.
 
+### Fixed
+
+- **Multi-image spatial zoom**: zooming into the current image now restores its native pixels instead of remaining limited to the 512-pixel multi-image preview resolution.
+- **Signal level-of-detail rendering**: dense curves now keep their display point budget aligned with the final plot width after panels resize, avoiding unnecessary points while preserving narrow extrema.
+- **Signal, image and HDF5 imports**: importing an object now switches to its matching panel before selecting it, avoiding transient internal errors when an image was imported while the Signals panel was active.
+
 ## [0.6.3] - 2026-07-18
 
 ### Changed in 0.6.3

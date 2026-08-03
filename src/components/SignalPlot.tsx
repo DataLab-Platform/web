@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import { registerActivePlot } from "../aiassistant/plotCapture";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
@@ -194,6 +194,19 @@ export function SignalPlot({
     });
     observer.observe(host);
     return () => observer.disconnect();
+  }, []);
+
+  const syncPlotWidth = useCallback((gd: unknown) => {
+    const graph = gd as {
+      _fullLayout?: { xaxis?: { _length?: number } };
+    };
+    const axisWidth = graph._fullLayout?.xaxis?._length;
+    if (axisWidth && axisWidth > 0) {
+      const usefulWidth = Math.max(1, Math.floor(axisWidth));
+      setPlotWidth((current) =>
+        current === usefulWidth ? current : usefulWidth,
+      );
+    }
   }, []);
 
   // Sync from backend payload whenever the displayed signal or its
@@ -712,6 +725,7 @@ export function SignalPlot({
             onRelayout={handleRelayout}
             onInitialized={(_fig, gd) => {
               registerActivePlot("signal", gd);
+              syncPlotWidth(gd);
               // ``react-plotly.js`` does not type ``onRelayouting`` (the live,
               // per-frame drag event). Bind it imperatively so ROI drags update
               // the overlay/form continuously instead of only on mouse release.
@@ -720,15 +734,7 @@ export function SignalPlot({
                   ev: string,
                   cb: (e: Record<string, unknown>) => void,
                 ) => void;
-                _fullLayout?: { xaxis?: { _length?: number } };
               };
-              const axisWidth = g._fullLayout?.xaxis?._length;
-              if (axisWidth && axisWidth > 0) {
-                const usefulWidth = Math.max(1, Math.floor(axisWidth));
-                setPlotWidth((current) =>
-                  current === usefulWidth ? current : usefulWidth,
-                );
-              }
               g.on?.("plotly_relayouting", (event) => {
                 const overlayEvent = withoutAxisRelayout(event);
                 if (Object.keys(overlayEvent).length > 0) {
@@ -736,7 +742,10 @@ export function SignalPlot({
                 }
               });
             }}
-            onUpdate={(_fig, gd) => registerActivePlot("signal", gd)}
+            onUpdate={(_fig, gd) => {
+              registerActivePlot("signal", gd);
+              syncPlotWidth(gd);
+            }}
             onPurge={() => registerActivePlot("signal", null)}
           />
         </div>

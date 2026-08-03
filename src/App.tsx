@@ -3248,6 +3248,20 @@ export default function App() {
     toastDownloaded,
   ]);
 
+  const refreshImportedObjects = useCallback(
+    async (oids: string[]) => {
+      if (!runtime) return;
+      const lastOid = oids[oids.length - 1];
+      if (!lastOid) {
+        await refresh(null);
+        return;
+      }
+      const { kind } = await runtime.getObject(lastOid);
+      await refreshPanelKind(kind, lastOid);
+    },
+    [runtime, refresh, refreshPanelKind],
+  );
+
   const handleOpenWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;
     const input = document.createElement("input");
@@ -3300,10 +3314,8 @@ export default function App() {
                     "Some uint32 image data was clipped to int32 range during import.",
                 });
               }
-              setSelectedIds([]);
-              setCurrentId(result.oids[result.oids.length - 1] ?? null);
               setWorkspaceVersion((v) => v + 1);
-              await refresh(result.oids[result.oids.length - 1] ?? null);
+              await refreshImportedObjects(result.oids);
             } catch (err2) {
               await notify({
                 kind: "error",
@@ -3343,6 +3355,7 @@ export default function App() {
   }, [
     runtime,
     refresh,
+    refreshImportedObjects,
     setWorkspaceFilename,
     markClean,
     notify,
@@ -3363,11 +3376,9 @@ export default function App() {
     async (oids: string[]) => {
       setTextImportOpen(false);
       if (oids.length === 0) return;
-      setSelectedIds([]);
-      setCurrentId(oids[oids.length - 1] ?? null);
-      await refresh(oids[oids.length - 1] ?? null);
+      await refreshImportedObjects(oids);
     },
-    [refresh, setSelectedIds],
+    [refreshImportedObjects],
   );
 
   const handleH5BrowserImport = useCallback(
@@ -3380,11 +3391,9 @@ export default function App() {
             "Some uint32 image data was clipped to int32 range during import.",
         });
       }
-      setSelectedIds([]);
-      setCurrentId(oids[oids.length - 1] ?? null);
-      await refresh(oids[oids.length - 1] ?? null);
+      await refreshImportedObjects(oids);
     },
-    [refresh, notify, setSelectedIds],
+    [refreshImportedObjects, notify],
   );
 
   const handleSaveFile = useCallback(async () => {

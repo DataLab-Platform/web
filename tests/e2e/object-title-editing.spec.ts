@@ -32,9 +32,10 @@ function propertyInput(page: Page, label: string) {
 async function expectPlotTitleReadOnly(page: Page, title: string) {
   const svgTitle = page.locator(".js-plotly-plot g.g-gtitle text").first();
   await expect(svgTitle).toHaveText(title);
+  await expect(svgTitle).toBeVisible();
   const box = await svgTitle.boundingBox();
-  expect(box).not.toBeNull();
-  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  if (!box) throw new Error("Plot title has no visible bounding box");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator(".js-plotly-plot .plugin-editable")).toHaveCount(0);
 }
 

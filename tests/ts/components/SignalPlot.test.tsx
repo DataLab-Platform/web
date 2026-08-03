@@ -83,6 +83,7 @@ function currentPlot() {
     };
     onRelayout: (event: Record<string, unknown>) => void;
     onInitialized: (figure: unknown, graphDiv: unknown) => void;
+    onUpdate: (figure: unknown, graphDiv: unknown) => void;
   };
 }
 
@@ -276,6 +277,28 @@ describe("SignalPlot title editing and LOD", () => {
     expect(roiTrace.x.length).toBeLessThanOrEqual(1_602);
     expect(Array.from(primaryTrace.y)).toContain(100);
     expect(Array.from(primaryTrace.y)).toContain(-80);
+  });
+
+  it("updates the LOD budget after Plotly resizes the axis", () => {
+    const signal = denseSignal("dense-resize");
+    render(plotElement(signal));
+
+    act(() => {
+      currentPlot().onUpdate(
+        {},
+        {
+          _fullLayout: { xaxis: { _length: 400 } },
+        },
+      );
+    });
+
+    const trace = currentPlot().data[0] as {
+      x: ArrayLike<number>;
+      y: ArrayLike<number>;
+    };
+    expect(trace.x.length).toBeLessThanOrEqual(802);
+    expect(Array.from(trace.y)).toContain(100);
+    expect(Array.from(trace.y)).toContain(-80);
   });
 
   it("reduces sticks before expansion and restores exact points after zoom", () => {

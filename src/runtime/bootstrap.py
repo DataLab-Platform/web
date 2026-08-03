@@ -5706,20 +5706,21 @@ def get_image_view_snapshot(
 ) -> dict[str, Any]:
     """Return every payload needed to render the selected image view.
 
-    A single selection keeps the full-resolution image. A multi-selection
-    uses one bounded batch containing the current image and every preview, so
-    the grid never pays for an unused full-resolution transfer.
+    The current image keeps its full resolution so viewport LOD can recover
+    native pixels when zooming. In a multi-selection, only the remaining
+    images use bounded previews.
     """
     ordered = _ordered_selection(current_oid, selected_oids)
     is_multi = len(ordered) > 1
+    images = [get_image_data(current_oid, encoding=encoding)]
+    if is_multi:
+        images.extend(
+            get_images_data(ordered[1:], max_size=max_size, encoding=encoding)
+        )
     return {
         "kind": "image",
         "mode": "multi" if is_multi else "single",
-        "images": (
-            get_images_data(ordered, max_size=max_size, encoding=encoding)
-            if is_multi
-            else [get_image_data(current_oid, encoding=encoding)]
-        ),
+        "images": images,
         "roi": get_image_roi(current_oid),
         "lut_range": get_lut_range(current_oid),
         "results": list_image_results(current_oid),

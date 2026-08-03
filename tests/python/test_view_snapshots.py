@@ -36,7 +36,9 @@ def test_signal_view_snapshot_groups_current_and_overlay_payloads(
     ]
 
 
-def test_multi_image_snapshot_uses_one_bounded_batch(fresh_bootstrap, monkeypatch):
+def test_multi_image_snapshot_keeps_current_at_full_resolution(
+    fresh_bootstrap, monkeypatch
+):
     bs = fresh_bootstrap
     first = bs.add_image_from_array("A", np.arange(16).reshape(4, 4))
     current = bs.add_image_from_array("B", np.arange(25).reshape(5, 5))
@@ -62,10 +64,12 @@ def test_multi_image_snapshot_uses_one_bounded_batch(fresh_bootstrap, monkeypatc
 
     assert snapshot["kind"] == "image"
     assert snapshot["mode"] == "multi"
-    assert batch_calls == [([current, first], 2, "list")]
-    assert image_calls == [2, 2]
+    assert batch_calls == [([first], 2, "list")]
+    assert image_calls == [None, 2]
     assert [item["id"] for item in snapshot["images"]] == [current, first]
-    assert all(max(item["width"], item["height"]) <= 2 for item in snapshot["images"])
+    assert snapshot["images"][0]["width"] == 5
+    assert snapshot["images"][0]["height"] == 5
+    assert max(snapshot["images"][1]["width"], snapshot["images"][1]["height"]) <= 2
 
 
 def test_single_image_snapshot_keeps_full_resolution(fresh_bootstrap):

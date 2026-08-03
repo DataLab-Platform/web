@@ -2223,10 +2223,10 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
   /** Minimal ``{id, kind, title}`` descriptor for a single object. */
   async getObject(
     id: string,
-  ): Promise<{ id: string; kind: string; title: string }> {
+  ): Promise<{ id: string; kind: PanelKind; title: string }> {
     return (await this.callPy("get_object", { oid: id })) as {
       id: string;
-      kind: string;
+      kind: PanelKind;
       title: string;
     };
   }
