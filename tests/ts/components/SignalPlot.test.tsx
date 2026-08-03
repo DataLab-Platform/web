@@ -250,7 +250,7 @@ describe("SignalPlot title editing and LOD", () => {
     expect(currentPlot().data).toBe(initial.data);
     expect(currentPlot().layout).toBe(initial.layout);
     expect(currentPlot().config).toBe(initial.config);
-    expect(initial.layout.uirevision).toBe(`overlay:${SIGNAL.id}`);
+    expect(initial.layout.uirevision).toBe(SIGNAL.id);
   });
 
   it("bounds dense signal and ROI traces while preserving narrow extrema", () => {

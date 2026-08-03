@@ -130,6 +130,7 @@ export function SignalPlot({
     [signalLayout.assignments],
   );
   const primaryAxis = signalLayout.assignments[0];
+  const hasMultipleSignals = extraSignals.length > 0;
   const splitLayout = signalLayout.effectiveMode !== "overlay";
   const themedAxes = useMemo(
     () =>
@@ -609,7 +610,9 @@ export function SignalPlot({
       autosize: true,
       margin: { l: 70, r: 30, t: 40, b: 55 },
       showlegend: resultTraces.length > 0 || extraSignals.length > 0,
-      uirevision: figureRevision,
+      // The prefixed multi-layout revision makes Plotly fully reconcile each
+      // single-trace update, adding ~300 ms for a 1M-sample source.
+      uirevision: hasMultipleSignals ? figureRevision : (oid ?? data.id),
       legend: {
         ...plotlyTheme.legend,
         x: 1,
@@ -640,7 +643,10 @@ export function SignalPlot({
     [
       plotlyTheme,
       themedAxes,
+      hasMultipleSignals,
       data.title,
+      data.id,
+      oid,
       resultTraces.length,
       extraSignals.length,
       figureRevision,
