@@ -50,7 +50,7 @@ class _FitKind:
         self.needs_degree = needs_degree
         # Sigima's ``FIT_TYPE_MAPPING`` key. It usually matches the fit id
         # without its ``_fit`` suffix, but not always.
-        self.fit_type = fit_type or fit_id[: -len("_fit")]
+        self.fit_type = fit_type or fit_id.removesuffix("_fit")
 
     def make_computer(
         self, x: np.ndarray, y: np.ndarray, extras: dict[str, Any] | None
@@ -323,7 +323,7 @@ def commit_interactive_fit(
     dst = src.copy()
     dst.set_xydata(x_full, y_fit)
     # Title carries the fit kind and the parameter values for traceability.
-    pretty = ", ".join(f"{_pretty_label(k)}={v:g}" for k, v in values.items())
+    pretty = ", ".join(f"{_pretty_label(k)}={v:g}" for k, v in float_values.items())
     dst.title = f"{kind.label}({pretty})"
     x_roi, y_roi = _roi_xy(src)
     y_fit_roi = _evaluate(kind, x_roi, float_values)
