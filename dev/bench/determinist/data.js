@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785749885678,
+  "lastUpdate": 1785751081358,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -1358,6 +1358,105 @@ window.BENCHMARK_DATA = {
           {
             "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
             "value": 53.4,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "8ec94c0933aa13d876db4c3a9fb1aff7be3b1440",
+          "message": "test(perf): stabilize signal fetch benchmarks\n\nWarm up each fetch and report the median of five measured transfers.\nKeep all samples in raw artifacts, but track only stable 500k and 1M\ntimings under a renamed series to prevent false performance alerts.",
+          "timestamp": "2026-08-03T11:54:46+02:00",
+          "tree_id": "bceb61ca928f9e6c80b13ac8ef92f64286598900",
+          "url": "https://github.com/DataLab-Platform/web/commit/8ec94c0933aa13d876db4c3a9fb1aff7be3b1440"
+        },
+        "date": 1785751080353,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 16.777,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · payload [10000 pts]",
+            "value": 0.16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [10000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [100000 pts]",
+            "value": 1.6,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [100000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [500000 pts]",
+            "value": 8,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [500000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [1000000 pts]",
+            "value": 16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [1000000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 44,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 44,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 52.8,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 52.8,
             "unit": "MiB"
           }
         ]
