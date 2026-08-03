@@ -19,11 +19,13 @@ import {
 } from "./helpers/plotlyMetrics";
 
 const SIZES = [10_000, 100_000, 500_000, 1_000_000];
+const FETCH_SAMPLE_COUNT = 5;
 
 interface SignalBenchResult {
   size: number;
   createMs: number;
   fetch: RuntimePayloadMetric;
+  fetchSamplesMs: number[];
   selectToVisibleMs: number;
   plotRenderCount: number;
   traceCount: number;
@@ -51,6 +53,27 @@ async function waitForGraphHook(page: Page): Promise<void> {
     undefined,
     { timeout: 5_000 },
   );
+}
+
+async function measureStableRuntimePayload(
+  page: Page,
+  method: string,
+  args: unknown[],
+): Promise<{ fetch: RuntimePayloadMetric; samplesMs: number[] }> {
+  // Exclude one cold call so Pyodide/JIT/queue startup does not dominate
+  // transfers whose steady-state duration is only a few milliseconds.
+  await measureRuntimePayload(page, method, args);
+  const samples: RuntimePayloadMetric[] = [];
+  for (let index = 0; index < FETCH_SAMPLE_COUNT; index += 1) {
+    samples.push(await measureRuntimePayload(page, method, args));
+  }
+  const ranked = [...samples].sort(
+    (left, right) => left.totalMs - right.totalMs,
+  );
+  return {
+    fetch: ranked[Math.floor(ranked.length / 2)],
+    samplesMs: samples.map((sample) => sample.totalMs),
+  };
 }
 
 async function readSignalPlot(page: Page, title: string) {
@@ -237,9 +260,8 @@ test.describe("Signal display perf", () => {
 
     const results: SignalBenchResult[] = [];
     for (const entry of created) {
-      const fetch = await measureRuntimePayload(page, "getSignalData", [
-        entry.id,
-      ]);
+      const { fetch, samplesMs: fetchSamplesMs } =
+        await measureStableRuntimePayload(page, "getSignalData", [entry.id]);
       expect(fetch.itemCount).toBe(1);
       expect(fetch.shapes[0]?.size).toBe(entry.size);
       expect(fetch.payloadBytes).toBe(
@@ -289,6 +311,7 @@ test.describe("Signal display perf", () => {
         size: entry.size,
         createMs: entry.createMs,
         fetch,
+        fetchSamplesMs,
         selectToVisibleMs: render.startTime - selectedAt,
         plotRenderCount: renderMetrics.plotRenders.length,
         traceCount: plotted.traceCount,

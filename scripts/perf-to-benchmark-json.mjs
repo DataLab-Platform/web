@@ -144,11 +144,18 @@ function cfgLabel(r) {
         unit: "ms",
         value: +r.selectToVisibleMs.toFixed(1),
       });
-      timings.push({
-        name: `signal_perf · binary fetch [${label}]`,
-        unit: "ms",
-        value: +r.fetch.totalMs.toFixed(1),
-      });
+      // Small transfers complete below the useful timing floor of a shared
+      // runner (the 10k samples span 1–17 ms in one run). Keep them in the
+      // raw artifact, but only publish stable large-transfer trends. This is
+      // the median of five post-warmup transfers; the distinct name also
+      // prevents comparison with the historical single cold sample.
+      if (r.size >= 500_000) {
+        timings.push({
+          name: `signal_perf · binary fetch median [${label}]`,
+          unit: "ms",
+          value: +r.fetch.totalMs.toFixed(1),
+        });
+      }
       timings.push({
         name: `signal_perf · longest task [${label}]`,
         unit: "ms",
