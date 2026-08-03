@@ -6,18 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Added
+## [0.7.0] - 2026-08-03
+
+### Added in 0.7.0
 
 - **Multi-signal plot layouts**: several selected signals can now be displayed as an overlay, as vertically stacked plots with a shared X axis, or as horizontal side-by-side plots. The arrangement is available from the **View** menu and is remembered across sessions.
 
-### Changed
+### Changed in 0.7.0
 
 - **Gaussian, Lorentzian and Voigt interactive fits**: amplitude now consistently means signed peak height above the baseline, in the signal's Y units. Committed fit curves store versioned Sigima parameters, and both the main Pyodide runtime and computation workers require Sigima 1.1.6 or later so an older area-based model cannot be loaded silently.
 - **Large-signal rendering**: dense curves now use viewport-aware level-of-detail rendering that keeps interaction responsive from 10,000 to 1,000,000 samples while preserving extrema, NaN gaps and endpoints; zooming in restores the exact samples for the visible range.
 - **Large-workspace responsiveness**: plots avoid redundant redraws, multi-image spatial views rasterise each image to the available display budget, and object properties load bounded previews before fetching full arrays on demand. Cached summaries and atomic selection snapshots also reduce repeated Pyodide transfers when navigating between objects.
 - **Startup performance**: the initial interface now defers the Pyodide runtime, Plotly views and code editors until needed, while preloading the primary plot during runtime startup. A build-time size budget protects the smaller initial JavaScript bundle from regressions.
 
-### Fixed
+### Fixed in 0.7.0
 
 - **Interactive fit commits**: piecewise exponential fits and the other interactive fit types now store validated Sigima metadata, so committed fit curves can be re-evaluated reliably.
 - **Object tree navigation**: creating, importing or processing an object now expands its group when necessary and scrolls the new object into view.
@@ -231,7 +233,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/DataLab-Platform/web/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/DataLab-Platform/web/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/DataLab-Platform/web/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/DataLab-Platform/web/compare/v0.6.0...v0.6.1
