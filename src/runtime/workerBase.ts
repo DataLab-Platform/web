@@ -12,9 +12,12 @@
  * The worker files themselves must remain standalone entry points so
  * Vite can resolve ``new Worker(new URL("./xxxWorker.ts", import.meta.url))``.
  */
-
-export const PYODIDE_VERSION = "v0.26.4";
-export const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
+import {
+  loadConfiguredPyodide,
+  pythonWheelInstallCode,
+  type ResolvedRuntimeConfig,
+  type RuntimeKind,
+} from "./runtimeConfig";
 
 /** Minimal slice of the Pyodide API surface used by the workers. */
 export interface PyodideAPI {
@@ -60,16 +63,11 @@ export interface DLWWorkerScope {
  */
 export async function bootPyodide(opts: {
   lang: string;
-  packages: string[];
+  runtimeConfig: ResolvedRuntimeConfig;
+  runtimeKind: Exclude<RuntimeKind, "main">;
   titleFormatSource: string;
 }): Promise<PyodideAPI> {
-  // Module workers don't support ``importScripts`` — use the ESM build
-  // of Pyodide and a dynamic ``import()`` instead. Vite needs the
-  // ``/* @vite-ignore */`` hint because the URL is dynamic.
-  const pyodideMod = (await import(
-    /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
-  )) as { loadPyodide: (o: { indexURL: string }) => Promise<PyodideAPI> };
-  const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
+  const py = (await loadConfiguredPyodide(opts.runtimeConfig)) as PyodideAPI;
 
   // Pin ``LANG`` before any guidata/sigima import so gettext-wrapped
   // labels match the main thread's UI locale (``C`` = English, or e.g.
@@ -81,19 +79,15 @@ os.environ["LANG"] = ${JSON.stringify(opts.lang)}
 os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
 `);
 
-  await py.loadPackage(opts.packages);
+  await py.loadPackage(opts.runtimeConfig.pyodidePackages[opts.runtimeKind]);
 
   // Install Sigima + guidata so user code can ``import sigima`` and
   // ``import guidata.dataset`` exactly as in DataLab desktop. This adds
   // ~10-30s to the first run; subsequent runs reuse the same worker.
-  // ``tifffile`` is pulled explicitly because the Pyodide-built
-  // ``scikit-image`` trims it from its deps, breaking TIFF I/O otherwise.
-  // Capped ``<2025``: tifffile 2025+ requires numpy>=2.1 but the pinned
-  // Pyodide ships numpy 1.26.4 (lift when Pyodide bumps numpy).
-  await py.runPythonAsync(`
-import micropip
-await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
-`);
+  // Exact wheels come from the shared manifest. The offline distribution
+  // includes their complete dependency closure and therefore uses
+  // ``deps=False``; online mode retains public dependency resolution.
+  await py.runPythonAsync(pythonWheelInstallCode(opts.runtimeConfig));
 
   // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced in
   // the worker use the same placeholder format as the main runtime

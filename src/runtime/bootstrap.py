@@ -5529,7 +5529,7 @@ async def run_image_analysis(
 
 
 async def _ensure_pyodide_pkg(name: str) -> None:
-    """Lazy-install a Pyodide-built package via micropip.
+    """Lazy-load a package from the configured Pyodide repository.
 
     No-op if the package is already installed.  Used by analyses that
     pull in heavy optional deps (currently only ``opencv-python`` for
@@ -5545,9 +5545,9 @@ async def _ensure_pyodide_pkg(name: str) -> None:
         return
     except ImportError:
         pass
-    import micropip  # type: ignore[import-not-found]
+    from pyodide_js import loadPackage  # type: ignore[import-not-found]
 
-    await micropip.install(name)
+    await loadPackage(name)
 
 
 async def _run_analysis(

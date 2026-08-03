@@ -31,6 +31,7 @@ import {
 } from "./workerProtocol";
 import { pyodideLang } from "../i18n/locale";
 import { t } from "../i18n/translate";
+import { loadRuntimeConfig, type ResolvedRuntimeConfig } from "./runtimeConfig";
 
 /** The slice of the ``Worker`` API the client needs — narrowed so unit
  *  tests can inject a fake transport without a real Worker. */
@@ -107,8 +108,9 @@ export class WorkerRuntimeProxy {
   init(
     lang: string,
     labels: { group: string; untitled: string },
+    runtimeConfig: ResolvedRuntimeConfig,
   ): Promise<void> {
-    this.post({ type: "init", lang, labels });
+    this.post({ type: "init", lang, labels, runtimeConfig });
     return this.readyPromise;
   }
 
@@ -303,6 +305,7 @@ export async function createWorkerRuntime(
     worker?: WorkerLike;
     lang?: string;
     labels?: { group: string; untitled: string };
+    runtimeConfig?: ResolvedRuntimeConfig;
   },
 ): Promise<RuntimeApi> {
   const worker: WorkerLike =
@@ -315,6 +318,7 @@ export async function createWorkerRuntime(
   // cannot) and pass them to the kernel boot.
   const lang = deps?.lang ?? pyodideLang();
   const labels = deps?.labels ?? { group: t("Group"), untitled: t("Untitled") };
-  await proxy.init(lang, labels);
+  const runtimeConfig = deps?.runtimeConfig ?? (await loadRuntimeConfig());
+  await proxy.init(lang, labels, runtimeConfig);
   return proxy.asRuntime();
 }

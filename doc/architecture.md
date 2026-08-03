@@ -83,9 +83,9 @@ right.
 flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
     L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
-    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
+    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtimeConfig.ts · runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
     L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_plugins.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
-    L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
+    L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Exact distribution selected<br/>by runtime-config.json.</i>"]
 
     L1 --> L2 --> L3 --> L4 --> L5
 ```
@@ -110,8 +110,24 @@ flowchart LR
   Dedicated Web Worker without touching any call site.
 - Python helpers return **JSON-friendly dicts / lists** (`tolist()` on
   arrays), never live PyProxies, to keep the bridge cheap.
-- The pinned `PYODIDE_VERSION` in `runtime.ts` and the `<script>` tag in
-  `index.html` must always match — the wheel index is version-specific.
+- `runtime-config.json` is the single runtime-distribution contract. It pins
+  Pyodide, package lists and exact Python wheels; no component or worker may
+  carry an independent CDN URL or version.
+
+#### Runtime distribution configuration
+
+`RuntimeContext` loads and validates `runtime-config.json` once from the
+document deployment root. `runtimeConfig.ts` resolves deployment-relative
+assets there, then passes absolute URLs to the kernel, macro and notebook
+workers in their `init` messages. Workers never resolve Python assets relative
+to generated chunks under `assets/`.
+
+The checked-in configuration selects the lightweight CDN distribution used by
+the normal build. `scripts/offline-package-lib.mjs` stages the same Vite build,
+rewrites that contract to a same-origin `local` distribution, verifies the
+complete pinned Pyodide repository and exact wheel hashes, and emits the
+separate offline ZIP. Both distributions execute the same loader and runtime
+code.
 
 ---
 

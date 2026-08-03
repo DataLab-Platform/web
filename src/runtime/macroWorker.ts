@@ -30,6 +30,7 @@ import {
   type DLWWorkerScope,
   type PyodideAPI,
 } from "./workerBase";
+import type { ResolvedRuntimeConfig } from "./runtimeConfig";
 // Same JSON Schema / backends shims as the main runtime — required so
 // ``guidata.dataset`` (transitively imported by ``sigima``) loads
 // cleanly under Pyodide. See runtime.ts for the rationale.
@@ -53,14 +54,19 @@ let pyPromise: Promise<PyodideAPI> | null = null;
 // macro worker matches the main thread's UI locale (which alone can read
 // ``localStorage`` — workers cannot). See ``runtime.ts`` for the rationale.
 let pyLang = "C";
+let runtimeConfig: ResolvedRuntimeConfig | null = null;
 
 /** Load Pyodide on first use; subsequent calls return the same instance. */
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
+  if (!runtimeConfig) {
+    throw new Error("macro worker received no runtime configuration");
+  }
   pyPromise = (async () => {
     const py = await bootPyodide({
       lang: pyLang,
-      packages: ["numpy", "scipy", "h5py", "pandas", "micropip"],
+      runtimeConfig,
+      runtimeKind: "macro",
       titleFormatSource: dlwTitleFormatSource,
     });
 
@@ -160,7 +166,11 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data as
-    | { type: "init"; lang?: string }
+    | {
+        type: "init";
+        lang?: string;
+        runtimeConfig: ResolvedRuntimeConfig;
+      }
     | { type: "run"; code: string; name?: string }
     | {
         type: "bridge_reply";
@@ -172,6 +182,7 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     if (msg.type === "init") {
       if (msg.lang) pyLang = msg.lang;
+      runtimeConfig = msg.runtimeConfig;
       await getPyodide();
       self.postMessage({ type: "ready" });
       return;

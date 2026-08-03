@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "distribution": "cdn",
+  "pyodideVersion": "0.26.4",
+  "pyodideIndexUrl": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
+  "pyodidePackages": {
+    "main": [
+      "numpy",
+      "scipy",
+      "h5py",
+      "pandas",
+      "micropip",
+      "scikit-image",
+      "pywavelets",
+      "packaging",
+      "typing-extensions",
+      "requests"
+    ],
+    "macro": [
+      "numpy",
+      "scipy",
+      "h5py",
+      "pandas",
+      "micropip",
+      "scikit-image",
+      "pywavelets",
+      "packaging",
+      "typing-extensions",
+      "requests"
+    ],
+    "notebook": [
+      "numpy",
+      "scipy",
+      "h5py",
+      "pandas",
+      "micropip",
+      "scikit-image",
+      "pywavelets",
+      "packaging",
+      "typing-extensions",
+      "requests"
+    ]
+  },
+  "pythonWheels": [
+    {
+      "name": "guidata",
+      "version": "3.14.4",
+      "url": "https://files.pythonhosted.org/packages/56/33/269cd9ed73deb51e5384b22ba64e2bcd9351e2bfd333c7b6eb886562c521/guidata-3.14.4-py3-none-any.whl",
+      "sha256": "7ff307ae457582aa59e680a1b8a3edd21d6f9bdb971eabe69498e83d9bae90f9"
+    },
+    {
+      "name": "sigima",
+      "version": "1.1.6",
+      "url": "https://files.pythonhosted.org/packages/e8/b6/cc912fa093d2998023e1147ca2c6cd1586fa9df4ae3fae81b27ff71626d0/sigima-1.1.6-py3-none-any.whl",
+      "sha256": "9bb990e76d91b8e57f7f909bbd1215107a12ae8b949873f0e101fb42d3ea5ccf"
+    },
+    {
+      "name": "tifffile",
+      "version": "2024.12.12",
+      "url": "https://files.pythonhosted.org/packages/d8/1e/76cbc758f6865a9da18001ac70d1a4154603b71e233f704401fc7d62493e/tifffile-2024.12.12-py3-none-any.whl",
+      "sha256": "6ff0f196a46a75c8c0661c70995e06ea4d08a81fe343193e69f1673f4807d508"
+    },
+    {
+      "name": "makefun",
+      "version": "1.16.0",
+      "url": "https://files.pythonhosted.org/packages/b7/c0/4bc973defd1270b89ccaae04cef0d5fa3ea85b59b108ad2c08aeea9afb76/makefun-1.16.0-py2.py3-none-any.whl",
+      "sha256": "43baa4c3e7ae2b17de9ceac20b669e9a67ceeadff31581007cca20a07bbe42c4"
+    },
+    {
+      "name": "QtPy",
+      "version": "2.4.3",
+      "url": "https://files.pythonhosted.org/packages/69/76/37c0ccd5ab968a6a438f9c623aeecc84c202ab2fabc6a8fd927580c15b5a/QtPy-2.4.3-py3-none-any.whl",
+      "sha256": "72095afe13673e017946cc258b8d5da43314197b741ed2890e563cf384b51aa1"
+    }
+  ],
+  "allowPublicNetwork": true
+}

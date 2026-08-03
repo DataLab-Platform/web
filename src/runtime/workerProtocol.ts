@@ -30,6 +30,7 @@
  */
 import type { MemoryUsage } from "../utils/memory";
 import type { StorageMode } from "./runtime";
+import type { ResolvedRuntimeConfig } from "./runtimeConfig";
 
 /** Synchronous-accessor snapshot the worker pushes to the proxy's cache. */
 export interface KernelMirror {
@@ -60,6 +61,7 @@ export interface InitRequest {
   type: "init";
   lang: string;
   labels: { group: string; untitled: string };
+  runtimeConfig: ResolvedRuntimeConfig;
 }
 
 /** Invoke ``runtime[method](...args)`` in the worker. */

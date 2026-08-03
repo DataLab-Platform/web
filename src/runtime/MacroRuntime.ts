@@ -14,6 +14,7 @@ import {
   type BridgeMethod,
 } from "./proxyBridge";
 import { pyodideLang } from "../i18n/locale";
+import { loadRuntimeConfig, type ResolvedRuntimeConfig } from "./runtimeConfig";
 
 export type MacroStreamKind = "stdout" | "stderr" | "system";
 
@@ -45,8 +46,17 @@ export class MacroRuntime {
   private workerReady = false;
   private currentRun: MacroRunCallbacks | null = null;
   private state: "idle" | "running" | "stopping" = "idle";
+  private readonly runtimeConfigPromise: Promise<ResolvedRuntimeConfig>;
+  private runtimeConfig: ResolvedRuntimeConfig | null = null;
 
-  constructor(private readonly runtime: RuntimeApi) {}
+  constructor(
+    private readonly runtime: RuntimeApi,
+    runtimeConfig?: ResolvedRuntimeConfig,
+  ) {
+    this.runtimeConfigPromise = runtimeConfig
+      ? Promise.resolve(runtimeConfig)
+      : loadRuntimeConfig();
+  }
 
   // ---------------------------------------------------------------------
   // Public API
@@ -117,8 +127,11 @@ export class MacroRuntime {
 
   private async ensureWorker(): Promise<void> {
     if (this.worker && this.workerReady) return;
+    const runtimeConfig =
+      this.runtimeConfig ?? (await this.runtimeConfigPromise);
+    this.runtimeConfig = runtimeConfig;
     if (!this.worker) {
-      this.worker = this.spawnWorker();
+      this.worker = this.spawnWorker(runtimeConfig);
     }
     if (!this.workerReady) {
       await this.waitForReady(this.worker);
@@ -129,7 +142,7 @@ export class MacroRuntime {
     }
   }
 
-  private spawnWorker(): Worker {
+  private spawnWorker(runtimeConfig: ResolvedRuntimeConfig): Worker {
     const w = new Worker(new URL("./macroWorker.ts", import.meta.url), {
       type: "module",
     });
@@ -141,12 +154,12 @@ export class MacroRuntime {
       this.currentRun = null;
       this.state = "idle";
     };
-    w.postMessage({ type: "init", lang: pyodideLang() });
+    w.postMessage({ type: "init", lang: pyodideLang(), runtimeConfig });
     return w;
   }
 
   private spawnWarmWorker(): void {
-    if (this.warmWorker) return;
+    if (this.warmWorker || !this.runtimeConfig) return;
     const w = new Worker(new URL("./macroWorker.ts", import.meta.url), {
       type: "module",
     });
@@ -158,7 +171,11 @@ export class MacroRuntime {
       }
       // Warm worker should not receive anything else before adoption.
     };
-    w.postMessage({ type: "init", lang: pyodideLang() });
+    w.postMessage({
+      type: "init",
+      lang: pyodideLang(),
+      runtimeConfig: this.runtimeConfig,
+    });
     this.warmWorker = w;
     // Track readiness for adoptWarmWorker(); we only adopt if ready.
     (w as unknown as { __ready: () => boolean }).__ready = () => ready;

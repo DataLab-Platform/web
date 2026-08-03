@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Self-contained intranet package**: releases now include a versioned offline ZIP with the complete pinned Pyodide distribution, exact Sigima/guidata/TIFF dependencies, checksums, dependency inventory and IIS/nginx/Apache deployment examples. The same application can run at an arbitrary intranet sub-path without contacting a public package service.
+
 ### Changed
 
 - **Gaussian, Lorentzian and Voigt interactive fits**: amplitude now consistently means signed peak height above the baseline, in the signal's Y units. Committed fit curves store versioned Sigima parameters, and both the main Pyodide runtime and computation workers require Sigima 1.1.6 or later so an older area-based model cannot be loaded silently.

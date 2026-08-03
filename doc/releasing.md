@@ -16,23 +16,33 @@ The next `npm run dev` or `npm run build` automatically picks up the new value �
 
 > **Keep `packages/sdk/package.json` in sync** — bump its `version` to the same value before tagging. The release CI fails if the two `package.json` files disagree.
 
-> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
+> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E (in parallel) → lint + Vitest + build → pack the online app, SDK and offline app → run the staged offline E2E guard → publish all artifacts in one GitHub Release → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
 
-## Distribution: app bundle + SDK tarballs
+## Distribution artifacts
 
-DataLab-Web is shipped to integrators as **two `.tgz` artefacts** produced by the release pipeline:
+The release pipeline preserves the two lightweight integration artifacts and
+adds a self-contained intranet package:
 
-| Tarball                                  | Contents                                               | Consumer action                               |
-| ---------------------------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| `datalab-web-<version>.tgz`              | Static bundle (everything under `dist/`) + `DEPLOY.md` | Unpack under any web server                   |
-| `datalab-platform-web-sdk-<version>.tgz` | Host-side TypeScript SDK (`@datalab-platform/web-sdk`) | `npm install ./datalab-platform-web-sdk-…tgz` |
+| Tarball                                  | Contents                                                                  | Consumer action                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `datalab-web-<version>.tgz`              | Static bundle (everything under `dist/`) + `DEPLOY.md`                    | Unpack under any web server                                       |
+| `datalab-web-offline-<version>.zip`      | Static bundle + complete Pyodide + exact Python wheels + deployment guide | Verify its `.sha256`, then unpack under an intranet static server |
+| `datalab-platform-web-sdk-<version>.tgz` | Host-side TypeScript SDK (`@datalab-platform/web-sdk`)                    | `npm install ./datalab-platform-web-sdk-…tgz`                     |
 
 Generate them locally:
 
 ```powershell
-npm run release:pack   # lint → test → build → SDK pack → app pack → summary
+npm run release:pack   # lint → test → build → SDK + online + offline packs
 ```
 
-Or invoke each step independently (`npm run sdk:pack`, `npm run app:pack`). Output lands in `release/`.
+Or invoke each step independently (`npm run sdk:pack`, `npm run app:pack`,
+`npm run app:pack:offline`). Run `npm run test:e2e:offline` to serve a verified
+staging directory under `/tools/datalab/` and reject every external request.
+Output lands in `release/`; the large downloads are cached by exact version
+under `.cache/offline/`.
 
-The two artefacts share the same release version. The wire-protocol they negotiate (`MAJOR.MINOR`, exposed as `client.protocolVersion`) is independent: a SDK and a bundle from different release versions inter-operate as long as the protocol `MAJOR` is unchanged. See [examples/angular/README.md](examples/angular/README.md) for the integrator-facing compatibility matrix.
+All artifacts share the same release version and are attached atomically. The
+wire-protocol negotiated by the SDK and either app distribution (`MAJOR.MINOR`,
+exposed as `client.protocolVersion`) remains independent: releases
+inter-operate while the protocol `MAJOR` is unchanged. See
+[examples/angular/README.md](../examples/angular/README.md) for the matrix.

@@ -19,6 +19,31 @@ import type {
   KernelRequest,
   KernelMirror,
 } from "../../../src/runtime/workerProtocol";
+import type { ResolvedRuntimeConfig } from "../../../src/runtime/runtimeConfig";
+
+const RUNTIME_CONFIG: ResolvedRuntimeConfig = {
+  schemaVersion: 1,
+  distribution: "local",
+  pyodideVersion: "0.26.4",
+  configUrl: "https://example.test/runtime-config.json",
+  deploymentRootUrl: "https://example.test/",
+  pyodideIndexUrl: "https://example.test/pyodide/",
+  pyodideModuleUrl: "https://example.test/pyodide/pyodide.mjs",
+  pyodidePackages: {
+    main: ["numpy"],
+    macro: ["numpy"],
+    notebook: ["numpy"],
+  },
+  pythonWheels: [
+    {
+      name: "sigima",
+      version: "1.1.6",
+      url: "https://example.test/wheels/sigima.whl",
+      sha256: "a".repeat(64),
+    },
+  ],
+  allowPublicNetwork: false,
+};
 
 /** A controllable in-memory stand-in for a ``Worker``. */
 class FakeWorker implements WorkerLike {
@@ -99,7 +124,11 @@ describe("WorkerRuntimeProxy", () => {
   it("surfaces a worker error event as a boot-failure rejection", async () => {
     const worker = new FakeWorker();
     const proxy = new WorkerRuntimeProxy(worker);
-    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    const ready = proxy.init(
+      "C",
+      { group: "G", untitled: "U" },
+      RUNTIME_CONFIG,
+    );
     worker.emitError("Unexpected token (kernelWorker.ts:1)");
     await expect(ready).rejects.toThrow(/Unexpected token/);
   });
@@ -109,7 +138,7 @@ describe("WorkerRuntimeProxy", () => {
     const proxy = new WorkerRuntimeProxy(worker);
     let resolved = false;
     const ready = proxy
-      .init("C", { group: "Group", untitled: "Untitled" })
+      .init("C", { group: "Group", untitled: "Untitled" }, RUNTIME_CONFIG)
       .then(() => {
         resolved = true;
       });
@@ -117,6 +146,7 @@ describe("WorkerRuntimeProxy", () => {
       type: "init",
       lang: "C",
       labels: { group: "Group", untitled: "Untitled" },
+      runtimeConfig: RUNTIME_CONFIG,
     });
     expect(resolved).toBe(false);
     worker.emit({ type: "ready", mirror: MIRROR });
@@ -127,7 +157,11 @@ describe("WorkerRuntimeProxy", () => {
   it("rejects init on a boot error", async () => {
     const worker = new FakeWorker();
     const proxy = new WorkerRuntimeProxy(worker);
-    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    const ready = proxy.init(
+      "C",
+      { group: "G", untitled: "U" },
+      RUNTIME_CONFIG,
+    );
     worker.emit({ type: "boot-error", error: "micropip failed" });
     await expect(ready).rejects.toThrow("micropip failed");
   });

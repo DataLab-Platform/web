@@ -40,6 +40,7 @@ import {
   type DLWWorkerScope,
   type PyodideAPI,
 } from "./workerBase";
+import type { ResolvedRuntimeConfig } from "./runtimeConfig";
 
 declare const self: DedicatedWorkerGlobalScope &
   DLWWorkerScope & {
@@ -55,14 +56,19 @@ let pyPromise: Promise<PyodideAPI> | null = null;
 // ``lang`` field so the notebook worker matches the main thread's UI
 // locale (workers cannot read ``localStorage``). See ``runtime.ts``.
 let pyLang = "C";
+let runtimeConfig: ResolvedRuntimeConfig | null = null;
 
 /** Load Pyodide on first use; subsequent calls return the same instance. */
 async function getPyodide(): Promise<PyodideAPI> {
   if (pyPromise) return pyPromise;
+  if (!runtimeConfig) {
+    throw new Error("notebook worker received no runtime configuration");
+  }
   pyPromise = (async () => {
     const py = await bootPyodide({
       lang: pyLang,
-      packages: ["numpy", "scipy", "pandas", "micropip"],
+      runtimeConfig,
+      runtimeKind: "notebook",
       titleFormatSource: dlwTitleFormatSource,
     });
 
@@ -213,7 +219,11 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
 
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data as
-    | { type: "init"; lang?: string }
+    | {
+        type: "init";
+        lang?: string;
+        runtimeConfig: ResolvedRuntimeConfig;
+      }
     | { type: "exec_cell"; cellId: string; code: string }
     | {
         type: "bridge_reply";
@@ -225,6 +235,7 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     if (msg.type === "init") {
       if (msg.lang) pyLang = msg.lang;
+      runtimeConfig = msg.runtimeConfig;
       await getPyodide();
       self.postMessage({ type: "ready" });
       return;

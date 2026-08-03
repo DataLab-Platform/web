@@ -10,6 +10,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
 import { t } from "../i18n/translate";
+import type { RuntimeApi } from "../runtime/runtime";
+import {
+  loadRuntimeConfig,
+  type ResolvedRuntimeConfig,
+} from "../runtime/runtimeConfig";
+import { getRuntimeMode, type RuntimeMode } from "../runtime/runtimeMode";
 import {
   clearConsoleEntries,
   getConsoleEntries,
@@ -25,12 +31,13 @@ interface Props {
   /** App version (defaults to ``import.meta.env.VITE_APP_VERSION`` when
    *  injected, otherwise the placeholder ``"dev"``). */
   appVersion?: string;
+  runtime?: RuntimeApi;
 }
 
 const DEFAULT_VERSION =
   (import.meta.env?.VITE_APP_VERSION as string | undefined) ?? "dev";
 
-export function HelpDialog({ view, onClose, appVersion }: Props) {
+export function HelpDialog({ view, onClose, appVersion, runtime }: Props) {
   // Esc closes the dialog.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -52,7 +59,10 @@ export function HelpDialog({ view, onClose, appVersion }: Props) {
         <h2 id="help-dialog-title">{titleFor(view)}</h2>
         <div className="help-dialog-body">
           {view === "about" && (
-            <AboutView version={appVersion ?? DEFAULT_VERSION} />
+            <AboutView
+              version={appVersion ?? DEFAULT_VERSION}
+              runtime={runtime}
+            />
           )}
           {view === "shortcuts" && <ShortcutsView />}
           {view === "console" && <ConsoleView />}
@@ -82,7 +92,91 @@ function titleFor(view: HelpView): string {
 // About
 // ---------------------------------------------------------------------------
 
-function AboutView({ version }: { version: string }) {
+interface RuntimeVersions {
+  python: string;
+  numpy: string;
+  scipy: string;
+  skimage: string;
+  sigima: string;
+  guidata: string;
+  h5py: string;
+  tifffile: string;
+}
+
+interface RuntimeDiagnostics {
+  config: ResolvedRuntimeConfig;
+  versions: RuntimeVersions | null;
+  runtimeMode: RuntimeMode;
+  opfs: boolean;
+  storageMode: "ram" | "disk" | null;
+  spilledCount: number;
+  diskStoreBytes: number;
+}
+
+function AboutView({
+  version,
+  runtime,
+}: {
+  version: string;
+  runtime?: RuntimeApi;
+}) {
+  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadRuntimeConfig()
+      .then(async (config) => {
+        let versions: RuntimeVersions | null = null;
+        if (runtime) {
+          const raw = await runtime.runPython(`
+import json
+import sys
+import guidata
+import numpy
+import scipy
+import sigima
+import skimage
+import h5py
+import tifffile
+json.dumps({
+    "python": sys.version.split()[0],
+    "numpy": numpy.__version__,
+    "scipy": scipy.__version__,
+    "skimage": skimage.__version__,
+    "sigima": sigima.__version__,
+    "guidata": guidata.__version__,
+    "h5py": h5py.__version__,
+    "tifffile": tifffile.__version__,
+})
+`);
+          if (typeof raw === "string") {
+            versions = JSON.parse(raw) as RuntimeVersions;
+          }
+        }
+        if (!cancelled) {
+          setDiagnostics({
+            config,
+            versions,
+            runtimeMode: getRuntimeMode(),
+            opfs:
+              window.isSecureContext &&
+              typeof navigator.storage?.getDirectory === "function",
+            storageMode: runtime?.getStorageMode() ?? null,
+            spilledCount: runtime?.getSpilledCount() ?? 0,
+            diskStoreBytes: runtime?.getDiskStoreBytes() ?? 0,
+          });
+        }
+      })
+      .catch((error) => {
+        console.warn("[diagnostics] unable to collect runtime versions", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime]);
+
   return (
     <div className="help-about">
       <div className="help-about-header">
@@ -188,6 +282,51 @@ function AboutView({ version }: { version: string }) {
       <p className="help-about-license">
         {t("Released under the BSD 3-Clause License.")}
       </p>
+      <section className="help-runtime-diagnostics">
+        <h3>{t("Runtime diagnostics")}</h3>
+        {diagnostics ? (
+          <dl>
+            <dt>{t("Distribution")}</dt>
+            <dd>{diagnostics.config.distribution}</dd>
+            <dt>Pyodide</dt>
+            <dd>{diagnostics.config.pyodideVersion}</dd>
+            <dt>{t("Runtime base URL")}</dt>
+            <dd>{diagnostics.config.deploymentRootUrl}</dd>
+            <dt>{t("Runtime mode")}</dt>
+            <dd>{diagnostics.runtimeMode}</dd>
+            {diagnostics.versions && (
+              <>
+                <dt>Python</dt>
+                <dd>{diagnostics.versions.python}</dd>
+                <dt>Sigima</dt>
+                <dd>{diagnostics.versions.sigima}</dd>
+                <dt>guidata</dt>
+                <dd>{diagnostics.versions.guidata}</dd>
+                <dt>NumPy</dt>
+                <dd>{diagnostics.versions.numpy}</dd>
+                <dt>SciPy</dt>
+                <dd>{diagnostics.versions.scipy}</dd>
+                <dt>scikit-image</dt>
+                <dd>{diagnostics.versions.skimage}</dd>
+                <dt>h5py</dt>
+                <dd>{diagnostics.versions.h5py}</dd>
+                <dt>tifffile</dt>
+                <dd>{diagnostics.versions.tifffile}</dd>
+              </>
+            )}
+            <dt>OPFS</dt>
+            <dd>{diagnostics.opfs ? t("Available") : t("Unavailable")}</dd>
+            <dt>{t("Data storage")}</dt>
+            <dd>{diagnostics.storageMode ?? t("Unavailable")}</dd>
+            <dt>{t("Objects stored on disk")}</dt>
+            <dd>{diagnostics.spilledCount}</dd>
+            <dt>{t("OPFS bytes")}</dt>
+            <dd>{diagnostics.diskStoreBytes}</dd>
+          </dl>
+        ) : (
+          <p>{t("Collecting runtime versions…")}</p>
+        )}
+      </section>
     </div>
   );
 }

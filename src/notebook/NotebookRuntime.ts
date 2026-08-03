@@ -18,6 +18,10 @@ import {
   type BridgeMethod,
 } from "../runtime/proxyBridge";
 import { pyodideLang } from "../i18n/locale";
+import {
+  loadRuntimeConfig,
+  type ResolvedRuntimeConfig,
+} from "../runtime/runtimeConfig";
 
 /** Outputs are MIME bundles, exactly like Jupyter ``display_data``. */
 export type MimeBundle = Record<string, unknown>;
@@ -66,10 +70,19 @@ export class NotebookRuntime {
   private currentRun: QueuedRun | null = null;
   private queue: QueuedRun[] = [];
   private status: NotebookRuntimeStatus = "idle";
+  private readonly runtimeConfigPromise: Promise<ResolvedRuntimeConfig>;
+  private runtimeConfig: ResolvedRuntimeConfig | null = null;
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
-  constructor(private readonly runtime: RuntimeApi) {}
+  constructor(
+    private readonly runtime: RuntimeApi,
+    runtimeConfig?: ResolvedRuntimeConfig,
+  ) {
+    this.runtimeConfigPromise = runtimeConfig
+      ? Promise.resolve(runtimeConfig)
+      : loadRuntimeConfig();
+  }
 
   // ---------------------------------------------------------------------
   // Public API
@@ -162,9 +175,12 @@ export class NotebookRuntime {
 
   private async ensureWorker(): Promise<void> {
     if (this.worker && this.workerReady) return;
+    const runtimeConfig =
+      this.runtimeConfig ?? (await this.runtimeConfigPromise);
+    this.runtimeConfig = runtimeConfig;
     if (!this.worker) {
       this.status = "loading";
-      this.worker = this.spawnWorker();
+      this.worker = this.spawnWorker(runtimeConfig);
     }
     if (!this.workerReady) {
       await this.waitForReady(this.worker);
@@ -173,7 +189,7 @@ export class NotebookRuntime {
     }
   }
 
-  private spawnWorker(): Worker {
+  private spawnWorker(runtimeConfig: ResolvedRuntimeConfig): Worker {
     const w = new Worker(
       new URL("../runtime/notebookWorker.ts", import.meta.url),
       {
@@ -193,7 +209,7 @@ export class NotebookRuntime {
       this.status = "idle";
       this.workerReady = false;
     };
-    w.postMessage({ type: "init", lang: pyodideLang() });
+    w.postMessage({ type: "init", lang: pyodideLang(), runtimeConfig });
     return w;
   }
 

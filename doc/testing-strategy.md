@@ -41,6 +41,10 @@ npm run test:cov
 npx playwright install chromium   # one-time
 npm run test:e2e
 
+# Self-contained staged package, arbitrary sub-path, external network blocked
+npm run build
+npm run test:e2e:offline
+
 # Performance benchmarks (opt-in). Includes image and signal display
 # baselines plus the OPFS transfer/storage probes.
 npx playwright test --project=perf
@@ -57,6 +61,12 @@ tests/
 ├── ts/              # Vitest suite — pure TypeScript modules
 └── e2e/             # Playwright specs — real browser smoke tests
 ```
+
+The permanent `offline.spec.ts` is excluded from the ordinary `chromium`
+project and runs through `playwright.offline.config.ts`. Its static server
+builds a fresh verified staging directory, and a route guard rejects every
+HTTP(S) request outside that server's origin while exercising the main kernel,
+macro worker and notebook worker.
 
 VS Code tasks are provided under `.vscode/tasks.json` (`🚀 Pytest`, `🟢 Vitest`, `🎭 Playwright`, …). The default test task (`Ctrl+Shift+P → Run Test Task`) launches the Python suite.
 

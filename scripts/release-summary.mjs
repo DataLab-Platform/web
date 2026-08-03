@@ -17,8 +17,13 @@ if (!existsSync(RELEASE)) {
   process.exit(1);
 }
 
-const tarballs = readdirSync(RELEASE)
-  .filter((f) => f.endsWith(".tgz"))
+const artifacts = readdirSync(RELEASE)
+  .filter(
+    (filename) =>
+      filename.endsWith(".tgz") ||
+      filename.endsWith(".zip") ||
+      filename.endsWith(".sha256"),
+  )
   .map((f) => {
     const full = join(RELEASE, f);
     const size = statSync(full).size;
@@ -26,8 +31,8 @@ const tarballs = readdirSync(RELEASE)
   })
   .sort((a, b) => a.name.localeCompare(b.name));
 
-if (tarballs.length === 0) {
-  console.error("[release-summary] no tarballs found in release/.");
+if (artifacts.length === 0) {
+  console.error("[release-summary] no release artifacts found in release/.");
   process.exit(1);
 }
 
@@ -40,13 +45,14 @@ const sep = "─".repeat(60);
 console.log(`\n${sep}`);
 console.log("DataLab-Web release artefacts");
 console.log(sep);
-for (const { name, full, size } of tarballs) {
+for (const { name, full, size } of artifacts) {
   console.log(`  ${name}  (${fmt(size)})`);
   console.log(`    ${full}`);
 }
 console.log(sep);
 console.log("Hand-off:");
-console.log("  • Distribute both .tgz files to the integrator.");
-console.log("  • Bundle is unpacked under any web server (see DEPLOY.md).");
+console.log("  • Use the .tgz app and SDK files for online integrations.");
+console.log("  • Transfer the offline .zip and its external .sha256 together.");
+console.log("  • Unpack either app bundle under a static web server.");
 console.log("  • SDK is consumed via `npm install ./<sdk>.tgz`.");
 console.log(`${sep}\n`);

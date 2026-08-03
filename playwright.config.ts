@@ -93,6 +93,7 @@ export default defineConfig({
         /opfs_storage_bench\.spec\.ts/,
         /opfs_sync_spike\.spec\.ts/,
         /opfs_worker_bench\.spec\.ts/,
+        /offline\.spec\.ts/,
         /_repro_.*\.spec\.ts/,
         /tests[\\/]benchmark[\\/]/,
         // The demo-recording spec is opt-in: it is driven by its own

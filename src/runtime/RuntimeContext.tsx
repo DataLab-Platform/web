@@ -6,6 +6,7 @@ import { getRuntimeMode } from "./runtimeMode";
 import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
 import { getCurrentPanel, getSelection } from "./selectionState";
 import { t } from "../i18n/translate";
+import { loadRuntimeConfig } from "./runtimeConfig";
 
 interface RuntimeContextValue {
   runtime: RuntimeApi | null;
@@ -32,12 +33,13 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     const onProgress = (msg: string) => {
       if (!cancelled) setMessage(msg);
     };
-    const boot =
+    const boot = loadRuntimeConfig().then((runtimeConfig) =>
       getRuntimeMode() === "worker"
-        ? createWorkerRuntime(onProgress)
+        ? createWorkerRuntime(onProgress, { runtimeConfig })
         : import("./runtime").then(({ DataLabRuntime }) =>
-            DataLabRuntime.load(onProgress),
-          );
+            DataLabRuntime.load(onProgress, { runtimeConfig }),
+          ),
+    );
     boot
       .then((rt) => {
         if (cancelled) return;

@@ -41,6 +41,11 @@ import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
+import {
+  loadConfiguredPyodide,
+  pythonWheelInstallCode,
+  type ResolvedRuntimeConfig,
+} from "./runtimeConfig";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -76,10 +81,6 @@ const guidataBackendsSource = (() => {
   return first ?? null;
 })();
 
-// Pyodide is loaded from a CDN <script> tag in index.html; the
-// ``window.loadPyodide`` global is declared in
-// ``src/types/pyodide-global.d.ts`` (shared with the bench).
-
 export interface PyodideAPI {
   runPythonAsync: (code: string) => Promise<unknown>;
   loadPackage: (names: string | string[]) => Promise<void>;
@@ -107,9 +108,6 @@ export interface PyProxy {
   }) => unknown;
   destroy?: () => void;
 }
-
-const PYODIDE_VERSION = "v0.26.4";
-const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 
 export interface SignalMeta {
   id: string;
@@ -942,16 +940,15 @@ export type PyodideLoader = (opts: { indexURL: string }) => Promise<unknown>;
 /**
  * Options for {@link DataLabRuntime.load}.
  *
- * All fields are optional and default to the historical main-thread
- * behaviour, so existing callers (``DataLabRuntime.load(onProgress)``) are
- * unaffected. They exist so the same boot sequence can run inside a
- * Dedicated Web Worker, where there is no ``window``/DOM: the worker injects
- * a Pyodide ``loader`` and the locale-derived values that the DOM-less
- * ``i18n`` layer cannot compute on its own.
+ * The resolved runtime distribution is required so main-thread and worker
+ * boots use the same versioned assets. The remaining fields are test or
+ * DOM-less worker seams.
  */
 export interface RuntimeLoadOptions {
-  /** Pyodide loader; defaults to ``window.loadPyodide``. */
+  /** Pyodide loader test seam; production uses the configured ESM module. */
   loadPyodide?: PyodideLoader;
+  /** Validated distribution resolved against the application document. */
+  runtimeConfig: ResolvedRuntimeConfig;
   /** ``LANG`` for the Pyodide environment; defaults to ``pyodideLang()``. */
   lang?: string;
   /** Default object/group labels pushed into ``bootstrap.py``; default to
@@ -960,7 +957,10 @@ export interface RuntimeLoadOptions {
 }
 
 export class DataLabRuntime {
-  private constructor(private readonly py: PyodideAPI) {}
+  private constructor(
+    private readonly py: PyodideAPI,
+    private readonly runtimeConfig: ResolvedRuntimeConfig,
+  ) {}
 
   /**
    * Workspace mutation tracker.
@@ -1083,27 +1083,15 @@ export class DataLabRuntime {
   }
 
   static async load(
-    onProgress?: (msg: string) => void,
-    opts: RuntimeLoadOptions = {},
+    onProgress: ((msg: string) => void) | undefined,
+    opts: RuntimeLoadOptions,
   ): Promise<DataLabRuntime> {
-    // The Pyodide loader is injectable so the runtime can boot both on the
-    // main thread (where ``window.loadPyodide`` is provided by the
-    // index.html <script>) and inside a Dedicated Web Worker (where the
-    // ``kernelWorker`` passes a dynamic-``import()`` loader for the ESM
-    // Pyodide build — there is no ``window`` there). Default preserves the
-    // historical main-thread behaviour exactly.
+    const { runtimeConfig } = opts;
     const loadPyodide =
-      opts.loadPyodide ??
-      (typeof window !== "undefined" ? window.loadPyodide : undefined);
-    if (typeof loadPyodide !== "function") {
-      throw new Error(
-        "Pyodide failed to load from the CDN. Check the browser console " +
-          "and your network / Content-Security-Policy settings.",
-      );
-    }
+      opts.loadPyodide ?? (() => loadConfiguredPyodide(runtimeConfig));
     onProgress?.(t("Loading Pyodide runtime…"));
     const py = (await loadPyodide({
-      indexURL: PYODIDE_INDEX,
+      indexURL: runtimeConfig.pyodideIndexUrl,
     })) as PyodideAPI;
 
     // ---------------------------------------------------------------
@@ -1138,20 +1126,17 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
     onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    await py.loadPackage(["numpy", "scipy", "h5py", "pandas", "micropip"]);
+    await py.loadPackage(runtimeConfig.pyodidePackages.main);
 
     onProgress?.(t("Installing Sigima…"));
     // ``tifffile`` is a pure-Python PyPI wheel that scikit-image needs for
     // TIFF I/O (``skimage.io`` loads ``tifffile_plugin`` for ``.tif``). The
     // Pyodide-built ``scikit-image`` trims it from its dependency list, so
     // micropip must pull it explicitly or TIFF read/write fails at runtime.
-    // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
-    // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
-    // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
-    await py.runPythonAsync(`
-import micropip
-await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
-`);
+    // The distribution manifest pins the exact wheel URLs. Online mode may
+    // resolve their transitive dependencies; local mode must provide the
+    // complete closure and installs with ``deps=False``.
+    await py.runPythonAsync(pythonWheelInstallCode(runtimeConfig));
 
     onProgress?.(t("Initialising Sigima namespace…"));
     await py.runPythonAsync(guidataJsonSchemaShim);
@@ -1193,7 +1178,7 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     );
 
     onProgress?.(t("Ready."));
-    const runtime = new DataLabRuntime(py);
+    const runtime = new DataLabRuntime(py, runtimeConfig);
     runtime.installDialogBridge();
     await runtime.installBuiltinPlugins(builtinPluginSources);
     return runtime;
@@ -3220,7 +3205,7 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
   > {
     if (this._macroRuntime) return this._macroRuntime;
     const { MacroRuntime } = await import("./MacroRuntime");
-    this._macroRuntime = new MacroRuntime(this);
+    this._macroRuntime = new MacroRuntime(this, this.runtimeConfig);
     return this._macroRuntime;
   }
 

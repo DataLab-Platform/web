@@ -19,8 +19,8 @@
  * It must stay a standalone entry point so Vite can resolve
  * ``new Worker(new URL("./kernelWorker.ts", import.meta.url))``.
  */
-import { DataLabRuntime, type PyodideLoader } from "./runtime";
-import { PYODIDE_INDEX } from "./workerBase";
+import { DataLabRuntime } from "./runtime";
+import type { ResolvedRuntimeConfig } from "./runtimeConfig";
 import { collectTransferables } from "./workerProtocol";
 import type {
   KernelEvent,
@@ -37,17 +37,6 @@ function post(event: KernelEvent, transfer?: Transferable[]): void {
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
-
-/** Module workers can't use ``importScripts``; load the ESM Pyodide build
- *  via a dynamic ``import()`` (mirrors ``workerBase.bootPyodide``). */
-const workerPyodideLoader: PyodideLoader = async (opts) => {
-  const mod = (await import(
-    /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
-  )) as {
-    loadPyodide: (o: { indexURL: string }) => Promise<unknown>;
-  };
-  return mod.loadPyodide(opts);
-};
 
 let runtime: DataLabRuntime | null = null;
 let booting = false;
@@ -72,6 +61,7 @@ function snapshot(rt: DataLabRuntime): KernelMirror {
 async function boot(
   lang: string,
   labels: { group: string; untitled: string },
+  runtimeConfig: ResolvedRuntimeConfig,
 ): Promise<void> {
   if (runtime || booting) return;
   booting = true;
@@ -79,7 +69,7 @@ async function boot(
     const rt = await DataLabRuntime.load(
       (message) => post({ type: "progress", message }),
       {
-        loadPyodide: workerPyodideLoader,
+        runtimeConfig,
         lang,
         labels,
       },
@@ -143,7 +133,7 @@ ctx.onmessage = (ev: MessageEvent<KernelRequest>) => {
   const msg = ev.data;
   switch (msg.type) {
     case "init":
-      void boot(msg.lang, msg.labels);
+      void boot(msg.lang, msg.labels, msg.runtimeConfig);
       break;
     case "call":
       void handleCall(msg.id, msg.method, msg.args);

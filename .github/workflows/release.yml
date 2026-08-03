@@ -124,20 +124,38 @@ jobs:
       - name: Build app bundle
         run: npm run build
 
+      - name: Cache offline Python distribution
+        uses: actions/cache@v4
+        with:
+          path: .cache/offline
+          key: offline-python-pyodide-0.26.4-${{ hashFiles('public/runtime-config.json') }}
+
       - name: Pack SDK tarball
         run: npm run sdk:pack
 
       - name: Pack app tarball
         run: npm run app:pack
 
+      - name: Pack self-contained offline ZIP
+        run: npm run app:pack:offline
+
+      - name: Install Playwright browser for offline validation
+        run: npx playwright install --with-deps chromium
+
+      - name: Validate offline package in Chromium
+        run: npm run test:e2e:offline
+
       - name: List release artefacts
         run: ls -lh release/
 
-      - name: Upload tarballs as workflow artefacts
+      - name: Upload release files as one workflow artefact
         uses: actions/upload-artifact@v4
         with:
           name: datalab-web-release
-          path: release/*.tgz
+          path: |
+            release/*.tgz
+            release/*.zip
+            release/*.sha256
           if-no-files-found: error
           retention-days: 30
 
@@ -153,11 +171,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/extract-changelog.mjs "$GITHUB_REF_NAME" -o release-notes.md
 
-      - name: Attach tarballs to GitHub Release
+      - name: Attach complete artifact set to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.tgz
+          files: release/*
           fail_on_unmatched_files: true
           body_path: release-notes.md
           generate_release_notes: true
