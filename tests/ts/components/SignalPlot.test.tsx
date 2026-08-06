@@ -183,6 +183,71 @@ describe("SignalPlot multi-signal layouts", () => {
     ).toBe("1080px");
   });
 
+  it("routes grouped signals and results to shared axes", () => {
+    const pointResult = {
+      category: "geometry",
+      metadata_key: "peak",
+      title: "Peak",
+      func_name: "peak",
+      headers: [],
+      roi_indices: null,
+      kind: "point",
+      coords: [[1, 2]],
+    } satisfies AnalysisResult;
+    const onEditAxisGroups = vi.fn();
+    renderPlot({
+      data: makeSignal("primary"),
+      extraSignals: [makeSignal("extra"), makeSignal("third")],
+      extraResults: [{ signalId: "extra", results: [pointResult] }],
+      layoutMode: "vertical",
+      onLayoutModeChange: () => {},
+      axisGroups: [
+        { id: "paired", signalIds: ["primary", "extra"] },
+        { id: "third", signalIds: ["third"] },
+      ],
+      onEditAxisGroups,
+    });
+    const { data, layout } = currentPlot();
+    const signalIds = new Set(["primary", "extra", "third"]);
+    expect(
+      data
+        .filter((trace) => signalIds.has(String(trace.uid ?? "")))
+        .map((trace) => [trace.xaxis, trace.yaxis]),
+    ).toEqual([
+      ["x", "y"],
+      ["x", "y"],
+      ["x2", "y2"],
+    ]);
+    expect(data.find((trace) => trace.name === "Peak")).toMatchObject({
+      xaxis: "x",
+      yaxis: "y",
+    });
+    expect(layout.uirevision).toContain("paired:primary,extra");
+    fireEvent.click(screen.getByRole("button", { name: "Organize axes…" }));
+    expect(onEditAxisGroups).toHaveBeenCalledOnce();
+  });
+
+  it("changes the figure revision when only axis grouping changes", () => {
+    const { rerender } = renderPlot({
+      data: makeSignal("primary"),
+      extraSignals: [makeSignal("extra")],
+      layoutMode: "vertical",
+      axisGroups: [
+        { id: "primary", signalIds: ["primary"] },
+        { id: "extra", signalIds: ["extra"] },
+      ],
+    });
+    const before = currentPlot().layout.uirevision;
+    rerender(
+      plotElement(makeSignal("primary"), {
+        extraSignals: [makeSignal("extra")],
+        layoutMode: "vertical",
+        axisGroups: [{ id: "paired", signalIds: ["primary", "extra"] }],
+      }),
+    );
+    expect(currentPlot().layout.uirevision).not.toBe(before);
+  });
+
   it("keeps a single signal on the historical primary axes", () => {
     renderPlot({ data: makeSignal("primary"), layoutMode: "vertical" });
     const { data, layout } = currentPlot();

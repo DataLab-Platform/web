@@ -5,6 +5,7 @@ import {
   bundleSignalResults,
   haveCompatibleSignalXAxes,
   normalizeSignalLayoutMode,
+  normalizeSignalAxisGroups,
 } from "../../src/components/signalPlotLayout";
 import type { AnalysisResult, SignalData } from "../../src/runtime/runtime";
 
@@ -80,6 +81,81 @@ describe("signalPlotLayout", () => {
     expect(layout.axes.xaxis2.matches).toBe("x");
     expect(layout.axes.xaxis3.matches).toBe("x");
     expect(layout.minWidth).toBeGreaterThanOrEqual(1080);
+  });
+
+  it("places several signals on one vertical axis group", () => {
+    const signals = [makeSignal("a"), makeSignal("b"), makeSignal("c")];
+    const layout = buildSignalPlotLayout(signals, "vertical", [
+      { id: "ab", signalIds: ["a", "b"] },
+      { id: "c", signalIds: ["c"] },
+    ]);
+    expect(layout.assignments.map(({ xRef, yRef }) => [xRef, yRef])).toEqual([
+      ["x", "y"],
+      ["x", "y"],
+      ["x2", "y2"],
+    ]);
+    expect(Object.keys(layout.axes)).toEqual([
+      "xaxis",
+      "yaxis",
+      "xaxis2",
+      "yaxis2",
+    ]);
+    expect(layout.axes.xaxis2.matches).toBe("x");
+    expect(layout.minHeight).toBe(440);
+  });
+
+  it("uses group domains horizontally and flattens groups in overlay mode", () => {
+    const signals = [makeSignal("a"), makeSignal("b"), makeSignal("c")];
+    const groups = [
+      { id: "ab", signalIds: ["a", "b"] },
+      { id: "c", signalIds: ["c"] },
+    ];
+    const horizontal = buildSignalPlotLayout(signals, "horizontal", groups);
+    expect(
+      horizontal.assignments.map(({ xRef, yRef }) => [xRef, yRef]),
+    ).toEqual([
+      ["x", "y"],
+      ["x", "y"],
+      ["x2", "y2"],
+    ]);
+    expect(horizontal.minWidth).toBe(720);
+
+    const overlay = buildSignalPlotLayout(signals, "overlay", groups);
+    expect(overlay.assignments.map(({ xRef, yRef }) => [xRef, yRef])).toEqual([
+      ["x", "y"],
+      ["x", "y"],
+      ["x", "y"],
+    ]);
+    expect(overlay.axisGroups).toEqual(groups);
+  });
+
+  it("normalizes incomplete and duplicate axis groups", () => {
+    const signals = [makeSignal("a"), makeSignal("b"), makeSignal("c")];
+    expect(
+      normalizeSignalAxisGroups(signals, [
+        { id: "first", signalIds: ["a", "missing", "a"] },
+        { id: "first", signalIds: ["a", "b"] },
+        { id: "empty", signalIds: ["missing"] },
+      ]),
+    ).toEqual([
+      { id: "first", signalIds: ["a"] },
+      { id: "axis:b", signalIds: ["b"] },
+      { id: "axis:c", signalIds: ["c"] },
+    ]);
+  });
+
+  it("does not synchronize a group whose members have incompatible X axes", () => {
+    const signals = [
+      makeSignal("a", "s"),
+      makeSignal("b", "Hz", "Frequency"),
+      makeSignal("c", "s"),
+    ];
+    const layout = buildSignalPlotLayout(signals, "vertical", [
+      { id: "mixed", signalIds: ["a", "b"] },
+      { id: "seconds", signalIds: ["c"] },
+    ]);
+    expect(layout.axes.xaxis.matches).toBeUndefined();
+    expect(layout.axes.xaxis2.matches).toBeUndefined();
   });
 
   it("does not synchronize ambiguous or incompatible X axes", () => {

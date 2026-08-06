@@ -92,6 +92,19 @@ def _new_id(prefix: str = "") -> str:
     return f"{prefix}{uuid.uuid4().hex[:8]}"
 
 
+def _object_uuid(obj: Any) -> str | None:
+    """Return DataLab's persistent UUID metadata option, when present."""
+    value = getattr(obj, "metadata", {}).get("__uuid")
+    return value if isinstance(value, str) and value else None
+
+
+def _set_new_object_uuid(obj: Any) -> str:
+    """Assign and return a fresh DataLab-compatible object UUID."""
+    value = str(uuid.uuid4())
+    obj.set_metadata_option("uuid", value)
+    return value
+
+
 def _dedupe_preserve_order(oids: list[str]) -> list[str]:
     """Return *oids* with duplicates removed, keeping first occurrence.
 
@@ -224,10 +237,22 @@ class ObjectModel:
 
     # -- Object mutation ----------------------------------------------------
 
-    def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
+    def add_object(
+        self,
+        kind: str,
+        obj: Any,
+        group_id: str | None = None,
+        *,
+        preserve_uuid: bool = False,
+    ) -> str:
         """Insert *obj* in *kind*'s panel (in *group_id* or default group)."""
         panel = self.panel(kind)
         group = panel.find_group(group_id) if group_id else panel.ensure_default_group()
+        object_uuid = _object_uuid(obj) if preserve_uuid else None
+        if object_uuid is None or any(
+            _object_uuid(entry.obj) == object_uuid for entry in self._objects.values()
+        ):
+            _set_new_object_uuid(obj)
         oid = _new_id()
         self._objects[oid] = _ObjectEntry(oid=oid, kind=kind, obj=obj)
         group.object_ids.append(oid)
@@ -310,6 +335,7 @@ class ObjectModel:
         """Insert a deep copy of object *oid* right after it in its group."""
         entry = self._objects[oid]
         new_obj = entry.obj.copy()
+        _set_new_object_uuid(new_obj)
         new_oid = _new_id()
         self._objects[new_oid] = _ObjectEntry(oid=new_oid, kind=entry.kind, obj=new_obj)
         panel = self.panel(entry.kind)
@@ -392,7 +418,7 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
         size = int(spilled["shape"][1]) if spilled else int(obj.x.size)
         return {
             "kind": "signal",
-            "uuid": getattr(obj, "uuid", None),
+            "uuid": _object_uuid(obj),
             "title": obj.title,
             "size": size,
             "xlabel": obj.xlabel or "",
@@ -406,7 +432,7 @@ def _object_meta(entry: _ObjectEntry) -> dict[str, Any]:
         h, w = spilled["shape"][:2] if spilled else obj.data.shape[:2]
         return {
             "kind": "image",
-            "uuid": getattr(obj, "uuid", None),
+            "uuid": _object_uuid(obj),
             "title": obj.title,
             "size": int(w * h),
             "width": int(w),
@@ -2596,11 +2622,11 @@ def add_object_pickled(pickled_b64: str, kind: str, group_id: str | None = None)
 def set_object_pickled(pickled_b64: str) -> str:
     """Replace an existing object's data, matched by its ``uuid`` attribute."""
     obj = _decode_pickled_obj(pickled_b64)
-    target_uuid = getattr(obj, "uuid", None)
+    target_uuid = _object_uuid(obj)
     if target_uuid is None:
         raise KeyError("Replacement object carries no UUID")
     for entry in _MODEL._objects.values():  # noqa: SLF001
-        if getattr(entry.obj, "uuid", None) == target_uuid:
+        if _object_uuid(entry.obj) == target_uuid:
             entry.obj = obj
             _mark_object_data_changed(entry.oid)
             return entry.oid
@@ -2629,7 +2655,7 @@ def get_group_titles_with_object_info(
             entry = _MODEL._objects.get(oid)  # noqa: SLF001
             if entry is None:
                 continue
-            gids.append(getattr(entry.obj, "uuid", oid) or oid)
+            gids.append(_object_uuid(entry.obj) or oid)
             gtitles.append(getattr(entry.obj, "title", ""))
         uuids.append(gids)
         obj_titles.append(gtitles)
@@ -5988,7 +6014,9 @@ def open_workspace_from_bytes(
                                 with reader.group(obj_name):
                                     obj = klass()
                                     obj.deserialize(reader)
-                                _MODEL.add_object(kind, obj, group_id=gid)
+                                _MODEL.add_object(
+                                    kind, obj, group_id=gid, preserve_uuid=True
+                                )
                                 if kind == "signal":
                                     counts["signals"] += 1
                                 else:

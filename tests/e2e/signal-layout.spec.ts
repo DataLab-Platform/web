@@ -6,6 +6,8 @@ test.describe.serial("multi-signal plot layout", () => {
     await dismissAnyDialog(page);
     await page.evaluate(async () => {
       await window.runtime.resetAll();
+      localStorage.removeItem("datalab-web.signal-axis-groups");
+      localStorage.removeItem("datalab-web.signal-layout-mode");
     });
     await page.getByRole("tab", { name: "Images" }).click();
     await page.getByRole("tab", { name: "Signals" }).click();
@@ -69,29 +71,71 @@ test.describe.serial("multi-signal plot layout", () => {
           y2: gd?.layout?.yaxis2?.domain ?? [0, 1],
           matches: gd?.layout?.xaxis2?.matches ?? null,
           stored: localStorage.getItem("datalab-web.signal-layout-mode"),
+          storedAxisGroups: localStorage.getItem(
+            "datalab-web.signal-axis-groups",
+          ),
         };
       });
 
-    await page.getByRole("button", { name: "Vertical" }).click();
+    await page.getByRole("button", { name: "Organize axes…" }).click();
+    const dialog = page.getByRole("dialog", { name: "Organize signal axes" });
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Vertical" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await dialog.getByRole("combobox").nth(1).selectOption({ index: 0 });
+    await dialog.getByRole("button", { name: "Apply" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Vertical" }),
+    ).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(async () => (await readLayout()).traces.map((trace) => trace.yaxis))
-      .toEqual(["y", "y2", "y3"]);
+      .toEqual(["y", "y", "y2"]);
     let snapshot = await readLayout();
     expect(snapshot.y1[0]).toBeGreaterThan(snapshot.y2[1]);
     expect(snapshot.matches).toBe("x");
     expect(snapshot.stored).toBe("vertical");
+    expect(JSON.parse(snapshot.storedAxisGroups ?? "{}")).toMatchObject({
+      version: 1,
+    });
 
     await page.getByRole("button", { name: "Horizontal" }).click();
     await expect
       .poll(async () => (await readLayout()).traces.map((trace) => trace.xaxis))
-      .toEqual(["x", "x2", "x3"]);
+      .toEqual(["x", "x", "x2"]);
     snapshot = await readLayout();
     expect(snapshot.x1[1]).toBeLessThan(snapshot.x2[0]);
     expect(snapshot.stored).toBe("horizontal");
+
+    await page.getByRole("button", { name: "Organize axes…" }).click();
+    await dialog.getByRole("button", { name: "Vertical" }).click();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      page.getByRole("button", { name: "Horizontal" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(async () => (await readLayout()).traces.map((trace) => trace.xaxis))
+      .toEqual(["x", "x", "x2"]);
+    expect((await readLayout()).stored).toBe("horizontal");
 
     await page.getByRole("button", { name: "Overlay" }).click();
     await expect
       .poll(async () => (await readLayout()).traces.map((trace) => trace.xaxis))
       .toEqual(["x", "x", "x"]);
+
+    await page.getByRole("button", { name: "Vertical" }).click();
+    await items.filter({ hasText: "layout-0" }).first().click();
+    await items
+      .filter({ hasText: "layout-1" })
+      .first()
+      .click({ modifiers: ["Control"] });
+    await items
+      .filter({ hasText: "layout-2" })
+      .first()
+      .click({ modifiers: ["Control"] });
+    await expect
+      .poll(async () => (await readLayout()).traces.map((trace) => trace.yaxis))
+      .toEqual(["y", "y", "y2"]);
   });
 });

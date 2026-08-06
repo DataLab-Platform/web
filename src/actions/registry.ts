@@ -458,6 +458,10 @@ export interface ViewActionCallbacks {
   signalLayoutAvailable: boolean;
   /** Select and persist the multi-signal plot arrangement. */
   onSetSignalLayoutMode: (mode: SignalLayoutMode) => void;
+  /** Whether more than one signal is available for axis grouping. */
+  signalAxisGroupsAvailable: boolean;
+  /** Open the selected-signal axis grouping editor. */
+  onOrganizeSignalAxes: () => void;
   /** Open the current selection in a full-screen popout dialog. */
   onOpenSeparateView: () => void;
   /** True when the active panel has at least one object selected
@@ -548,6 +552,15 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
         if (cb.signalLayoutMode !== mode) cb.onSetSignalLayoutMode(mode);
       },
     })),
+    {
+      id: "view.signal_axes.organize",
+      label: t("Organize axes…"),
+      menuPath: "View/Signal plot layout/Organize axes…",
+      beginGroup: true,
+      enabled: (state) =>
+        state.status === "ready" && !state.busy && cb.signalAxisGroupsAvailable,
+      run: cb.onOrganizeSignalAxes,
+    },
     {
       id: "view.notebook_floating",
       label: `${notebookPrefix}${t("Detach Notebooks panel")}`,

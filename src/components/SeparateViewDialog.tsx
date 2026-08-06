@@ -16,7 +16,11 @@
 import { useEffect } from "react";
 import { ImagePlot } from "./ImagePlot";
 import { SignalPlot } from "./SignalPlot";
-import type { SignalLayoutMode, SignalResultBundle } from "./signalPlotLayout";
+import type {
+  SignalAxisGroup,
+  SignalLayoutMode,
+  SignalResultBundle,
+} from "./signalPlotLayout";
 import type {
   ImageData,
   PlotlyAnnotations,
@@ -53,6 +57,8 @@ interface Props {
   showGraphicalTitles: boolean;
   signalLayoutMode: SignalLayoutMode;
   onSignalLayoutModeChange: (mode: SignalLayoutMode) => void;
+  signalAxisGroups: readonly SignalAxisGroup[];
+  onEditSignalAxisGroups: () => void;
   onClose: () => void;
 }
 
@@ -62,6 +68,8 @@ export function SeparateViewDialog({
   showGraphicalTitles,
   signalLayoutMode,
   onSignalLayoutModeChange,
+  signalAxisGroups,
+  onEditSignalAxisGroups,
   onClose,
 }: Props) {
   // Close on Escape — same convention as the existing ConfirmDialog.
@@ -117,6 +125,8 @@ export function SeparateViewDialog({
               extraResults={content.extraResults}
               layoutMode={signalLayoutMode}
               onLayoutModeChange={onSignalLayoutModeChange}
+              axisGroups={signalAxisGroups}
+              onEditAxisGroups={onEditSignalAxisGroups}
             />
           ) : (
             <ImagePlot

@@ -1812,6 +1812,149 @@ input {
   color: #fff;
 }
 
+.signal-layout-organizebtn {
+  margin-inline-start: auto;
+}
+
+.signal-axis-groups-dialog {
+  width: min(760px, 92vw);
+  max-height: min(86vh, 820px);
+  display: flex;
+  flex-direction: column;
+}
+
+.signal-axis-groups-description {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.signal-axis-groups-layout {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.signal-axis-groups-layout > span {
+  margin-right: 2px;
+  color: var(--text-dim);
+}
+
+.signal-axis-groups-toolbar,
+.signal-axis-group-header,
+.signal-axis-group-order {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.signal-axis-groups-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.signal-axis-groups-list {
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+
+.signal-axis-group {
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.signal-axis-group-header {
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.signal-axis-group-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.signal-axis-group-order button {
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.signal-axis-group-signals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signal-axis-group-signals li {
+  display: grid;
+  grid-template-columns: 20px minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 3px 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: var(--bg);
+}
+
+.signal-axis-group-signals li:first-child {
+  border-top: 0;
+}
+
+.signal-axis-group-drag {
+  color: var(--text-dim);
+  cursor: grab;
+  font-weight: 700;
+}
+
+.signal-axis-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signal-axis-group-signals label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.signal-axis-group-signals select {
+  min-width: 90px;
+}
+
+.signal-axis-group-empty {
+  padding: 14px;
+  border: 1px dashed var(--border);
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.signal-axis-group-warning {
+  margin-top: 6px;
+  color: var(--warning, #9a6700);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .signal-axis-groups-layout {
+    flex-wrap: wrap;
+  }
+
+  .signal-axis-group-signals li {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .signal-axis-group-signals label {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+}
+
 .signal-plot-viewport {
   flex: 1 1 auto;
   min-width: 0;

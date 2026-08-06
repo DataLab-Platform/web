@@ -31,6 +31,30 @@ def test_create_signal_creates_default_group(fresh_bootstrap):
     assert objs[0]["size"] == 10
 
 
+def test_objects_receive_unique_persistent_uuids(fresh_bootstrap):
+    bs = fresh_bootstrap
+    source_id = bs.add_signal_from_arrays("S1", [0, 1], [0, 1])
+    duplicate_id = bs.duplicate_object(source_id)
+    objects = bs.get_panel_tree("signal")["groups"][0]["objects"]
+    uuid_by_id = {obj["id"]: obj["uuid"] for obj in objects}
+
+    assert uuid_by_id[source_id]
+    assert uuid_by_id[duplicate_id]
+    assert uuid_by_id[source_id] != uuid_by_id[duplicate_id]
+
+
+def test_workspace_roundtrip_preserves_object_uuid(fresh_bootstrap):
+    bs = fresh_bootstrap
+    bs.add_signal_from_arrays("S1", [0, 1], [0, 1])
+    original_uuid = bs.get_panel_tree("signal")["groups"][0]["objects"][0]["uuid"]
+
+    payload = bs.save_workspace_to_bytes()
+    bs.open_workspace_from_bytes("workspace.h5", payload, replace=True)
+
+    restored_uuid = bs.get_panel_tree("signal")["groups"][0]["objects"][0]["uuid"]
+    assert restored_uuid == original_uuid
+
+
 def test_create_group_appends_after_default(fresh_bootstrap):
     bs = fresh_bootstrap
     bs.add_signal_from_arrays("S0", [0, 1, 2], [0, 0, 0])

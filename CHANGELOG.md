@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added in Unreleased
+
+- **Mixed signal axis groups**: selected signals may now be organized so related curves share one axis while other curves remain on separate vertical or horizontal axes. Compatible X axes stay synchronized, and each selection's organization is restored locally when the same workspace objects are selected again.
+
 ## [0.7.0] - 2026-08-03
 
 ### Added in 0.7.0

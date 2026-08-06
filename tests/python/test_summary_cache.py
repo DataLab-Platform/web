@@ -115,9 +115,10 @@ def test_pickle_replacement_invalidates_and_delete_drops_state(
     bs.get_object_stats(oid)
 
     original = bs._MODEL.get(oid)
-    original.uuid = "summary-cache-replacement"
+    original_uuid = bs._object_uuid(original)
+    assert original_uuid is not None
     replacement = original.copy()
-    replacement.uuid = original.uuid
+    replacement.set_metadata_option("uuid", original_uuid)
     replacement.set_xydata([0, 1], [20, 40])
     payload = base64.b64encode(pickle.dumps(replacement)).decode("ascii")
     assert bs.set_object_pickled(payload) == oid

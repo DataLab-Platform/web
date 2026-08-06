@@ -35,9 +35,15 @@ export interface SignalAxisAssignment {
   yLayoutKey: string;
 }
 
+export interface SignalAxisGroup {
+  id: string;
+  signalIds: string[];
+}
+
 export interface SignalPlotLayout {
   effectiveMode: SignalLayoutMode;
   assignments: SignalAxisAssignment[];
+  axisGroups: SignalAxisGroup[];
   axes: Record<string, Record<string, unknown>>;
   minWidth?: number;
   minHeight?: number;
@@ -90,27 +96,70 @@ function domains(count: number): Array<[number, number]> {
   });
 }
 
+export function normalizeSignalAxisGroups(
+  signals: SignalData[],
+  groups?: readonly SignalAxisGroup[],
+): SignalAxisGroup[] {
+  const knownSignalIds = new Set(signals.map((signal) => signal.id));
+  const assignedSignalIds = new Set<string>();
+  const usedGroupIds = new Set<string>();
+  const normalized: SignalAxisGroup[] = [];
+
+  for (const group of groups ?? []) {
+    const signalIds = group.signalIds.filter((signalId) => {
+      if (!knownSignalIds.has(signalId) || assignedSignalIds.has(signalId)) {
+        return false;
+      }
+      assignedSignalIds.add(signalId);
+      return true;
+    });
+    if (signalIds.length === 0) continue;
+    let id = group.id.trim();
+    if (!id || usedGroupIds.has(id)) id = `axis:${signalIds[0]}`;
+    while (usedGroupIds.has(id)) id = `${id}:next`;
+    usedGroupIds.add(id);
+    normalized.push({ id, signalIds });
+  }
+
+  for (const signal of signals) {
+    if (assignedSignalIds.has(signal.id)) continue;
+    let id = `axis:${signal.id}`;
+    while (usedGroupIds.has(id)) id = `${id}:next`;
+    usedGroupIds.add(id);
+    normalized.push({ id, signalIds: [signal.id] });
+  }
+  return normalized;
+}
+
+function groupSynchronizationKey(signals: SignalData[]): string | null {
+  const firstKey = signals[0] ? synchronizationKey(signals[0]) : null;
+  if (firstKey === null) return null;
+  return signals.every((signal) => synchronizationKey(signal) === firstKey)
+    ? firstKey
+    : null;
+}
+
 export function buildSignalPlotLayout(
   signals: SignalData[],
   requestedMode: SignalLayoutMode,
+  requestedGroups?: readonly SignalAxisGroup[],
 ): SignalPlotLayout {
   const effectiveMode =
     signals.length <= 1 ? "overlay" : normalizeSignalLayoutMode(requestedMode);
-  const assignments = signals.map((signal, index) => ({
-    signalId: signal.id,
-    xRef: effectiveMode === "overlay" ? "x" : axisRef("x", index),
-    yRef: effectiveMode === "overlay" ? "y" : axisRef("y", index),
-    xLayoutKey:
-      effectiveMode === "overlay" ? "xaxis" : axisLayoutKey("xaxis", index),
-    yLayoutKey:
-      effectiveMode === "overlay" ? "yaxis" : axisLayoutKey("yaxis", index),
-  }));
+  const axisGroups = normalizeSignalAxisGroups(signals, requestedGroups);
 
   if (effectiveMode === "overlay") {
     const primary = signals[0];
     return {
       effectiveMode,
-      assignments,
+      assignments: signals.map((signal) => ({
+        signalId: signal.id,
+        xRef: "x",
+        yRef: "y",
+        xLayoutKey: "xaxis",
+        yLayoutKey: "yaxis",
+      })),
+      axisGroups,
       axes: primary
         ? {
             xaxis: {
@@ -130,8 +179,32 @@ export function buildSignalPlotLayout(
     };
   }
 
-  const splitDomains = domains(signals.length);
-  const syncKeys = signals.map(synchronizationKey);
+  const signalById = new Map(signals.map((signal) => [signal.id, signal]));
+  const groupIndexBySignalId = new Map<string, number>();
+  axisGroups.forEach((group, groupIndex) => {
+    group.signalIds.forEach((signalId) => {
+      groupIndexBySignalId.set(signalId, groupIndex);
+    });
+  });
+  const assignments = signals.map((signal) => {
+    const groupIndex = groupIndexBySignalId.get(signal.id) ?? 0;
+    return {
+      signalId: signal.id,
+      xRef: axisRef("x", groupIndex),
+      yRef: axisRef("y", groupIndex),
+      xLayoutKey: axisLayoutKey("xaxis", groupIndex),
+      yLayoutKey: axisLayoutKey("yaxis", groupIndex),
+    };
+  });
+  const splitDomains = domains(axisGroups.length);
+  const syncKeys = axisGroups.map((group) =>
+    groupSynchronizationKey(
+      group.signalIds.flatMap((signalId) => {
+        const signal = signalById.get(signalId);
+        return signal ? [signal] : [];
+      }),
+    ),
+  );
   const lastIndexBySyncKey = new Map<string, number>();
   syncKeys.forEach((key, index) => {
     if (key !== null) lastIndexBySyncKey.set(key, index);
@@ -139,13 +212,18 @@ export function buildSignalPlotLayout(
   const firstAxisBySyncKey = new Map<string, string>();
   const axes: Record<string, Record<string, unknown>> = {};
 
-  signals.forEach((signal, index) => {
-    const assignment = assignments[index];
+  axisGroups.forEach((group, index) => {
+    const signal = signalById.get(group.signalIds[0]);
+    if (!signal) return;
+    const xRef = axisRef("x", index);
+    const yRef = axisRef("y", index);
+    const xLayoutKey = axisLayoutKey("xaxis", index);
+    const yLayoutKey = axisLayoutKey("yaxis", index);
     const syncKey = syncKeys[index];
     const firstMatchingAxis =
       syncKey === null ? undefined : firstAxisBySyncKey.get(syncKey);
     if (syncKey !== null && firstMatchingAxis === undefined) {
-      firstAxisBySyncKey.set(syncKey, assignment.xRef);
+      firstAxisBySyncKey.set(syncKey, xRef);
     }
     const showXLabels =
       effectiveMode === "horizontal" ||
@@ -155,12 +233,12 @@ export function buildSignalPlotLayout(
       effectiveMode === "horizontal" ? splitDomains[index] : [0, 1];
     const yDomain =
       effectiveMode === "vertical"
-        ? splitDomains[signals.length - index - 1]
+        ? splitDomains[axisGroups.length - index - 1]
         : [0, 1];
 
-    axes[assignment.xLayoutKey] = {
+    axes[xLayoutKey] = {
       domain: xDomain,
-      anchor: assignment.yRef,
+      anchor: yRef,
       ...(firstMatchingAxis ? { matches: firstMatchingAxis } : {}),
       showticklabels: showXLabels,
       title: {
@@ -170,9 +248,9 @@ export function buildSignalPlotLayout(
       },
       automargin: true,
     };
-    axes[assignment.yLayoutKey] = {
+    axes[yLayoutKey] = {
       domain: yDomain,
-      anchor: assignment.xRef,
+      anchor: xRef,
       title: {
         text: formatSignalAxis(signal.ylabel || "Y", signal.yunit),
       },
@@ -183,14 +261,15 @@ export function buildSignalPlotLayout(
   return {
     effectiveMode,
     assignments,
+    axisGroups,
     axes,
     minWidth:
       effectiveMode === "horizontal"
-        ? Math.max(720, signals.length * 360)
+        ? Math.max(720, axisGroups.length * 360)
         : undefined,
     minHeight:
       effectiveMode === "vertical"
-        ? Math.max(440, signals.length * 220)
+        ? Math.max(440, axisGroups.length * 220)
         : undefined,
   };
 }

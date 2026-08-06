@@ -68,6 +68,7 @@ import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
 import {
   bundleSignalResults,
   normalizeSignalLayoutMode,
+  type SignalAxisGroup,
   type SignalLayoutMode,
   type SignalResultBundle,
 } from "./components/signalPlotLayout";
@@ -79,9 +80,11 @@ import {
   LazyProfileDefinitionDialog as ProfileDefinitionDialog,
   LazyRoiGridDialog as RoiGridDialog,
   LazySeparateViewDialog as SeparateViewDialog,
+  LazySignalAxisGroupsDialog as SignalAxisGroupsDialog,
   LazySignalPlot as SignalPlot,
 } from "./components/lazyPlotComponents";
 import { useSelectionView } from "./hooks/useSelectionView";
+import { useSignalAxisGroups } from "./hooks/useSignalAxisGroups";
 import { DataSetDialog } from "./components/DataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
@@ -677,6 +680,33 @@ export default function App() {
   /** Other signals selected alongside ``currentId`` and rendered according
    *  to the persisted multi-signal layout preference. */
   const [extraSignals, setExtraSignals] = useState<SignalData[]>([]);
+  const selectedSignalData = useMemo(
+    () => (data ? [data, ...extraSignals] : []),
+    [data, extraSignals],
+  );
+  const { groups: signalAxisGroups, applyGroups: applySignalAxisGroups } =
+    useSignalAxisGroups(selectedSignalData);
+  const [signalAxisGroupsDialogOpen, setSignalAxisGroupsDialogOpen] =
+    useState(false);
+  const openSignalAxisGroupsDialog = useCallback(
+    () => setSignalAxisGroupsDialogOpen(true),
+    [],
+  );
+  const closeSignalAxisGroupsDialog = useCallback(
+    () => setSignalAxisGroupsDialogOpen(false),
+    [],
+  );
+  const handleApplySignalAxisGroups = useCallback(
+    (
+      groups: SignalAxisGroup[],
+      layoutMode: Exclude<SignalLayoutMode, "overlay">,
+    ) => {
+      applySignalAxisGroups(groups);
+      setSignalLayoutMode(layoutMode);
+      setSignalAxisGroupsDialogOpen(false);
+    },
+    [applySignalAxisGroups, setSignalLayoutMode],
+  );
   const [imageData, setImageData] = useState<ImageData | null>(null);
   const [extraImages, setExtraImages] = useState<ImageData[]>([]);
   /** Multi-image view mode: ``false`` = thumbnail grid (default),
@@ -3985,6 +4015,9 @@ export default function App() {
         signalLayoutMode,
         signalLayoutAvailable: treeKind === "signal",
         onSetSignalLayoutMode: setSignalLayoutMode,
+        signalAxisGroupsAvailable:
+          treeKind === "signal" && selectedSignalData.length > 1,
+        onOrganizeSignalAxes: openSignalAxisGroupsDialog,
         onOpenSeparateView: openSeparateView,
         hasSelection: selectedIds.length > 0 || currentId !== null,
         notebookFloating,
@@ -4120,6 +4153,8 @@ export default function App() {
       toggleGraphicalTitles,
       signalLayoutMode,
       setSignalLayoutMode,
+      selectedSignalData.length,
+      openSignalAxisGroupsDialog,
       openSeparateView,
       aiPanelVisible,
       toggleAIPanel,
@@ -4496,6 +4531,8 @@ export default function App() {
                   extraResults={extraResults}
                   layoutMode={signalLayoutMode}
                   onLayoutModeChange={setSignalLayoutMode}
+                  axisGroups={signalAxisGroups}
+                  onEditAxisGroups={openSignalAxisGroupsDialog}
                 />
               </Suspense>
             )}
@@ -4999,11 +5036,28 @@ export default function App() {
                   showGraphicalTitles={showGraphicalTitles}
                   signalLayoutMode={signalLayoutMode}
                   onSignalLayoutModeChange={setSignalLayoutMode}
+                  signalAxisGroups={signalAxisGroups}
+                  onEditSignalAxisGroups={openSignalAxisGroupsDialog}
                   onClose={closeSeparateView}
                 />
               </Suspense>
             );
           })()}
+        {signalAxisGroupsDialogOpen && selectedSignalData.length > 1 && (
+          <Suspense fallback={null}>
+            <SignalAxisGroupsDialog
+              key={selectedSignalData
+                .map((signal) => `${signal.uuid ?? ""}:${signal.id}`)
+                .sort()
+                .join("|")}
+              signals={selectedSignalData}
+              groups={signalAxisGroups}
+              layoutMode={signalLayoutMode}
+              onApply={handleApplySignalAxisGroups}
+              onCancel={closeSignalAxisGroupsDialog}
+            />
+          </Suspense>
+        )}
         <DialogBridge />
         {contextMenu && (
           <ContextMenu

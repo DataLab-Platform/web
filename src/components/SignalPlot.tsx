@@ -16,6 +16,7 @@ import { buildResultAnnotationBox } from "./resultBox";
 import {
   buildSignalPlotLayout,
   SIGNAL_LAYOUT_MODES,
+  type SignalAxisGroup,
   type SignalAxisAssignment,
   type SignalLayoutMode,
   type SignalResultBundle,
@@ -65,6 +66,10 @@ interface Props {
   layoutMode?: SignalLayoutMode;
   /** Change the browser-level multi-signal arrangement preference. */
   onLayoutModeChange?: (mode: SignalLayoutMode) => void;
+  /** Ordered groups whose members share a subplot in split layouts. */
+  axisGroups?: readonly SignalAxisGroup[];
+  /** Open the editor for assigning selected signals to axes. */
+  onEditAxisGroups?: () => void;
 }
 
 const SIGNAL_PLOT_STYLE = { width: "100%", height: "100%" } as const;
@@ -75,6 +80,7 @@ const EMPTY_RESULTS: AnalysisResult[] = [];
 const EMPTY_RESULT_BUNDLES: SignalResultBundle[] = [];
 const EMPTY_ROI: SignalRoiSegment[] = [];
 const EMPTY_SIGNALS: SignalData[] = [];
+const EMPTY_AXIS_GROUPS: SignalAxisGroup[] = [];
 
 export function SignalPlot({
   data,
@@ -92,6 +98,8 @@ export function SignalPlot({
   extraSignals = EMPTY_SIGNALS,
   layoutMode = "overlay",
   onLayoutModeChange,
+  axisGroups = EMPTY_AXIS_GROUPS,
+  onEditAxisGroups,
 }: Props) {
   const plotlyTheme = usePlotlyTheme();
   const allSignals = useMemo(
@@ -116,8 +124,8 @@ export function SignalPlot({
   }>(() => ({ id: data.id, range: null }));
   const xRange = xRangeState.id === data.id ? xRangeState.range : null;
   const signalLayout = useMemo(
-    () => buildSignalPlotLayout(allSignals, layoutMode),
-    [allSignals, layoutMode],
+    () => buildSignalPlotLayout(allSignals, layoutMode, axisGroups),
+    [allSignals, layoutMode, axisGroups],
   );
   const axisBySignalId = useMemo(
     () =>
@@ -601,7 +609,10 @@ export function SignalPlot({
     signalLayout.assignments,
   ]);
   const orderedSignalIds = allSignals.map((signal) => signal.id).join(",");
-  const figureRevision = `${signalLayout.effectiveMode}:${orderedSignalIds}`;
+  const axisGroupsRevision = signalLayout.axisGroups
+    .map((group) => `${group.id}:${group.signalIds.join(",")}`)
+    .join("|");
+  const figureRevision = `${signalLayout.effectiveMode}:${orderedSignalIds}:${axisGroupsRevision}`;
   const layout = useMemo(
     () => ({
       ...plotlyTheme,
@@ -683,7 +694,7 @@ export function SignalPlot({
       className="signal-plot-host"
       style={SIGNAL_PLOT_HOST_STYLE}
     >
-      {extraSignals.length > 0 && onLayoutModeChange && (
+      {extraSignals.length > 0 && (onLayoutModeChange || onEditAxisGroups) && (
         <div
           className="signal-layout-modebar"
           role="group"
@@ -692,26 +703,37 @@ export function SignalPlot({
           <span className="signal-layout-label">
             {t("Signal plot layout")}:
           </span>
-          {SIGNAL_LAYOUT_MODES.map((mode) => {
-            const label =
-              mode === "overlay"
-                ? t("Overlay")
-                : mode === "vertical"
-                  ? t("Vertical")
-                  : t("Horizontal");
-            return (
-              <button
-                key={mode}
-                type="button"
-                className={`signal-layout-modebtn${layoutMode === mode ? " active" : ""}`}
-                aria-pressed={layoutMode === mode}
-                onClick={() => onLayoutModeChange(mode)}
-                title={label}
-              >
-                {label}
-              </button>
-            );
-          })}
+          {onLayoutModeChange &&
+            SIGNAL_LAYOUT_MODES.map((mode) => {
+              const label =
+                mode === "overlay"
+                  ? t("Overlay")
+                  : mode === "vertical"
+                    ? t("Vertical")
+                    : t("Horizontal");
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`signal-layout-modebtn${layoutMode === mode ? " active" : ""}`}
+                  aria-pressed={layoutMode === mode}
+                  onClick={() => onLayoutModeChange(mode)}
+                  title={label}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          {onEditAxisGroups && (
+            <button
+              type="button"
+              className="signal-layout-modebtn signal-layout-organizebtn"
+              onClick={onEditAxisGroups}
+              title={t("Organize axes…")}
+            >
+              {t("Organize axes…")}
+            </button>
+          )}
         </div>
       )}
       <div className="signal-plot-viewport">

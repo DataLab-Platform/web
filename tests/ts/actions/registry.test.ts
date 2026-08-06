@@ -351,6 +351,8 @@ describe("buildViewActions", () => {
       signalLayoutMode: "overlay" as const,
       signalLayoutAvailable: true,
       onSetSignalLayoutMode: vi.fn(),
+      signalAxisGroupsAvailable: true,
+      onOrganizeSignalAxes: vi.fn(),
       onOpenSeparateView: vi.fn(),
       hasSelection: true,
       notebookFloating: false,
@@ -377,6 +379,7 @@ describe("buildViewActions", () => {
       "view.signal_layout.overlay",
       "view.signal_layout.vertical",
       "view.signal_layout.horizontal",
+      "view.signal_axes.organize",
       "view.notebook_floating",
       "view.macro_floating",
       "view.language.en",
@@ -416,6 +419,20 @@ describe("buildViewActions", () => {
     ).find((action) => action.id === "view.signal_layout.overlay")!;
     expect(enabled.enabled(makeState())).toBe(true);
     expect(disabled.enabled(makeState())).toBe(false);
+  });
+
+  it("opens axis organization only for a multi-signal view", () => {
+    const cb = makeViewCallbacks();
+    const enabled = buildViewActions(cb).find(
+      (action) => action.id === "view.signal_axes.organize",
+    )!;
+    const disabled = buildViewActions(
+      makeViewCallbacks({ signalAxisGroupsAvailable: false }),
+    ).find((action) => action.id === "view.signal_axes.organize")!;
+    expect(enabled.enabled(makeState())).toBe(true);
+    expect(disabled.enabled(makeState())).toBe(false);
+    enabled.run();
+    expect(cb.onOrganizeSignalAxes).toHaveBeenCalledOnce();
   });
 
   it("marks the active locale and switches to another on demand", () => {

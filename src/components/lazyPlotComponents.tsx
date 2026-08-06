@@ -41,6 +41,11 @@ export const LazySeparateViewDialog = lazy(() =>
     default: module.SeparateViewDialog,
   })),
 );
+export const LazySignalAxisGroupsDialog = lazy(() =>
+  import("./SignalAxisGroupsDialog").then((module) => ({
+    default: module.SignalAxisGroupsDialog,
+  })),
+);
 
 /** Warm the plotting path while Pyodide initializes. */
 export async function preloadPrimaryPlots(): Promise<void> {
