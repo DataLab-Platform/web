@@ -138,6 +138,12 @@ import { type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
 import {
+  resolvePreloadUrl,
+  preloadFilename,
+  preloadPanelKind,
+  resolvePanelKind,
+} from "./utils/preload";
+import {
   acceptFromExtensions,
   downloadBytes,
   pickSaveFile,
@@ -405,7 +411,11 @@ export default function App() {
     recovered: workspaceRecovered,
   });
   useBeforeUnloadGuard(workspaceDirty);
-  const [treeKind, setTreeKind] = useState<PanelKind>("signal");
+  // ?panel=signal|image picks the startup panel (works with or without
+  // ?preload=; the preload flow may still auto-switch, see below).
+  const [treeKind, setTreeKind] = useState<PanelKind>(
+    () => resolvePanelKind(window.location.search) ?? "signal",
+  );
   // Live mirror of ``treeKind`` for async guards: a fire-and-forget
   // ``refresh()`` started for one panel must not write its results after
   // the user (or a proxy/notebook call) switched to the other panel. See
@@ -3397,6 +3407,66 @@ export default function App() {
     // a file from inside the dialog (matches Qt's File > Import HDF5).
     setH5BrowserFiles([]);
   }, []);
+
+  // Startup deep-link: `?preload=<same-origin .h5>` loads a demo workspace
+  // once the runtime is ready (used by the documentation use-case pages).
+  const preloadDone = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || !runtime || preloadDone.current) return;
+    const url = resolvePreloadUrl(window.location.search, document.baseURI);
+    if (!url) return;
+    preloadDone.current = true;
+    const filename = preloadFilename(url);
+    void (async () => {
+      setBusy(true);
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        const result = await runtime.openWorkspaceHdf5(filename, bytes, true, {
+          silent: true,
+        });
+        setSelectedIds([]);
+        setCurrentId(null);
+        setWorkspaceVersion((v) => v + 1);
+        setWorkspaceFilename(filename);
+        markClean();
+        // Land on the requested (?panel=) or only non-empty panel, so an
+        // image-only workspace doesn't show an empty Signal panel.
+        const panel = preloadPanelKind(window.location.search, result);
+        if (panel) {
+          await refreshPanelKind(panel);
+        } else {
+          await refresh(null);
+        }
+        pushToast({
+          kind: "success",
+          message: t("Loaded workspace {filename}", { filename }),
+        });
+      } catch (err) {
+        pushToast({
+          kind: "error",
+          message: t("Failed to preload workspace {filename}: {error}", {
+            filename,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [
+    status,
+    runtime,
+    refresh,
+    refreshPanelKind,
+    setWorkspaceFilename,
+    markClean,
+    pushToast,
+    setSelectedIds,
+  ]);
 
   const handleImportTextWizard = useCallback(() => {
     setTextImportOpen(true);

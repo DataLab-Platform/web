@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added in Unreleased
 
+- **Demo workspace deep links**: the application can now be opened with a workspace already loaded, via the `?preload=` URL parameter (e.g. `…/web/?preload=demos/ndt.h5`). The workspace is fetched at startup once the runtime is ready; only same-origin files are accepted, so a link cannot make the app load data from a third-party server. Three demo workspaces (spectroscopy, photonics/laser, non-destructive testing) are shipped under `demos/` and back the "try it in your browser" links of the documentation's new use-case pages.
+- **Startup panel selection**: the `?panel=signal` / `?panel=image` URL parameter opens the application directly on the requested panel. In addition, after a `?preload=` deep link the application automatically switches to the only non-empty panel, so a workspace containing only images no longer lands on an empty Signal panel.
 - **Mixed signal axis groups**: selected signals may now be organized so related curves share one axis while other curves remain on separate vertical or horizontal axes. Compatible X axes stay synchronized, and each selection's organization is restored locally when the same workspace objects are selected again.
 
 ## [0.7.0] - 2026-08-03
