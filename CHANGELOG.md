@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Added in Unreleased
+## [0.8.0] - 2026-08-07
+
+### Added in 0.8.0
 
 - **Demo workspace deep links**: the application can now be opened with a workspace already loaded, via the `?preload=` URL parameter (e.g. `…/web/?preload=demos/ndt.h5`). The workspace is fetched at startup once the runtime is ready; only same-origin files are accepted, so a link cannot make the app load data from a third-party server. Three demo workspaces (spectroscopy, photonics/laser, non-destructive testing) are shipped under `demos/` and back the "try it in your browser" links of the documentation's new use-case pages.
 - **Startup panel selection**: the `?panel=signal` / `?panel=image` URL parameter opens the application directly on the requested panel. In addition, after a `?preload=` deep link the application automatically switches to the only non-empty panel, so a workspace containing only images no longer lands on an empty Signal panel.
@@ -239,7 +241,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/DataLab-Platform/web/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DataLab-Platform/web/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/DataLab-Platform/web/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/DataLab-Platform/web/compare/v0.6.1...v0.6.2
