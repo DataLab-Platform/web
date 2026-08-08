@@ -87,19 +87,29 @@ class PluginRegistry(type):
 
     @classmethod
     def get_plugin(cls, name_or_class: str | type[PluginBase]) -> PluginBase | None:
-        """Return plugin instance by name or class."""
+        """Return a plugin by stable ID, legacy name, or class."""
         for plugin in cls._plugin_instances:
-            if name_or_class in (plugin.info.name, plugin.__class__):
+            if name_or_class in (plugin.plugin_id, plugin.__class__):
                 return plugin
+        if isinstance(name_or_class, str):
+            matching_plugins = [
+                plugin
+                for plugin in cls._plugin_instances
+                if plugin.info.name == name_or_class
+            ]
+            if len(matching_plugins) == 1:
+                return matching_plugins[0]
         return None
 
     @classmethod
     def register_plugin(cls, plugin: PluginBase) -> None:
         """Register plugin instance."""
-        if plugin.info.name in [p.info.name for p in cls._plugin_instances]:
-            raise ValueError(f"Plugin {plugin.info.name} already registered")
+        if plugin.plugin_id in [
+            registered.plugin_id for registered in cls._plugin_instances
+        ]:
+            raise ValueError(f"Plugin ID {plugin.plugin_id!r} already registered")
         cls._plugin_instances.append(plugin)
-        execenv.log(cls, f"Plugin {plugin.info.name} registered")
+        execenv.log(cls, f"Plugin {plugin.info.name} ({plugin.plugin_id}) registered")
 
     @classmethod
     def unregister_plugin(cls, plugin: PluginBase) -> None:
@@ -201,6 +211,7 @@ class PluginInfo:
     version: str = "0.0.0"
     description: str = ""
     icon: str = None
+    id: str | None = None
 
 
 class PluginBaseMeta(PluginRegistry, abc.ABCMeta):
@@ -219,6 +230,23 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self.info = self.PLUGIN_INFO
         if self.info is None:
             raise ValueError(f"Plugin info not set for {self.__class__.__name__}")
+        self.get_plugin_id()
+
+    @classmethod
+    def get_plugin_id(cls) -> str:
+        """Return the stable plugin ID or a deterministic legacy fallback."""
+        if cls.PLUGIN_INFO is None:
+            raise ValueError(f"Plugin info not set for {cls.__name__}")
+        if cls.PLUGIN_INFO.id is not None:
+            if not cls.PLUGIN_INFO.id.strip():
+                raise ValueError(f"Plugin ID not set for {cls.__name__}")
+            return cls.PLUGIN_INFO.id
+        return f"{cls.__module__}.{cls.__qualname__}"
+
+    @property
+    def plugin_id(self) -> str:
+        """Return the stable plugin ID or a deterministic legacy fallback."""
+        return self.get_plugin_id()
 
     # -- Convenience accessors -----------------------------------------
 
@@ -378,7 +406,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     def register(self, main: main.DLMainWindow) -> None:
         """Register the plugin against the (browser) main window.
 
-        Also calls :meth:`create_actions`, with the plugin name pushed
+        Also calls :meth:`create_actions`, with the stable plugin ID pushed
         onto :mod:`datalab.registries` so every contribution carries an
         ``origin`` field — required for hot reload.
         """
@@ -392,7 +420,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self.proxy = LocalProxy(main)
         self.register_hooks()
 
-        registries.push_origin(self.info.name)
+        registries.push_origin(self.plugin_id)
         try:
             self.create_actions()
         finally:
@@ -407,7 +435,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         PluginRegistry.unregister_plugin(self)
         self._is_registered = False
         self.unregister_hooks()
-        registries.clear_origin(self.info.name)
+        registries.clear_origin(self.plugin_id)
         self.main = None
         self.proxy = None
 

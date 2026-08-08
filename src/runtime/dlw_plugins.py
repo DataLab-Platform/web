@@ -208,9 +208,9 @@ def unload_plugin(name: str) -> dict[str, Any]:
         except Exception:  # pylint: disable=broad-except
             traceback.print_exc()
     # Drop any leftover catalogue contributions registered under this
-    # plugin's display name (covers plugins that didn't fully register).
-    if record.instance is not None and record.instance.info is not None:
-        registries.clear_origin(record.instance.info.name)
+    # plugin's stable ID (covers plugins that didn't fully register).
+    if record.instance is not None:
+        registries.clear_origin(record.instance.plugin_id)
     # Remove the module from sys.modules so a subsequent load re-imports
     # fresh source.
     sys.modules.pop(record.module_name, None)
@@ -272,6 +272,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
     if record.instance is not None and record.instance.info is not None:
         pinfo = record.instance.info
         info = {
+            "id": record.instance.plugin_id,
             "name": pinfo.name,
             "version": pinfo.version,
             "description": pinfo.description,
@@ -281,6 +282,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         cls_info = getattr(record.classes[0], "PLUGIN_INFO", None)
         if cls_info is not None:
             info = {
+                "id": record.classes[0].get_plugin_id(),
                 "name": cls_info.name,
                 "version": cls_info.version,
                 "description": cls_info.description,

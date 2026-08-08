@@ -14,7 +14,11 @@ from __future__ import annotations
 import sys
 
 import dlw_plugins
+import dlw_processor
 import pytest
+from datalab import registries
+from datalab.gui.processor.base import BaseProcessor
+from datalab.plugins import PluginBase, PluginInfo, PluginRegistry
 
 VALID_PLUGIN = '''
 from datalab.plugins import PluginBase, PluginInfo
@@ -24,7 +28,10 @@ class MyTestPlugin(PluginBase):
     """A minimal valid plugin."""
 
     PLUGIN_INFO = PluginInfo(
-        name="My Test Plugin", version="1.2.3", description="A test plugin."
+        id="org.example.my-test-plugin",
+        name="My Test Plugin",
+        version="1.2.3",
+        description="A test plugin.",
     )
 
     def create_actions(self):
@@ -68,8 +75,83 @@ def test_load_valid_plugin_source(plugins_env):
     assert payload["loaded"] is True
     assert payload["enabled"] is True
     assert payload["error"] is None
+    assert payload["info"]["id"] == "org.example.my-test-plugin"
     assert payload["info"]["name"] == "My Test Plugin"
     assert payload["info"]["version"] == "1.2.3"
+
+
+def test_stable_ids_own_web_plugin_contributions():
+    """Display-name changes do not affect lookup or contribution cleanup."""
+
+    def portable_processing(source):
+        return source
+
+    class PortablePlugin(PluginBase):
+        PLUGIN_INFO = PluginInfo(
+            id="org.example.portable",
+            name="Portable Plugin",
+        )
+
+        def create_actions(self):
+            pass
+
+    class DuplicatePlugin(PluginBase):
+        PLUGIN_INFO = PluginInfo(
+            id="org.example.portable",
+            name="Duplicate Plugin",
+        )
+
+        def create_actions(self):
+            pass
+
+    plugin = PortablePlugin()
+    feature_id = "org.example.portable:normalize"
+    try:
+        PluginRegistry.register_plugin(plugin)
+        with pytest.raises(ValueError, match="already registered"):
+            PluginRegistry.register_plugin(DuplicatePlugin())
+        registries.push_origin(plugin.plugin_id)
+        try:
+            processor = BaseProcessor("signal")
+            processor.register_1_to_1(
+                portable_processing,
+                "Portable processing",
+                feature_id=feature_id,
+                owner_plugin_id=plugin.plugin_id,
+            )
+            with pytest.raises(ValueError, match="already registered"):
+                processor.register_1_to_1(
+                    portable_processing,
+                    "Duplicate processing",
+                    feature_id=feature_id,
+                    owner_plugin_id=plugin.plugin_id,
+                )
+        finally:
+            registries.pop_origin()
+
+        feature = registries.EXTRA_FEATURES["signal"][0]
+        assert feature.feature_id == feature_id
+        assert feature.origin == plugin.plugin_id
+        merged = dlw_processor.merge_plugin_features({}, "signal")
+        assert list(merged) == [feature_id]
+        assert merged[feature_id].feature_id == feature_id
+        with pytest.raises(ValueError, match="already registered"):
+            dlw_processor.merge_plugin_features(merged, "signal")
+
+        plugin.info.name = "Renamed Portable Plugin"
+        assert PluginRegistry.get_plugin("org.example.portable") is plugin
+        assert PluginRegistry.get_plugin("Renamed Portable Plugin") is plugin
+
+        registries.clear_origin(plugin.plugin_id)
+        assert registries.EXTRA_FEATURES["signal"] == []
+    finally:
+        registries.clear_all()
+        if plugin in PluginRegistry.get_plugins():
+            PluginRegistry.unregister_plugin(plugin)
+        if PortablePlugin in PluginRegistry.get_plugin_classes():
+            PluginRegistry.get_plugin_classes().remove(PortablePlugin)
+        if DuplicatePlugin in PluginRegistry.get_plugin_classes():
+            PluginRegistry.get_plugin_classes().remove(DuplicatePlugin)
 
 
 def test_load_syntax_error_reports_traceback(plugins_env):

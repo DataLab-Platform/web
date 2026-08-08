@@ -51,6 +51,8 @@ class BaseProcessor:
         paramclass: type | None = None,
         icon_name: str | None = None,
         menu_path: str | None = None,
+        feature_id: str | None = None,
+        owner_plugin_id: str | None = None,
     ) -> None:
         """Register a 1→1 processing entry."""
         self._register(
@@ -60,6 +62,8 @@ class BaseProcessor:
             paramclass=paramclass,
             icon=icon_name,
             menu_path=menu_path,
+            feature_id=feature_id,
+            owner_plugin_id=owner_plugin_id,
         )
 
     def register_2_to_1(
@@ -71,6 +75,8 @@ class BaseProcessor:
         menu_path: str | None = None,
         obj2_name: str = "Operand",
         skip_xarray_compat: bool = False,
+        feature_id: str | None = None,
+        owner_plugin_id: str | None = None,
     ) -> None:
         """Register a 2→1 processing entry."""
         self._register(
@@ -82,6 +88,8 @@ class BaseProcessor:
             menu_path=menu_path,
             operand_label=obj2_name,
             skip_xarray_compat=skip_xarray_compat,
+            feature_id=feature_id,
+            owner_plugin_id=owner_plugin_id,
         )
 
     def register_n_to_1(
@@ -91,6 +99,8 @@ class BaseProcessor:
         paramclass: type | None = None,
         icon_name: str | None = None,
         menu_path: str | None = None,
+        feature_id: str | None = None,
+        owner_plugin_id: str | None = None,
     ) -> None:
         """Register an n→1 processing entry."""
         self._register(
@@ -100,6 +110,8 @@ class BaseProcessor:
             paramclass=paramclass,
             icon=icon_name,
             menu_path=menu_path,
+            feature_id=feature_id,
+            owner_plugin_id=owner_plugin_id,
         )
 
     def update_param_defaults(self, instance: gds.DataSet) -> None:
@@ -130,8 +142,28 @@ class BaseProcessor:
         menu_path: str | None = None,
         operand_label: str = "Operand",
         skip_xarray_compat: bool = False,
+        feature_id: str | None = None,
+        owner_plugin_id: str | None = None,
     ) -> None:
-        feature_id = func.__name__
+        if feature_id is None:
+            feature_id = f"{func.__module__}.{func.__qualname__}"
+        elif not feature_id.strip():
+            raise ValueError("Plugin feature ID must not be empty")
+        origin = registries.current_origin()
+        if owner_plugin_id is not None:
+            if not owner_plugin_id.strip():
+                raise ValueError("Plugin feature owner must not be empty")
+            if origin not in (None, owner_plugin_id):
+                raise ValueError(
+                    f"Plugin feature {feature_id!r} belongs to "
+                    f"{owner_plugin_id!r}, not active plugin {origin!r}"
+                )
+            origin = owner_plugin_id
+        if any(
+            feature.feature_id == feature_id
+            for feature in registries.EXTRA_FEATURES[self.object_kind]
+        ):
+            raise ValueError(f"Plugin feature ID {feature_id!r} already registered")
         if not menu_path:
             # Fallback: surface the action under "Plugins / <label>".
             menu_path = f"Plugins/{label}"
@@ -146,7 +178,7 @@ class BaseProcessor:
             operand_label=operand_label,
             skip_xarray_compat=skip_xarray_compat,
             object_kind=self.object_kind,
-            origin=registries.current_origin(),
+            origin=origin,
         )
         registries.EXTRA_FEATURES[self.object_kind].append(spec)
 

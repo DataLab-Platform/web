@@ -9,7 +9,7 @@ and ``self.signalpanel.acthandler.new_action`` APIs reproduced in
 that ``bootstrap.py`` can read to extend its feature catalogue and
 publish menu entries to the React UI.
 
-Every entry carries an ``origin`` field set to the plugin name that
+Every entry carries an ``origin`` field set to the stable plugin ID that
 contributed it, so :func:`clear_origin` can purge them on hot reload.
 """
 
@@ -37,7 +37,7 @@ class ExtraFeature:
     operand_label: str = "Operand"
     skip_xarray_compat: bool = False
     object_kind: str = "signal"
-    origin: str | None = None  # plugin name that registered it
+    origin: str | None = None  # stable ID of the plugin that registered it
 
 
 EXTRA_FEATURES: dict[str, list[ExtraFeature]] = {"signal": [], "image": []}
@@ -124,9 +124,9 @@ def clear_all() -> None:
 _CURRENT_ORIGIN: list[str] = []
 
 
-def push_origin(name: str) -> None:
-    """Mark *name* as the plugin currently registering contributions."""
-    _CURRENT_ORIGIN.append(name)
+def push_origin(plugin_id: str) -> None:
+    """Mark *plugin_id* as the plugin currently registering contributions."""
+    _CURRENT_ORIGIN.append(plugin_id)
 
 
 def pop_origin() -> None:

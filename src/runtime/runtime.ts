@@ -236,6 +236,7 @@ export interface InteractiveFitAuto {
 }
 
 export interface PluginInfoMeta {
+  id: string;
   name: string;
   version: string;
   description: string;

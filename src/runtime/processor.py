@@ -1043,14 +1043,9 @@ def merge_plugin_features(
         return dict(catalog)
     merged = dict(catalog)
     for extra in EXTRA_FEATURES.get(kind, ()):
-        # Namespace plugin features under "plugin:<name>" so they never
-        # clash with curated ids — even when plugins re-register the same
-        # function across reloads.
         fid = extra.feature_id
-        if fid in merged or f"plugin:{fid}" in merged:
-            fid = f"plugin:{extra.origin or 'unknown'}:{extra.feature_id}"
-        else:
-            fid = f"plugin:{extra.feature_id}"
+        if fid in merged:
+            raise ValueError(f"Plugin feature ID {fid!r} already registered")
         merged[fid] = FeatureSpec(
             feature_id=fid,
             label=extra.label,
