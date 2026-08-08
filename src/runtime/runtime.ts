@@ -110,6 +110,8 @@ export interface PyProxy {
 
 const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
+const SIGIMA_INSTALL_SPEC =
+  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.2.0";
 
 export interface SignalMeta {
   id: string;
@@ -294,6 +296,123 @@ export interface ObjectMeta {
 export interface PlotlyAnnotations {
   shapes: unknown[];
   annotations: unknown[];
+}
+
+export type AnnotationTextAnchor =
+  | "top-left"
+  | "top"
+  | "top-right"
+  | "left"
+  | "center"
+  | "right"
+  | "bottom-left"
+  | "bottom"
+  | "bottom-right";
+
+export type AnnotationJsonValue =
+  | null
+  | string
+  | number
+  | boolean
+  | AnnotationJsonValue[]
+  | { [key: string]: AnnotationJsonValue };
+
+export interface GraphicalAnnotationStyle {
+  stroke: {
+    color: string | null;
+    width: number;
+    opacity: number;
+    dash: string | number[];
+  };
+  fill: { color: string | null; opacity: number };
+  marker: { symbol: string; size: number; color: string | null };
+  text: {
+    family: string | null;
+    size: number;
+    bold: boolean;
+    italic: boolean;
+    color: string;
+    background_color: string | null;
+    background_opacity: number;
+  };
+}
+
+export interface GraphicalAnnotationLabel {
+  text: string;
+  visible: boolean;
+  anchor: AnnotationTextAnchor;
+  offset: [number, number];
+}
+
+interface GraphicalAnnotationCommon {
+  format: "sigima.annotation";
+  version: "1.0";
+  id: string;
+  visible: boolean;
+  locked: boolean;
+  z_index: number;
+  title: string;
+  style: GraphicalAnnotationStyle;
+  label: GraphicalAnnotationLabel | null;
+  metadata: Record<string, AnnotationJsonValue>;
+  extensions: Record<string, AnnotationJsonValue>;
+}
+
+export type GraphicalAnnotation = GraphicalAnnotationCommon &
+  (
+    | { kind: "point"; x: number; y: number }
+    | {
+        kind: "segment";
+        x0: number;
+        y0: number;
+        x1: number;
+        y1: number;
+      }
+    | {
+        kind: "rectangle";
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        angle: number;
+      }
+    | { kind: "circle"; cx: number; cy: number; radius: number }
+    | {
+        kind: "ellipse";
+        cx: number;
+        cy: number;
+        radius_x: number;
+        radius_y: number;
+        angle: number;
+      }
+    | { kind: "polyline"; points: Array<[number, number]> }
+    | { kind: "polygon"; points: Array<[number, number]> }
+    | {
+        kind: "text";
+        text: string;
+        x: number;
+        y: number;
+        coordinate_space: "data" | "axes";
+        anchor: AnnotationTextAnchor;
+        offset: [number, number];
+      }
+    | {
+        kind: "cursor";
+        orientation: "horizontal" | "vertical" | "crosshair";
+        position: number | [number, number];
+      }
+    | { kind: "range"; axis: "x" | "y"; start: number; end: number }
+  );
+
+export interface PlotlyOverlaySpec {
+  traces: Array<Record<string, unknown>>;
+  shapes: Array<Record<string, unknown>>;
+  annotations: Array<Record<string, unknown>>;
+}
+
+export interface GraphicalAnnotationsBundle {
+  items: GraphicalAnnotation[];
+  overlay: PlotlyOverlaySpec;
 }
 
 /** A single ROI segment on a 1D signal (Phase 5). */
@@ -612,6 +731,7 @@ export interface SignalViewSnapshot {
   current: SignalData;
   extras: SignalData[];
   annotations: PlotlyAnnotations;
+  graphical_annotations: GraphicalAnnotationsBundle;
   roi: SignalRoiSegment[];
   results: AnalysisResult[];
   extra_results: SignalResultBundle[];
@@ -622,6 +742,8 @@ export interface ImageViewSnapshot {
   kind: "image";
   mode: "single" | "multi";
   images: ImageData[];
+  annotations: PlotlyAnnotations;
+  graphical_annotations: GraphicalAnnotationsBundle;
   roi: ImageRoiSegment[];
   lut_range: [number, number] | null;
   results: AnalysisResult[];
@@ -1150,7 +1272,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
     await py.runPythonAsync(`
 import micropip
-await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
+await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tifffile<2025"])
 `);
 
     onProgress?.(t("Initialising Sigima namespace…"));

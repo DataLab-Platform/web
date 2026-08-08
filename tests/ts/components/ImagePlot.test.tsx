@@ -69,21 +69,28 @@ const IMAGE: ImageData = {
   zunit: "",
 };
 
-function plotElement() {
+type ImagePlotProps = Parameters<typeof ImagePlot>[0];
+
+function plotElement(props: Partial<ImagePlotProps> = {}) {
   return (
     <ThemeProvider>
-      <ImagePlot data={IMAGE} />
+      <ImagePlot data={IMAGE} {...props} />
     </ThemeProvider>
   );
 }
 
-function renderPlot() {
-  render(plotElement());
+function renderPlot(props: Partial<ImagePlotProps> = {}) {
+  render(plotElement(props));
   return currentPlot();
 }
 
 function currentPlot() {
   return plotState.props as {
+    data: Array<Record<string, unknown>>;
+    layout: {
+      shapes: Array<Record<string, unknown>>;
+      annotations: Array<Record<string, unknown>>;
+    };
     config: {
       editable: boolean;
       edits: Record<string, boolean>;
@@ -94,6 +101,33 @@ function currentPlot() {
 }
 
 describe("ImagePlot title editing", () => {
+  it("restores canonical and legacy annotations without enabling editing", () => {
+    const plot = renderPlot({
+      graphicalAnnotations: {
+        items: [],
+        overlay: {
+          traces: [{ type: "scatter", x: [1], y: [2] }],
+          shapes: [{ type: "line", name: "canonical" }],
+          annotations: [{ text: "canonical" }],
+        },
+      },
+      annotations: {
+        shapes: [{ type: "rect", name: "legacy" }],
+        annotations: [{ text: "legacy" }],
+      },
+    });
+
+    expect(plot.data.at(-1)).toMatchObject({ type: "scatter" });
+    expect(plot.layout.shapes).toEqual([
+      expect.objectContaining({ name: "canonical", editable: false }),
+      expect.objectContaining({ name: "legacy", editable: false }),
+    ]);
+    expect(plot.layout.annotations).toEqual([
+      expect.objectContaining({ text: "canonical", editable: false }),
+      expect.objectContaining({ text: "legacy", editable: false }),
+    ]);
+  });
+
   it("keeps the title read-only without enabling native ROI movement", () => {
     const plot = renderPlot();
 

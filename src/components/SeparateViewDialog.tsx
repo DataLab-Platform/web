@@ -23,6 +23,7 @@ import type {
 } from "./signalPlotLayout";
 import type {
   ImageData,
+  GraphicalAnnotationsBundle,
   PlotlyAnnotations,
   SignalData,
   SignalRoiSegment,
@@ -35,6 +36,7 @@ interface SignalContent {
   data: SignalData;
   oid: string | null;
   annotations: PlotlyAnnotations;
+  graphicalAnnotations: GraphicalAnnotationsBundle;
   roi: SignalRoiSegment[];
   results: AnalysisResult[];
   extraSignals: SignalData[];
@@ -44,6 +46,8 @@ interface SignalContent {
 interface ImageContent {
   kind: "image";
   data: ImageData;
+  annotations: PlotlyAnnotations;
+  graphicalAnnotations: GraphicalAnnotationsBundle;
   roi: ImageRoiSegment[];
   results: AnalysisResult[];
   lutRange: [number, number] | null;
@@ -113,6 +117,7 @@ export function SeparateViewDialog({
               data={content.data}
               oid={content.oid}
               annotations={content.annotations}
+              graphicalAnnotations={content.graphicalAnnotations}
               // Read-only popout: silently swallow annotation edits so
               // the popout never mutates the underlying object.
               onAnnotationsChange={() => {}}
@@ -131,6 +136,8 @@ export function SeparateViewDialog({
           ) : (
             <ImagePlot
               data={content.data}
+              annotations={content.annotations}
+              graphicalAnnotations={content.graphicalAnnotations}
               roi={content.roi}
               roiEditMode={false}
               results={content.results}

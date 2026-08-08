@@ -66,12 +66,17 @@ import numpy as np
 import sigima
 from dlw_macro_lint import lint_macro
 from sigima.objects import SignalObj
+from sigima.objects.annotations import (
+    annotation_to_dict,
+    migrate_legacy_plotpy_annotations,
+)
 from sigima.objects.signal.creation import (
     SIGNAL_TYPE_PARAM_CLASSES,
     SignalTypes,
     create_signal_parameters,
 )
 from sigima.objects.signal.roi import SignalROI
+from sigima.viz.annotation_plotly import annotations_to_plotly_spec
 
 # Re-export interactive-fit helpers as module-level callables so the JS
 # runtime can resolve them via ``py.globals.get(...)``.
@@ -3743,9 +3748,19 @@ def set_plotly_annotations(oid: str, payload: dict[str, Any]) -> None:
     if hasattr(payload, "to_py"):
         payload = payload.to_py()
     obj = _MODEL.get(oid)
-    obj.metadata[_PLOTLY_ANNOTATIONS_KEY] = {
-        "shapes": list(payload.get("shapes", [])),
-        "annotations": list(payload.get("annotations", [])),
+    previous = obj.metadata.get(_PLOTLY_ANNOTATIONS_KEY)
+    stored = dict(previous) if isinstance(previous, dict) else {}
+    stored["shapes"] = list(payload.get("shapes", []))
+    stored["annotations"] = list(payload.get("annotations", []))
+    obj.metadata[_PLOTLY_ANNOTATIONS_KEY] = stored
+
+
+def get_graphical_annotations(oid: str) -> dict[str, Any]:
+    """Return canonical annotations and their lightweight Plotly overlay."""
+    annotations = _MODEL.get(oid).get_graphical_annotations()
+    return {
+        "items": [annotation_to_dict(annotation) for annotation in annotations],
+        "overlay": annotations_to_plotly_spec(annotations),
     }
 
 
@@ -5718,6 +5733,7 @@ def get_signal_view_snapshot(
         "current": get_signal_xy(current_oid, encoding=encoding),
         "extras": get_signals_xy(extra_oids, encoding=encoding),
         "annotations": get_plotly_annotations(current_oid),
+        "graphical_annotations": get_graphical_annotations(current_oid),
         "roi": get_signal_roi(current_oid),
         "results": list_signal_results(current_oid),
         "extra_results": extra_results,
@@ -5747,6 +5763,8 @@ def get_image_view_snapshot(
         "kind": "image",
         "mode": "multi" if is_multi else "single",
         "images": images,
+        "annotations": get_plotly_annotations(current_oid),
+        "graphical_annotations": get_graphical_annotations(current_oid),
         "roi": get_image_roi(current_oid),
         "lut_range": get_lut_range(current_oid),
         "results": list_image_results(current_oid),
@@ -6014,6 +6032,7 @@ def open_workspace_from_bytes(
                                 with reader.group(obj_name):
                                     obj = klass()
                                     obj.deserialize(reader)
+                                    migrate_legacy_plotpy_annotations(obj)
                                 _MODEL.add_object(
                                     kind, obj, group_id=gid, preserve_uuid=True
                                 )

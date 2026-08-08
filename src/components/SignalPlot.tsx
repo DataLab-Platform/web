@@ -26,6 +26,7 @@ import { t } from "../i18n/translate";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
+  GraphicalAnnotationsBundle,
   PlotlyAnnotations,
   SignalData,
   SignalRoiSegment,
@@ -34,6 +35,7 @@ interface Props {
   data: SignalData;
   oid: string | null;
   annotations: PlotlyAnnotations;
+  graphicalAnnotations?: GraphicalAnnotationsBundle;
   onAnnotationsChange: (payload: PlotlyAnnotations) => void;
   /** Persistent ROI segments to overlay. */
   roi?: SignalRoiSegment[];
@@ -78,6 +80,10 @@ const DEFAULT_SIGNAL_PLOT_WIDTH = 800;
 const SIGNAL_PLOT_HORIZONTAL_MARGIN = 80;
 const EMPTY_RESULTS: AnalysisResult[] = [];
 const EMPTY_RESULT_BUNDLES: SignalResultBundle[] = [];
+const EMPTY_GRAPHICAL_ANNOTATIONS: GraphicalAnnotationsBundle = {
+  items: [],
+  overlay: { traces: [], shapes: [], annotations: [] },
+};
 const EMPTY_ROI: SignalRoiSegment[] = [];
 const EMPTY_SIGNALS: SignalData[] = [];
 const EMPTY_AXIS_GROUPS: SignalAxisGroup[] = [];
@@ -86,6 +92,7 @@ export function SignalPlot({
   data,
   oid,
   annotations,
+  graphicalAnnotations = EMPTY_GRAPHICAL_ANNOTATIONS,
   onAnnotationsChange,
   roi = EMPTY_ROI,
   roiEditMode = false,
@@ -273,6 +280,7 @@ export function SignalPlot({
       const allEv = event.shapes as Array<Record<string, unknown>>;
       const roiCount = roiShapes.length;
       const resultCount = resultShapes.length;
+      const canonicalCount = canonicalShapes.length;
       // Dashed boundary lines are injected (view mode only) right after the
       // ROI block; they are not user-editable and must be skipped when
       // recovering the trailing free-annotation shapes.
@@ -297,7 +305,11 @@ export function SignalPlot({
         // numeric x bounds as a new ROI and consume it so it doesn't end
         // up persisted as an annotation.
         const extras: unknown[] = [];
-        for (let i = roiCount + resultCount; i < allEv.length; i++) {
+        for (
+          let i = roiCount + resultCount + canonicalCount;
+          i < allEv.length;
+          i++
+        ) {
           const s = allEv[i];
           if (
             s.type === "rect" &&
@@ -336,7 +348,7 @@ export function SignalPlot({
         touched = true;
       } else {
         nextShapes = allEv
-          .slice(roiCount + boundaryCount + resultCount)
+          .slice(roiCount + boundaryCount + resultCount + canonicalCount)
           .map((shape, index) =>
             restorePrimaryPaperReferences(
               shape,
@@ -350,7 +362,11 @@ export function SignalPlot({
     }
     if ("annotations" in event && Array.isArray(event.annotations)) {
       nextAnns = (event.annotations as unknown[])
-        .slice(resultAnnotations.length + resultBoxAnnotations.length)
+        .slice(
+          resultAnnotations.length +
+            resultBoxAnnotations.length +
+            canonicalAnnotations.length,
+        )
         .map((annotation, index) =>
           restorePrimaryPaperReferences(
             annotation,
@@ -545,23 +561,58 @@ export function SignalPlot({
       ),
     [localAnnotations, primaryAxis, splitLayout],
   );
+  const canonicalShapes = useMemo(
+    () =>
+      graphicalAnnotations.overlay.shapes.map((shape) =>
+        scopePrimaryPaperReferences(
+          { ...shape, editable: false },
+          primaryAxis,
+          splitLayout,
+        ),
+      ),
+    [graphicalAnnotations, primaryAxis, splitLayout],
+  );
+  const canonicalAnnotations = useMemo(
+    () =>
+      graphicalAnnotations.overlay.annotations.map((annotation) =>
+        scopePrimaryPaperReferences(
+          { ...annotation, editable: false },
+          primaryAxis,
+          splitLayout,
+        ),
+      ),
+    [graphicalAnnotations, primaryAxis, splitLayout],
+  );
 
   const allShapes = useMemo(
     () => [
       ...roiShapes,
       ...roiBoundaryShapes,
       ...resultShapes,
+      ...canonicalShapes,
       ...displayLocalShapes,
     ],
-    [roiShapes, roiBoundaryShapes, resultShapes, displayLocalShapes],
+    [
+      roiShapes,
+      roiBoundaryShapes,
+      resultShapes,
+      canonicalShapes,
+      displayLocalShapes,
+    ],
   );
   const allAnnotations = useMemo(
     () => [
       ...resultAnnotations,
       ...resultBoxAnnotations,
+      ...canonicalAnnotations,
       ...displayLocalAnnotations,
     ],
-    [resultAnnotations, resultBoxAnnotations, displayLocalAnnotations],
+    [
+      resultAnnotations,
+      resultBoxAnnotations,
+      canonicalAnnotations,
+      displayLocalAnnotations,
+    ],
   );
   const allTraces = useMemo(() => {
     // Build one Scatter trace per signal (primary first, then any
@@ -599,9 +650,23 @@ export function SignalPlot({
       yaxis: primaryAxis.yRef,
       legendgroup: data.id,
     }));
-    return [...scopedRoiTraces, ...curveTraces, ...resultTraces];
+    const canonicalTraces = graphicalAnnotations.overlay.traces.map(
+      (trace, index) => ({
+        ...trace,
+        xaxis: primaryAxis.xRef,
+        yaxis: primaryAxis.yRef,
+        uid: `${data.id}:annotation:${index}`,
+      }),
+    );
+    return [
+      ...scopedRoiTraces,
+      ...curveTraces,
+      ...resultTraces,
+      ...canonicalTraces,
+    ];
   }, [
     data.id,
+    graphicalAnnotations,
     lodSignals,
     primaryAxis,
     resultTraces,

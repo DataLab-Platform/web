@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from "react";
 
 import type {
   AnalysisResult,
+  GraphicalAnnotationsBundle,
   ImageData,
   ImageRoiSegment,
   PanelKind,
@@ -20,6 +21,7 @@ interface SelectionViewState {
   imageData: ImageData | null;
   extraImages: ImageData[];
   annotations: PlotlyAnnotations;
+  graphicalAnnotations: GraphicalAnnotationsBundle;
   roi: SignalRoiSegment[];
   imageRoi: ImageRoiSegment[];
   imageLutRange: [number, number] | null;
@@ -36,6 +38,10 @@ function emptySelectionView(): SelectionViewState {
     imageData: null,
     extraImages: [],
     annotations: { shapes: [], annotations: [] },
+    graphicalAnnotations: {
+      items: [],
+      overlay: { traces: [], shapes: [], annotations: [] },
+    },
     roi: [],
     imageRoi: [],
     imageLutRange: null,
@@ -113,6 +119,8 @@ export function useSelectionView({
               ...emptySelectionView(),
               imageData: snapshot.images[0] ?? null,
               extraImages: snapshot.images.slice(1),
+              annotations: snapshot.annotations,
+              graphicalAnnotations: snapshot.graphical_annotations,
               imageRoi: snapshot.roi,
               imageLutRange: snapshot.lut_range,
               results: snapshot.results,
@@ -132,6 +140,7 @@ export function useSelectionView({
             data: snapshot.current,
             extraSignals: snapshot.extras,
             annotations: snapshot.annotations,
+            graphicalAnnotations: snapshot.graphical_annotations,
             roi: snapshot.roi,
             results: snapshot.results,
             extraResults: snapshot.extra_results,

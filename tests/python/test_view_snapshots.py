@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import numpy as np
+from sigima.objects.annotations import TextAnnotation
 
 
 def test_signal_view_snapshot_groups_current_and_overlay_payloads(
@@ -29,6 +30,10 @@ def test_signal_view_snapshot_groups_current_and_overlay_payloads(
     assert snapshot["current"]["id"] == current
     assert [item["id"] for item in snapshot["extras"]] == [first]
     assert snapshot["annotations"]["shapes"] == [{"type": "line"}]
+    assert snapshot["graphical_annotations"] == {
+        "items": [],
+        "overlay": {"traces": [], "shapes": [], "annotations": []},
+    }
     assert snapshot["roi"] == []
     assert snapshot["results"] == []
     assert snapshot["extra_results"] == [
@@ -75,12 +80,24 @@ def test_multi_image_snapshot_keeps_current_at_full_resolution(
 def test_single_image_snapshot_keeps_full_resolution(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = bs.add_image_from_array("I", np.arange(30).reshape(5, 6))
+    bs.set_plotly_annotations(
+        oid, {"shapes": [{"type": "rect", "name": "legacy"}], "annotations": []}
+    )
+    bs._MODEL.get(oid).add_graphical_annotation(
+        TextAnnotation(text="canonical", x=0.5, y=0.5)
+    )
 
     snapshot = bs.get_image_view_snapshot(oid, [oid], max_size=2, encoding="list")
 
     assert snapshot["mode"] == "single"
     assert snapshot["images"][0]["width"] == 6
     assert snapshot["images"][0]["height"] == 5
+    assert snapshot["annotations"]["shapes"] == [{"type": "rect", "name": "legacy"}]
+    assert snapshot["graphical_annotations"]["items"][0]["kind"] == "text"
+    assert (
+        snapshot["graphical_annotations"]["overlay"]["annotations"][0]["text"]
+        == "canonical"
+    )
 
 
 def test_properties_snapshot_includes_signal_preview_only(fresh_bootstrap):

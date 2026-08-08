@@ -66,6 +66,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    fs: {
+      // Supports VITE_SIGIMA_INSTALL_SPEC=/@fs/... during coordinated
+      // pre-release development without exposing the rest of the workspace.
+      allow: [__dirname, resolve(__dirname, "../Sigima/dist")],
+    },
     // NOTE: do NOT enable Cross-Origin-Embedder-Policy=require-corp here.
     // It would block the Pyodide CDN <script> tag (loaded without
     // `crossorigin`) and silently break the whole runtime.  Basic Pyodide

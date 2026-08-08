@@ -55,6 +55,62 @@ def test_workspace_roundtrip_preserves_object_uuid(fresh_bootstrap):
     assert restored_uuid == original_uuid
 
 
+def test_workspace_open_migrates_desktop_plotpy_annotations(fresh_bootstrap):
+    """Desktop ``plotpy_json`` annotations become visible Web overlays."""
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("Annotated", np.zeros((5, 5)))
+    item_key = "AnnotatedRectangle_001"
+    legacy_payload = {
+        "type": "plotpy_item",
+        "item_class": "AnnotatedRectangle",
+        "plotpy_json": json.dumps(
+            {
+                item_key: {
+                    "annotationparam": {"title": "Desktop rectangle"},
+                    "shapeparam": {
+                        "line": {
+                            "style": "SolidLine",
+                            "color": "#00aa00",
+                            "width": 2.0,
+                        },
+                        "fill": {
+                            "style": "NoBrush",
+                            "color": "#00aa00",
+                            "alpha": 0.0,
+                        },
+                    },
+                    "points": [
+                        "array",
+                        [[1.0, 1.0], [3.0, 1.0], [3.0, 4.0], [1.0, 4.0]],
+                        "float64",
+                    ],
+                    "closed": True,
+                    "visible": True,
+                },
+                "plot_items": [item_key],
+            }
+        ),
+    }
+    bs._MODEL.get(oid).set_annotations([legacy_payload])
+    payload = bs.save_workspace_to_bytes()
+
+    bs.open_workspace_from_bytes("desktop-workspace.h5", payload, replace=True)
+
+    restored_oid = bs.get_panel_tree("image")["groups"][0]["objects"][0]["id"]
+    snapshot = bs.get_image_view_snapshot(restored_oid, [restored_oid], encoding="list")
+    [annotation] = snapshot["graphical_annotations"]["items"]
+    [shape] = snapshot["graphical_annotations"]["overlay"]["shapes"]
+    assert annotation["kind"] == "rectangle"
+    assert annotation["title"] == "Desktop rectangle"
+    assert shape["type"] == "rect"
+    assert (shape["x0"], shape["y0"], shape["x1"], shape["y1"]) == (
+        1.0,
+        1.0,
+        3.0,
+        4.0,
+    )
+
+
 def test_create_group_appends_after_default(fresh_bootstrap):
     bs = fresh_bootstrap
     bs.add_signal_from_arrays("S0", [0, 1, 2], [0, 0, 0])

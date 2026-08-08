@@ -88,6 +88,38 @@ function currentPlot() {
 }
 
 describe("SignalPlot multi-signal layouts", () => {
+  it("composes canonical overlays before legacy editable annotations", () => {
+    renderPlot({
+      graphicalAnnotations: {
+        items: [],
+        overlay: {
+          traces: [{ type: "scatter", x: [1], y: [2] }],
+          shapes: [{ type: "line", name: "canonical" }],
+          annotations: [{ text: "canonical" }],
+        },
+      },
+      annotations: {
+        shapes: [{ type: "rect", name: "legacy" }],
+        annotations: [{ text: "legacy" }],
+      },
+    });
+
+    const plot = currentPlot();
+    expect(plot.data.at(-1)).toMatchObject({
+      type: "scatter",
+      xaxis: "x",
+      yaxis: "y",
+    });
+    expect(plot.layout.shapes).toEqual([
+      expect.objectContaining({ name: "canonical", editable: false }),
+      { type: "rect", name: "legacy" },
+    ]);
+    expect(plot.layout.annotations).toEqual([
+      expect.objectContaining({ text: "canonical", editable: false }),
+      { text: "legacy" },
+    ]);
+  });
+
   it("preserves overlay mode and exposes an accessible mode selector", () => {
     const onModeChange = vi.fn();
     renderPlot({

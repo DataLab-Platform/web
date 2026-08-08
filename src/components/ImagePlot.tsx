@@ -45,8 +45,10 @@ import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import type {
   AnalysisResult,
   GeometryAnalysisResult,
+  GraphicalAnnotationsBundle,
   ImageData,
   ImageRoiSegment,
+  PlotlyAnnotations,
 } from "../runtime/runtime";
 
 /** Pure-visualization tools available in the image viewer toolbar. */
@@ -76,6 +78,10 @@ function colormapCategoryLabel(label: string): string {
 
 interface ImagePlotProps {
   data: ImageData;
+  /** Legacy renderer-specific annotations preserved during migration. */
+  annotations?: PlotlyAnnotations;
+  /** Canonical renderer-independent annotations and their Sigima overlay. */
+  graphicalAnnotations?: GraphicalAnnotationsBundle;
   /** ROI overlays drawn on top of the heatmap. */
   roi?: ImageRoiSegment[];
   /** When true, ROI shapes become draggable/resizable and the
@@ -127,6 +133,19 @@ interface ImagePlotProps {
     row: number;
     col: number;
   }) => void;
+}
+
+const EMPTY_PLOTLY_ANNOTATIONS: PlotlyAnnotations = {
+  shapes: [],
+  annotations: [],
+};
+const EMPTY_GRAPHICAL_ANNOTATIONS: GraphicalAnnotationsBundle = {
+  items: [],
+  overlay: { traces: [], shapes: [], annotations: [] },
+};
+
+function isPlotlyRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const IMAGE_PLOT_STYLE = { width: "100%", height: "100%" } as const;
@@ -195,6 +214,8 @@ const ImageHoverOverlay = memo(
  */
 export function ImagePlot({
   data,
+  annotations = EMPTY_PLOTLY_ANNOTATIONS,
+  graphicalAnnotations = EMPTY_GRAPHICAL_ANNOTATIONS,
   roi = EMPTY_IMAGE_ROI,
   roiEditMode = false,
   onRoiChange,
@@ -598,6 +619,32 @@ export function ImagePlot({
     () => buildImageGeometryOverlays(results, showGraphicalTitles),
     [results, showGraphicalTitles],
   );
+  const persistedShapes = useMemo(
+    () => [
+      ...graphicalAnnotations.overlay.shapes.map((shape) => ({
+        ...shape,
+        editable: false,
+      })),
+      ...annotations.shapes.map((shape) =>
+        isPlotlyRecord(shape) ? { ...shape, editable: false } : shape,
+      ),
+    ],
+    [annotations.shapes, graphicalAnnotations],
+  );
+  const persistedAnnotations = useMemo(
+    () => [
+      ...graphicalAnnotations.overlay.annotations.map((annotation) => ({
+        ...annotation,
+        editable: false,
+      })),
+      ...annotations.annotations.map((annotation) =>
+        isPlotlyRecord(annotation)
+          ? { ...annotation, editable: false }
+          : annotation,
+      ),
+    ],
+    [annotations.annotations, graphicalAnnotations],
+  );
   // Top-right paper-coords summary box for TableAnalysisResult rows
   // (centroid, blob coordinates, peak positions, …).  Mirrors
   // PlotPy's "computing results" annotation in DataLab desktop.
@@ -697,8 +744,13 @@ export function ImagePlot({
   }, [highlightedVertex, roi]);
 
   const allTraces = useMemo(
-    () => [...traces, ...resultTraces, ...highlightTrace],
-    [traces, resultTraces, highlightTrace],
+    () => [
+      ...traces,
+      ...resultTraces,
+      ...graphicalAnnotations.overlay.traces,
+      ...highlightTrace,
+    ],
+    [traces, resultTraces, graphicalAnnotations, highlightTrace],
   );
 
   // Uniform-image bitmap drawn as a ``layout.images`` background.  Unlike the
@@ -821,11 +873,17 @@ export function ImagePlot({
         xanchor: "left" as const,
         yanchor: "top" as const,
       },
-      shapes: [...roiShapes, ...resultShapes, ...toolShapes],
+      shapes: [
+        ...roiShapes,
+        ...resultShapes,
+        ...persistedShapes,
+        ...toolShapes,
+      ],
       annotations: [
         ...roiAnnotations,
         ...resultAnnotations,
         ...resultBoxAnnotations,
+        ...persistedAnnotations,
       ],
       newshape: roiEditMode
         ? {
@@ -853,6 +911,8 @@ export function ImagePlot({
     resultShapes,
     resultAnnotations,
     resultBoxAnnotations,
+    persistedShapes,
+    persistedAnnotations,
     resultTraces.length,
     toolShapes,
     roiEditMode,
@@ -1254,6 +1314,7 @@ export function ImagePlot({
       if (roiEditMode && onRoiChange) {
         const roiCount = roiShapes.length;
         const resultCount = resultShapes.length;
+        const persistedCount = persistedShapes.length;
         if ("shapes" in event && Array.isArray(event.shapes)) {
           const allEv = event.shapes as Array<Record<string, unknown>>;
           const updated: ImageRoiSegment[] = [];
@@ -1262,7 +1323,11 @@ export function ImagePlot({
             const seg = shapeToRoi(allEv[i], roi[i]);
             if (seg) updated.push(seg);
           }
-          for (let i = roiCount + resultCount; i < allEv.length; i++) {
+          for (
+            let i = roiCount + resultCount + persistedCount;
+            i < allEv.length;
+            i++
+          ) {
             const seg = shapeToRoi(allEv[i], null);
             if (seg) updated.push(seg);
           }
@@ -1295,7 +1360,8 @@ export function ImagePlot({
 
       // Stats tool — capture the last user-drawn rectangle.
       if (tool === "stats") {
-        const headCount = roiShapes.length + resultShapes.length;
+        const headCount =
+          roiShapes.length + resultShapes.length + persistedShapes.length;
         if ("shapes" in event && Array.isArray(event.shapes)) {
           const allEv = event.shapes as Array<Record<string, unknown>>;
           // Find a rectangle in the trailing slots (skip the existing
@@ -1350,6 +1416,7 @@ export function ImagePlot({
       roi,
       roiShapes.length,
       resultShapes.length,
+      persistedShapes.length,
       tool,
       statsRect,
       displayRange,

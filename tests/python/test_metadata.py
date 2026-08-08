@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import numpy as np
+from sigima.objects.annotations import PointAnnotation
 
 
 def test_get_set_object_meta_round_trip(fresh_bootstrap):
@@ -80,6 +81,38 @@ def test_plotly_annotations_round_trip(fresh_bootstrap):
     got = bs.get_plotly_annotations(oid)
     assert got["shapes"] == payload["shapes"]
     assert got["annotations"] == payload["annotations"]
+
+
+def test_plotly_annotations_preserve_unknown_payload(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    obj = bs._MODEL.get(oid)
+    obj.metadata["_dlw_plotly_annotations"] = {
+        "shapes": [],
+        "annotations": [],
+        "vendor": {"keep": True},
+    }
+
+    assert bs.get_plotly_annotations(oid) == {"shapes": [], "annotations": []}
+    bs.set_plotly_annotations(oid, {"shapes": [{"type": "line"}], "annotations": []})
+
+    assert obj.metadata["_dlw_plotly_annotations"]["vendor"] == {"keep": True}
+
+
+def test_graphical_annotations_preserve_opaque_entries(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1, 2], [0, 0, 0])
+    obj = bs._MODEL.get(oid)
+    opaque = {"vendor": "custom", "payload": {"keep": True}}
+    obj.set_annotations([opaque])
+    obj.add_graphical_annotation(PointAnnotation(x=1.0, y=2.0))
+
+    payload = bs.get_graphical_annotations(oid)
+
+    assert payload["items"][0]["format"] == "sigima.annotation"
+    assert payload["items"][0]["kind"] == "point"
+    assert payload["overlay"]["traces"][0]["x"] == [1.0]
+    assert obj.get_annotations()[0] == opaque
 
 
 # ---------------------------------------------------------------------------

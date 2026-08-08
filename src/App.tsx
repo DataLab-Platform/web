@@ -155,6 +155,7 @@ import { formatBytes } from "./utils/memory";
 import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
+  GraphicalAnnotationsBundle,
   ImageCreationType,
   ImageRoiSegment,
   ObjectMeta,
@@ -830,6 +831,11 @@ export default function App() {
     shapes: [],
     annotations: [],
   });
+  const [graphicalAnnotations, setGraphicalAnnotations] =
+    useState<GraphicalAnnotationsBundle>({
+      items: [],
+      overlay: { traces: [], shapes: [], annotations: [] },
+    });
   const [roi, setRoi] = useState<SignalRoiSegment[]>([]);
   const [roiEditMode, setRoiEditMode] = useState<boolean>(false);
   const [imageRoi, setImageRoi] = useState<ImageRoiSegment[]>([]);
@@ -891,6 +897,7 @@ export default function App() {
     setImageData(selectionView.imageData);
     setExtraImages(selectionView.extraImages);
     setAnnotations(selectionView.annotations);
+    setGraphicalAnnotations(selectionView.graphicalAnnotations);
     setRoi(selectionView.roi);
     setImageRoi(selectionView.imageRoi);
     setImageLutRange(selectionView.imageLutRange);
@@ -4589,6 +4596,7 @@ export default function App() {
                   data={data}
                   oid={currentId}
                   annotations={annotations}
+                  graphicalAnnotations={graphicalAnnotations}
                   onAnnotationsChange={handleAnnotationsChange}
                   roi={roi}
                   roiEditMode={roiEditMode}
@@ -4653,6 +4661,8 @@ export default function App() {
                 <Suspense fallback={null}>
                   <ImagePlot
                     data={imageData}
+                    annotations={annotations}
+                    graphicalAnnotations={graphicalAnnotations}
                     roi={imageEraseMode ? eraseRegions : imageRoi}
                     roiEditMode={imageEraseMode || imageRoiEditMode}
                     onRoiChange={
@@ -5083,6 +5093,7 @@ export default function App() {
                 data,
                 oid: currentId,
                 annotations,
+                graphicalAnnotations,
                 roi,
                 results,
                 extraSignals,
@@ -5092,6 +5103,8 @@ export default function App() {
               content = {
                 kind: "image",
                 data: imageData,
+                annotations,
+                graphicalAnnotations,
                 roi: imageRoi,
                 results,
                 lutRange: imageLutRange,

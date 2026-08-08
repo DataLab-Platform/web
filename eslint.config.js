@@ -14,6 +14,7 @@ export default [
       "dist/**",
       "build/**",
       "release/**",
+      ".cache/**",
       "packages/*/dist/**",
       "node_modules/**",
       "coverage-ts/**",
