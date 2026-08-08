@@ -113,6 +113,22 @@ const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/
 const SIGIMA_INSTALL_SPEC =
   import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.2.0";
 
+export interface PythonDistributionInfo {
+  name: string;
+  version: string;
+}
+
+/** JSON-safe snapshot of the live Python environment. */
+export interface PythonEnvironmentInfo {
+  pythonVersion: string;
+  pythonImplementation: string;
+  pythonPlatform: string;
+  platform: string;
+  machine: string;
+  pyodideVersion: string | null;
+  packages: PythonDistributionInfo[];
+}
+
 export interface SignalMeta {
   id: string;
   uuid: string | null;
@@ -3641,6 +3657,40 @@ def _resolve(_names):
 json.dumps(_resolve(json.loads(${JSON.stringify(names)})))
 `);
     return JSON.parse(result as string) as Record<string, string | null>;
+  }
+
+  /** Return a complete, JSON-safe snapshot of the live Python runtime. */
+  async getPythonEnvironmentInfo(): Promise<PythonEnvironmentInfo> {
+    const result = await this.py.runPythonAsync(`
+import json
+import platform
+import sys
+from importlib.metadata import distributions
+
+try:
+    import pyodide as _pyodide
+    _pyodide_version = getattr(_pyodide, "__version__", None)
+except ImportError:
+    _pyodide_version = None
+
+_packages = []
+for _dist in distributions():
+    _name = _dist.metadata.get("Name")
+    if _name:
+        _packages.append({"name": _name, "version": _dist.version})
+_packages.sort(key=lambda _item: _item["name"].casefold())
+
+json.dumps({
+  "pythonVersion": platform.python_version(),
+    "pythonImplementation": platform.python_implementation(),
+    "pythonPlatform": sys.platform,
+    "platform": platform.platform(),
+    "machine": platform.machine(),
+    "pyodideVersion": _pyodide_version,
+    "packages": _packages,
+})
+`);
+    return JSON.parse(result as string) as PythonEnvironmentInfo;
   }
 
   /**

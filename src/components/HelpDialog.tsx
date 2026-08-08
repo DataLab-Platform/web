@@ -1,15 +1,24 @@
 /**
- * HelpDialog — modal serving the four entries of the "?" / Help menu:
+ * HelpDialog — modal serving informational entries of the "?" / Help menu:
  *
  *   * ``about``      — application name, version, links and credits.
  *   * ``shortcuts``  — list of recognised keyboard shortcuts.
  *   * ``console``    — live view of the in-browser console buffer
  *                      (see :mod:`utils/consoleLog`).
+ *   * ``environment`` — installation and browser diagnostics.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../assets/DataLab.svg";
+import { getEditIconUrl } from "../assets/editIcons";
 import { t } from "../i18n/translate";
+import type { RuntimeApi } from "../runtime/RuntimeApi";
+import {
+  collectEnvironmentReport,
+  formatEnvironmentReportMarkdown,
+  type EnvironmentReport,
+  type EnvironmentRuntimeStatus,
+} from "../utils/environmentReport";
 import {
   clearConsoleEntries,
   getConsoleEntries,
@@ -17,7 +26,7 @@ import {
   type ConsoleEntry,
 } from "../utils/consoleLog";
 
-export type HelpView = "about" | "shortcuts" | "console";
+export type HelpView = "about" | "shortcuts" | "console" | "environment";
 
 interface Props {
   view: HelpView;
@@ -25,12 +34,20 @@ interface Props {
   /** App version (defaults to ``import.meta.env.VITE_APP_VERSION`` when
    *  injected, otherwise the placeholder ``"dev"``). */
   appVersion?: string;
+  runtime?: RuntimeApi | null;
+  runtimeStatus?: EnvironmentRuntimeStatus;
 }
 
 const DEFAULT_VERSION =
   (import.meta.env?.VITE_APP_VERSION as string | undefined) ?? "dev";
 
-export function HelpDialog({ view, onClose, appVersion }: Props) {
+export function HelpDialog({
+  view,
+  onClose,
+  appVersion,
+  runtime = null,
+  runtimeStatus = runtime ? "ready" : "loading",
+}: Props) {
   // Esc closes the dialog.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -48,14 +65,26 @@ export function HelpDialog({ view, onClose, appVersion }: Props) {
       aria-labelledby="help-dialog-title"
       onClick={onClose}
     >
-      <div className="card help-dialog" onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`card help-dialog${view === "environment" ? " help-dialog-environment" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 id="help-dialog-title">{titleFor(view)}</h2>
-        <div className="help-dialog-body">
+        <div
+          className={`help-dialog-body${view === "environment" ? " help-dialog-body-environment" : ""}`}
+        >
           {view === "about" && (
             <AboutView version={appVersion ?? DEFAULT_VERSION} />
           )}
           {view === "shortcuts" && <ShortcutsView />}
           {view === "console" && <ConsoleView />}
+          {view === "environment" && (
+            <EnvironmentView
+              runtime={runtime}
+              runtimeStatus={runtimeStatus}
+              appVersion={appVersion ?? DEFAULT_VERSION}
+            />
+          )}
         </div>
         <div className="actions">
           <button type="button" onClick={onClose}>
@@ -75,6 +104,8 @@ function titleFor(view: HelpView): string {
       return t("Keyboard shortcuts");
     case "console":
       return t("Browser console log");
+    case "environment":
+      return t("Installation and configuration");
   }
 }
 
@@ -371,6 +402,247 @@ function ConsoleView() {
               <span className="help-console-msg">{e.message}</span>
             </div>
           ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Installation and configuration
+// ---------------------------------------------------------------------------
+
+const COPY_REPORT_ICON = getEditIconUrl("copy_titles.svg");
+
+function DetailRows({
+  rows,
+}: {
+  rows: ReadonlyArray<readonly [string, string]>;
+}) {
+  return (
+    <dl className="help-environment-details">
+      {rows.map(([label, value]) => (
+        <div className="help-environment-detail" key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function available(value: string | null | undefined): string {
+  return value || t("Unavailable");
+}
+
+function EnvironmentView({
+  runtime,
+  runtimeStatus,
+  appVersion,
+}: {
+  runtime: RuntimeApi | null;
+  runtimeStatus: EnvironmentRuntimeStatus;
+  appVersion: string;
+}) {
+  const [report, setReport] = useState<EnvironmentReport | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setReport(null);
+    setCopyState("idle");
+    void collectEnvironmentReport({
+      runtime,
+      runtimeStatus,
+      appVersion,
+    }).then((nextReport) => {
+      if (!cancelled) setReport(nextReport);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [appVersion, runtime, runtimeStatus]);
+
+  const handleCopy = async () => {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(
+        formatEnvironmentReportMarkdown(report),
+      );
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  };
+
+  const copyFeedback =
+    copyState === "copied"
+      ? t("Copied!")
+      : copyState === "error"
+        ? t("Clipboard access was denied.")
+        : "";
+
+  return (
+    <div className="help-environment">
+      <div className="help-environment-toolbar">
+        <p>
+          {t(
+            "This diagnostic snapshot contains no workspace data and is ready to paste into a bug report.",
+          )}
+        </p>
+        <div className="help-environment-copy-area">
+          <button
+            type="button"
+            className="help-environment-copy"
+            onClick={handleCopy}
+            disabled={!report}
+          >
+            {COPY_REPORT_ICON && (
+              <img src={COPY_REPORT_ICON} alt="" aria-hidden="true" />
+            )}
+            <span>{t("Copy report")}</span>
+          </button>
+          <span
+            className={`help-environment-copy-feedback help-environment-copy-${copyState}`}
+            role="status"
+            aria-live="polite"
+          >
+            {copyFeedback}
+          </span>
+        </div>
+      </div>
+
+      <div className="help-environment-content">
+        {!report ? (
+          <div className="help-environment-pending">
+            {t("Collecting environment information…")}
+          </div>
+        ) : (
+          <>
+            <p className="help-environment-captured">
+              {t("Snapshot captured {date}", {
+                date: new Date(report.capturedAt).toLocaleString(),
+              })}
+            </p>
+
+            <section>
+              <h3>{t("Application")}</h3>
+              <DetailRows
+                rows={[
+                  ["DataLab Web", report.application.version],
+                  [t("Build mode"), report.application.buildMode],
+                  [
+                    t("Runtime mode"),
+                    report.application.runtimeMode === "worker"
+                      ? t("Web Worker")
+                      : t("Main thread"),
+                  ],
+                  [
+                    t("Storage mode"),
+                    report.application.storageMode === "disk"
+                      ? t("Browser storage (OPFS)")
+                      : report.application.storageMode === "ram"
+                        ? t("Memory (RAM)")
+                        : t("Unavailable"),
+                  ],
+                  [
+                    t("OPFS availability"),
+                    report.application.opfsSupported
+                      ? t("Available")
+                      : t("Unavailable"),
+                  ],
+                ]}
+              />
+            </section>
+
+            <section>
+              <h3>{t("Python and Pyodide")}</h3>
+              {report.python.status === "ready" ? (
+                <DetailRows
+                  rows={[
+                    [t("Python version"), report.python.info.pythonVersion],
+                    [
+                      t("Implementation"),
+                      available(report.python.info.pythonImplementation),
+                    ],
+                    [
+                      t("Python platform"),
+                      available(report.python.info.pythonPlatform),
+                    ],
+                    [t("Platform"), available(report.python.info.platform)],
+                    [t("Machine"), available(report.python.info.machine)],
+                    ["Pyodide", available(report.python.info.pyodideVersion)],
+                  ]}
+                />
+              ) : (
+                <div
+                  className={`help-environment-runtime-state help-environment-runtime-${report.python.status}`}
+                  role="status"
+                >
+                  {report.python.reason === "runtime-loading"
+                    ? t(
+                        "The Python runtime is still loading. Browser information is already available.",
+                      )
+                    : report.python.reason === "collection-failed"
+                      ? t(
+                          "Python environment information could not be collected.",
+                        )
+                      : t("The Python runtime is unavailable.")}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h3>{t("Web environment")}</h3>
+              <DetailRows
+                rows={[
+                  [t("User agent"), available(report.browser.userAgent)],
+                  [t("Platform"), available(report.browser.platform)],
+                  [t("Browser language"), available(report.browser.language)],
+                  [t("Interface language"), report.browser.activeLocale],
+                  [
+                    "WebAssembly",
+                    report.browser.webAssemblySupported
+                      ? t("Available")
+                      : t("Unavailable"),
+                  ],
+                ]}
+              />
+            </section>
+
+            {report.python.status === "ready" && (
+              <section className="help-environment-packages">
+                <h3>
+                  {t("Python distributions ({count})", {
+                    count: report.python.info.packages.length,
+                  })}
+                </h3>
+                <div
+                  className="help-environment-package-table-wrap"
+                  tabIndex={0}
+                >
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Package")}</th>
+                        <th scope="col">{t("Version")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.python.info.packages.map((entry) => (
+                        <tr key={`${entry.name}:${entry.version}`}>
+                          <td>{entry.name}</td>
+                          <td>{entry.version}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>

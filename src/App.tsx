@@ -4073,6 +4073,7 @@ export default function App() {
       ...buildHelpActions({
         onShowAbout: () => setHelpView("about"),
         onShowShortcuts: () => setHelpView("shortcuts"),
+        onShowEnvironment: () => setHelpView("environment"),
         onShowConsole: () => setHelpView("console"),
         onOpenUserGuide: () => setUserGuideOpen(true),
         onOpenWelcome: () => {
@@ -5033,6 +5034,8 @@ export default function App() {
             view={helpView}
             onClose={() => setHelpView(null)}
             appVersion={import.meta.env.VITE_APP_VERSION}
+            runtime={runtime}
+            runtimeStatus={status}
           />
         )}
         {releaseNotesOpen && (
