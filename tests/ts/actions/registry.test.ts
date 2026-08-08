@@ -146,6 +146,7 @@ describe("buildHelpActions", () => {
     const actions = buildHelpActions({
       onShowAbout: vi.fn(),
       onShowShortcuts: vi.fn(),
+      onShowEnvironment: vi.fn(),
       onShowConsole: vi.fn(),
       onOpenUserGuide: vi.fn(),
       onOpenWelcome: vi.fn(),
@@ -162,6 +163,7 @@ describe("buildHelpActions", () => {
         "help.releaseNotes",
         "help.documentation",
         "help.shortcuts",
+        "help.environment",
         "help.console",
         "help.about",
       ]),

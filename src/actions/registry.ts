@@ -353,6 +353,7 @@ export function buildStaticActions(
 export interface HelpActionCallbacks {
   onShowAbout: () => void;
   onShowShortcuts: () => void;
+  onShowEnvironment: () => void;
   onShowConsole: () => void;
   onOpenUserGuide: () => void;
   onOpenWelcome: () => void;
@@ -420,11 +421,19 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       run: cb.onShowShortcuts,
     },
     {
+      id: "help.environment",
+      label: t("Installation and configuration"),
+      menuPath: "Help/Installation and configuration",
+      iconUrl: getHelpIconUrl("libre-gui-about.svg"),
+      beginGroup: true,
+      enabled: always,
+      run: cb.onShowEnvironment,
+    },
+    {
       id: "help.console",
       label: t("Browser console log"),
       menuPath: "Help/Browser console log",
       iconUrl: getRootIconUrl("console.svg"),
-      beginGroup: true,
       enabled: always,
       run: cb.onShowConsole,
     },

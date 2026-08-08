@@ -2613,6 +2613,17 @@ input {
   margin: 8px 0;
 }
 
+.help-dialog-environment {
+  width: min(820px, 94vw);
+  min-width: 0;
+  height: min(760px, 88vh);
+}
+
+.help-dialog-body-environment {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .release-notes-body {
   font-size: 13px;
   line-height: 1.5;
@@ -2880,6 +2891,215 @@ input {
 
 .help-console-error {
   color: #f48771;
+}
+
+.help-environment {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 12px;
+}
+
+.help-environment-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 0 0 auto;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-environment-toolbar p {
+  flex: 1 1 auto;
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.help-environment-copy-area {
+  display: grid;
+  justify-items: end;
+  flex: 0 0 auto;
+  min-width: 150px;
+}
+
+.help-environment-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.help-environment-copy img {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
+.help-environment-copy-feedback {
+  min-height: 17px;
+  padding-top: 3px;
+  font-size: 11px;
+}
+
+.help-environment-copy-copied {
+  color: #57b875;
+}
+
+.help-environment-copy-error {
+  color: #f48771;
+}
+
+.help-environment-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.help-environment-content section {
+  padding: 14px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.help-environment-content section:last-child {
+  border-bottom: 0;
+}
+
+.help-environment-content h3 {
+  margin: 0 0 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.help-environment-captured {
+  margin: 10px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.help-environment-details {
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.help-environment-detail {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+
+.help-environment-detail dt,
+.help-environment-detail dd {
+  margin: 0;
+  padding: 6px 8px;
+  line-height: 1.4;
+}
+
+.help-environment-detail dt {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--panel-alt) 55%, transparent);
+}
+
+.help-environment-detail dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono, "Cascadia Code", Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.help-environment-pending,
+.help-environment-runtime-state {
+  padding: 14px 0;
+  color: var(--text-dim);
+}
+
+.help-environment-runtime-error {
+  color: #f48771;
+}
+
+.help-environment-package-table-wrap {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border);
+}
+
+.help-environment-package-table-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.help-environment-package-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.help-environment-package-table-wrap th,
+.help-environment-package-table-wrap td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.help-environment-package-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-alt);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.help-environment-package-table-wrap th:last-child,
+.help-environment-package-table-wrap td:last-child {
+  width: 34%;
+  font-family: var(--font-mono, "Cascadia Code", Consolas, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.help-environment-package-table-wrap tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .help-dialog-environment {
+    width: calc(100vw - 16px);
+    max-width: none;
+    height: calc(100vh - 16px);
+    max-height: none;
+    padding: 14px;
+  }
+
+  .help-environment-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .help-environment-copy-area {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .help-environment-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .help-environment-detail dt {
+    padding-bottom: 2px;
+  }
+
+  .help-environment-detail dd {
+    padding-top: 2px;
+  }
 }
 
 /* DataSetForm — generic schema-driven parameter editor */
