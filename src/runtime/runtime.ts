@@ -266,6 +266,35 @@ export interface CameraWebManifest {
   quickstart_filename: string;
 }
 
+export interface CameraRecipeObject {
+  output_id: string;
+  id: string;
+  kind: "signal" | "image";
+  title: string;
+}
+
+export interface CameraRecipeResult {
+  output_id: string;
+  anchor_output_id: string;
+  anchor_id: string;
+  metadata_key: string;
+}
+
+export interface CameraRecipeDiagnostic {
+  level: "info" | "warning" | "error";
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface CameraRecipeCommit {
+  recipe_id: string;
+  run_id: string;
+  objects: CameraRecipeObject[];
+  results: CameraRecipeResult[];
+  diagnostics: CameraRecipeDiagnostic[];
+}
+
 export interface PluginMenuAction {
   action_id: string;
   title: string;
@@ -1043,6 +1072,7 @@ export class DataLabRuntime {
       "reapply_last_processing",
       "run_signal_analysis",
       "run_image_analysis",
+      "run_bundled_camera_recipe",
       "open_signal_from_bytes",
       "open_image_from_bytes",
       "open_from_directory_chunk",
@@ -1205,9 +1235,11 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     await py.runPythonAsync(`
   import dlw_camera
   dlw_camera.install_workspace_loader(open_workspace_from_bytes)
+  dlw_camera.install_recipe_host(_MODEL, _object_uuid)
   from dlw_camera import (
     get_bundled_camera_manifest,
     open_bundled_camera_quickstart,
+    run_bundled_camera_recipe,
   )
   `);
 
@@ -2605,6 +2637,17 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     return (await this.callPy("open_bundled_camera_quickstart", {
       replace,
     })) as WorkspaceLoadResult;
+  }
+
+  /** Run Camera characterization for selected workspace images and commit it. */
+  async runBundledCameraRecipe(
+    imageIds: string[],
+    parameterValues: Record<string, unknown> = {},
+  ): Promise<CameraRecipeCommit> {
+    return (await this.callPy("run_bundled_camera_recipe", {
+      image_ids: imageIds,
+      parameter_values: parameterValues,
+    })) as CameraRecipeCommit;
   }
 
   // ------------------------------------------------------------------

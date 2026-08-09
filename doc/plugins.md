@@ -112,6 +112,13 @@ Bundling proves distribution, not compatibility. An adapter must report
 `untested` until its visible outputs and Pyodide resource budget have passed
 their project-specific qualification gate; only then may it report `verified`.
 
+The Camera gate in `tests/e2e/camera_bundle.spec.ts` runs the packaged campaign
+through the real worker-hosted Pyodide runtime. It requires a visible Plotly
+response trace, decoded non-blank PRNU-map pixels, and the anchored metrics
+table in the Results panel. It also limits incremental WASM-heap growth to
+64 MiB and retained output arrays to three times the input arrays. The status
+change itself remains a separate, reviewable adapter-manifest change.
+
 ## Hot reload
 
 _Plugins → Reload all plugins_ re-imports every loaded plugin module

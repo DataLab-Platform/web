@@ -11,8 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Explicit Camera plugin bundle:** the Web runtime now ships the independent
   Camera characterization package as a versioned, SHA-256-checked wheel and
   can open its packaged HDF5 quickstart through the existing browser byte-I/O
-  path. Compatibility remains explicitly `untested` until visible-output and
-  Pyodide-memory qualification is complete.
+  path. Its shared recipe commits signals, images, anchored metrics, and
+  provenance transactionally; a Chromium/Pyodide gate verifies a visible
+  response curve, PRNU map, result table, and bounded demo-workspace memory.
+  Compatibility remains explicitly `untested` until the separately reviewed
+  manifest transition.
 
 ## [0.8.0] - 2026-08-07
 
