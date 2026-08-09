@@ -92,6 +92,26 @@ The synchronous helpers (`self.show_info` / `show_warning` / `show_error` /
   `src/runtime/builtin_plugins/`; it will be discovered automatically at
   startup.
 
+## Bundled multi-module distributions
+
+Single-file built-ins are not sufficient for a plugin that has a reusable
+`core -> workflow -> adapters` package. DataLab-Web therefore ships qualified
+multi-module plugins as explicit wheel assets under
+`src/runtime/builtin_wheels/`. Each artifact has a checked version, size, and
+SHA-256 manifest in TypeScript. The runtime fetches only the Vite-bundled URL,
+verifies the artifact, writes it to Pyodide's filesystem, and adds the wheel to
+`sys.path` before importing its Web adapter.
+
+The Camera characterization wheel is the first such bundle. It is deliberately
+not installed from a public package index and its Desktop entry point is not
+used in the browser. DataLab-Web supplies the portable `datalab.*` host shim,
+while the Camera adapter reuses the existing HDF5 byte loader for its packaged
+quickstart. See `src/runtime/builtin_wheels/README.md` for the update procedure.
+
+Bundling proves distribution, not compatibility. An adapter must report
+`untested` until its visible outputs and Pyodide resource budget have passed
+their project-specific qualification gate; only then may it report `verified`.
+
 ## Hot reload
 
 _Plugins → Reload all plugins_ re-imports every loaded plugin module

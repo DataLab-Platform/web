@@ -11,6 +11,7 @@ import processorSource from "./processor.py?raw";
 import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
+import dlwCameraSource from "./dlw_camera.py?raw";
 import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
 import dlwMacroLintSource from "./dlw_macro_lint.py?raw";
 import macroProxySource from "./macro_proxy.py?raw";
@@ -41,6 +42,7 @@ import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
+import { BUNDLED_CAMERA_WHEEL, fetchBundledCameraWheel } from "./bundledCamera";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -251,6 +253,17 @@ export interface PluginRecord {
   loaded: boolean;
   error: string | null;
   info: PluginInfoMeta | null;
+}
+
+export interface CameraWebManifest {
+  plugin_id: string;
+  plugin_version: string;
+  web_status: "unsupported" | "untested" | "verified";
+  datalab_web_version: string;
+  pyodide_version: string;
+  recipe_id: string;
+  recipe_version: string;
+  quickstart_filename: string;
 }
 
 export interface PluginMenuAction {
@@ -1161,11 +1174,23 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     }
     // Mirror the portable ``datalab.*`` shim into Pyodide site-packages.
     DataLabRuntime.installShim(py, shimSources);
+    // Camera is a pure-Python wheel committed into the Vite bundle. Add the
+    // wheel itself to ``sys.path`` so no package index or host entry point is
+    // consulted in the browser.
+    const cameraWheelPath = `/home/pyodide/${BUNDLED_CAMERA_WHEEL.filename}`;
+    py.FS.writeFile(cameraWheelPath, await fetchBundledCameraWheel());
+    await py.runPythonAsync(`
+  import sys
+  _camera_wheel = ${JSON.stringify(cameraWheelPath)}
+  if _camera_wheel not in sys.path:
+    sys.path.insert(0, _camera_wheel)
+  `);
     // Make ``processor.py``/``dlw_main.py``/``dlw_plugins.py`` importable.
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
     py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
     py.FS.writeFile("/home/pyodide/dlw_h5browser.py", dlwH5BrowserSource);
+    py.FS.writeFile("/home/pyodide/dlw_camera.py", dlwCameraSource);
     py.FS.writeFile(
       "/home/pyodide/dlw_interactive_fit.py",
       dlwInteractiveFitSource,
@@ -1177,6 +1202,14 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
     py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
+    await py.runPythonAsync(`
+  import dlw_camera
+  dlw_camera.install_workspace_loader(open_workspace_from_bytes)
+  from dlw_camera import (
+    get_bundled_camera_manifest,
+    open_bundled_camera_quickstart,
+  )
+  `);
 
     // Bridge DataLab-Web's own (non-gettext) default labels into Python:
     // the "Group" prefix for auto-created groups and the "Untitled" macro
@@ -2556,6 +2589,22 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
       },
       { silent: options.silent },
     )) as WorkspaceLoadResult;
+  }
+
+  /** Return the version matrix declared by the bundled Camera adapter. */
+  async getBundledCameraManifest(): Promise<CameraWebManifest> {
+    return (await this.callPy(
+      "get_bundled_camera_manifest",
+    )) as CameraWebManifest;
+  }
+
+  /** Open Camera's packaged HDF5 campaign through the existing byte loader. */
+  async openBundledCameraQuickstart(
+    replace: boolean = true,
+  ): Promise<WorkspaceLoadResult> {
+    return (await this.callPy("open_bundled_camera_quickstart", {
+      replace,
+    })) as WorkspaceLoadResult;
   }
 
   // ------------------------------------------------------------------

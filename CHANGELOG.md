@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Explicit Camera plugin bundle:** the Web runtime now ships the independent
+  Camera characterization package as a versioned, SHA-256-checked wheel and
+  can open its packaged HDF5 quickstart through the existing browser byte-I/O
+  path. Compatibility remains explicitly `untested` until visible-output and
+  Pyodide-memory qualification is complete.
+
 ## [0.8.0] - 2026-08-07
 
 ### Added in 0.8.0
