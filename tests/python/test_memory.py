@@ -103,6 +103,19 @@ def test_get_data_memory_tracks_image_arrays(fresh_bootstrap):
     assert after["data_bytes"] == 0
 
 
+def test_get_data_memory_counts_signal_storage_once(fresh_bootstrap):
+    """The ``data`` alias of SignalObj.y must not inflate retained bytes."""
+    bs = fresh_bootstrap
+    x = np.linspace(0.0, 1.0, 501)
+    y = np.zeros(501)
+
+    bs.add_signal_from_arrays("signal", x, y)
+
+    loaded = bs.get_data_memory()
+    assert loaded["object_count"] == 1
+    assert loaded["data_bytes"] == x.nbytes + y.nbytes
+
+
 def test_panel_tree_reports_real_size_when_spilled(fresh_bootstrap):
     """Spilled objects must keep their real size in the panel tree.
 

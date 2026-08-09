@@ -2756,10 +2756,9 @@ def get_data_memory() -> dict[str, int]:
     for entry in _MODEL._objects.values():  # noqa: SLF001
         obj = entry.obj
         count += 1
-        # Images expose ``data``; signals expose ``x``/``y`` plus optional
-        # ``dx``/``dy`` uncertainty arrays. Image ``dx``/``dy`` are scalar
-        # pixel sizes (no ``nbytes``) and are skipped by the guard below.
-        for attr in ("data", "x", "y", "dx", "dy"):
+        # Signal ``data`` aliases ``y`` and must not be counted twice.
+        attrs = ("x", "y", "dx", "dy") if entry.kind == "signal" else ("data",)
+        for attr in attrs:
             nbytes = getattr(getattr(obj, attr, None), "nbytes", None)
             if isinstance(nbytes, int):
                 total += nbytes

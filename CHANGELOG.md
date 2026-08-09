@@ -16,6 +16,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   response curve, PRNU map, result table, and bounded demo-workspace memory.
   The separately reviewed manifest reports `verified` for the pinned
   DataLab-Web 0.8.0 / Pyodide 0.26.4 compatibility matrix.
+- **Explicit Pulse plugin bundle:** the runtime now ships the independent Pulse
+  characterization package as a versioned, SHA-256-checked wheel. Its shared
+  recipe transactionally commits amplitude, raw-mean, aligned-mean, metrics,
+  and provenance outputs for selected signals. A deterministic 500-shot
+  Chromium/Pyodide gate verifies all visible outputs, six explainable status
+  classes, 489 aligned shots, exact retained-array growth, and bounded WASM
+  memory before the pinned compatibility manifest reports `verified`.
+
+### Fixed
+
+- **Signal memory accounting:** the memory indicator no longer counts a
+  signal's Y array twice through its equivalent `data` property, so retained
+  workspace bytes now reflect the actual X/Y storage.
 
 ## [0.8.0] - 2026-08-07
 

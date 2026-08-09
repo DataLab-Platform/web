@@ -102,11 +102,13 @@ SHA-256 manifest in TypeScript. The runtime fetches only the Vite-bundled URL,
 verifies the artifact, writes it to Pyodide's filesystem, and adds the wheel to
 `sys.path` before importing its Web adapter.
 
-The Camera characterization wheel is the first such bundle. It is deliberately
-not installed from a public package index and its Desktop entry point is not
-used in the browser. DataLab-Web supplies the portable `datalab.*` host shim,
-while the Camera adapter reuses the existing HDF5 byte loader for its packaged
-quickstart. See `src/runtime/builtin_wheels/README.md` for the update procedure.
+The Camera and Pulse characterization wheels are the first such bundles. They
+are deliberately not installed from a public package index and their Desktop
+entry points are not used in the browser. DataLab-Web supplies the portable
+`datalab.*` host shim. Camera reuses the existing HDF5 byte loader for its
+packaged quickstart, while Pulse creates its documented deterministic campaign
+through the shared headless simulator. See
+`src/runtime/builtin_wheels/README.md` for the update procedure.
 
 Bundling proves distribution, not compatibility. An adapter must report
 `untested` until its visible outputs and Pyodide resource budget have passed
@@ -119,6 +121,15 @@ table in the Results panel. It also limits incremental WASM-heap growth to
 64 MiB and retained output arrays to three times the input arrays. The status
 was promoted separately to `verified` for DataLab-Web 0.8.0, Pyodide 0.26.4,
 Camera 0.1.0, and relative-DN recipe 1.1.0 after this gate passed.
+
+The Pulse gate in `tests/e2e/pulse_bundle.spec.ts` executes the deterministic
+500-shot campaign through Pyodide and transactionally commits three signal
+outputs plus the anchored 500-row metrics table. It requires visible Plotly
+traces for amplitude, raw mean, and aligned mean; all six quality statuses;
+489 valid/aligned shots; no more than 64 MiB incremental WASM heap; and exactly
+24,032 bytes of retained output arrays. The separately reviewed manifest
+reports `verified` for DataLab-Web 0.8.0, Pyodide 0.26.4, Pulse 0.1.0, and pulse
+campaign recipe 1.1.0.
 
 ## Hot reload
 

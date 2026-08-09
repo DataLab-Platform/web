@@ -5,14 +5,14 @@ DataLab-Web build. They are explicit application assets, not a general wheel
 installer: Pyodide never searches a public package index for them or resolves
 their Desktop dependencies.
 
-The Camera wheel is built from the sibling
-`datalab-camera-characterization` checkout:
+The Camera and Pulse wheels are built from their sibling plugin checkouts:
 
 ```powershell
-python -m build --wheel --outdir ..\DataLab-Web\src\runtime\builtin_wheels
+python -m build --wheel --outdir <output-directory>
 ```
 
-After replacing an artifact, update its filename, version, byte size, and
-SHA-256 in `src/runtime/bundledCamera.ts`. Then run the focused TypeScript,
-Python, and Playwright bundle contracts. The TypeScript test fails if the
-committed artifact and manifest drift.
+Copy the resulting artifact here, then update its filename, version, byte size,
+and SHA-256 in `src/runtime/bundledCamera.ts` or
+`src/runtime/bundledPulse.ts`. Run the focused TypeScript, Python, and
+Playwright bundle contracts after every replacement. The TypeScript tests fail
+if a committed artifact and manifest drift.

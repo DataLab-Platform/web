@@ -12,6 +12,7 @@ import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
 import dlwCameraSource from "./dlw_camera.py?raw";
+import dlwPulseSource from "./dlw_pulse.py?raw";
 import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
 import dlwMacroLintSource from "./dlw_macro_lint.py?raw";
 import macroProxySource from "./macro_proxy.py?raw";
@@ -43,6 +44,7 @@ import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 import { BUNDLED_CAMERA_WHEEL, fetchBundledCameraWheel } from "./bundledCamera";
+import { BUNDLED_PULSE_WHEEL, fetchBundledPulseWheel } from "./bundledPulse";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -293,6 +295,51 @@ export interface CameraRecipeCommit {
   objects: CameraRecipeObject[];
   results: CameraRecipeResult[];
   diagnostics: CameraRecipeDiagnostic[];
+}
+
+export interface PulseWebManifest {
+  plugin_id: string;
+  plugin_version: string;
+  web_status: "unsupported" | "untested" | "verified";
+  datalab_web_version: string;
+  pyodide_version: string;
+  recipe_id: string;
+  recipe_version: string;
+}
+
+export interface PulseDemoCampaign {
+  signal_ids: string[];
+  signal_count: number;
+  parameter_values: Record<string, unknown>;
+}
+
+export interface PulseRecipeObject {
+  output_id: string;
+  id: string;
+  kind: "signal";
+  title: string;
+}
+
+export interface PulseRecipeResult {
+  output_id: string;
+  anchor_output_id: string;
+  anchor_id: string;
+  metadata_key: string;
+}
+
+export interface PulseRecipeDiagnostic {
+  level: "info" | "warning" | "error";
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface PulseRecipeCommit {
+  recipe_id: string;
+  run_id: string;
+  objects: PulseRecipeObject[];
+  results: PulseRecipeResult[];
+  diagnostics: PulseRecipeDiagnostic[];
 }
 
 export interface PluginMenuAction {
@@ -1073,6 +1120,8 @@ export class DataLabRuntime {
       "run_signal_analysis",
       "run_image_analysis",
       "run_bundled_camera_recipe",
+      "create_bundled_pulse_demo",
+      "run_bundled_pulse_recipe",
       "open_signal_from_bytes",
       "open_image_from_bytes",
       "open_from_directory_chunk",
@@ -1215,12 +1264,21 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
   if _camera_wheel not in sys.path:
     sys.path.insert(0, _camera_wheel)
   `);
+    const pulseWheelPath = `/home/pyodide/${BUNDLED_PULSE_WHEEL.filename}`;
+    py.FS.writeFile(pulseWheelPath, await fetchBundledPulseWheel());
+    await py.runPythonAsync(`
+  import sys
+  _pulse_wheel = ${JSON.stringify(pulseWheelPath)}
+  if _pulse_wheel not in sys.path:
+    sys.path.insert(0, _pulse_wheel)
+  `);
     // Make ``processor.py``/``dlw_main.py``/``dlw_plugins.py`` importable.
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
     py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
     py.FS.writeFile("/home/pyodide/dlw_h5browser.py", dlwH5BrowserSource);
     py.FS.writeFile("/home/pyodide/dlw_camera.py", dlwCameraSource);
+    py.FS.writeFile("/home/pyodide/dlw_pulse.py", dlwPulseSource);
     py.FS.writeFile(
       "/home/pyodide/dlw_interactive_fit.py",
       dlwInteractiveFitSource,
@@ -1240,6 +1298,13 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
     get_bundled_camera_manifest,
     open_bundled_camera_quickstart,
     run_bundled_camera_recipe,
+  )
+  import dlw_pulse
+  dlw_pulse.install_recipe_host(_MODEL, _object_uuid)
+  from dlw_pulse import (
+    create_bundled_pulse_demo,
+    get_bundled_pulse_manifest,
+    run_bundled_pulse_recipe,
   )
   `);
 
@@ -2648,6 +2713,31 @@ await micropip.install(["sigima>=1.1.6", "guidata", "tifffile<2025"])
       image_ids: imageIds,
       parameter_values: parameterValues,
     })) as CameraRecipeCommit;
+  }
+
+  /** Return the version matrix declared by the bundled Pulse adapter. */
+  async getBundledPulseManifest(): Promise<PulseWebManifest> {
+    return (await this.callPy(
+      "get_bundled_pulse_manifest",
+    )) as PulseWebManifest;
+  }
+
+  /** Create Pulse's deterministic 500-shot browser qualification campaign. */
+  async createBundledPulseDemo(): Promise<PulseDemoCampaign> {
+    return (await this.callPy(
+      "create_bundled_pulse_demo",
+    )) as PulseDemoCampaign;
+  }
+
+  /** Run Pulse characterization for selected workspace signals and commit it. */
+  async runBundledPulseRecipe(
+    signalIds: string[],
+    parameterValues: Record<string, unknown> = {},
+  ): Promise<PulseRecipeCommit> {
+    return (await this.callPy("run_bundled_pulse_recipe", {
+      signal_ids: signalIds,
+      parameter_values: parameterValues,
+    })) as PulseRecipeCommit;
   }
 
   // ------------------------------------------------------------------
