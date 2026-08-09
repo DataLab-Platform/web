@@ -36,11 +36,11 @@ def camera_bridge(monkeypatch):
 
 
 def test_bundled_camera_manifest_matches_runtime_matrix(camera_bridge) -> None:
-    """The wheel exposes the exact unverified browser compatibility target."""
+    """The wheel exposes the exact verified browser compatibility target."""
     assert camera_bridge.get_bundled_camera_manifest() == {
         "plugin_id": "org.datalab.camera-characterization",
         "plugin_version": "0.1.0",
-        "web_status": "untested",
+        "web_status": "verified",
         "datalab_web_version": "0.8.0",
         "pyodide_version": "0.26.4",
         "recipe_id": (

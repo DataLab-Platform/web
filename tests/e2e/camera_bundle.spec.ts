@@ -111,7 +111,7 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
   expect(result.manifest).toEqual({
     plugin_id: "org.datalab.camera-characterization",
     plugin_version: "0.1.0",
-    web_status: "untested",
+    web_status: "verified",
     datalab_web_version: "0.8.0",
     pyodide_version: "0.26.4",
     recipe_id:

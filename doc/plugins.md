@@ -117,7 +117,8 @@ through the real worker-hosted Pyodide runtime. It requires a visible Plotly
 response trace, decoded non-blank PRNU-map pixels, and the anchored metrics
 table in the Results panel. It also limits incremental WASM-heap growth to
 64 MiB and retained output arrays to three times the input arrays. The status
-change itself remains a separate, reviewable adapter-manifest change.
+was promoted separately to `verified` for DataLab-Web 0.8.0, Pyodide 0.26.4,
+Camera 0.1.0, and relative-DN recipe 1.1.0 after this gate passed.
 
 ## Hot reload
 

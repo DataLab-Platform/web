@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   path. Its shared recipe commits signals, images, anchored metrics, and
   provenance transactionally; a Chromium/Pyodide gate verifies a visible
   response curve, PRNU map, result table, and bounded demo-workspace memory.
-  Compatibility remains explicitly `untested` until the separately reviewed
-  manifest transition.
+  The separately reviewed manifest reports `verified` for the pinned
+  DataLab-Web 0.8.0 / Pyodide 0.26.4 compatibility matrix.
 
 ## [0.8.0] - 2026-08-07
 
