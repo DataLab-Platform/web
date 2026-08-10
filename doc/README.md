@@ -16,6 +16,8 @@ Guides and reference material for DataLab-Web. Start with the [project README](.
 
 ## Subsystems
 
+- [Applications deep links](application-deep-links.md) — open a bundled,
+  version-validated plugin example from documentation or product pages.
 - [Notebooks](notebooks.md) — multi-tab notebook panel, `.ipynb` import/export, macro conversion.
 - [Plugins](plugins.md) — Qt-compatible `PluginBase` API, hot-reload and the bundled vitrine plugin.
 - [Shim registry](shim-registry.md) — tracking temporary backport shims.

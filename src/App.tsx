@@ -50,6 +50,7 @@ import {
   buildStaticActions,
   buildViewActions,
 } from "./actions/registry";
+import { openBundledApplicationDeepLink } from "./actions/applicationDeepLinks";
 import { ObjectTree } from "./components/ObjectTree";
 import type { ObjectTreeHandle } from "./components/ObjectTree";
 import {
@@ -137,6 +138,7 @@ import { type MacroPanelHandle } from "./components/MacroPanel";
 import { type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
+import { parseApplicationDeepLink } from "./utils/applicationDeepLink";
 import {
   resolvePreloadUrl,
   preloadFilename,
@@ -3408,11 +3410,107 @@ export default function App() {
     setH5BrowserFiles([]);
   }, []);
 
+  // Startup Applications deep-link: validate the exact plugin and recipe
+  // versions against a manifest loaded from the bundle before opening its
+  // packaged example. Unknown plugins are never installed implicitly.
+  const applicationDeepLinkDone = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || !runtime || applicationDeepLinkDone.current)
+      return;
+    const parsed = parseApplicationDeepLink(window.location.search);
+    if (parsed.kind === "none") return;
+    applicationDeepLinkDone.current = true;
+    if (parsed.kind === "invalid") {
+      pushToast({
+        kind: "error",
+        message: t("Invalid application link: missing {parameters}.", {
+          parameters: parsed.missing.join(", "),
+        }),
+      });
+      return;
+    }
+
+    void (async () => {
+      setBusy(true);
+      try {
+        const result = await openBundledApplicationDeepLink(
+          runtime,
+          parsed.request,
+        );
+        if (result.kind === "unsupported") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: plugin {plugin} is not bundled.",
+              { plugin: result.pluginId },
+            ),
+          });
+          return;
+        }
+        if (result.kind === "unverified") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: plugin {plugin} has Web status {status}.",
+              { plugin: result.pluginId, status: result.status },
+            ),
+          });
+          return;
+        }
+        if (result.kind === "mismatch") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: requested {field} {requested}, but this bundle provides {bundled}.",
+              {
+                field: result.mismatch.field,
+                requested: result.mismatch.requested,
+                bundled: result.mismatch.bundled,
+              },
+            ),
+          });
+          return;
+        }
+
+        setWorkspaceVersion((version) => version + 1);
+        setWorkspaceFilename(result.filename);
+        if (result.clean) markClean();
+        else markDirty();
+        await refreshPanelKind(result.panel, result.preferredObjectId);
+        pushToast({
+          kind: "success",
+          message: t("Opened bundled example {example}.", {
+            example: parsed.request.exampleId,
+          }),
+        });
+      } catch (error) {
+        pushToast({
+          kind: "error",
+          message: t("Failed to open application link: {error}", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [
+    status,
+    runtime,
+    refreshPanelKind,
+    setWorkspaceFilename,
+    markClean,
+    markDirty,
+    pushToast,
+  ]);
+
   // Startup deep-link: `?preload=<same-origin .h5>` loads a demo workspace
   // once the runtime is ready (used by the documentation use-case pages).
   const preloadDone = useRef(false);
   useEffect(() => {
     if (status !== "ready" || !runtime || preloadDone.current) return;
+    if (parseApplicationDeepLink(window.location.search).kind !== "none")
+      return;
     const url = resolvePreloadUrl(window.location.search, document.baseURI);
     if (!url) return;
     preloadDone.current = true;

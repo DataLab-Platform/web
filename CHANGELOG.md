@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **Validated Applications deep links:** documentation and product pages may
+  open the bundled Camera quickstart or Pulse 500-shot demo by declaring the
+  exact plugin, plugin version, recipe, recipe version, and example in the
+  URL. DataLab-Web compares the request with the compatibility manifest loaded
+  from its own bundle before replacing the workspace; unknown, unverified, or
+  mismatched workflows show an explicit error and never trigger an implicit
+  Python package installation.
 - **Explicit Camera plugin bundle:** the Web runtime now ships the independent
   Camera characterization package as a versioned, SHA-256-checked wheel and
   can open its packaged HDF5 quickstart through the existing browser byte-I/O
