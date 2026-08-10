@@ -5,8 +5,8 @@ export const BUNDLED_CAMERA_WHEEL = Object.freeze({
   distribution: "datalab-camera-characterization",
   version: "0.1.0",
   filename: "datalab_camera_characterization-0.1.0-py3-none-any.whl",
-  sha256: "85f5918b95d857df56796e674daccbdb229a19bb6f238b139dbdbf3abcfc0a60",
-  sizeBytes: 122_613,
+  sha256: "f9d90b77452ae17a2323658446feaad0f1730d19b3a5dee1c0ec6266fc4da561",
+  sizeBytes: 306_258,
   url: wheelUrl,
 });
 
