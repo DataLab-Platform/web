@@ -43,6 +43,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Pyodide startup with scikit-image:** the runtime now loads Pillow
+  explicitly before importing Sigima, avoiding a startup failure when
+  Pyodide's scikit-image package omits Pillow from its dependency metadata.
 - **Signal memory accounting:** the memory indicator no longer counts a
   signal's Y array twice through its equivalent `data` property, so retained
   workspace bytes now reflect the actual X/Y storage.

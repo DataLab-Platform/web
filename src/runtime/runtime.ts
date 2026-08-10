@@ -1231,13 +1231,20 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
     onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    await py.loadPackage(["numpy", "scipy", "h5py", "pandas", "micropip"]);
+    await py.loadPackage([
+      "numpy",
+      "scipy",
+      "h5py",
+      "pandas",
+      "pillow",
+      "micropip",
+    ]);
 
     onProgress?.(t("Installing Sigima…"));
-    // ``tifffile`` is a pure-Python PyPI wheel that scikit-image needs for
-    // TIFF I/O (``skimage.io`` loads ``tifffile_plugin`` for ``.tif``). The
-    // Pyodide-built ``scikit-image`` trims it from its dependency list, so
-    // micropip must pull it explicitly or TIFF read/write fails at runtime.
+    // Pyodide's ``scikit-image`` package omits Pillow and tifffile from its
+    // dependency metadata even though ``skimage.io`` imports both. Pillow is
+    // loaded from the Pyodide distribution above; ``tifffile`` is pulled from
+    // PyPI explicitly so importing Sigima and TIFF read/write both work.
     // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
     // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.

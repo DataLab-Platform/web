@@ -60,7 +60,7 @@ async function getPyodide(): Promise<PyodideAPI> {
   pyPromise = (async () => {
     const py = await bootPyodide({
       lang: pyLang,
-      packages: ["numpy", "scipy", "h5py", "pandas", "micropip"],
+      packages: ["numpy", "scipy", "h5py", "pandas", "pillow", "micropip"],
       titleFormatSource: dlwTitleFormatSource,
     });
 
