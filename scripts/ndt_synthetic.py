@@ -61,14 +61,17 @@ def generate_synthetic_radiograph(
     x_normalized = x_grid / (size - 1) * 2.0 - 1.0
     y_normalized = y_grid / (size - 1) * 2.0 - 1.0
 
-    thickness_variation = (
+    # Phenomenological brightness field (NOT Beer-Lambert attenuation):
+    # indications carry negative contrast by convention of this spike.
+    base_brightness = (
         13_000.0
         + 1_600.0 * x_normalized
         + 900.0 * y_normalized**2
         + 2_200.0 * np.exp(-0.5 * (x_normalized / 0.22) ** 2)
     )
     texture = 180.0 * np.sin(8.0 * x_normalized + 3.0 * y_normalized)
-    data = thickness_variation + texture
+    data = base_brightness + texture
+    # Signal-independent Gaussian noise only (no Poisson term) by design
     data += rng.normal(0.0, 120.0, size=(size, size))
 
     indication_specs = (
@@ -81,6 +84,7 @@ def generate_synthetic_radiograph(
         ("linear-02", "linear", 0.36, 0.77, 0.065, 0.012, -35.0, -1_700.0),
     )
     indications: list[dict[str, Any]] = []
+    footprints: list[tuple[str, NDArray[np.bool_]]] = []
     for (
         indication_id,
         indication_class,
@@ -95,7 +99,7 @@ def generate_synthetic_radiograph(
         center_y = center_y_ratio * (size - 1)
         radius_x = radius_x_ratio * size
         radius_y = radius_y_ratio * size
-        data += contrast * _ellipse_response(
+        response = _ellipse_response(
             x_grid,
             y_grid,
             center_x=center_x,
@@ -104,6 +108,8 @@ def generate_synthetic_radiograph(
             radius_y=radius_y,
             angle_deg=angle_deg,
         )
+        data += contrast * response
+        footprints.append((indication_id, response > 0.0))
         indications.append(
             {
                 "id": indication_id,
@@ -123,6 +129,13 @@ def generate_synthetic_radiograph(
     data[:, stripe_column : stripe_column + 2] += 700.0
     band_row = round(0.84 * (size - 1))
     data[band_row : band_row + 2, :] -= 450.0
+    # Derived from rendered footprints so the truth cannot drift from the specs
+    overlaps = [
+        [first_id, second_id]
+        for index, (first_id, first_mask) in enumerate(footprints)
+        for second_id, second_mask in footprints[index + 1 :]
+        if bool(np.any(first_mask & second_mask))
+    ]
     bad_pixels = []
     for index in range(8):
         pixel_y = int(rng.integers(0, size))
@@ -136,7 +149,7 @@ def generate_synthetic_radiograph(
         "seed": seed,
         "image_size": [size, size],
         "indications": indications,
-        "overlaps": [["compact-04", "compact-05"]],
+        "overlaps": overlaps,
         "artifacts": {
             "vertical_gain_stripe_columns": [stripe_column, stripe_column + 1],
             "horizontal_band_rows": [band_row, band_row + 1],
