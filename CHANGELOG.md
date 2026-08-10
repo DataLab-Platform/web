@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **Synthetic radiograph spike:** the bundled NDT demo now contains a
+  deterministic thickness-varying background, detector noise and artifacts,
+  compact and linear indications with varied geometry and contrast, and a
+  declared overlap. Versioned JSON ground truth is preserved in the image
+  metadata for algorithm-development tests. The data is explicitly synthetic;
+  it does not validate radiographic realism, inspection performance, or
+  standards compliance.
 - **Validated Applications deep links:** documentation and product pages may
   open the bundled Camera quickstart or Pulse 500-shot demo by declaring the
   exact plugin, plugin version, recipe, recipe version, and example in the

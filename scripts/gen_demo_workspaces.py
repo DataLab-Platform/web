@@ -13,12 +13,14 @@ DataLab desktop venv)::
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 import numpy as np
 import sigima
 from guidata.io import HDF5Writer
+from ndt_synthetic import generate_synthetic_radiograph
 from sigima.objects import create_image
 
 HERE = Path(__file__).resolve().parent
@@ -98,25 +100,20 @@ def make_photonics() -> None:
 
 def make_ndt() -> None:
     """Generate a synthetic inspection image and write it to a workspace."""
-    # Synthetic inspection image: noisy background + blob-like "defects"
-    # (same recipe as Sigima's blob-detection test data).
-    rng = np.random.default_rng(42)
-    size, radius = 512, 12.0
-    data = rng.normal(1000.0, 50.0, size=(size, size))
-    y_grid, x_grid = np.ogrid[:size, :size]
-    margin = int(radius * 2)
-    for _ in range(12):
-        xc = margin + rng.random() * (size - 2 * margin)
-        yc = margin + rng.random() * (size - 2 * margin)
-        mask = (x_grid - xc) ** 2 + (y_grid - yc) ** 2 < radius**2
-        data[mask] += 800.0
+    data, truth = generate_synthetic_radiograph()
     obj = create_image(
-        "Inspection image (synthetic defects)",
-        np.clip(data, 0, 65535).astype(np.uint16),
+        "Synthetic radiograph (NDT spike)",
+        data,
+    )
+    obj.metadata["spike.ndt.synthetic_truth"] = json.dumps(
+        truth, sort_keys=True, separators=(",", ":")
+    )
+    obj.metadata["spike.ndt.disclaimer"] = (
+        "Synthetic algorithm-development data; not a qualified radiograph"
     )
     write_workspace(
         OUTDIR / "ndt.h5",
-        {"image": {"NDT demo": [obj]}},
+        {"image": {"Synthetic NDT spike": [obj]}},
     )
 
 
