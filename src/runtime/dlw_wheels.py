@@ -37,9 +37,14 @@ _RESERVED_TOP_LEVEL = frozenset(
         "datalab",
         "guidata",
         "h5py",
+        "js",
+        "matplotlib",
+        "micropip",
         "numpy",
         "packaging",
         "pandas",
+        "PIL",
+        "pyodide",
         "scipy",
         "sigima",
         "skimage",
@@ -168,15 +173,23 @@ def _top_level_packages(
             if line.strip()
         }
     else:
-        packages = {
-            name.split("/", maxsplit=1)[0]
-            for entry in entries
-            if not entry.is_dir()
-            for name in [entry.filename.replace("\\", "/")]
-            if "/" in name
-            and not name.startswith(f"{dist_info}/")
-            and not name.endswith(".data/")
-        }
+        packages = set()
+        for entry in entries:
+            if entry.is_dir():
+                continue
+            name = entry.filename.replace("\\", "/")
+            if name.startswith(f"{dist_info}/"):
+                continue
+            top = name.split("/", maxsplit=1)[0]
+            if "/" not in name:
+                # Flat layout: a root-level module is itself a package.
+                if top.endswith(".py"):
+                    packages.add(top[: -len(".py")])
+                continue
+            if top.endswith(".data"):
+                # Wheel payload directories are not importable packages.
+                continue
+            packages.add(top)
     for package in packages:
         if not package.isidentifier():
             raise WheelInspectionError(f"Invalid top-level package name: {package!r}")
@@ -192,10 +205,13 @@ def _validate_dependencies(
     available_distributions: Mapping[str, str],
     marker_environment: Mapping[str, str] | None,
 ) -> list[dict[str, Any]]:
-    available = {
-        canonicalize_name(name): Version(version)
-        for name, version in available_distributions.items()
-    }
+    available: dict[str, Version] = {}
+    for name, version in available_distributions.items():
+        try:
+            available[canonicalize_name(name)] = Version(version)
+        except InvalidVersion:
+            # Non-PEP 440 host versions cannot satisfy any specifier.
+            continue
     environment = default_environment()
     environment.update(dict(marker_environment or {}))
     dependencies: list[dict[str, Any]] = []
