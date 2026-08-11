@@ -12,7 +12,11 @@ python -m build --wheel --outdir <output-directory>
 ```
 
 Copy the resulting artifact here, then update its filename, version, byte size,
-and SHA-256 in `src/runtime/bundledCamera.ts` or
-`src/runtime/bundledPulse.ts`. Run the focused TypeScript, Python, and
-Playwright bundle contracts after every replacement. The TypeScript tests fail
-if a committed artifact and manifest drift.
+and SHA-256 in `src/runtime/bundledPlugins.ts`. Run the focused TypeScript,
+Python, and Playwright application contracts after every replacement. The
+TypeScript tests fail if a committed artifact and the integrity catalog drift.
+
+Every artifact is inspected through the same `dlw_wheels.py` path as a local
+user wheel and must expose at least one `datalab.web_plugins` entry point. The
+catalog contains build integrity only; plugin identity, capabilities, recipes,
+examples, and documentation come from the loaded portable plugin class.

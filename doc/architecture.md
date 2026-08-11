@@ -84,7 +84,7 @@ flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
     L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
     L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
-    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_plugins.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
+    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 
     L1 --> L2 --> L3 --> L4 --> L5
@@ -141,7 +141,8 @@ Presentational React. Notable components:
   `TextImportWizard.tsx`, `ObjectPropertiesDialog.tsx`,
   `ProfileDefinitionDialog.tsx`, `SaveToDirectoryDialog.tsx`,
   `SeparateViewDialog.tsx`, `PluginManagerDialog.tsx`,
-  `PluginConsentDialog.tsx`, `HelpDialog.tsx`.
+  `PluginConsentDialog.tsx`, `ApplicationsDialog.tsx`,
+  `RecipeInputResolverDialog.tsx`, `HelpDialog.tsx`.
 - Macros / notebooks: `MacroPanel.tsx`, `MacroEditorTabs.tsx`,
   `MacroConsole.tsx`, `notebook/`.
 - AI assistant: `AIAssistant/`.
@@ -188,7 +189,8 @@ classDiagram
       +applyFeature(id, oids, params)
       +HDF5 workspace save / load
       +macros / notebooks CRUD
-      +plugins (register, enable, hot-reload)
+      +plugins (inspect, install, enable, remove, hot-reload)
+      +plugin recipes / examples
       +interactive fit, ROI editing, …
     }
     DataLabRuntime ..> Pyodide : runPython
@@ -202,7 +204,8 @@ classDiagram
 Companion exports (interfaces / types): `SignalMeta`, `SignalStyle`,
 `SignalData`, `ProcessingDescriptor`, `LastProcessingInfo`, `Pattern`,
 `FeatureDescriptor`, `InteractiveFitInfo` / `Param` / `Init` / `Auto`,
-`PluginInfoMeta`, `PluginRecord`, `PluginMenuAction`, `PanelKind`,
+`PluginInfoMeta`, `PluginRecord`, `PluginMenuAction`,
+`PluginRecipePreparation`, `PluginRecipeCommit`, `PluginExampleOpenResult`, `PanelKind`,
 `ObjectNode`, `GroupNode`, `PanelTree`, `ObjectMeta`, plus thin
 `PyodideAPI` / `PyProxy` aliases.
 
@@ -357,8 +360,18 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
   unchanged** in the browser, provided they use `await
 param.edit_async(...)` for parameter dialogs.
 
-- **`dlw_plugins.py`** — host for the Qt-compatible plugin API:
-  discovery, registration, hot-reload, consent dialog, menu wiring.
+- **`dlw_wheels.py`** — non-importing wheel inspector. It validates archive
+  structure, pure-Python tags, Python/dependency compatibility, reserved
+  namespaces, and the dedicated `datalab.web_plugins` entry-point group.
+
+- **`dlw_plugins.py`** — the single managed plugin registry for bundled/user
+  wheels and Python sources: discovery, activation, import ownership,
+  hot-reload, cleanup, capabilities, recipes, examples, and menu wiring.
+
+- **`dlw_applications.py`** — generic application host. It prepares typed
+  recipe slots, bridges guidata parameter schemas, opens packaged/generated
+  examples, and commits recipe objects, results, diagnostics, and provenance
+  transactionally. It contains no Camera- or Pulse-specific paths.
 
 - **`dlw_h5browser.py`** — HDF5 browser backend (consumed by
   `H5BrowserDialog.tsx`).

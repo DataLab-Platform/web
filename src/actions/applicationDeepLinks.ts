@@ -1,13 +1,7 @@
-import type {
-  CameraWebManifest,
-  PanelKind,
-  RuntimeApi,
-} from "../runtime/runtime";
+import type { PluginExampleOpenResult, RuntimeApi } from "../runtime/runtime";
 import {
-  validateApplicationDeepLink,
   type ApplicationDeepLinkMismatch,
   type ApplicationDeepLinkRequest,
-  type BundledApplicationManifest,
 } from "../utils/applicationDeepLink";
 
 export type ApplicationDeepLinkOpenResult =
@@ -16,92 +10,77 @@ export type ApplicationDeepLinkOpenResult =
   | { kind: "mismatch"; mismatch: ApplicationDeepLinkMismatch }
   | {
       kind: "opened";
-      panel: PanelKind;
-      preferredObjectId: string | null;
-      filename: string | null;
-      clean: boolean;
+      pluginId: string;
+      recipeId: string;
+      example: PluginExampleOpenResult;
     };
 
-type BundledWebManifest = BundledApplicationManifest & {
-  web_status: string;
-};
-
-interface BundledApplicationEntry {
-  exampleId: string;
-  getManifest: (runtime: RuntimeApi) => Promise<BundledWebManifest>;
-  openExample: (runtime: RuntimeApi) => Promise<{
-    panel: PanelKind;
-    preferredObjectId: string | null;
-    clean: boolean;
-  }>;
-  workspaceFilename: (manifest: BundledWebManifest) => string | null;
+function mismatch(
+  field: ApplicationDeepLinkMismatch["field"],
+  requested: string,
+  bundled: string,
+): ApplicationDeepLinkOpenResult {
+  return { kind: "mismatch", mismatch: { field, requested, bundled } };
 }
-
-const CAMERA_PLUGIN_ID = "org.datalab.camera-characterization";
-const PULSE_PLUGIN_ID = "org.datalab.pulse-characterization";
-
-const CAMERA_APPLICATION: BundledApplicationEntry = {
-  exampleId: "quickstart",
-  getManifest: (runtime) => runtime.getBundledCameraManifest(),
-  openExample: async (runtime) => {
-    await runtime.openBundledCameraQuickstart(true);
-    const images = await runtime.listImages();
-    return {
-      panel: "image",
-      preferredObjectId: images[0]?.id ?? null,
-      clean: true,
-    };
-  },
-  workspaceFilename: (manifest) =>
-    (manifest as CameraWebManifest).quickstart_filename,
-};
-
-const PULSE_APPLICATION: BundledApplicationEntry = {
-  exampleId: "demo",
-  getManifest: (runtime) => runtime.getBundledPulseManifest(),
-  openExample: async (runtime) => {
-    await runtime.resetAll();
-    const demo = await runtime.createBundledPulseDemo();
-    return {
-      panel: "signal",
-      preferredObjectId: demo.signal_ids[0] ?? null,
-      clean: false,
-    };
-  },
-  workspaceFilename: () => null,
-};
-
-const BUNDLED_APPLICATIONS: Record<string, BundledApplicationEntry> = {
-  [CAMERA_PLUGIN_ID]: CAMERA_APPLICATION,
-  [PULSE_PLUGIN_ID]: PULSE_APPLICATION,
-};
 
 /** Validate and open one application example already bundled in DataLab-Web. */
 export async function openBundledApplicationDeepLink(
   runtime: RuntimeApi,
   request: ApplicationDeepLinkRequest,
 ): Promise<ApplicationDeepLinkOpenResult> {
-  const application = BUNDLED_APPLICATIONS[request.pluginId];
-  if (!application) return { kind: "unsupported", pluginId: request.pluginId };
-
-  const manifest = await application.getManifest(runtime);
-  const mismatch = validateApplicationDeepLink(
-    request,
-    manifest,
-    application.exampleId,
+  const record = (await runtime.listPlugins()).find(
+    (candidate) =>
+      candidate.plugin_id === request.pluginId &&
+      candidate.source === "bundled-wheel",
   );
-  if (mismatch) return { kind: "mismatch", mismatch };
-  if (manifest.web_status !== "verified") {
+  if (!record) return { kind: "unsupported", pluginId: request.pluginId };
+  if (!record.enabled || !record.loaded) {
     return {
       kind: "unverified",
       pluginId: request.pluginId,
-      status: manifest.web_status,
+      status: "disabled",
     };
   }
-  const opened = await application.openExample(runtime);
+  if (record.trust !== "verified") {
+    return {
+      kind: "unverified",
+      pluginId: request.pluginId,
+      status: record.trust,
+    };
+  }
+
+  const pluginVersion = record.info?.version ?? record.version ?? "";
+  if (request.pluginVersion !== pluginVersion) {
+    return mismatch("pluginVersion", request.pluginVersion, pluginVersion);
+  }
+  const recipe = record.recipes.find(
+    (candidate) => candidate.id === request.recipeId,
+  );
+  if (!recipe) {
+    return mismatch("recipe", request.recipeId, record.recipes[0]?.id ?? "");
+  }
+  if (request.recipeVersion !== recipe.version) {
+    return mismatch("recipeVersion", request.recipeVersion, recipe.version);
+  }
+  const example = record.examples.find(
+    (candidate) => candidate.id === request.exampleId,
+  );
+  if (!example) {
+    return mismatch("example", request.exampleId, record.examples[0]?.id ?? "");
+  }
+  if (example.recipe_id !== recipe.id) {
+    return mismatch("recipe", request.recipeId, example.recipe_id ?? "");
+  }
+
+  const opened = await runtime.openPluginExample(
+    request.pluginId,
+    request.exampleId,
+    true,
+  );
   return {
     kind: "opened",
-    ...opened,
-    filename: application.workspaceFilename(manifest),
+    pluginId: request.pluginId,
+    recipeId: request.recipeId,
+    example: opened,
   };
 }

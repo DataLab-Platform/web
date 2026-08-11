@@ -38,15 +38,17 @@ correctly.
 
 ## Validation and loading
 
-Once Pyodide is ready, DataLab-Web resolves the plugin only from its static
-application registry and loads that plugin's compatibility manifest from the
-bundled wheel. Plugin ID, plugin version, recipe ID, recipe version, and example
-ID must all match exactly. The manifest must also report Web status `verified`.
+Once Pyodide is ready, DataLab-Web resolves the request from the live managed
+plugin registry. The matching record must be loaded and enabled, have source
+`bundled-wheel`, and have trust status `verified`. Plugin ID, plugin version,
+recipe ID, recipe version, example ID, and the example-to-recipe link must all
+match exactly.
 
 Validation finishes before the workspace is changed. An unknown plugin,
-incomplete request, version mismatch, unsupported example, or unverified
-manifest produces a visible error. DataLab-Web never downloads or installs a
-Python package in response to a deep link.
+incomplete request, version mismatch, unsupported example, disabled plugin, or
+unverified artifact produces a visible error. A user-installed wheel with the
+same plugin ID is never an implicit target. DataLab-Web never downloads,
+installs, or enables a Python package in response to a deep link.
 
 After validation:
 
@@ -54,6 +56,9 @@ After validation:
   Images panel, and marks the loaded workspace clean.
 - Pulse replaces the workspace with its deterministic 500-shot campaign, opens
   the Signals panel, and marks the generated workspace as unsaved.
+- The Applications dialog selects the requested plugin, highlights the recipe,
+  and carries any generated example parameter defaults into its parameter
+  dialog. The recipe is never executed until the user clicks _Start analysis_.
 
 The generic same-origin `preload` workspace parameter remains available for
 ordinary HDF5 demos. When Applications parameters are present, their validated

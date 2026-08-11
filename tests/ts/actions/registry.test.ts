@@ -6,11 +6,13 @@ import {
   buildInteractiveFitActions,
   buildSignalCreationActions,
   buildImageCreationActions,
+  buildPluginActions,
   buildViewActions,
   buildPlotResultsAction,
   isFeatureActionEnabled,
 } from "../../../src/actions/registry";
 import type { ActionState } from "../../../src/actions/types";
+import type { PluginRecord } from "../../../src/runtime/runtime";
 
 function makeState(over: Partial<ActionState> = {}): ActionState {
   return {
@@ -194,6 +196,103 @@ describe("buildPlotResultsAction", () => {
   it("namespaces its id per panel kind", () => {
     expect(buildPlotResultsAction("image", vi.fn()).id).toBe(
       "analysis.image.plot_results",
+    );
+  });
+});
+
+describe("buildPluginActions", () => {
+  it("projects application recipes and examples under the plugin menu", () => {
+    const onOpenApplicationRecipe = vi.fn();
+    const onOpenApplicationExample = vi.fn();
+    const record: PluginRecord = {
+      name: "application",
+      record_id: "application",
+      filename: "/plugins/application.whl",
+      module: "application.web",
+      source: "bundled-wheel",
+      artifact_id: null,
+      artifact_filename: null,
+      plugin_id: "org.example.application",
+      distribution: "application",
+      version: "1.0.0",
+      sha256: null,
+      trust: "verified",
+      entry_point: "application.web:ApplicationPlugin",
+      enabled: true,
+      loaded: true,
+      error: null,
+      info: {
+        id: "org.example.application",
+        name: "Example & Application",
+        version: "1.0.0",
+        description: "Example application",
+        icon: null,
+        capabilities: ["application"],
+        documentation_url: null,
+      },
+      recipes: [
+        {
+          id: "org.example.application:analyze",
+          version: "1.0.0",
+          title: "Analyze campaign",
+          description: "Analyze the selected campaign",
+          inputs: [],
+          has_params: false,
+        },
+      ],
+      examples: [
+        {
+          id: "quickstart",
+          title: "Open quickstart",
+          description: "Open an example",
+          recipe_id: "org.example.application:analyze",
+          expected_checks: [],
+        },
+      ],
+      operations: {
+        can_enable: true,
+        can_disable: true,
+        can_remove: false,
+        can_reload: true,
+      },
+    };
+    const actions = buildPluginActions([], [record], "signal", {
+      onTrigger: vi.fn(),
+      onOpenApplications: vi.fn(),
+      onOpenApplicationRecipe,
+      onOpenApplicationExample,
+      onOpenManager: vi.fn(),
+      onReloadAll: vi.fn(),
+    });
+
+    expect(
+      actions.find((action) => action.id === "plugins.applications"),
+    ).toMatchObject({
+      menuPath: "Applications",
+      label: "Applications…",
+      iconUrl: expect.stringContaining("data:image/svg+xml"),
+    });
+    const recipe = actions.find((action) =>
+      action.id.startsWith("plugin.application.recipe."),
+    )!;
+    const example = actions.find((action) =>
+      action.id.startsWith("plugin.application.example."),
+    )!;
+    expect(recipe.menuPath).toBe(
+      "Plugins/Example & Application/Analyze campaign",
+    );
+    expect(example.menuPath).toBe(
+      "Plugins/Example & Application/Open quickstart",
+    );
+    recipe.run();
+    example.run();
+    expect(onOpenApplicationRecipe).toHaveBeenCalledWith(
+      "org.example.application",
+      "org.example.application:analyze",
+    );
+    expect(onOpenApplicationExample).toHaveBeenCalledWith(
+      "org.example.application",
+      "quickstart",
     );
   });
 });

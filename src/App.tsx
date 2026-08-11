@@ -24,7 +24,10 @@ import type {
   InteractiveFitInfo,
   JsonSchema,
   PanelTree,
+  PluginExampleOpenResult,
   PluginMenuAction,
+  PluginRecord,
+  PluginRecipeCommit,
   PlotResultsSchemaEntry,
   SchemaWithValues,
   SignalData,
@@ -84,7 +87,7 @@ import {
   LazySignalAxisGroupsDialog as SignalAxisGroupsDialog,
   LazySignalPlot as SignalPlot,
 } from "./components/lazyPlotComponents";
-import { useSelectionView } from "./hooks/useSelectionView";
+import { MULTI_SIGNAL_LIMIT, useSelectionView } from "./hooks/useSelectionView";
 import { useSignalAxisGroups } from "./hooks/useSignalAxisGroups";
 import { DataSetDialog } from "./components/DataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
@@ -109,6 +112,7 @@ import { useProgress } from "./components/ProgressDialog";
 import { useToast } from "./components/Toast";
 import type { SeparateViewContent } from "./components/SeparateViewDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
+import { ApplicationsDialog } from "./components/ApplicationsDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
@@ -827,7 +831,15 @@ export default function App() {
     extensions: string[];
   } | null>(null);
   const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
+  const [pluginRecords, setPluginRecords] = useState<PluginRecord[]>([]);
   const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
+  const [applicationsOpen, setApplicationsOpen] = useState(false);
+  const [applicationTarget, setApplicationTarget] = useState<{
+    pluginId: string;
+    recipeId: string;
+    parameterValues: Record<string, unknown>;
+    candidateIds?: string[];
+  } | null>(null);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -1135,6 +1147,9 @@ export default function App() {
     });
     runtime.listPluginMenuActions().then((v) => {
       if (!cancelled) setPluginActions(v);
+    });
+    runtime.listPlugins().then((v) => {
+      if (!cancelled) setPluginRecords(v);
     });
     runtime.listInteractiveFits().then((v) => {
       if (!cancelled) setInteractiveFits(v);
@@ -1574,7 +1589,12 @@ export default function App() {
 
   const refreshPluginActions = useCallback(async () => {
     if (!runtime) return;
-    setPluginActions(await runtime.listPluginMenuActions());
+    const [actions, records] = await Promise.all([
+      runtime.listPluginMenuActions(),
+      runtime.listPlugins(),
+    ]);
+    setPluginActions(actions);
+    setPluginRecords(records);
   }, [runtime]);
 
   const handleTriggerPluginAction = useCallback(
@@ -1631,6 +1651,119 @@ export default function App() {
       setBusy(false);
     }
   }, [runtime, refreshPluginActions]);
+
+  const confirmOpenPluginExample = useCallback(async () => {
+    if (!workspaceDirty) return true;
+    return confirm({
+      title: t("Open example"),
+      message: t(
+        "Opening this example replaces the current workspace. Continue?",
+      ),
+      confirmLabel: t("Open example"),
+      destructive: true,
+    });
+  }, [confirm, workspaceDirty]);
+
+  const handlePluginRecipeCommitted = useCallback(
+    async (commit: PluginRecipeCommit) => {
+      const primaryOutput =
+        commit.objects.find(
+          (output) => output.id === commit.results[0]?.anchor_id,
+        ) ?? commit.objects[0];
+      if (!primaryOutput) {
+        await refresh(null);
+        return;
+      }
+      if (!runtime) return;
+      const outputIds = commit.objects
+        .filter((output) => output.kind === primaryOutput.kind)
+        .map((output) => output.id);
+      await refreshPanelKind(primaryOutput.kind, primaryOutput.id);
+      setSelectedIds(outputIds);
+      setCurrentId(primaryOutput.id);
+    },
+    [refresh, refreshPanelKind, runtime, setSelectedIds],
+  );
+
+  const handlePluginExampleOpened = useCallback(
+    async (result: PluginExampleOpenResult) => {
+      setWorkspaceVersion((version) => version + 1);
+      setWorkspaceFilename(result.filename);
+      if (result.dirty) markDirty();
+      else markClean();
+      if (result.panel) {
+        await refreshPanelKind(result.panel, result.current_id);
+        const visualSelection =
+          result.panel === "signal" &&
+          result.selected_ids.length > MULTI_SIGNAL_LIMIT
+            ? result.current_id
+              ? [result.current_id]
+              : result.selected_ids.slice(0, 1)
+            : result.selected_ids;
+        setSelectedIds(visualSelection);
+        setCurrentId(result.current_id);
+      } else {
+        await refresh(null);
+      }
+    },
+    [
+      markClean,
+      markDirty,
+      refresh,
+      refreshPanelKind,
+      setSelectedIds,
+      setWorkspaceFilename,
+    ],
+  );
+
+  const handleOpenApplicationRecipe = useCallback(
+    (pluginId: string, recipeId: string) => {
+      setApplicationTarget({ pluginId, recipeId, parameterValues: {} });
+      setApplicationsOpen(true);
+    },
+    [],
+  );
+
+  const handleOpenApplicationExample = useCallback(
+    async (pluginId: string, exampleId: string) => {
+      if (!runtime || !(await confirmOpenPluginExample())) return;
+      setBusy(true);
+      try {
+        const result = await runtime.openPluginExample(
+          pluginId,
+          exampleId,
+          true,
+        );
+        await handlePluginExampleOpened(result);
+        const example = pluginRecords
+          .find((record) => record.plugin_id === pluginId)
+          ?.examples.find((candidate) => candidate.id === exampleId);
+        if (example?.recipe_id) {
+          setApplicationTarget({
+            pluginId,
+            recipeId: example.recipe_id,
+            parameterValues: result.parameter_values,
+            candidateIds: result.selected_ids,
+          });
+          setApplicationsOpen(true);
+        }
+      } catch (error) {
+        await showProcessingError({
+          context: t("Open example"),
+          traceback: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      confirmOpenPluginExample,
+      handlePluginExampleOpened,
+      pluginRecords,
+      runtime,
+      showProcessingError,
+    ],
+  );
 
   const handleApplyFeature = useCallback(
     async (featureId: string) => {
@@ -3472,11 +3605,14 @@ export default function App() {
           return;
         }
 
-        setWorkspaceVersion((version) => version + 1);
-        setWorkspaceFilename(result.filename);
-        if (result.clean) markClean();
-        else markDirty();
-        await refreshPanelKind(result.panel, result.preferredObjectId);
+        await handlePluginExampleOpened(result.example);
+        setApplicationTarget({
+          pluginId: result.pluginId,
+          recipeId: result.recipeId,
+          parameterValues: result.example.parameter_values,
+          candidateIds: result.example.selected_ids,
+        });
+        setApplicationsOpen(true);
         pushToast({
           kind: "success",
           message: t("Opened bundled example {example}.", {
@@ -3494,15 +3630,7 @@ export default function App() {
         setBusy(false);
       }
     })();
-  }, [
-    status,
-    runtime,
-    refreshPanelKind,
-    setWorkspaceFilename,
-    markClean,
-    markDirty,
-    pushToast,
-  ]);
+  }, [status, runtime, handlePluginExampleOpened, pushToast]);
 
   // Startup deep-link: `?preload=<same-origin .h5>` loads a demo workspace
   // once the runtime is ready (used by the documentation use-case pages).
@@ -4250,8 +4378,16 @@ export default function App() {
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
-      ...buildPluginActions(pluginActions, treeKind, {
+      ...buildPluginActions(pluginActions, pluginRecords, treeKind, {
         onTrigger: handleTriggerPluginAction,
+        onOpenApplications: () => {
+          setApplicationTarget(null);
+          setApplicationsOpen(true);
+        },
+        onOpenApplicationRecipe: handleOpenApplicationRecipe,
+        onOpenApplicationExample: (pluginId, exampleId) => {
+          void handleOpenApplicationExample(pluginId, exampleId);
+        },
         onOpenManager: () => setPluginManagerOpen(true),
         onReloadAll: handleReloadPlugins,
       }),
@@ -4309,7 +4445,10 @@ export default function App() {
       handleImportHdf5,
       handleImportTextWizard,
       pluginActions,
+      pluginRecords,
       handleTriggerPluginAction,
+      handleOpenApplicationRecipe,
+      handleOpenApplicationExample,
       handleReloadPlugins,
       interactiveFits,
       handleLaunchInteractiveFit,
@@ -5167,6 +5306,22 @@ export default function App() {
               void refreshPluginActions();
               if (runtime) void runtime.listFeatures().then(setFeatures);
             }}
+          />
+        )}
+        {applicationsOpen && (
+          <ApplicationsDialog
+            candidateIds={
+              selectedIds.length > 0
+                ? selectedIds
+                : currentId
+                  ? [currentId]
+                  : []
+            }
+            initialTarget={applicationTarget}
+            confirmOpenExample={confirmOpenPluginExample}
+            onCommitted={handlePluginRecipeCommitted}
+            onExampleOpened={handlePluginExampleOpened}
+            onClose={() => setApplicationsOpen(false)}
           />
         )}
         {separateViewOpen &&

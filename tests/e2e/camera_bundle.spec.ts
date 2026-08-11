@@ -12,6 +12,8 @@ declare global {
 const MIB = 1024 * 1024;
 const MAX_RECIPE_WASM_GROWTH = 64 * MIB;
 const MAX_RETAINED_DATA_RATIO = 3;
+const CAMERA_PLUGIN_ID = "org.datalab.camera-characterization";
+const CAMERA_RECIPE_ID = `${CAMERA_PLUGIN_ID}:relative-dn-characterization`;
 
 async function readVisibleImageRaster(page: Page): Promise<{
   source: string;
@@ -81,22 +83,45 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
   await waitForRuntimeReady(page);
 
   const result = await page.evaluate(async () => {
-    const manifest = await window.runtime.getBundledCameraManifest();
-    const counts = await window.runtime.openBundledCameraQuickstart();
-    const images = await window.runtime.listImages();
+    const plugin = (await window.runtime.listPlugins()).find(
+      (record) => record.plugin_id === "org.datalab.camera-characterization",
+    );
+    if (!plugin) throw new Error("Bundled Camera plugin was not registered");
+    const recipe = plugin.recipes.find(
+      (item) =>
+        item.id ===
+        "org.datalab.camera-characterization:relative-dn-characterization",
+    );
+    if (!recipe) throw new Error("Bundled Camera recipe was not registered");
+    const example = plugin.examples.find((item) => item.id === "quickstart");
+    if (!example) throw new Error("Bundled Camera example was not registered");
+    const opened = await window.runtime.openPluginExample(
+      plugin.plugin_id!,
+      example.id,
+    );
+    const prepared = await window.runtime.preparePluginRecipe(
+      plugin.plugin_id!,
+      recipe.id,
+      opened.selected_ids,
+    );
     await window.runtime.freeMemory();
     const dataBefore = (await window.runtime.getDataMemoryBytes()) ?? 0;
     const wasmBefore = window.runtime.getMemoryUsage().wasmBytes ?? 0;
-    const commit = await window.runtime.runBundledCameraRecipe(
-      images.map((image) => image.id),
+    const commit = await window.runtime.runPluginRecipe(
+      plugin.plugin_id!,
+      recipe.id,
+      prepared.bindings,
+      prepared.parameters?.values ?? {},
     );
     const dataAfter = (await window.runtime.getDataMemoryBytes()) ?? 0;
     const wasmAfter = window.runtime.getMemoryUsage().wasmBytes ?? 0;
     return {
-      manifest,
-      counts,
+      plugin,
+      recipe,
+      example,
+      opened,
+      prepared,
       commit,
-      imageCount: images.length,
       memory: {
         dataBefore,
         dataAfter,
@@ -108,20 +133,24 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
     };
   });
 
-  expect(result.manifest).toEqual({
-    plugin_id: "org.datalab.camera-characterization",
-    plugin_version: "0.1.0",
-    web_status: "verified",
-    datalab_web_version: "0.8.0",
-    pyodide_version: "0.26.4",
-    recipe_id:
-      "org.datalab.camera-characterization:relative-dn-characterization",
-    recipe_version: "1.1.0",
-    quickstart_filename: "camera_quickstart.h5",
+  expect(result.plugin).toMatchObject({
+    plugin_id: CAMERA_PLUGIN_ID,
+    version: "0.1.0",
+    source: "bundled-wheel",
+    trust: "verified",
+    enabled: true,
+    loaded: true,
   });
-  expect(result.counts.images).toBeGreaterThan(0);
-  expect(result.counts.images).toBe(result.imageCount);
-  expect(result.counts.groups).toBeGreaterThan(0);
+  expect(result.recipe).toMatchObject({
+    id: CAMERA_RECIPE_ID,
+    version: "1.1.0",
+  });
+  expect(result.example.recipe_id).toBe(CAMERA_RECIPE_ID);
+  expect(result.opened.images).toBeGreaterThan(0);
+  expect(result.opened.images).toBe(result.opened.selected_ids.length);
+  expect(result.opened.groups).toBeGreaterThan(0);
+  expect(result.prepared.ambiguous_slots).toEqual([]);
+  expect(result.prepared.missing_slots).toEqual([]);
   expect(result.commit.objects).toHaveLength(10);
   expect(result.memory.dataBefore).toBeGreaterThan(0);
   expect(result.memory.dataGrowth).toBeGreaterThan(0);

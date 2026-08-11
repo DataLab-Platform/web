@@ -5795,9 +5795,36 @@ def load_plugin_file(path: str) -> dict[str, Any]:
     return _plugins_module().load_plugin_file(path)
 
 
+def load_plugin_wheel(
+    path: str,
+    filename: str,
+    source: str,
+    sha256: str,
+    trust: str,
+) -> list[dict[str, Any]]:
+    """Inspect and load exact Web plugin entry points from one wheel."""
+    return _plugins_module().load_plugin_wheel(
+        path,
+        filename=filename,
+        source=source,
+        sha256=sha256,
+        trust=trust,
+    )
+
+
+def inspect_plugin_wheel(path: str, filename: str) -> dict[str, Any]:
+    """Inspect a local wheel against the live host without importing it."""
+    return _plugins_module().inspect_plugin_wheel(path, filename)
+
+
 def unload_plugin(name: str) -> dict[str, Any]:
     """Unregister and forget the plugin *name*."""
     return _plugins_module().unload_plugin(name)
+
+
+def set_plugin_enabled(name: str, enabled: bool) -> dict[str, Any]:
+    """Enable or disable one plugin while retaining its managed record."""
+    return _plugins_module().set_plugin_enabled(name, enabled)
 
 
 def reload_plugins() -> list[dict[str, Any]]:
@@ -5805,9 +5832,11 @@ def reload_plugins() -> list[dict[str, Any]]:
     return _plugins_module().reload_plugins()
 
 
-def discover_plugins_in_dir(directory: str) -> list[dict[str, Any]]:
+def discover_plugins_in_dir(
+    directory: str, source: str = "user-source"
+) -> list[dict[str, Any]]:
     """Load every ``*.py`` file in *directory* (non-recursive)."""
-    return _plugins_module().discover_plugins_in_dir(directory)
+    return _plugins_module().discover_plugins_in_dir(directory, source=source)
 
 
 def list_plugins() -> list[dict[str, Any]]:
@@ -6614,6 +6643,9 @@ __all__ = [
     "resolve_bridge_active",
     "load_plugin_source",
     "load_plugin_file",
+    "load_plugin_wheel",
+    "inspect_plugin_wheel",
+    "set_plugin_enabled",
     "unload_plugin",
     "reload_plugins",
     "discover_plugins_in_dir",

@@ -13,6 +13,8 @@ const MIB = 1024 * 1024;
 const INPUT_DATA_BYTES = 4_008_000;
 const OUTPUT_DATA_BYTES = 24_032;
 const MAX_RECIPE_WASM_GROWTH = 64 * MIB;
+const PULSE_PLUGIN_ID = "org.datalab.pulse-characterization";
+const PULSE_RECIPE_ID = `${PULSE_PLUGIN_ID}:single-channel-campaign`;
 
 test("bundled Pulse workflow renders campaign curves and metrics within budget", async ({
   page,
@@ -23,14 +25,35 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
   await waitForRuntimeReady(page);
 
   const result = await page.evaluate(async () => {
-    const manifest = await window.runtime.getBundledPulseManifest();
-    const demo = await window.runtime.createBundledPulseDemo();
+    const plugin = (await window.runtime.listPlugins()).find(
+      (record) => record.plugin_id === "org.datalab.pulse-characterization",
+    );
+    if (!plugin) throw new Error("Bundled Pulse plugin was not registered");
+    const recipe = plugin.recipes.find(
+      (item) =>
+        item.id ===
+        "org.datalab.pulse-characterization:single-channel-campaign",
+    );
+    if (!recipe) throw new Error("Bundled Pulse recipe was not registered");
+    const example = plugin.examples.find((item) => item.id === "demo");
+    if (!example) throw new Error("Bundled Pulse example was not registered");
+    const opened = await window.runtime.openPluginExample(
+      plugin.plugin_id!,
+      example.id,
+    );
+    const prepared = await window.runtime.preparePluginRecipe(
+      plugin.plugin_id!,
+      recipe.id,
+      opened.selected_ids,
+    );
     await window.runtime.freeMemory();
     const dataBefore = (await window.runtime.getDataMemoryBytes()) ?? 0;
     const wasmBefore = window.runtime.getMemoryUsage().wasmBytes ?? 0;
-    const commit = await window.runtime.runBundledPulseRecipe(
-      demo.signal_ids,
-      demo.parameter_values,
+    const commit = await window.runtime.runPluginRecipe(
+      plugin.plugin_id!,
+      recipe.id,
+      prepared.bindings,
+      opened.parameter_values,
     );
     const dataAfter = (await window.runtime.getDataMemoryBytes()) ?? 0;
     const wasmAfter = window.runtime.getMemoryUsage().wasmBytes ?? 0;
@@ -52,8 +75,11 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
       if (row[alignedIndex]) alignedCount += 1;
     }
     return {
-      manifest,
-      demoCount: demo.signal_count,
+      plugin,
+      recipe,
+      example,
+      opened,
+      prepared,
       commit,
       metrics: {
         rowCount: metrics.data.length,
@@ -72,16 +98,24 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
     };
   });
 
-  expect(result.manifest).toEqual({
-    plugin_id: "org.datalab.pulse-characterization",
-    plugin_version: "0.1.0",
-    web_status: "verified",
-    datalab_web_version: "0.8.0",
-    pyodide_version: "0.26.4",
-    recipe_id: "org.datalab.pulse-characterization:single-channel-campaign",
-    recipe_version: "1.1.0",
+  expect(result.plugin).toMatchObject({
+    plugin_id: PULSE_PLUGIN_ID,
+    version: "0.1.0",
+    source: "bundled-wheel",
+    trust: "verified",
+    enabled: true,
+    loaded: true,
   });
-  expect(result.demoCount).toBe(500);
+  expect(result.recipe).toMatchObject({
+    id: PULSE_RECIPE_ID,
+    version: "1.1.0",
+  });
+  expect(result.example.recipe_id).toBe(PULSE_RECIPE_ID);
+  expect(result.opened.signals).toBe(500);
+  expect(result.opened.selected_ids).toHaveLength(500);
+  expect(result.prepared.bindings.signals).toHaveLength(500);
+  expect(result.prepared.ambiguous_slots).toEqual([]);
+  expect(result.prepared.missing_slots).toEqual([]);
   expect(result.commit.objects).toHaveLength(3);
   expect(result.metrics).toEqual({
     rowCount: 500,

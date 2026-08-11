@@ -13,6 +13,7 @@ import type {
 } from "../runtime/runtime";
 
 export const MULTI_SELECTION_DEBOUNCE_MS = 75;
+export const MULTI_SIGNAL_LIMIT = 16;
 
 interface SelectionViewState {
   data: SignalData | null;
@@ -97,7 +98,14 @@ export function useSelectionView({
               .filter((id) => id !== currentId)
               .slice(0, Math.max(0, maxImages - 1)),
           ]
-        : stableSelectedIds;
+        : stableSelectedIds.length <= MULTI_SIGNAL_LIMIT
+          ? stableSelectedIds
+          : [
+              currentId,
+              ...stableSelectedIds
+                .filter((id) => id !== currentId)
+                .slice(0, MULTI_SIGNAL_LIMIT - 1),
+            ];
 
     const load = async () => {
       try {

@@ -667,6 +667,42 @@ input {
   border-color: var(--border);
 }
 
+/* Icon-only top-level actions, such as Applications. These keep the compact
+   visual weight of the other menu-bar tools while preserving menu ordering. */
+.menubar-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 26px;
+  padding: 3px 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.menubar-icon-action:hover:not(:disabled),
+.menubar-icon-action:focus-visible {
+  background: var(--panel-alt);
+  border-color: var(--border);
+  outline: none;
+}
+
+.menubar-icon-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menubar-icon-action__icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+  user-select: none;
+}
+
 .menu-dropdown {
   list-style: none;
   margin: 0;
@@ -2858,6 +2894,260 @@ input {
   margin: 0 0 10px;
   color: var(--text-dim);
   font-size: 12px;
+}
+
+.applications-dialog {
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 0;
+}
+
+.applications-window-layer {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9;
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.applications-window-layer .applications-dialog {
+  max-height: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+.applications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.applications-header-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.applications-header-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.applications-header h2 {
+  margin: 0;
+}
+
+.dialog-close-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.applications-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
+  min-height: 420px;
+}
+
+.applications-list {
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  background: var(--panel-alt);
+}
+
+.applications-list button {
+  display: grid;
+  width: 100%;
+  min-height: 54px;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border-color: transparent;
+  text-align: left;
+}
+
+.applications-list button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+}
+
+.applications-list button span,
+.application-meta,
+.application-entry p,
+.applications-status,
+.applications-diagnostics {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.applications-content {
+  min-width: 0;
+  padding: 18px;
+}
+
+.application-title-row,
+.application-entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.application-title-row h3,
+.application-title-row p,
+.application-entry p {
+  margin: 0;
+}
+
+.application-title-row p,
+.application-entry p {
+  margin-top: 4px;
+}
+
+.application-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.application-unverified {
+  padding: 2px 6px;
+  border: 1px solid #b27a19;
+  border-radius: 4px;
+  color: #b27a19;
+}
+
+.application-section {
+  margin-top: 22px;
+}
+
+.application-section h4 {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.application-entry {
+  min-height: 54px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.application-entry.focused {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.application-entry button {
+  flex: 0 0 auto;
+}
+
+.application-doc-button {
+  margin-top: 18px;
+}
+
+.applications-dialog > .error,
+.applications-status,
+.applications-diagnostics {
+  margin: 0 16px 12px;
+}
+
+.applications-diagnostics {
+  max-height: 96px;
+  overflow: auto;
+  padding-left: 18px;
+}
+
+.recipe-input-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 32px));
+  overflow: auto;
+}
+
+.recipe-slot-list {
+  display: grid;
+  gap: 12px;
+}
+
+.recipe-slot {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+
+.recipe-slot legend {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 4px;
+  text-transform: capitalize;
+}
+
+.recipe-slot legend small,
+.recipe-empty {
+  color: var(--text-dim);
+}
+
+.recipe-slot select {
+  width: 100%;
+}
+
+.recipe-candidate-list {
+  display: grid;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.recipe-candidate-list label {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .applications-window-layer {
+    inset: 56px 8px 8px;
+  }
+
+  .applications-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .applications-list {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .applications-list button {
+    flex: 0 0 180px;
+  }
+
+  .application-title-row,
+  .application-entry {
+    flex-direction: column;
+  }
 }
 
 /* RoiGridDialog — form + live preview side-by-side */

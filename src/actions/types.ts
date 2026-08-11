@@ -137,6 +137,7 @@ export const TOP_LEVEL_ORDER = [
   "Processing",
   "Analysis",
   "View",
+  "Applications",
   "Plugins",
   "Help",
 ];

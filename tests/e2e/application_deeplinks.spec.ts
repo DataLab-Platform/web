@@ -45,6 +45,11 @@ test("Camera deep link validates the bundle and opens its visible quickstart", a
   await expect(page.locator(".toast-success")).toContainText(
     "Opened bundled example quickstart.",
   );
+  const applications = page.getByRole("dialog", { name: "Applications" });
+  await expect(applications).toBeVisible();
+  await expect(
+    applications.locator(`[data-recipe-id="${CAMERA_LINK.recipe}"]`),
+  ).toHaveClass(/focused/);
   await expect(page.getByRole("tab", { name: "Images" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -56,6 +61,9 @@ test("Camera deep link validates the bundle and opens its visible quickstart", a
   }));
   expect(counts.images).toBeGreaterThan(0);
   expect(counts.signals).toBe(0);
+  await expect(
+    page.locator(".object-tree-item").filter({ hasText: "Camera response" }),
+  ).toHaveCount(0);
 });
 
 test("Pulse deep link validates the bundle and opens its visible demo", async ({
@@ -68,6 +76,11 @@ test("Pulse deep link validates the bundle and opens its visible demo", async ({
   await expect(page.locator(".toast-success")).toContainText(
     "Opened bundled example demo.",
   );
+  const applications = page.getByRole("dialog", { name: "Applications" });
+  await expect(applications).toBeVisible();
+  await expect(
+    applications.locator(`[data-recipe-id="${PULSE_LINK.recipe}"]`),
+  ).toHaveClass(/focused/);
   await expect(page.getByRole("tab", { name: "Signals" })).toHaveAttribute(
     "aria-selected",
     "true",
@@ -78,6 +91,11 @@ test("Pulse deep link validates the bundle and opens its visible demo", async ({
       async () => (await window.runtime.listSignals()).length,
     ),
   ).toBe(500);
+  await expect(
+    page
+      .locator(".object-tree-item")
+      .filter({ hasText: "Pulse amplitude vs shot" }),
+  ).toHaveCount(0);
 });
 
 test("deep link rejects a plugin version absent from the bundle", async ({

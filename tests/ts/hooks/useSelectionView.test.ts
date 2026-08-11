@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   MULTI_SELECTION_DEBOUNCE_MS,
+  MULTI_SIGNAL_LIMIT,
   useSelectionView,
 } from "../../../src/hooks/useSelectionView";
 import type {
@@ -83,5 +84,38 @@ describe("useSelectionView", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(getSignalViewSnapshot).toHaveBeenCalledWith("B", ["A", "B"]);
+  });
+
+  it("bounds the signal preview without changing the full selection", async () => {
+    vi.useFakeTimers();
+    const getSignalViewSnapshot = vi
+      .fn()
+      .mockResolvedValue(signalSnapshot("signal-20"));
+    const runtime = { getSignalViewSnapshot } as unknown as RuntimeApi;
+    const selectedIds = Array.from(
+      { length: MULTI_SIGNAL_LIMIT + 10 },
+      (_, index) => `signal-${index}`,
+    );
+    renderHook(() =>
+      useSelectionView({
+        runtime,
+        currentId: "signal-20",
+        selectedIds,
+        treeKind: "signal",
+        refreshNonce: 0,
+        maxImages: 6,
+      }),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MULTI_SELECTION_DEBOUNCE_MS);
+    });
+    expect(selectedIds).toHaveLength(MULTI_SIGNAL_LIMIT + 10);
+    expect(getSignalViewSnapshot).toHaveBeenCalledWith("signal-20", [
+      "signal-20",
+      ...selectedIds
+        .filter((id) => id !== "signal-20")
+        .slice(0, MULTI_SIGNAL_LIMIT - 1),
+    ]);
   });
 });
