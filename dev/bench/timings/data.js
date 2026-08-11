@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786473744612,
+  "lastUpdate": 1786480476059,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (timings)": [
@@ -4218,6 +4218,215 @@ window.BENCHMARK_DATA = {
           {
             "name": "opfs_worker · sync add [2048² ×8 float64]",
             "value": 305.5,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "6e484928fb17168ef7cff1f492a617caf52c7efa",
+          "message": "fix: adapt Vitest crypto inputs for Node 20\n\nNormalize cross-realm BufferSource values in the jsdom Web Crypto adapter.\n\nAssisted-by: GitHub Copilot",
+          "timestamp": "2026-08-11T22:28:50+02:00",
+          "tree_id": "fc778e32d7e5dd80337c85bcf95fc92d88658cac",
+          "url": "https://github.com/DataLab-Platform/web/commit/6e484928fb17168ef7cff1f492a617caf52c7efa"
+        },
+        "date": 1786480474968,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · multi-select → grid",
+            "value": 219,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · getImagesData (×4)",
+            "value": 13.4,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · single Plotly render",
+            "value": 65.4,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · grid React commit",
+            "value": 203.2,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · grid canvas paint",
+            "value": 15.8,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [10000 pts]",
+            "value": 91.8,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [10000 pts]",
+            "value": 71,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [10000 pts]",
+            "value": 54.2,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [10000 pts]",
+            "value": 461.1,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [10000 pts]",
+            "value": 258.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [100000 pts]",
+            "value": 96.3,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [100000 pts]",
+            "value": 64,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [100000 pts]",
+            "value": 31.5,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [100000 pts]",
+            "value": 354.3,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [100000 pts]",
+            "value": 406.3,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [500000 pts]",
+            "value": 155.1,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · binary fetch median [500000 pts]",
+            "value": 10.3,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [500000 pts]",
+            "value": 133,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [500000 pts]",
+            "value": 38.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [500000 pts]",
+            "value": 311.4,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [500000 pts]",
+            "value": 298.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [1000000 pts]",
+            "value": 164.2,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · binary fetch median [1000000 pts]",
+            "value": 21.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [1000000 pts]",
+            "value": 130,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [1000000 pts]",
+            "value": 27.1,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [1000000 pts]",
+            "value": 354.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [1000000 pts]",
+            "value": 303.1,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [1024² ×16 float64]",
+            "value": 118.1,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [1024² ×16 float64]",
+            "value": 230.1,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [1024² ×16 float64]",
+            "value": 208.8,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [2048² ×8 float64]",
+            "value": 77.3,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [2048² ×8 float64]",
+            "value": 299.3,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [2048² ×8 float64]",
+            "value": 321,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [1024² ×16 float64]",
+            "value": 766.9,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [1024² ×16 float64]",
+            "value": 235.7,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [2048² ×8 float64]",
+            "value": 283.3,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [2048² ×8 float64]",
+            "value": 318.1,
             "unit": "ms"
           }
         ]
