@@ -65,7 +65,7 @@ def pulse_application(fresh_bootstrap, monkeypatch):
         bootstrap._MODEL,
         bootstrap._object_uuid,
         bootstrap.open_workspace_from_bytes,
-        "0.8.0",
+        "0.9.0",
         bootstrap.reset_all,
     )
     yield bootstrap

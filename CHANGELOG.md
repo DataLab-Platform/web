@@ -6,8 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Added
+## [0.9.0] - 2026-08-11
 
+### Added in 0.9.0
+
+- **Environment report:** Help now exposes a copyable diagnostic snapshot with
+  the DataLab-Web build, browser capabilities, Pyodide runtime, and installed
+  Python distributions, without including workspace data.
 - **Synthetic radiograph spike:** the bundled NDT demo now contains a
   deterministic thickness-varying background, detector noise and artifacts,
   compact and linear indications with varied geometry and contrast, and a
@@ -32,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   provenance transactionally; a Chromium/Pyodide gate verifies a visible
   response curve, PRNU map, result table, and bounded demo-workspace memory.
   The separately reviewed manifest reports `verified` for the pinned
-  DataLab-Web 0.8.0 / Pyodide 0.26.4 compatibility matrix.
+  DataLab-Web 0.9.0 / Pyodide 0.26.4 compatibility matrix.
 - **Explicit Pulse plugin bundle:** the runtime now ships the independent Pulse
   characterization package as a versioned, SHA-256-checked wheel. Its shared
   recipe transactionally commits amplitude, raw-mean, aligned-mean, metrics,
@@ -41,7 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   classes, 489 aligned shots, exact retained-array growth, and bounded WASM
   memory before the pinned compatibility manifest reports `verified`.
 
-### Fixed
+### Fixed in 0.9.0
 
 - **Pyodide startup with scikit-image:** the runtime now loads Pillow
   explicitly before importing Sigima, avoiding a startup failure when
@@ -285,7 +290,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/DataLab-Platform/web/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DataLab-Platform/web/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DataLab-Platform/web/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/DataLab-Platform/web/compare/v0.6.2...v0.6.3
