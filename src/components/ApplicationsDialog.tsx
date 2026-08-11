@@ -310,7 +310,7 @@ export function ApplicationsDialog({
 
                   {selected.recipes.length > 0 && (
                     <section className="application-section">
-                      <h4>{t("Analyses")}</h4>
+                      <h4>{t("Recipes")}</h4>
                       {selected.recipes.map((recipe) => (
                         <div
                           className={`application-entry${
