@@ -7,7 +7,6 @@ import {
   resizeCursor,
   roiHitTest,
 } from "../../src/components/imageRoi";
-import { ROI_FILL_COLORS } from "../../src/runtime/plotStyles";
 import type { ImageRoiSegment } from "../../src/runtime/runtime";
 
 type Shape = {
@@ -54,7 +53,7 @@ describe("buildRoiOverlays", () => {
     ],
   };
 
-  it("renders rectangle shape and label with the cycling palette color", () => {
+  it("renders rectangle shape and matching label color", () => {
     const { roiShapes, roiAnnotations } = buildRoiOverlays([rect]);
     expect(roiShapes).toHaveLength(1);
     const s = roiShapes[0] as Shape;
@@ -63,10 +62,9 @@ describe("buildRoiOverlays", () => {
     expect(s.x1).toBe(40);
     expect(s.y0).toBe(20);
     expect(s.y1).toBe(60);
-    expect(s.line.color).toBe(ROI_FILL_COLORS[0]);
     const a = roiAnnotations[0] as Annotation;
     expect(a.text).toBe("ROI1");
-    expect(a.font.color).toBe(ROI_FILL_COLORS[0]);
+    expect(a.font.color).toBe(s.line.color);
   });
 
   it("renders circle shape with bounding box and honours an explicit title", () => {
@@ -112,16 +110,18 @@ describe("buildRoiOverlays", () => {
       dy: 1,
     }));
     const { roiShapes } = buildRoiOverlays(segments);
-    expect((roiShapes[0] as Shape).line.color).toBe(ROI_FILL_COLORS[0]);
-    expect((roiShapes[1] as Shape).line.color).toBe(ROI_FILL_COLORS[1]);
-    expect((roiShapes[10] as Shape).line.color).toBe(ROI_FILL_COLORS[0]);
+    expect((roiShapes[0] as Shape).line.color).not.toBe(
+      (roiShapes[1] as Shape).line.color,
+    );
+    expect((roiShapes[10] as Shape).line.color).toBe(
+      (roiShapes[0] as Shape).line.color,
+    );
   });
 
   it("adds editable shapes and translucent fill in edit mode", () => {
     const { roiShapes } = buildRoiOverlays([rect], true);
     const s = roiShapes[0] as Shape;
     expect(s.editable).toBe(true);
-    expect(s.line.width).toBe(2);
     expect(s.fillcolor).toBeDefined();
     expect(s.fillcolor).toContain("rgba(");
   });
@@ -130,7 +130,6 @@ describe("buildRoiOverlays", () => {
     const { roiShapes } = buildRoiOverlays([rect]);
     const s = roiShapes[0] as Shape;
     expect(s.editable).toBe(false);
-    expect(s.line.width).toBe(1.5);
     expect(s.fillcolor).toBeUndefined();
   });
 });

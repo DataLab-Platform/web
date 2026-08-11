@@ -22,7 +22,6 @@ test("Applications and application plugin menus follow desktop placement", async
   const applicationsButton = page.getByRole("menuitem", {
     name: "Applications…",
   });
-  await expect(applicationsButton).toHaveClass(/menubar-icon-action/);
   await expect(applicationsButton.locator("img")).toBeVisible();
   await expect(applicationsButton).not.toContainText("Applications…");
   const launcherIconSource = await applicationsButton

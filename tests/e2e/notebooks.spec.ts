@@ -166,7 +166,10 @@ test.describe("Notebook UI", () => {
     // happens to land between the count snapshot and the assertions.
     await expect(page.locator(".nb-tab")).toHaveCount(before + 1);
     await expect(page.locator(".nb-tab.active")).toHaveCount(1);
-    await expect(page.locator(".nb-tab").last()).toHaveClass(/active/);
+    await expect(page.locator(".nb-tab").last()).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   test("Export… triggers a .ipynb download with valid nbformat content", async ({

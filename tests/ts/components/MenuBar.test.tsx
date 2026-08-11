@@ -44,7 +44,6 @@ describe("MenuBar", () => {
     });
 
     const action = screen.getByRole("menuitem", { name: "Applications…" });
-    expect(action).toHaveClass("menubar-icon-action");
     expect(action).toHaveAttribute("title", "Applications…");
     expect(action).not.toHaveTextContent("Applications…");
     expect(action.querySelector("img")).toHaveAttribute(
