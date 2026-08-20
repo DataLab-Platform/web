@@ -14,11 +14,12 @@
  *    test (part of ``npm test``) that keeps the registry, the on-disk
  *    sources and the sentinel markers in sync, and fails CI when a new
  *    inline ``TEMPORARY SHIM`` block is added without a registry entry.
- * 2. ``tests/ts/shims/shim-audit.spec.ts`` — an opt-in audit (run via the
- *    ``🔍 Audit shims (versions)`` VS Code task / ``npm run audit:shims``)
- *    that compares ``removableFrom`` with the version actually resolved at
- *    runtime (PyPI for the ``micropip``-installed packages, the Pyodide
- *    lockfile for the bundled scientific stack).
+ * 2. ``tests/ts/shims/shim-audit.spec.ts`` — an opt-in, fast pre-audit (run
+ *    via the ``🔍 Audit shims (versions)`` VS Code task /
+ *    ``npm run audit:shims``) that compares ``removableFrom`` with versions
+ *    inferred from PyPI for ``micropip`` packages and the Pyodide lockfile
+ *    for the bundled scientific stack. The live Pyodide audit and behavior
+ *    tests remain mandatory before removal.
  *
  * Convention for new shims (so the anti-drift scanner can find them):
  * wrap inline shims in ``# TEMPORARY SHIM`` / ``# END TEMPORARY SHIM``
@@ -26,7 +27,7 @@
  * the opening marker (or in the module docstring for whole-file shims).
  */
 
-/** How the audit resolves the *installed* version of a target package. */
+/** How the fast audit infers the version of a target package. */
 export type VersionSource = "pypi" | "pyodide-lock";
 
 /** Whether a shim is a removable backport or a permanent portability layer. */
@@ -74,12 +75,11 @@ export interface ShimDescriptor {
 /**
  * Version-resolution strategy per target package.
  *
- * ``guidata`` is installed by ``micropip`` without a pin, so the runtime gets
- * the latest PyPI release. ``sigima`` carries a lower-bound pin (see
- * ``runtime.ts`` and ``workerBase.ts``), so the resolved version is the latest
- * PyPI release satisfying it. ``numpy``/``scipy``/``h5py`` are bundled with
- * Pyodide, so their version is fixed by the pinned Pyodide build and read from
- * its ``pyodide-lock.json``.
+ * ``guidata`` and ``sigima`` carry lower-bound pins (see ``runtime.ts`` and
+ * ``workerBase.ts``). The fast audit uses their latest PyPI releases as an
+ * approximation; the live audit confirms what ``micropip`` actually resolved.
+ * ``numpy``/``scipy``/``h5py`` are bundled with Pyodide, so their version is
+ * fixed by the pinned Pyodide build and read from its ``pyodide-lock.json``.
  */
 export const PACKAGE_VERSION_SOURCES: Record<string, VersionSource> = {
   guidata: "pypi",
@@ -98,26 +98,14 @@ export const PACKAGE_VERSION_SOURCES: Record<string, VersionSource> = {
  */
 export const SHIM_REGISTRY: ShimDescriptor[] = [
   {
-    id: "guidata-backends",
-    summary:
-      "Adds the pluggable UI backend registry (guidata.dataset.backends) " +
-      "so DataSet.edit() can route to the React frontend.",
-    kind: "backport",
-    targetPackage: "guidata",
-    files: ["src/runtime/_guidata_backends_shim.py"],
-    removableFrom: "3.15.0",
-    upstreamRef: "guidata/guidata/dataset/backends.py",
-    loadedBy: ["src/runtime/runtime.ts", "src/runtime/macroWorker.ts"],
-  },
-  {
     id: "guidata-jsonschema",
     summary:
-      "Exposes the JSON Schema export helpers (dataset_to_schema, " +
-      "dataset_to_schema_with_values, …) on the guidata.dataset namespace.",
+      "Adds FloatArrayItem variable-size and min/max hints missing from " +
+      "guidata's native JSON Schema exporter.",
     kind: "backport",
     targetPackage: "guidata",
     files: ["src/runtime/_guidata_jsonschema_shim.py"],
-    removableFrom: "3.15.0",
+    removableFrom: null,
     upstreamRef: "guidata/guidata/dataset/jsonschema.py",
     loadedBy: ["src/runtime/runtime.ts", "src/runtime/macroWorker.ts"],
   },
@@ -161,8 +149,9 @@ export interface ShimAuditResult {
 }
 
 /**
- * Classify a shim given the resolved installed version of its target
- * package. Pure (no I/O) so it is unit-testable on its own.
+ * Classify a shim given a candidate version of its target package. The fast
+ * audit supplies an inferred version; the live audit supplies the installed
+ * version. Pure (no I/O) so it is unit-testable on its own.
  */
 export function classifyShim(
   shim: ShimDescriptor,
@@ -193,12 +182,14 @@ export function classifyShim(
     return {
       ...base,
       status: "ready-to-remove",
-      detail: `Installed ${installedVersion} >= ${shim.removableFrom}: shim can be removed.`,
+      detail:
+        `Version ${installedVersion} >= ${shim.removableFrom}: ` +
+        "verify native behavioral parity before removal.",
     };
   }
   return {
     ...base,
     status: "pending",
-    detail: `Installed ${installedVersion} < ${shim.removableFrom}: keep the shim.`,
+    detail: `Version ${installedVersion} < ${shim.removableFrom}: keep the shim.`,
   };
 }

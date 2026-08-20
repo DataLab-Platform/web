@@ -10,10 +10,10 @@ import { PYODIDE_INDEX } from "../../../src/runtime/workerBase";
 
 /**
  * Opt-in audit (``npm run audit:shims`` / the ``🔍 Audit shims (versions)``
- * VS Code task). It resolves the version of each backport's target package
- * the way the browser does — PyPI for the ``micropip``-installed packages,
- * the pinned Pyodide lockfile for the bundled scientific stack — and reports
- * which shims are now removable.
+ * VS Code task). It infers each backport target's version from PyPI for the
+ * ``micropip``-installed packages and from the pinned Pyodide lockfile for
+ * the bundled scientific stack, then reports removal candidates. The live
+ * Pyodide audit confirms the versions that were actually installed.
  *
  * REPORT-ONLY: this spec never fails on an outdated shim (that is a human
  * decision). It only fails on an internal inconsistency. When the machine
@@ -63,7 +63,7 @@ async function fetchPyodideLockVersions(): Promise<Record<
   }
 }
 
-async function resolveInstalledVersion(pkg: string): Promise<string | null> {
+async function inferVersion(pkg: string): Promise<string | null> {
   const source = PACKAGE_VERSION_SOURCES[pkg];
   if (source === "pypi") return fetchPypiVersion(pkg);
   if (source === "pyodide-lock") {
@@ -80,23 +80,31 @@ function renderTable(results: ShimAuditResult[]): string {
     unknown: "❔ unknown",
     skipped: "⚠️ skipped",
   };
+  if (results.length === 0) {
+    return [
+      "",
+      "Shim removability audit:",
+      "  No active backport shims.",
+      "",
+    ].join("\n");
+  }
   const rows = results.map(
     (r) =>
       `  ${icon[r.status].padEnd(11)} ${r.id.padEnd(32)} ` +
       `${r.targetPackage.padEnd(9)} need>=${String(r.removableFrom).padEnd(8)} ` +
-      `installed=${String(r.installedVersion)}`,
+      `inferred=${String(r.installedVersion)}`,
   );
   return ["", "Shim removability audit:", ...rows, ""].join("\n");
 }
 
 describe("shim version audit (report-only)", () => {
   it(
-    "reports removability against runtime-resolved versions",
+    "reports removability against inferred versions",
     async () => {
       const backports = SHIM_REGISTRY.filter((s) => s.kind === "backport");
       const versions = new Map<string, string | null>();
       for (const pkg of new Set(backports.map((s) => s.targetPackage))) {
-        versions.set(pkg, await resolveInstalledVersion(pkg));
+        versions.set(pkg, await inferVersion(pkg));
       }
 
       const results = backports.map((shim) =>

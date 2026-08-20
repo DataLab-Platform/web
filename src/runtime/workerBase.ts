@@ -16,7 +16,9 @@
 export const PYODIDE_VERSION = "v0.26.4";
 export const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 const SIGIMA_INSTALL_SPEC =
-  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.2.0";
+  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.3.0";
+const GUIDATA_INSTALL_SPEC =
+  import.meta.env.VITE_GUIDATA_INSTALL_SPEC || "guidata>=3.15.0";
 
 /** Minimal slice of the Pyodide API surface used by the workers. */
 export interface PyodideAPI {
@@ -95,7 +97,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
   // Pyodide ships numpy 1.26.4 (lift when Pyodide bumps numpy).
   await py.runPythonAsync(`
 import micropip
-await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tifffile<2025"])
+await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify(GUIDATA_INSTALL_SPEC)}, "tifffile<2025"])
 `);
 
   // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced in

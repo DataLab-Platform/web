@@ -21,9 +21,9 @@ import macroProxySource from "./macro_proxy.py?raw";
 // so processed objects carry the same placeholder titles (later resolved
 // to source ``oid``s by ``bootstrap.patch_title_with_ids``).
 import dlwTitleFormatSource from "./dlw_title_format.py?raw";
-// Until the released ``guidata`` ships the new JSON Schema helpers, we
-// pre-load a copy of ``guidata/dataset/jsonschema.py`` and let it
-// monkey-patch the ``guidata.dataset`` namespace.
+// Guidata 3.15 provides the JSON Schema exporter natively. This tracked
+// compatibility patch only adds FloatArrayItem hints used by the browser
+// array editor and may be dropped once a later guidata release ships them.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
 // Resolve the Pyodide ``LANG`` from the active UI locale so that
 // Sigima/guidata gettext labels match the rest of the interface. Import
@@ -72,19 +72,6 @@ const builtinPluginSources = import.meta.glob("./builtin_plugins/*.py", {
   eager: true,
 }) as Record<string, string>;
 
-// Bundle pluggable backend file from local guidata working tree
-// (Phase 0 patches that aren't yet in a released wheel). Loaded after
-// ``micropip install guidata`` and applied as monkey-patch.
-const guidataBackendsSource = (() => {
-  const candidates = import.meta.glob("./_guidata_backends_shim.py", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }) as Record<string, string>;
-  const first = Object.values(candidates)[0];
-  return first ?? null;
-})();
-
 // Pyodide is loaded from a CDN <script> tag in index.html; the
 // ``window.loadPyodide`` global is declared in
 // ``src/types/pyodide-global.d.ts`` (shared with the bench).
@@ -121,7 +108,9 @@ export interface PyProxy {
 const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 const SIGIMA_INSTALL_SPEC =
-  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.2.0";
+  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.3.0";
+const GUIDATA_INSTALL_SPEC =
+  import.meta.env.VITE_GUIDATA_INSTALL_SPEC || "guidata>=3.15.0";
 
 export interface PythonDistributionInfo {
   name: string;
@@ -1490,14 +1479,11 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
     await py.runPythonAsync(`
 import micropip
-await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tifffile<2025"])
+await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify(GUIDATA_INSTALL_SPEC)}, "tifffile<2025"])
 `);
 
     onProgress?.(t("Initialising Sigima namespace…"));
     await py.runPythonAsync(guidataJsonSchemaShim);
-    if (guidataBackendsSource) {
-      await py.runPythonAsync(guidataBackendsSource);
-    }
     // Mirror the portable ``datalab.*`` shim into Pyodide site-packages.
     DataLabRuntime.installShim(py, shimSources);
     // Verified pure-Python plugin wheels are explicit build assets. They are
@@ -4140,9 +4126,9 @@ _after = {k: list(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
    * Pyodide. Useful for diagnostics (About dialog, bug reports) and for an
    * end-to-end audit probe.
    *
-   * @param packages Package names to query; defaults to the packages
-   *  tracked by the shim registry (``guidata``, ``sigima``, ``numpy``,
-   *  ``scipy``, ``h5py``).
+   * @param packages Package names to query; defaults to the packages listed
+   *  in ``PACKAGE_VERSION_SOURCES`` for shim audits and diagnostics
+   *  (``guidata``, ``sigima``, ``numpy``, ``scipy``, ``h5py``).
    */
   async getInstalledVersions(
     packages: readonly string[] = Object.keys(PACKAGE_VERSION_SOURCES),
