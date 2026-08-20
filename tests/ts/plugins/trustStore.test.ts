@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   hashSource,
+  hashBytes,
+  isPluginHashTrusted,
   isPluginTrusted,
   trustPlugin,
   listTrustedPlugins,
   revokePluginTrust,
+  trustPluginHash,
 } from "../../../src/plugins/trustStore";
 
 beforeEach(() => {
@@ -23,6 +26,24 @@ describe("trustStore", () => {
     const a = await hashSource("a");
     const b = await hashSource("b");
     expect(a).not.toBe(b);
+  });
+
+  it("hashes the exact binary view rather than its whole backing buffer", async () => {
+    const backing = new Uint8Array([9, 1, 2, 3, 8]);
+    const view = backing.subarray(1, 4);
+    expect(await hashBytes(view)).toBe(
+      await hashBytes(new Uint8Array([1, 2, 3])),
+    );
+  });
+
+  it("persists wheel trust by filename and exact binary hash", async () => {
+    const hash = await hashBytes(new Uint8Array([1, 2, 3]));
+    trustPluginHash("plugin.whl", hash);
+    expect(isPluginHashTrusted("plugin.whl", hash)).toBe(true);
+    expect(isPluginHashTrusted("renamed.whl", hash)).toBe(false);
+
+    const changedHash = await hashBytes(new Uint8Array([1, 2, 4]));
+    expect(isPluginHashTrusted("plugin.whl", changedHash)).toBe(false);
   });
 
   it("treats unknown plugins as untrusted", async () => {

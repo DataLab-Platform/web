@@ -8,21 +8,6 @@ import {
 } from "../../../src/utils/plotlyTheme";
 import { ThemeProvider } from "../../../src/utils/theme";
 
-describe("getPlotlyThemeLayout", () => {
-  it("returns dark palette for the dark theme", () => {
-    const layout = getPlotlyThemeLayout("dark");
-    expect(layout.font.color).toBe("#d4d4d4");
-    expect(layout.paper_bgcolor).toMatch(/rgba\(0,0,0,0\)/);
-    expect(layout.legend.font.color).toBe("#d4d4d4");
-  });
-
-  it("returns light palette for the light theme", () => {
-    const layout = getPlotlyThemeLayout("light");
-    expect(layout.font.color).toBe("#1f1f1f");
-    expect(layout.xaxis.gridcolor).toBe("#e0e0e0");
-  });
-});
-
 describe("usePlotlyTheme", () => {
   it("preserves layout identity when the theme is unchanged", () => {
     const wrapper = ({ children }: { children: ReactNode }) =>

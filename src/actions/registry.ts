@@ -4,6 +4,7 @@ import type {
   ImageRoiSegment,
   InteractiveFitInfo,
   PluginMenuAction,
+  PluginRecord,
   SignalAnalysisDescriptor,
   SignalCreationType,
   SignalRoiSegment,
@@ -1184,12 +1185,16 @@ export function buildImageGridActions(
 /** Wire actions contributed by Python plugins. */
 export interface PluginActionCallbacks {
   onTrigger: (actionId: string) => void;
+  onOpenApplications: () => void;
+  onOpenApplicationRecipe: (pluginId: string, recipeId: string) => void;
+  onOpenApplicationExample: (pluginId: string, exampleId: string) => void;
   onOpenManager: () => void;
   onReloadAll: () => void;
 }
 
 export function buildPluginActions(
   entries: PluginMenuAction[],
+  records: PluginRecord[],
   activePanel: "signal" | "image",
   cb: PluginActionCallbacks,
 ): ActionDescriptor[] {
@@ -1199,6 +1204,14 @@ export function buildPluginActions(
   // of the menu — after any plugin-contributed actions — with a separator
   // before them, mirroring DataLab desktop (and using the same icons).
   const fixed: ActionDescriptor[] = [
+    {
+      id: "plugins.applications",
+      label: t("Applications…"),
+      menuPath: "Applications",
+      iconUrl: getRootIconUrl("libre-gui-plugin.svg"),
+      enabled: ready,
+      run: cb.onOpenApplications,
+    },
     {
       id: "plugins.manager",
       label: t("Manage plugins…"),
@@ -1247,5 +1260,37 @@ export function buildPluginActions(
     };
   });
 
-  return [...dynamic, ...fixed];
+  const applications = records.filter(
+    (record) =>
+      record.enabled &&
+      record.loaded &&
+      record.plugin_id &&
+      record.info?.capabilities.includes("application"),
+  );
+  const applicationActions = applications.flatMap<ActionDescriptor>(
+    (record) => {
+      const pluginId = record.plugin_id!;
+      const pluginName = record.info?.name ?? pluginId;
+      const recipes = record.recipes.map<ActionDescriptor>((recipe) => ({
+        id: `plugin.application.recipe.${pluginId}.${recipe.id}`,
+        label: recipe.title,
+        menuPath: `Plugins/${pluginName}/${recipe.title}`,
+        enabled: ready,
+        run: () => cb.onOpenApplicationRecipe(pluginId, recipe.id),
+      }));
+      const examples = record.examples.map<ActionDescriptor>(
+        (example, index) => ({
+          id: `plugin.application.example.${pluginId}.${example.id}`,
+          label: example.title,
+          menuPath: `Plugins/${pluginName}/${example.title}`,
+          beginGroup: recipes.length > 0 && index === 0,
+          enabled: ready,
+          run: () => cb.onOpenApplicationExample(pluginId, example.id),
+        }),
+      );
+      return [...recipes, ...examples];
+    },
+  );
+
+  return [...dynamic, ...applicationActions, ...fixed];
 }

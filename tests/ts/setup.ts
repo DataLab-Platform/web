@@ -24,16 +24,25 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-// jsdom 24+ ships ``window.crypto.subtle``; older versions don't. We only
-// need the ``digest`` method for the trust-store hashing tests.
-if (
-  typeof window !== "undefined" &&
-  (!window.crypto || !window.crypto.subtle)
-) {
-  // Lazy-import the Node implementation. ``webcrypto`` is available since
-  // Node 18.
+// Node 20 Web Crypto rejects BufferSource values created in jsdom's realm.
+// Adapt digest inputs to a native Buffer while keeping browser semantics.
+if (typeof window !== "undefined") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { webcrypto } = require("node:crypto");
+  const nativeDigest = webcrypto.subtle.digest.bind(webcrypto.subtle);
+  Object.defineProperty(webcrypto.subtle, "digest", {
+    value: (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+      const bytes = ArrayBuffer.isView(data)
+        ? Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+        : Buffer.from(data);
+      return nativeDigest(algorithm, bytes);
+    },
+    configurable: true,
+  });
+  Object.defineProperty(globalThis, "crypto", {
+    value: webcrypto,
+    configurable: true,
+  });
   Object.defineProperty(window, "crypto", {
     value: webcrypto,
     configurable: true,

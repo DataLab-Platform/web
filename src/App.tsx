@@ -24,7 +24,10 @@ import type {
   InteractiveFitInfo,
   JsonSchema,
   PanelTree,
+  PluginExampleOpenResult,
   PluginMenuAction,
+  PluginRecord,
+  PluginRecipeCommit,
   PlotResultsSchemaEntry,
   SchemaWithValues,
   SignalData,
@@ -50,6 +53,7 @@ import {
   buildStaticActions,
   buildViewActions,
 } from "./actions/registry";
+import { openBundledApplicationDeepLink } from "./actions/applicationDeepLinks";
 import { ObjectTree } from "./components/ObjectTree";
 import type { ObjectTreeHandle } from "./components/ObjectTree";
 import {
@@ -83,7 +87,7 @@ import {
   LazySignalAxisGroupsDialog as SignalAxisGroupsDialog,
   LazySignalPlot as SignalPlot,
 } from "./components/lazyPlotComponents";
-import { useSelectionView } from "./hooks/useSelectionView";
+import { MULTI_SIGNAL_LIMIT, useSelectionView } from "./hooks/useSelectionView";
 import { useSignalAxisGroups } from "./hooks/useSignalAxisGroups";
 import { DataSetDialog } from "./components/DataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
@@ -108,6 +112,7 @@ import { useProgress } from "./components/ProgressDialog";
 import { useToast } from "./components/Toast";
 import type { SeparateViewContent } from "./components/SeparateViewDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
+import { ApplicationsDialog } from "./components/ApplicationsDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
@@ -137,6 +142,7 @@ import { type MacroPanelHandle } from "./components/MacroPanel";
 import { type NotebookPanelHandle } from "./components/notebook/NotebookPanel";
 import { useTheme } from "./utils/theme";
 import { pickDirectoryRecursive, groupByFolder } from "./utils/pickDirectory";
+import { parseApplicationDeepLink } from "./utils/applicationDeepLink";
 import {
   resolvePreloadUrl,
   preloadFilename,
@@ -826,7 +832,15 @@ export default function App() {
     extensions: string[];
   } | null>(null);
   const [pluginActions, setPluginActions] = useState<PluginMenuAction[]>([]);
+  const [pluginRecords, setPluginRecords] = useState<PluginRecord[]>([]);
   const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
+  const [applicationsOpen, setApplicationsOpen] = useState(false);
+  const [applicationTarget, setApplicationTarget] = useState<{
+    pluginId: string;
+    recipeId: string;
+    parameterValues: Record<string, unknown>;
+    candidateIds?: string[];
+  } | null>(null);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -1140,6 +1154,9 @@ export default function App() {
     });
     runtime.listPluginMenuActions().then((v) => {
       if (!cancelled) setPluginActions(v);
+    });
+    runtime.listPlugins().then((v) => {
+      if (!cancelled) setPluginRecords(v);
     });
     runtime.listInteractiveFits().then((v) => {
       if (!cancelled) setInteractiveFits(v);
@@ -1579,7 +1596,12 @@ export default function App() {
 
   const refreshPluginActions = useCallback(async () => {
     if (!runtime) return;
-    setPluginActions(await runtime.listPluginMenuActions());
+    const [actions, records] = await Promise.all([
+      runtime.listPluginMenuActions(),
+      runtime.listPlugins(),
+    ]);
+    setPluginActions(actions);
+    setPluginRecords(records);
   }, [runtime]);
 
   const handleTriggerPluginAction = useCallback(
@@ -1636,6 +1658,119 @@ export default function App() {
       setBusy(false);
     }
   }, [runtime, refreshPluginActions]);
+
+  const confirmOpenPluginExample = useCallback(async () => {
+    if (!workspaceDirty) return true;
+    return confirm({
+      title: t("Open example"),
+      message: t(
+        "Opening this example replaces the current workspace. Continue?",
+      ),
+      confirmLabel: t("Open example"),
+      destructive: true,
+    });
+  }, [confirm, workspaceDirty]);
+
+  const handlePluginRecipeCommitted = useCallback(
+    async (commit: PluginRecipeCommit) => {
+      const primaryOutput =
+        commit.objects.find(
+          (output) => output.id === commit.results[0]?.anchor_id,
+        ) ?? commit.objects[0];
+      if (!primaryOutput) {
+        await refresh(null);
+        return;
+      }
+      if (!runtime) return;
+      const outputIds = commit.objects
+        .filter((output) => output.kind === primaryOutput.kind)
+        .map((output) => output.id);
+      await refreshPanelKind(primaryOutput.kind, primaryOutput.id);
+      setSelectedIds(outputIds);
+      setCurrentId(primaryOutput.id);
+    },
+    [refresh, refreshPanelKind, runtime, setSelectedIds],
+  );
+
+  const handlePluginExampleOpened = useCallback(
+    async (result: PluginExampleOpenResult) => {
+      setWorkspaceVersion((version) => version + 1);
+      setWorkspaceFilename(result.filename);
+      if (result.dirty) markDirty();
+      else markClean();
+      if (result.panel) {
+        await refreshPanelKind(result.panel, result.current_id);
+        const visualSelection =
+          result.panel === "signal" &&
+          result.selected_ids.length > MULTI_SIGNAL_LIMIT
+            ? result.current_id
+              ? [result.current_id]
+              : result.selected_ids.slice(0, 1)
+            : result.selected_ids;
+        setSelectedIds(visualSelection);
+        setCurrentId(result.current_id);
+      } else {
+        await refresh(null);
+      }
+    },
+    [
+      markClean,
+      markDirty,
+      refresh,
+      refreshPanelKind,
+      setSelectedIds,
+      setWorkspaceFilename,
+    ],
+  );
+
+  const handleOpenApplicationRecipe = useCallback(
+    (pluginId: string, recipeId: string) => {
+      setApplicationTarget({ pluginId, recipeId, parameterValues: {} });
+      setApplicationsOpen(true);
+    },
+    [],
+  );
+
+  const handleOpenApplicationExample = useCallback(
+    async (pluginId: string, exampleId: string) => {
+      if (!runtime || !(await confirmOpenPluginExample())) return;
+      setBusy(true);
+      try {
+        const result = await runtime.openPluginExample(
+          pluginId,
+          exampleId,
+          true,
+        );
+        await handlePluginExampleOpened(result);
+        const example = pluginRecords
+          .find((record) => record.plugin_id === pluginId)
+          ?.examples.find((candidate) => candidate.id === exampleId);
+        if (example?.recipe_id) {
+          setApplicationTarget({
+            pluginId,
+            recipeId: example.recipe_id,
+            parameterValues: result.parameter_values,
+            candidateIds: result.selected_ids,
+          });
+          setApplicationsOpen(true);
+        }
+      } catch (error) {
+        await showProcessingError({
+          context: t("Open example"),
+          traceback: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      confirmOpenPluginExample,
+      handlePluginExampleOpened,
+      pluginRecords,
+      runtime,
+      showProcessingError,
+    ],
+  );
 
   const handleApplyFeature = useCallback(
     async (featureId: string) => {
@@ -3415,11 +3550,102 @@ export default function App() {
     setH5BrowserFiles([]);
   }, []);
 
+  // Startup Applications deep-link: validate the exact plugin and recipe
+  // versions against a manifest loaded from the bundle before opening its
+  // packaged example. Unknown plugins are never installed implicitly.
+  const applicationDeepLinkDone = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || !runtime || applicationDeepLinkDone.current)
+      return;
+    const parsed = parseApplicationDeepLink(window.location.search);
+    if (parsed.kind === "none") return;
+    applicationDeepLinkDone.current = true;
+    if (parsed.kind === "invalid") {
+      pushToast({
+        kind: "error",
+        message: t("Invalid application link: missing {parameters}.", {
+          parameters: parsed.missing.join(", "),
+        }),
+      });
+      return;
+    }
+
+    void (async () => {
+      setBusy(true);
+      try {
+        const result = await openBundledApplicationDeepLink(
+          runtime,
+          parsed.request,
+        );
+        if (result.kind === "unsupported") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: plugin {plugin} is not bundled.",
+              { plugin: result.pluginId },
+            ),
+          });
+          return;
+        }
+        if (result.kind === "unverified") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: plugin {plugin} has Web status {status}.",
+              { plugin: result.pluginId, status: result.status },
+            ),
+          });
+          return;
+        }
+        if (result.kind === "mismatch") {
+          pushToast({
+            kind: "error",
+            message: t(
+              "Application link rejected: requested {field} {requested}, but this bundle provides {bundled}.",
+              {
+                field: result.mismatch.field,
+                requested: result.mismatch.requested,
+                bundled: result.mismatch.bundled,
+              },
+            ),
+          });
+          return;
+        }
+
+        await handlePluginExampleOpened(result.example);
+        setApplicationTarget({
+          pluginId: result.pluginId,
+          recipeId: result.recipeId,
+          parameterValues: result.example.parameter_values,
+          candidateIds: result.example.selected_ids,
+        });
+        setApplicationsOpen(true);
+        pushToast({
+          kind: "success",
+          message: t("Opened bundled example {example}.", {
+            example: parsed.request.exampleId,
+          }),
+        });
+      } catch (error) {
+        pushToast({
+          kind: "error",
+          message: t("Failed to open application link: {error}", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [status, runtime, handlePluginExampleOpened, pushToast]);
+
   // Startup deep-link: `?preload=<same-origin .h5>` loads a demo workspace
   // once the runtime is ready (used by the documentation use-case pages).
   const preloadDone = useRef(false);
   useEffect(() => {
     if (status !== "ready" || !runtime || preloadDone.current) return;
+    if (parseApplicationDeepLink(window.location.search).kind !== "none")
+      return;
     const url = resolvePreloadUrl(window.location.search, document.baseURI);
     if (!url) return;
     preloadDone.current = true;
@@ -4160,8 +4386,16 @@ export default function App() {
             onRemoveAt: handleImageRoiRemoveAt,
             onRemoveAll: handleImageRoiRemoveAll,
           })),
-      ...buildPluginActions(pluginActions, treeKind, {
+      ...buildPluginActions(pluginActions, pluginRecords, treeKind, {
         onTrigger: handleTriggerPluginAction,
+        onOpenApplications: () => {
+          setApplicationTarget(null);
+          setApplicationsOpen(true);
+        },
+        onOpenApplicationRecipe: handleOpenApplicationRecipe,
+        onOpenApplicationExample: (pluginId, exampleId) => {
+          void handleOpenApplicationExample(pluginId, exampleId);
+        },
         onOpenManager: () => setPluginManagerOpen(true),
         onReloadAll: handleReloadPlugins,
       }),
@@ -4219,7 +4453,10 @@ export default function App() {
       handleImportHdf5,
       handleImportTextWizard,
       pluginActions,
+      pluginRecords,
       handleTriggerPluginAction,
+      handleOpenApplicationRecipe,
+      handleOpenApplicationExample,
       handleReloadPlugins,
       interactiveFits,
       handleLaunchInteractiveFit,
@@ -5082,6 +5319,22 @@ export default function App() {
               void refreshPluginActions();
               if (runtime) void runtime.listFeatures().then(setFeatures);
             }}
+          />
+        )}
+        {applicationsOpen && (
+          <ApplicationsDialog
+            candidateIds={
+              selectedIds.length > 0
+                ? selectedIds
+                : currentId
+                  ? [currentId]
+                  : []
+            }
+            initialTarget={applicationTarget}
+            confirmOpenExample={confirmOpenPluginExample}
+            onCommitted={handlePluginRecipeCommitted}
+            onExampleOpened={handlePluginExampleOpened}
+            onClose={() => setApplicationsOpen(false)}
           />
         )}
         {separateViewOpen &&

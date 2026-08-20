@@ -36,12 +36,21 @@ test.describe("preload deep link", () => {
     await expect(page.getByText("Loaded workspace ndt.h5")).toBeVisible();
 
     // Without the auto-switch the app stayed on the (empty) Signal panel.
-    await expect(page.getByText("NDT demo")).toBeVisible();
+    await expect(page.getByText("Synthetic NDT spike")).toBeVisible();
     await expect(
       page.locator(".object-tree-title", {
-        hasText: "Inspection image (synthetic defects)",
+        hasText: "Synthetic radiograph (NDT spike)",
       }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("main").getByText("Synthetic radiograph (NDT spike)"),
+    ).toBeVisible();
+    const imageTrace = page.getByRole("main").locator(".imagelayer image");
+    await expect(imageTrace).toBeVisible();
+    await expect(imageTrace).toHaveAttribute(
+      "href",
+      /^data:image\/png;base64,/,
+    );
   });
 
   test("standalone ?panel=image opens on the Image panel", async ({ page }) => {

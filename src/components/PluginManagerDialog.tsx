@@ -9,15 +9,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRuntime } from "../runtime/RuntimeContext";
-import type { PluginRecord } from "../runtime/runtime";
+import type { PluginRecord, PluginWheelInspection } from "../runtime/runtime";
 import { t } from "../i18n/translate";
 import { PluginConsentDialog } from "./PluginConsentDialog";
 import {
   hashSource,
+  hashBytes,
+  isPluginHashTrusted,
   isPluginTrusted,
+  revokePluginTrust,
   trustPlugin,
+  trustPluginHash,
 } from "../plugins/trustStore";
 import { EXAMPLE_PLUGINS, type ExamplePlugin } from "../plugins/examplePlugins";
+import { PluginWheelStore } from "../storage/pluginWheelStore";
 
 interface Props {
   onClose: () => void;
@@ -29,12 +34,19 @@ export function PluginManagerDialog({ onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [errorOpen, setErrorOpen] = useState<PluginRecord | null>(null);
-  const [pending, setPending] = useState<{
-    filename: string;
-    source: string;
-    hash: string;
-  } | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [pending, setPending] = useState<
+    | { kind: "source"; filename: string; source: string; hash: string }
+    | {
+        kind: "wheel";
+        filename: string;
+        bytes: Uint8Array;
+        hash: string;
+        inspection: PluginWheelInspection;
+      }
+    | null
+  >(null);
+  const sourceFileRef = useRef<HTMLInputElement | null>(null);
+  const wheelFileRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
     if (!runtime) return;
@@ -66,7 +78,35 @@ export function PluginManagerDialog({ onClose }: Props) {
       return;
     }
     const hash = await hashSource(source);
-    setPending({ filename: file.name, source, hash });
+    setPending({ kind: "source", filename: file.name, source, hash });
+  };
+
+  const handleInstallWheel = async (file: File) => {
+    if (!runtime) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const [hash, inspection] = await Promise.all([
+        hashBytes(bytes),
+        runtime.inspectPluginWheel(file.name, bytes.slice()),
+      ]);
+      if (isPluginHashTrusted(file.name, hash)) {
+        await doInstallWheel(file.name, bytes);
+      } else {
+        setPending({
+          kind: "wheel",
+          filename: file.name,
+          bytes,
+          hash,
+          inspection,
+        });
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleLoadExample = async (ex: ExamplePlugin) => {
@@ -77,7 +117,26 @@ export function PluginManagerDialog({ onClose }: Props) {
       return;
     }
     const hash = await hashSource(ex.source);
-    setPending({ filename: ex.filename, source: ex.source, hash });
+    setPending({
+      kind: "source",
+      filename: ex.filename,
+      source: ex.source,
+      hash,
+    });
+  };
+
+  const doInstallWheel = async (filename: string, bytes: Uint8Array) => {
+    if (!runtime) return;
+    setErr(null);
+    setBusy(true);
+    try {
+      await runtime.installPluginWheel(filename, bytes);
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const doLoad = async (filename: string, source: string) => {
@@ -91,6 +150,48 @@ export function PluginManagerDialog({ onClose }: Props) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleToggle = async (rec: PluginRecord) => {
+    if (!runtime) return;
+    setBusy(true);
+    try {
+      await runtime.setPluginEnabled(rec.record_id, !rec.enabled);
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemoveWheel = async (rec: PluginRecord) => {
+    if (!runtime || !rec.artifact_id) return;
+    setBusy(true);
+    try {
+      await runtime.removeUserPluginWheel(rec.artifact_id);
+      if (rec.artifact_filename && rec.sha256) {
+        revokePluginTrust(rec.artifact_filename, rec.sha256);
+      }
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sourceLabel = (source: PluginRecord["source"]): string => {
+    switch (source) {
+      case "bundled-wheel":
+        return t("Bundled wheel");
+      case "user-wheel":
+        return t("User wheel");
+      case "builtin-source":
+        return t("Built-in source");
+      default:
+        return t("User source");
     }
   };
 
@@ -128,8 +229,22 @@ export function PluginManagerDialog({ onClose }: Props) {
           className="actions"
           style={{ justifyContent: "flex-start", marginBottom: 8 }}
         >
-          <button onClick={() => fileRef.current?.click()} disabled={busy}>
-            {t("Load from file…")}
+          <button
+            onClick={() => sourceFileRef.current?.click()}
+            disabled={busy}
+          >
+            {t("Load Python file…")}
+          </button>
+          <button
+            onClick={() => wheelFileRef.current?.click()}
+            disabled={busy || !PluginWheelStore.isSupported()}
+            title={
+              PluginWheelStore.isSupported()
+                ? undefined
+                : t("Persistent plugin storage requires OPFS.")
+            }
+          >
+            {t("Install wheel…")}
           </button>
           <button
             onClick={handleReloadAll}
@@ -138,7 +253,7 @@ export function PluginManagerDialog({ onClose }: Props) {
             {t("Reload all")}
           </button>
           <input
-            ref={fileRef}
+            ref={sourceFileRef}
             type="file"
             accept=".py"
             style={{ display: "none" }}
@@ -146,6 +261,17 @@ export function PluginManagerDialog({ onClose }: Props) {
               const f = ev.target.files?.[0];
               ev.target.value = "";
               if (f) void handleLoadFile(f);
+            }}
+          />
+          <input
+            ref={wheelFileRef}
+            type="file"
+            accept=".whl"
+            style={{ display: "none" }}
+            onChange={(ev) => {
+              const file = ev.target.files?.[0];
+              ev.target.value = "";
+              if (file) void handleInstallWheel(file);
             }}
           />
         </div>
@@ -156,6 +282,8 @@ export function PluginManagerDialog({ onClose }: Props) {
               <th>{t("Name")}</th>
               <th>{t("Version")}</th>
               <th>{t("Status")}</th>
+              <th>{t("Source")}</th>
+              <th>{t("Trust")}</th>
               <th>{t("File")}</th>
               <th></th>
             </tr>
@@ -163,13 +291,13 @@ export function PluginManagerDialog({ onClose }: Props) {
           <tbody>
             {records.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "#888" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "#888" }}>
                   {t("No plugin loaded.")}
                 </td>
               </tr>
             )}
             {records.map((r) => (
-              <tr key={r.name}>
+              <tr key={r.record_id}>
                 <td>{r.info?.name ?? r.name}</td>
                 <td>{r.info?.version ?? "—"}</td>
                 <td>
@@ -186,17 +314,41 @@ export function PluginManagerDialog({ onClose }: Props) {
                     </a>
                   ) : r.loaded ? (
                     <span style={{ color: "#2e7d32" }}>{t("loaded")}</span>
+                  ) : !r.enabled ? (
+                    <span>{t("disabled")}</span>
                   ) : (
                     <span>—</span>
                   )}
                 </td>
+                <td>{sourceLabel(r.source)}</td>
                 <td>
-                  <code style={{ fontSize: 11 }}>{r.filename}</code>
+                  {r.trust === "verified" ? t("verified") : t("unverified")}
                 </td>
                 <td>
-                  <button onClick={() => handleUnload(r)} disabled={busy}>
-                    {t("Unload")}
-                  </button>
+                  <code style={{ fontSize: 11 }}>
+                    {r.artifact_filename ?? r.filename}
+                  </code>
+                </td>
+                <td>
+                  {r.artifact_id ? (
+                    <>
+                      <button onClick={() => handleToggle(r)} disabled={busy}>
+                        {r.enabled ? t("Disable") : t("Enable")}
+                      </button>
+                      {r.operations.can_remove && (
+                        <button
+                          onClick={() => handleRemoveWheel(r)}
+                          disabled={busy}
+                        >
+                          {t("Remove")}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button onClick={() => handleUnload(r)} disabled={busy}>
+                      {t("Unload")}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -241,14 +393,23 @@ export function PluginManagerDialog({ onClose }: Props) {
       {pending && (
         <PluginConsentDialog
           filename={pending.filename}
-          source={pending.source}
+          source={pending.kind === "source" ? pending.source : undefined}
+          inspection={pending.kind === "wheel" ? pending.inspection : undefined}
           hash={pending.hash}
           onCancel={() => setPending(null)}
           onAccept={async () => {
-            await trustPlugin(pending.filename, pending.source);
-            const { filename, source } = pending;
+            if (pending.kind === "source") {
+              await trustPlugin(pending.filename, pending.source);
+            } else {
+              trustPluginHash(pending.filename, pending.hash);
+            }
+            const accepted = pending;
             setPending(null);
-            await doLoad(filename, source);
+            if (accepted.kind === "source") {
+              await doLoad(accepted.filename, accepted.source);
+            } else {
+              await doInstallWheel(accepted.filename, accepted.bytes);
+            }
           }}
         />
       )}

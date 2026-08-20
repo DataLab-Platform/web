@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-11
+
+### Added in 0.9.0
+
+- **Environment report:** Help now exposes a copyable diagnostic snapshot with
+  the DataLab-Web build, browser capabilities, Pyodide runtime, and installed
+  Python distributions, without including workspace data.
+- **Synthetic radiograph spike:** the bundled NDT demo now contains a
+  deterministic thickness-varying background, detector noise and artifacts,
+  compact and linear indications with varied geometry and contrast, and a
+  declared overlap. Versioned JSON ground truth is preserved in the image
+  metadata for algorithm-development tests. The data is explicitly synthetic;
+  it does not validate radiographic realism, inspection performance, or
+  standards compliance.
+- **Validated Applications deep links:** documentation and product pages may
+  open the bundled Camera quickstart or Pulse 500-shot demo by declaring the
+  exact plugin, plugin version, recipe, recipe version, and example in the
+  URL. DataLab-Web compares the request with the compatibility manifest loaded
+  from its own bundle before replacing the workspace; unknown, unverified, or
+  mismatched workflows show an explicit error and never trigger an implicit
+  Python package installation.
+- **Explicit Camera plugin bundle:** the Web runtime now ships the independent
+  Camera characterization package as a versioned, SHA-256-checked wheel and
+  can open its packaged HDF5 quickstart through the existing browser byte-I/O
+  path. Its 96 x 128 dark frames now expose readout banding, amplifier glow,
+  and defects, while its flat frames remain uniform-field acquisitions with
+  vignetting, dust shadows, PRNU, and shot noise. Its shared recipe commits
+  signals, images, anchored metrics, and
+  provenance transactionally; a Chromium/Pyodide gate verifies a visible
+  response curve, PRNU map, result table, and bounded demo-workspace memory.
+  The separately reviewed manifest reports `verified` for the pinned
+  DataLab-Web 0.9.0 / Pyodide 0.26.4 compatibility matrix.
+- **Explicit Pulse plugin bundle:** the runtime now ships the independent Pulse
+  characterization package as a versioned, SHA-256-checked wheel. Its shared
+  recipe transactionally commits amplitude, raw-mean, aligned-mean, metrics,
+  and provenance outputs for selected signals. A deterministic 500-shot
+  Chromium/Pyodide gate verifies all visible outputs, six explainable status
+  classes, 489 aligned shots, exact retained-array growth, and bounded WASM
+  memory before the pinned compatibility manifest reports `verified`.
+
+### Fixed in 0.9.0
+
+- **Pyodide startup with scikit-image:** the runtime now loads Pillow
+  explicitly before importing Sigima, avoiding a startup failure when
+  Pyodide's scikit-image package omits Pillow from its dependency metadata.
+- **Signal memory accounting:** the memory indicator no longer counts a
+  signal's Y array twice through its equivalent `data` property, so retained
+  workspace bytes now reflect the actual X/Y storage.
+
 ## [0.8.0] - 2026-08-07
 
 ### Added in 0.8.0
@@ -241,7 +290,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/DataLab-Platform/web/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DataLab-Platform/web/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DataLab-Platform/web/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/DataLab-Platform/web/compare/v0.6.2...v0.6.3

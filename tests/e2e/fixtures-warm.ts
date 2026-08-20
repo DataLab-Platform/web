@@ -181,13 +181,14 @@ export async function resetWarmNotebookPanel(page: Page): Promise<void> {
   });
   // The newly-appended tab is always the last one (``openOrFocusNotebook``
   // appends), and the panel activates it synchronously after the append.
-  await expect(page.locator(".nb-tab").last()).toHaveClass(/active/, {
-    timeout: 10_000,
-  });
-  await expect(page.locator(".nb-tab.active .nb-tab-title")).toHaveText(
-    "Untitled",
+  await expect(page.locator(".nb-tab").last()).toHaveAttribute(
+    "aria-selected",
+    "true",
     { timeout: 10_000 },
   );
+  await expect(
+    page.locator('.nb-tab[aria-selected="true"] .nb-tab-title'),
+  ).toHaveText("Untitled", { timeout: 10_000 });
   await expect(page.locator(".nb-toolbar-status")).toContainText(
     /Kernel idle|Kernel running/,
     { timeout: 60_000 },

@@ -110,20 +110,56 @@ export function MenuBar(props: Props) {
       <nav className="menubar-nav" role="menubar">
         {tree.map((node) => {
           const isOpen = openTop === node.label;
+          const enabled = node.action?.enabled(state) ?? true;
+          if (node.action?.iconUrl) {
+            return (
+              <button
+                key={node.label}
+                type="button"
+                className="menubar-icon-action"
+                role="menuitem"
+                data-menu-top={node.label}
+                title={node.displayLabel}
+                aria-label={node.displayLabel}
+                disabled={!enabled}
+                onClick={() => {
+                  setOpenTop(null);
+                  void node.action?.run();
+                }}
+              >
+                <img
+                  className="menubar-icon-action__icon"
+                  src={node.action.iconUrl}
+                  alt=""
+                />
+              </button>
+            );
+          }
           return (
             <div
               key={node.label}
-              className={"menubar-top" + (isOpen ? " open" : "")}
+              className={
+                "menubar-top" +
+                (isOpen ? " open" : "") +
+                (enabled ? "" : " disabled")
+              }
               role="menuitem"
               data-menu-top={node.label}
-              aria-haspopup="true"
-              aria-expanded={isOpen}
+              aria-disabled={!enabled}
+              aria-haspopup={node.action ? undefined : "true"}
+              aria-expanded={node.action ? undefined : isOpen}
               onClick={(event) => {
                 event.stopPropagation();
+                if (!enabled) return;
+                if (node.action) {
+                  setOpenTop(null);
+                  void node.action.run();
+                  return;
+                }
                 setOpenTop((c) => (c === node.label ? null : node.label));
               }}
               onMouseEnter={() => {
-                if (openTop !== null) setOpenTop(node.label);
+                if (!node.action && openTop !== null) setOpenTop(node.label);
               }}
             >
               <span className="menubar-top-label">{node.displayLabel}</span>

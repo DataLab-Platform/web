@@ -21,6 +21,7 @@ export default [
       "htmlcov-python/**",
       "playwright-report/**",
       "test-results/**",
+      ".cache/**",
       ".venv/**",
       "**/*.d.ts",
       "vite.config.js",

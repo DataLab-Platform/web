@@ -30,13 +30,16 @@ from __future__ import annotations
 
 import abc
 import dataclasses
+import enum
 import importlib
 import logging
 import os
 import os.path as osp
 import sys
 import traceback
-from typing import TYPE_CHECKING
+from collections.abc import Collection, Mapping
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 # Re-export Sigima I/O bases so plugins can subclass them without ever
 # importing the desktop ``datalab`` package.
@@ -49,6 +52,8 @@ from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 from datalab.config import MOD_NAME, Conf, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
+from datalab.plugin_examples import PluginExample, PluginExampleData
+from datalab.recipes import RecipeDescriptor
 
 if TYPE_CHECKING:
     from sigima.objects import NewImageParam, NewSignalParam
@@ -87,19 +92,29 @@ class PluginRegistry(type):
 
     @classmethod
     def get_plugin(cls, name_or_class: str | type[PluginBase]) -> PluginBase | None:
-        """Return plugin instance by name or class."""
+        """Return a plugin by stable ID, legacy name, or class."""
         for plugin in cls._plugin_instances:
-            if name_or_class in (plugin.info.name, plugin.__class__):
+            if name_or_class in (plugin.plugin_id, plugin.__class__):
                 return plugin
+        if isinstance(name_or_class, str):
+            matching_plugins = [
+                plugin
+                for plugin in cls._plugin_instances
+                if plugin.info.name == name_or_class
+            ]
+            if len(matching_plugins) == 1:
+                return matching_plugins[0]
         return None
 
     @classmethod
     def register_plugin(cls, plugin: PluginBase) -> None:
         """Register plugin instance."""
-        if plugin.info.name in [p.info.name for p in cls._plugin_instances]:
-            raise ValueError(f"Plugin {plugin.info.name} already registered")
+        if plugin.plugin_id in [
+            registered.plugin_id for registered in cls._plugin_instances
+        ]:
+            raise ValueError(f"Plugin ID {plugin.plugin_id!r} already registered")
         cls._plugin_instances.append(plugin)
-        execenv.log(cls, f"Plugin {plugin.info.name} registered")
+        execenv.log(cls, f"Plugin {plugin.info.name} ({plugin.plugin_id}) registered")
 
     @classmethod
     def unregister_plugin(cls, plugin: PluginBase) -> None:
@@ -193,6 +208,15 @@ class FailedPluginInfo:
     traceback: str
 
 
+class PluginCapability(str, enum.Enum):
+    """Capability exposed by a plugin to DataLab consumers."""
+
+    PROCESSING = "processing"
+    IO = "io"
+    VISUALIZATION = "visualization"
+    APPLICATION = "application"
+
+
 @dataclasses.dataclass
 class PluginInfo:
     """Plugin metadata."""
@@ -201,6 +225,28 @@ class PluginInfo:
     version: str = "0.0.0"
     description: str = ""
     icon: str = None
+    id: str | None = None
+    capabilities: Collection[PluginCapability] = dataclasses.field(
+        default_factory=frozenset
+    )
+    documentation_url: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate stable identity, capabilities and documentation URL."""
+        if self.id is not None and not self.id.strip():
+            raise ValueError("Plugin ID must be None or a non-blank string")
+        capabilities = frozenset(self.capabilities)
+        if any(
+            not isinstance(capability, PluginCapability) for capability in capabilities
+        ):
+            raise TypeError("Plugin capabilities must be PluginCapability values")
+        self.capabilities = capabilities
+        if self.documentation_url is not None:
+            if not isinstance(self.documentation_url, str):
+                raise TypeError("Plugin documentation URL must be a string or None")
+            parsed_url = urlparse(self.documentation_url)
+            if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+                raise ValueError("Plugin documentation URL must use HTTP or HTTPS")
 
 
 class PluginBaseMeta(PluginRegistry, abc.ABCMeta):
@@ -211,6 +257,8 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     """Plugin base class (Qt-compatible API, browser implementation)."""
 
     PLUGIN_INFO: PluginInfo = None
+    RECIPES: tuple[RecipeDescriptor, ...] = ()
+    EXAMPLES: tuple[PluginExample, ...] = ()
 
     def __init__(self):
         self.main: main.DLMainWindow = None
@@ -219,6 +267,89 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self.info = self.PLUGIN_INFO
         if self.info is None:
             raise ValueError(f"Plugin info not set for {self.__class__.__name__}")
+        self.get_plugin_id()
+
+    @classmethod
+    def get_plugin_id(cls) -> str:
+        """Return the stable plugin ID or a deterministic legacy fallback."""
+        if cls.PLUGIN_INFO is None:
+            raise ValueError(f"Plugin info not set for {cls.__name__}")
+        if cls.PLUGIN_INFO.id is not None:
+            if not cls.PLUGIN_INFO.id.strip():
+                raise ValueError(f"Plugin ID not set for {cls.__name__}")
+            return cls.PLUGIN_INFO.id
+        return f"{cls.__module__}.{cls.__qualname__}"
+
+    @property
+    def plugin_id(self) -> str:
+        """Return the stable plugin ID or a deterministic legacy fallback."""
+        return self.get_plugin_id()
+
+    @classmethod
+    def get_recipes(cls) -> tuple[RecipeDescriptor, ...]:
+        """Return validated recipe descriptors exposed by this plugin."""
+        recipes = tuple(cls.RECIPES)
+        if not all(isinstance(recipe, RecipeDescriptor) for recipe in recipes):
+            raise TypeError("Plugin recipes must be RecipeDescriptor values")
+        recipe_ids: set[str] = set()
+        plugin_id = cls.get_plugin_id()
+        for recipe in recipes:
+            if recipe.plugin_id != plugin_id:
+                raise ValueError(
+                    f"Recipe {recipe.recipe_id!r} is not owned by plugin {plugin_id!r}"
+                )
+            if recipe.plugin_version != cls.PLUGIN_INFO.version:
+                raise ValueError(
+                    f"Recipe {recipe.recipe_id!r} plugin version does not match "
+                    f"plugin {plugin_id!r} version {cls.PLUGIN_INFO.version!r}"
+                )
+            if recipe.recipe_id in recipe_ids:
+                raise ValueError(f"Duplicate plugin recipe ID: {recipe.recipe_id!r}")
+            recipe_ids.add(recipe.recipe_id)
+        return recipes
+
+    @classmethod
+    def get_examples(cls) -> tuple[PluginExample, ...]:
+        """Return validated packaged examples exposed by this plugin."""
+        examples = tuple(cls.EXAMPLES)
+        if not all(isinstance(example, PluginExample) for example in examples):
+            raise TypeError("Plugin examples must be PluginExample values")
+        example_ids: set[str] = set()
+        recipe_ids = {recipe.recipe_id for recipe in cls.get_recipes()}
+        for example in examples:
+            if example.id in example_ids:
+                raise ValueError(f"Duplicate plugin example ID: {example.id!r}")
+            if example.recipe_id is not None and example.recipe_id not in recipe_ids:
+                raise ValueError(
+                    f"Plugin example {example.id!r} references unknown recipe "
+                    f"{example.recipe_id!r}"
+                )
+            example_ids.add(example.id)
+        return examples
+
+    @classmethod
+    def get_example(cls, example_id: str) -> PluginExample:
+        """Return one packaged example by its plugin-local ID."""
+        for example in cls.get_examples():
+            if example.id == example_id:
+                return example
+        raise KeyError(f"Plugin example {example_id!r} not found")
+
+    @classmethod
+    def materialize_example(cls, example_id: str) -> PluginExampleData | None:
+        """Generate one example in memory, or defer to its package resource."""
+        cls.get_example(example_id)
+        return None
+
+    @classmethod
+    def suggest_recipe_bindings(
+        cls,
+        recipe: RecipeDescriptor,
+        candidates: Collection[Any],
+    ) -> Mapping[str, Collection[Any]]:
+        """Suggest scientific objects for recipe slots, when unambiguous."""
+        del recipe, candidates
+        return {}
 
     # -- Convenience accessors -----------------------------------------
 
@@ -378,7 +509,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     def register(self, main: main.DLMainWindow) -> None:
         """Register the plugin against the (browser) main window.
 
-        Also calls :meth:`create_actions`, with the plugin name pushed
+        Also calls :meth:`create_actions`, with the stable plugin ID pushed
         onto :mod:`datalab.registries` so every contribution carries an
         ``origin`` field — required for hot reload.
         """
@@ -392,7 +523,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self.proxy = LocalProxy(main)
         self.register_hooks()
 
-        registries.push_origin(self.info.name)
+        registries.push_origin(self.plugin_id)
         try:
             self.create_actions()
         finally:
@@ -407,7 +538,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         PluginRegistry.unregister_plugin(self)
         self._is_registered = False
         self.unregister_hooks()
-        registries.clear_origin(self.info.name)
+        registries.clear_origin(self.plugin_id)
         self.main = None
         self.proxy = None
 

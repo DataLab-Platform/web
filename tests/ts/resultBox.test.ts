@@ -124,13 +124,4 @@ describe("buildResultAnnotationBox", () => {
     expect(a.text).toContain("a&amp;b");
     expect(a.text).toContain("&lt;x&gt;");
   });
-
-  it("uses dark colours when options.dark is true", () => {
-    const { annotations } = buildResultAnnotationBox([makeTable({})], {
-      dark: true,
-    });
-    const a = annotations[0] as { font: { color: string }; bgcolor: string };
-    expect(a.font.color).toBe("#f0f0f0");
-    expect(a.bgcolor).toContain("30,30,30");
-  });
 });

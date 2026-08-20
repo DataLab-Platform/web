@@ -10,6 +10,8 @@ import bootstrapSource from "./bootstrap.py?raw";
 import processorSource from "./processor.py?raw";
 import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
+import dlwWheelsSource from "./dlw_wheels.py?raw";
+import dlwApplicationsSource from "./dlw_applications.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
 import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
 import dlwMacroLintSource from "./dlw_macro_lint.py?raw";
@@ -38,9 +40,16 @@ import { OpfsObjectStore } from "../storage/opfsObjectStore";
 import type { ObjectByteStore } from "../storage/opfsObjectStore";
 import { isDiskStorageSupported } from "./storageCapabilities";
 import { OpfsSyncObjectStore } from "../storage/opfsSyncObjectStore";
+import {
+  PluginWheelStore,
+  type StoredPluginWheel,
+  type UserPluginWheelRecord,
+} from "../storage/pluginWheelStore";
+import { hashBytes } from "../plugins/trustStore";
 // Default set of packages whose installed versions are worth surfacing for
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
+import { fetchBundledPluginWheels } from "./bundledPlugins";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -89,6 +98,7 @@ export interface PyodideAPI {
   FS: {
     writeFile: (path: string, data: string | Uint8Array) => void;
     mkdirTree?: (path: string) => void;
+    unlink?: (path: string) => void;
   };
   /** Emscripten module backing the WASM heap. Used by
    *  {@link DataLabRuntime.getMemoryUsage} to read the linear-heap size
@@ -112,6 +122,22 @@ const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 const SIGIMA_INSTALL_SPEC =
   import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.2.0";
+
+export interface PythonDistributionInfo {
+  name: string;
+  version: string;
+}
+
+/** JSON-safe snapshot of the live Python environment. */
+export interface PythonEnvironmentInfo {
+  pythonVersion: string;
+  pythonImplementation: string;
+  pythonPlatform: string;
+  platform: string;
+  machine: string;
+  pyodideVersion: string | null;
+  packages: PythonDistributionInfo[];
+}
 
 export interface PythonDistributionInfo {
   name: string;
@@ -254,20 +280,154 @@ export interface InteractiveFitAuto {
 }
 
 export interface PluginInfoMeta {
+  id: string;
   name: string;
   version: string;
   description: string;
   icon: string | null;
+  capabilities: Array<"processing" | "io" | "visualization" | "application">;
+  documentation_url: string | null;
+}
+
+export interface PluginRecipeSummary {
+  id: string;
+  version: string;
+  title: string;
+  description: string;
+  inputs: Array<{
+    id: string;
+    object_type: PanelKind;
+    cardinality: "one" | "many";
+    required: boolean;
+  }>;
+  has_params: boolean;
+}
+
+export interface PluginExampleSummary {
+  id: string;
+  title: string;
+  description: string;
+  recipe_id: string | null;
+  expected_checks: string[];
+}
+
+export interface PluginWheelInspection {
+  filename: string;
+  distribution: string;
+  version: string;
+  sha256: string;
+  size_bytes: number;
+  requires_python: string | null;
+  tags: string[];
+  entry_points: Array<{
+    name: string;
+    module: string;
+    attribute: string;
+  }>;
+  top_level_packages: string[];
+  dependencies: Array<{
+    requirement: string;
+    applies: boolean;
+    installed_version: string | null;
+    compatible: boolean;
+  }>;
 }
 
 export interface PluginRecord {
   name: string;
+  record_id: string;
   filename: string;
   module: string;
+  source: "bundled-wheel" | "user-wheel" | "builtin-source" | "user-source";
+  artifact_id: string | null;
+  artifact_filename: string | null;
+  plugin_id: string | null;
+  distribution: string | null;
+  version: string | null;
+  sha256: string | null;
+  trust: "verified" | "unverified";
+  entry_point: string | null;
   enabled: boolean;
   loaded: boolean;
   error: string | null;
   info: PluginInfoMeta | null;
+  recipes: PluginRecipeSummary[];
+  examples: PluginExampleSummary[];
+  operations: {
+    can_enable: boolean;
+    can_disable: boolean;
+    can_remove: boolean;
+    can_reload: boolean;
+  };
+}
+
+export interface PluginRecipeSlot {
+  id: string;
+  object_type: "signal" | "image";
+  cardinality: "one" | "many";
+  required: boolean;
+}
+
+export interface PluginRecipeCandidate {
+  id: string;
+  kind: "signal" | "image";
+  title: string;
+  compatible_slots: string[];
+}
+
+export interface PluginRecipePreparation {
+  plugin_id: string;
+  recipe_id: string;
+  title: string;
+  description: string;
+  slots: PluginRecipeSlot[];
+  candidates: PluginRecipeCandidate[];
+  bindings: Record<string, string[]>;
+  ambiguous_slots: string[];
+  missing_slots: string[];
+  parameters: SchemaWithValues | null;
+}
+
+export interface PluginRecipeObject {
+  output_id: string;
+  id: string;
+  kind: "signal" | "image";
+  title: string;
+}
+
+export interface PluginRecipeResult {
+  output_id: string;
+  anchor_output_id: string;
+  anchor_id: string;
+  metadata_key: string;
+}
+
+export interface PluginRecipeDiagnostic {
+  level: "info" | "warning" | "error";
+  code: string;
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface PluginRecipeCommit {
+  plugin_id: string;
+  recipe_id: string;
+  run_id: string;
+  objects: PluginRecipeObject[];
+  results: PluginRecipeResult[];
+  diagnostics: PluginRecipeDiagnostic[];
+}
+
+export interface PluginExampleOpenResult extends WorkspaceLoadResult {
+  plugin_id: string;
+  example_id: string;
+  recipe_id: string | null;
+  filename: string | null;
+  panel: "signal" | "image" | null;
+  selected_ids: string[];
+  current_id: string | null;
+  dirty: boolean;
+  parameter_values: Record<string, unknown>;
 }
 
 export interface PluginMenuAction {
@@ -1098,7 +1258,10 @@ export interface RuntimeLoadOptions {
 }
 
 export class DataLabRuntime {
-  private constructor(private readonly py: PyodideAPI) {}
+  private constructor(
+    private readonly py: PyodideAPI,
+    private readonly pluginWheelStore: PluginWheelStore | null = null,
+  ) {}
 
   /**
    * Workspace mutation tracker.
@@ -1167,6 +1330,7 @@ export class DataLabRuntime {
       "reapply_last_processing",
       "run_signal_analysis",
       "run_image_analysis",
+      "run_plugin_recipe",
       "open_signal_from_bytes",
       "open_image_from_bytes",
       "open_from_directory_chunk",
@@ -1243,6 +1407,37 @@ export class DataLabRuntime {
     const py = (await loadPyodide({
       indexURL: PYODIDE_INDEX,
     })) as PyodideAPI;
+    let pluginWheelStore: PluginWheelStore | null = null;
+    const storedPluginWheels: StoredPluginWheel[] = [];
+    if (PluginWheelStore.isSupported()) {
+      try {
+        pluginWheelStore = new PluginWheelStore();
+        await pluginWheelStore.init();
+        for (const metadata of pluginWheelStore.list()) {
+          try {
+            storedPluginWheels.push({
+              metadata,
+              bytes: await pluginWheelStore.readBytes(metadata.sha256),
+            });
+          } catch (error) {
+            console.error(
+              `[plugins] failed to restore ${metadata.filename}`,
+              error,
+            );
+            storedPluginWheels.push({
+              metadata,
+              bytes: new Uint8Array(),
+            });
+          }
+        }
+      } catch (error) {
+        pluginWheelStore = null;
+        console.error(
+          "[plugins] failed to initialise persistent storage",
+          error,
+        );
+      }
+    }
 
     // ---------------------------------------------------------------
     // Pin the Pyodide locale *before* any ``guidata`` / ``sigima``
@@ -1276,13 +1471,20 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
     onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    await py.loadPackage(["numpy", "scipy", "h5py", "pandas", "micropip"]);
+    await py.loadPackage([
+      "numpy",
+      "scipy",
+      "h5py",
+      "pandas",
+      "pillow",
+      "micropip",
+    ]);
 
     onProgress?.(t("Installing Sigima…"));
-    // ``tifffile`` is a pure-Python PyPI wheel that scikit-image needs for
-    // TIFF I/O (``skimage.io`` loads ``tifffile_plugin`` for ``.tif``). The
-    // Pyodide-built ``scikit-image`` trims it from its dependency list, so
-    // micropip must pull it explicitly or TIFF read/write fails at runtime.
+    // Pyodide's ``scikit-image`` package omits Pillow and tifffile from its
+    // dependency metadata even though ``skimage.io`` imports both. Pillow is
+    // loaded from the Pyodide distribution above; ``tifffile`` is pulled from
+    // PyPI explicitly so importing Sigima and TIFF read/write both work.
     // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
     // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
@@ -1298,10 +1500,27 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     }
     // Mirror the portable ``datalab.*`` shim into Pyodide site-packages.
     DataLabRuntime.installShim(py, shimSources);
+    // Verified pure-Python plugin wheels are explicit build assets. They are
+    // added directly to ``sys.path``; no package index or Desktop entry point
+    // discovery participates in browser startup.
+    const bundledPluginWheels = await fetchBundledPluginWheels();
+    py.FS.mkdirTree?.("/home/pyodide/plugin-wheels");
+    const bundledWheelSpecs = bundledPluginWheels.map(({ wheel, bytes }) => {
+      const path = `/home/pyodide/plugin-wheels/${wheel.sha256}.whl`;
+      py.FS.writeFile(path, bytes);
+      return { ...wheel, path };
+    });
+    const userWheelSpecs = storedPluginWheels.map(({ metadata, bytes }) => {
+      const path = `/home/pyodide/plugin-wheels/user-${metadata.sha256}.whl`;
+      py.FS.writeFile(path, bytes);
+      return { ...metadata, path };
+    });
     // Make ``processor.py``/``dlw_main.py``/``dlw_plugins.py`` importable.
     py.FS.writeFile("/home/pyodide/dlw_processor.py", processorSource);
     py.FS.writeFile("/home/pyodide/dlw_main.py", dlwMainSource);
+    py.FS.writeFile("/home/pyodide/dlw_wheels.py", dlwWheelsSource);
     py.FS.writeFile("/home/pyodide/dlw_plugins.py", dlwPluginsSource);
+    py.FS.writeFile("/home/pyodide/dlw_applications.py", dlwApplicationsSource);
     py.FS.writeFile("/home/pyodide/dlw_h5browser.py", dlwH5BrowserSource);
     py.FS.writeFile(
       "/home/pyodide/dlw_interactive_fit.py",
@@ -1314,6 +1533,48 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
     py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
+    await py.runPythonAsync(`
+  import dlw_plugins
+  for _wheel in ${JSON.stringify(bundledWheelSpecs)}:
+    dlw_plugins.load_plugin_wheel(
+      _wheel["path"],
+      filename=_wheel["filename"],
+      source="bundled-wheel",
+      sha256=_wheel["sha256"],
+      trust="verified",
+    )
+  for _wheel in ${JSON.stringify(userWheelSpecs)}:
+    _records = dlw_plugins.load_plugin_wheel(
+      _wheel["path"],
+      filename=_wheel["filename"],
+      source="user-wheel",
+      sha256=_wheel["sha256"],
+      trust="unverified",
+    )
+    for _record in _records:
+      if (
+        _record["loaded"]
+        and _record["plugin_id"] not in _wheel["enabledPluginIds"]
+      ):
+        dlw_plugins.set_plugin_enabled(_record["record_id"], False)
+  import dlw_applications
+  dlw_applications.install_host(
+    _MODEL,
+    _object_uuid,
+    open_workspace_from_bytes,
+    ${JSON.stringify(import.meta.env.VITE_APP_VERSION)},
+    reset_all,
+  )
+  from dlw_applications import (
+    get_plugin_recipe_schema,
+    open_plugin_example,
+    prepare_plugin_recipe,
+    resolve_plugin_recipe_active,
+    resolve_plugin_recipe_callbacks,
+    resolve_plugin_recipe_choices,
+    run_plugin_recipe,
+  )
+  `);
 
     // Bridge DataLab-Web's own (non-gettext) default labels into Python:
     // the "Group" prefix for auto-created groups and the "Untitled" macro
@@ -1331,7 +1592,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     );
 
     onProgress?.(t("Ready."));
-    const runtime = new DataLabRuntime(py);
+    const runtime = new DataLabRuntime(py, pluginWheelStore);
     runtime.installDialogBridge();
     await runtime.installBuiltinPlugins(builtinPluginSources);
     return runtime;
@@ -2695,6 +2956,101 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     )) as WorkspaceLoadResult;
   }
 
+  /** Prepare typed bindings and parameters for one active plugin recipe. */
+  async preparePluginRecipe(
+    pluginId: string,
+    recipeId: string,
+    candidateIds: string[],
+  ): Promise<PluginRecipePreparation> {
+    return (await this.callPy("prepare_plugin_recipe", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      candidate_ids: candidateIds,
+    })) as PluginRecipePreparation;
+  }
+
+  /** Return the live guidata parameter schema for one plugin recipe. */
+  async getPluginRecipeSchema(
+    pluginId: string,
+    recipeId: string,
+  ): Promise<SchemaWithValues | null> {
+    return (await this.callPy("get_plugin_recipe_schema", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+    })) as SchemaWithValues | null;
+  }
+
+  /** Resolve conditional parameter visibility for one plugin recipe. */
+  async resolvePluginRecipeActive(
+    pluginId: string,
+    recipeId: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_plugin_recipe_active", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      values,
+    })) as Record<string, boolean>;
+  }
+
+  /** Resolve one dynamic choice list for recipe parameters. */
+  async resolvePluginRecipeChoices(
+    pluginId: string,
+    recipeId: string,
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<DynamicChoice[]> {
+    return (await this.callPy("resolve_plugin_recipe_choices", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      item_name: itemName,
+      values,
+    })) as DynamicChoice[];
+  }
+
+  /** Run one guidata display callback for recipe parameters. */
+  async resolvePluginRecipeCallbacks(
+    pluginId: string,
+    recipeId: string,
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return (await this.callPy("resolve_plugin_recipe_callbacks", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      item_name: itemName,
+      values,
+    })) as Record<string, unknown>;
+  }
+
+  /** Execute and transactionally commit one active plugin recipe. */
+  async runPluginRecipe(
+    pluginId: string,
+    recipeId: string,
+    bindings: Record<string, string[]>,
+    parameterValues: Record<string, unknown> = {},
+  ): Promise<PluginRecipeCommit> {
+    return (await this.callPy("run_plugin_recipe", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      bindings,
+      parameter_values: parameterValues,
+    })) as PluginRecipeCommit;
+  }
+
+  /** Open one packaged HDF5 example from an active plugin. */
+  async openPluginExample(
+    pluginId: string,
+    exampleId: string,
+    replace: boolean = true,
+  ): Promise<PluginExampleOpenResult> {
+    return (await this.callPy("open_plugin_example", {
+      plugin_id: pluginId,
+      example_id: exampleId,
+      replace,
+    })) as PluginExampleOpenResult;
+  }
+
   // ------------------------------------------------------------------
   // Foreign HDF5 browser (Phase 2)
   // ------------------------------------------------------------------
@@ -3295,7 +3651,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
       this.py.FS.writeFile(`${dir}/${name}`, source);
     }
     try {
-      await this.discoverPluginsInDir(dir);
+      await this.discoverPluginsInDir(dir, "builtin-source");
     } catch (err) {
       console.error("[plugins] failed to load built-in plugins", err);
     }
@@ -3315,6 +3671,98 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     return (await this.callPy("load_plugin_file", { path })) as PluginRecord;
   }
 
+  async loadPluginWheel(
+    path: string,
+    filename: string,
+    sha256: string,
+    source: "bundled-wheel" | "user-wheel" = "user-wheel",
+    trust: "verified" | "unverified" = "unverified",
+  ): Promise<PluginRecord[]> {
+    return (await this.callPy("load_plugin_wheel", {
+      path,
+      filename,
+      source,
+      sha256,
+      trust,
+    })) as PluginRecord[];
+  }
+
+  private writePluginWheel(sha256: string, bytes: Uint8Array): string {
+    const dir = "/home/pyodide/plugin-wheels";
+    this.py.FS.mkdirTree?.(dir);
+    const path = `${dir}/user-${sha256}.whl`;
+    this.py.FS.writeFile(path, bytes);
+    return path;
+  }
+
+  /** Inspect a local wheel with the live Pyodide package inventory, no import. */
+  async inspectPluginWheel(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<PluginWheelInspection> {
+    const sha256 = await hashBytes(bytes);
+    const path = this.writePluginWheel(sha256, bytes);
+    const inspection = (await this.callPy("inspect_plugin_wheel", {
+      path,
+      filename,
+    })) as PluginWheelInspection;
+    if (inspection.sha256 !== sha256) {
+      throw new Error("Plugin wheel changed while it was being inspected");
+    }
+    return inspection;
+  }
+
+  /** Install an already-consented local wheel transactionally into OPFS. */
+  async installPluginWheel(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<PluginRecord[]> {
+    if (!this.pluginWheelStore) {
+      throw new Error("Persistent plugin storage requires OPFS");
+    }
+    const inspection = await this.inspectPluginWheel(filename, bytes);
+    const sha256 = inspection.sha256;
+    const artifactId = `sha256:${sha256}`;
+    const path = this.writePluginWheel(sha256, bytes);
+    await this.pluginWheelStore.stage(sha256, bytes);
+    let records: PluginRecord[] = [];
+    try {
+      records = await this.loadPluginWheel(
+        path,
+        filename,
+        sha256,
+        "user-wheel",
+        "unverified",
+      );
+      if (records.length === 0 || records.some((record) => !record.loaded)) {
+        throw new Error(
+          records.find((record) => record.error)?.error ??
+            "Plugin wheel did not register a Web plugin",
+        );
+      }
+      const pluginIds = records.map((record) => record.plugin_id as string);
+      const metadata: UserPluginWheelRecord = {
+        artifactId,
+        sha256,
+        filename,
+        sizeBytes: bytes.byteLength,
+        distribution: inspection.distribution,
+        version: inspection.version,
+        pluginIds,
+        enabledPluginIds: [...pluginIds],
+        installedAt: new Date().toISOString(),
+      };
+      await this.pluginWheelStore.commit(metadata);
+      return records;
+    } catch (error) {
+      for (const record of records) {
+        await this.unloadPlugin(record.record_id);
+      }
+      await this.pluginWheelStore.rollback(sha256);
+      throw error;
+    }
+  }
+
   async unloadPlugin(
     name: string,
   ): Promise<{ name: string; removed: boolean }> {
@@ -3324,13 +3772,72 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, "guidata", "tiff
     };
   }
 
+  async setPluginEnabled(
+    name: string,
+    enabled: boolean,
+  ): Promise<PluginRecord> {
+    const before = (await this.listPlugins()).find(
+      (record) => record.record_id === name || record.plugin_id === name,
+    );
+    const result = (await this.callPy("set_plugin_enabled", {
+      name,
+      enabled,
+    })) as PluginRecord;
+    if (
+      result.source === "user-wheel" &&
+      result.artifact_id &&
+      this.pluginWheelStore
+    ) {
+      try {
+        const records = (await this.listPlugins()).filter(
+          (record) => record.artifact_id === result.artifact_id,
+        );
+        await this.pluginWheelStore.setEnabledPluginIds(
+          result.artifact_id,
+          records
+            .filter((record) => record.enabled)
+            .map((record) => record.plugin_id as string),
+        );
+      } catch (error) {
+        if (before) {
+          await this.callPy("set_plugin_enabled", {
+            name: result.record_id,
+            enabled: before.enabled,
+          });
+        }
+        throw error;
+      }
+    }
+    return result;
+  }
+
+  async removeUserPluginWheel(artifactId: string): Promise<void> {
+    if (!this.pluginWheelStore) {
+      throw new Error("Persistent plugin storage requires OPFS");
+    }
+    const records = (await this.listPlugins()).filter(
+      (record) => record.artifact_id === artifactId,
+    );
+    if (records.some((record) => record.source !== "user-wheel")) {
+      throw new Error("Bundled plugin wheels cannot be removed");
+    }
+    for (const record of records) {
+      await this.unloadPlugin(record.record_id);
+    }
+    await this.pluginWheelStore.remove(artifactId);
+  }
+
   async reloadPlugins(): Promise<PluginRecord[]> {
     return (await this.callPy("reload_plugins")) as PluginRecord[];
   }
 
-  async discoverPluginsInDir(directory: string): Promise<PluginRecord[]> {
+  async discoverPluginsInDir(
+    directory: string,
+    source: "builtin-source" | "user-source" = "user-source",
+  ): Promise<PluginRecord[]> {
     return (await this.callPy("discover_plugins_in_dir", {
       directory,
+      source,
     })) as PluginRecord[];
   }
 

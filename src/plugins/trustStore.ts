@@ -9,7 +9,7 @@
 
 const STORAGE_KEY = "datalab-web/trusted-plugins";
 
-interface TrustEntry {
+export interface TrustEntry {
   filename: string;
   hash: string;
   trustedAt: string;
@@ -35,10 +35,31 @@ function write(entries: TrustEntry[]): void {
 }
 
 export async function hashSource(source: string): Promise<string> {
-  const data = new TextEncoder().encode(source);
-  const digest = await window.crypto.subtle.digest("SHA-256", data);
-  const bytes = Array.from(new Uint8Array(digest));
-  return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hashBytes(new TextEncoder().encode(source));
+}
+
+export async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const data = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", data);
+  const digestBytes = Array.from(new Uint8Array(digest));
+  return digestBytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function isPluginHashTrusted(filename: string, hash: string): boolean {
+  return read().some(
+    (entry) => entry.filename === filename && entry.hash === hash,
+  );
+}
+
+export function trustPluginHash(filename: string, hash: string): void {
+  const entries = read().filter(
+    (entry) => !(entry.filename === filename && entry.hash === hash),
+  );
+  entries.push({ filename, hash, trustedAt: new Date().toISOString() });
+  write(entries);
 }
 
 export async function isPluginTrusted(
@@ -46,7 +67,7 @@ export async function isPluginTrusted(
   source: string,
 ): Promise<boolean> {
   const hash = await hashSource(source);
-  return read().some((e) => e.filename === filename && e.hash === hash);
+  return isPluginHashTrusted(filename, hash);
 }
 
 export async function trustPlugin(
@@ -54,11 +75,7 @@ export async function trustPlugin(
   source: string,
 ): Promise<void> {
   const hash = await hashSource(source);
-  const entries = read().filter(
-    (e) => !(e.filename === filename && e.hash === hash),
-  );
-  entries.push({ filename, hash, trustedAt: new Date().toISOString() });
-  write(entries);
+  trustPluginHash(filename, hash);
 }
 
 export function listTrustedPlugins(): TrustEntry[] {

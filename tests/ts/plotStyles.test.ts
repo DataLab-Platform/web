@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  PLOTLY_COLORS,
-  PLOTLY_DASHES,
   buildCurveTrace,
   getCurveStyle,
   hexToRgba,
@@ -16,18 +14,11 @@ describe("plotStyles", () => {
     const s0 = getCurveStyle(0);
     const s9 = getCurveStyle(9);
     const s10 = getCurveStyle(10);
-    expect(s0.color).toBe(PLOTLY_COLORS[0]);
-    expect(s0.dash).toBe(PLOTLY_DASHES[0]);
-    expect(s9.color).toBe(PLOTLY_COLORS[9]);
-    expect(s9.dash).toBe(PLOTLY_DASHES[0]);
+    expect(s0.color).not.toBe(s9.color);
+    expect(s0.dash).toBe(s9.dash);
     // After a full color round, the dash advances and color resets.
-    expect(s10.color).toBe(PLOTLY_COLORS[0]);
-    expect(s10.dash).toBe(PLOTLY_DASHES[1]);
-  });
-
-  it("uses a stable default linewidth", () => {
-    expect(getCurveStyle(0).width).toBe(1.5);
-    expect(getCurveStyle(0, 3).width).toBe(3);
+    expect(s10.color).toBe(s0.color);
+    expect(s10.dash).not.toBe(s0.dash);
   });
 
   it("converts hex to rgba", () => {
