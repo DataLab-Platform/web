@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786480484855,
+  "lastUpdate": 1787235803384,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -2471,6 +2471,105 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/DataLab-Platform/web/commit/6e484928fb17168ef7cff1f492a617caf52c7efa"
         },
         "date": 1786480483668,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 16.777,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · payload [10000 pts]",
+            "value": 0.16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [10000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [100000 pts]",
+            "value": 1.6,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [100000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [500000 pts]",
+            "value": 8,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [500000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [1000000 pts]",
+            "value": 16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [1000000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 53.7,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 53.7,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "2bc1db86023d43cd98102ac0d77f8cca53cc52b4",
+          "message": "refactor: adopt native guidata browser APIs\n\nRequire guidata 3.15, retire the obsolete backend backport, and retain\nonly the FloatArray schema hints still missing upstream. Distinguish\ninferred and live audits before removing future shims.\n\nAssisted-by: GPT-5.6 Sol",
+          "timestamp": "2026-08-20T16:18:26+02:00",
+          "tree_id": "f5683fe3d7f3b89564fc1fd0182554b03bc82c9a",
+          "url": "https://github.com/DataLab-Platform/web/commit/2bc1db86023d43cd98102ac0d77f8cca53cc52b4"
+        },
+        "date": 1787235802731,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
