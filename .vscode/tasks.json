@@ -322,10 +322,21 @@
     },
     {
       "label": "🔍 Audit shims (versions)",
-      "detail": "Report which temporary backport shims are now removable by comparing each shim's removableFrom with the version resolved at runtime (PyPI / pyodide-lock). Report-only; needs network.",
+      "detail": "Fast pre-audit: infer package versions from PyPI / pyodide-lock and report removable backports. Report-only; needs network.",
       "type": "shell",
       "command": "npm",
       "args": ["run", "audit:shims"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🔬 Audit shims (live Pyodide)",
+      "detail": "Authoritative audit: boot the browser runtime and classify shims against the package versions actually installed in Pyodide.",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "audit:shims:runtime"],
       "options": {
         "cwd": "${workspaceFolder}"
       },

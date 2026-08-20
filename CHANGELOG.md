@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
+  its native async DataSet backend and JSON Schema exporter. The former
+  backend backport has been removed; a focused compatibility patch preserves
+  the `FloatArrayItem` sizing hints required by the browser array editor.
+
 ## [0.9.0] - 2026-08-11
 
 ### Added in 0.9.0

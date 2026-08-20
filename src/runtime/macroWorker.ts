@@ -30,19 +30,9 @@ import {
   type DLWWorkerScope,
   type PyodideAPI,
 } from "./workerBase";
-// Same JSON Schema / backends shims as the main runtime — required so
-// ``guidata.dataset`` (transitively imported by ``sigima``) loads
-// cleanly under Pyodide. See runtime.ts for the rationale.
+// Same FloatArrayItem schema-hint patch as the main runtime. Guidata's
+// exporter and asynchronous DataSet backend are otherwise native from 3.15.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
-const guidataBackendsSource = (() => {
-  const candidates = import.meta.glob("./_guidata_backends_shim.py", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }) as Record<string, string>;
-  const first = Object.values(candidates)[0];
-  return first ?? null;
-})();
 
 declare const self: DedicatedWorkerGlobalScope & DLWWorkerScope;
 
@@ -65,9 +55,6 @@ async function getPyodide(): Promise<PyodideAPI> {
     });
 
     await py.runPythonAsync(guidataJsonSchemaShim);
-    if (guidataBackendsSource) {
-      await py.runPythonAsync(guidataBackendsSource);
-    }
 
     // Stream stdout/stderr to the main thread, line by line.
     // ``setStdout``/``setStderr`` work for raw C-level writes but

@@ -79,7 +79,7 @@ DataLab-Web is fully internationalised: English is the source language and Frenc
 
 ## Temporary shims
 
-DataLab-Web sometimes backports a feature or patches a bug that is fixed upstream (`guidata`, `sigima`, …) but not yet in a released wheel. These **temporary shims** are tracked centrally so they can be audited and removed once upstream catches up. Every backport shim is declared once in [src/runtime/shims/registry.ts](src/runtime/shims/registry.ts), carries `# TEMPORARY SHIM` / `@shim-registry: <id>` markers in its source, and is kept in sync by a network-free anti-drift test that runs in `npm test`. Run `npm run audit:shims` (or the **🔍 Audit shims (versions)** task) to see which shims are now removable. Full workflow — adding, registering and removing a shim — is in [doc/shim-registry.md](doc/shim-registry.md).
+DataLab-Web sometimes backports a feature or patches a bug that is fixed upstream (`guidata`, `sigima`, …) but not yet in a released wheel. These **temporary shims** are tracked centrally so they can be audited and removed once upstream catches up. Every backport shim is declared once in [src/runtime/shims/registry.ts](src/runtime/shims/registry.ts), carries `# TEMPORARY SHIM` / `@shim-registry: <id>` markers in its source, and is kept in sync by a network-free anti-drift test that runs in `npm test`. Use `npm run audit:shims` for the fast PyPI/lockfile pre-audit and `npm run audit:shims:runtime` to verify the versions actually installed in Pyodide. A `ready-to-remove` version result is only a candidate: focused contract or E2E tests must also prove native behavioral parity before the shim is deleted. The full workflow is in [doc/shim-registry.md](doc/shim-registry.md).
 
 ## Branching model
 

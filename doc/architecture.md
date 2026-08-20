@@ -389,13 +389,13 @@ param.edit_async(...)` for parameter dialogs.
   user scripts (macros and notebook cells). Each method ultimately
   becomes a `bridge_call` to the main thread.
 
-- **`_guidata_backends_shim.py`** / **`_guidata_jsonschema_shim.py`** —
-  patch guidata so that DataSet parameter classes (a) do not require a
-  Qt backend and (b) can be serialised as JSON schemas that
-  `DataSetDialog.tsx` consumes. These are **temporary backport shims**:
-  they are declared in `src/runtime/shims/registry.ts` and audited for
-  removal once upstream ships the feature — see
-  [`shim-registry.md`](shim-registry.md).
+- **guidata integration** — guidata 3.15 provides the native async backend
+  registry and JSON Schema exporter. `bootstrap.py` registers the browser
+  dialog bridge through that backend API. `_guidata_jsonschema_shim.py` is a
+  small **temporary backport shim** that only adds the `FloatArrayItem`
+  variable-size and min/max hints still missing upstream. It is declared in
+  `src/runtime/shims/registry.ts`; see
+  [`shim-registry.md`](shim-registry.md) for the audit and removal workflow.
 
 ### 3.5 SDK — `packages/sdk/`
 

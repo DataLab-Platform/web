@@ -39,9 +39,10 @@ you add or restructure a top-level subsystem.
   DataLab desktop's `register_1_to_1` / `register_n_to_1` / etc. machinery.
 - **`src/runtime/dlw_main.py`, `dlw_plugins.py`, `dlw_h5browser.py`,
   `dlw_interactive_fit.py`, `notebook_display.py`, `macro_proxy.py`,
-  `_guidata_*_shim.py`** — focused Python modules pushed into Pyodide's FS
-  alongside `bootstrap.py` (plugin host, HDF5 browser, interactive fit,
-  notebook `display()`, macro/notebook proxy, guidata browser shims).
+  `_guidata_jsonschema_shim.py`** — focused Python modules pushed into
+  Pyodide's FS alongside `bootstrap.py` (plugin host, HDF5 browser,
+  interactive fit, notebook `display()`, macro/notebook proxy, and the
+  tracked guidata `FloatArrayItem` schema-hint backport).
 - **`src/runtime/runtime.ts`** is the only place that touches the Pyodide
   API. All Python calls go through `DataLabRuntime`; the rest of the UI
   consumes typed interfaces (`SignalMeta`, `SignalData`,
@@ -158,9 +159,12 @@ temporary shim**, not an ad-hoc patch:
   `run_with_env.py`) — those are permanent.
 - The network-free anti-drift test in `npm test`
   (`tests/ts/shims/shim-registry.test.ts`) **fails CI** if the registry,
-  the sources and the markers drift. The version audit
-  (`npm run audit:shims`, `*.spec.ts`) is **report-only** and runs only
-  via `vitest.audit.config.ts`. Full workflow in
+  the sources and the markers drift. `npm run audit:shims` is a fast,
+  **report-only** pre-audit inferred from PyPI and `pyodide-lock.json`;
+  `npm run audit:shims:runtime` is the authoritative live-Pyodide version
+  check. Before removing a candidate, also run focused contract or E2E tests
+  proving that the upstream implementation preserves the required behavior.
+  Full workflow in
   [`doc/shim-registry.md`](../doc/shim-registry.md).
 
 ## Testing

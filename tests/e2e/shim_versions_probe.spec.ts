@@ -70,6 +70,11 @@ test("runtime ground-truth versions resolve and feed the shim audit", async ({
   const results = SHIM_REGISTRY.filter((s) => s.kind === "backport").map(
     (shim) => classifyShim(shim, versions[shim.targetPackage] ?? null),
   );
+  if (results.length === 0) {
+    console.log(
+      "[shim-audit] no active backport shims; runtime package snapshot captured",
+    );
+  }
   for (const r of results) {
     console.log(
       `[shim-audit] ${r.status.padEnd(16)} ${r.id} (${r.targetPackage} ${r.installedVersion}) — ${r.detail}`,

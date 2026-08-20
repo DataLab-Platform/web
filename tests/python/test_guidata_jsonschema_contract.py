@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed under the terms of the BSD 3-Clause
 # (see datalab-web/LICENSE for details)
 
-"""Tests for the FloatArrayItem JSON-schema export (graphical array editor).
+"""Contract tests for DataLab-Web's guidata JSON Schema integration.
 
-The browser array editor relies on ``x-guidata-*`` hints emitted by
-``_guidata_jsonschema_shim`` to decide which controls to show (variable
-size, formatting, transpose). These tests lock in that contract.
+Guidata 3.15 provides the exporter and most ``x-guidata-*`` hints natively.
+The tracked compatibility patch adds the two FloatArrayItem hints still
+needed by the browser array editor. These tests lock in the combined contract.
 """
 
 from __future__ import annotations
@@ -116,7 +115,7 @@ def test_store_gated_active_state():
     ``min_circularity``: in Qt the checkbox widget pushes its value into the
     shared ``ValueProp`` (``do_store``), and the gated items resolve their
     ``active`` against it.  Headless schema generation never builds the
-    widget, so the shim must replay that ``do_store`` step before resolving
+    widget, so the native exporter must replay that ``do_store`` step before resolving
     ``active`` — otherwise the gated fields never grey out.
     """
     prop = gds.ValueProp(False)

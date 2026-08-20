@@ -65,10 +65,9 @@ if "pyodide" not in sys.modules:
 # Alias ``processor`` -> ``dlw_processor`` (mirrors the FS write in runtime.ts).
 # ---------------------------------------------------------------------------
 
-# Importing the JSON-schema shim installs ``dataset_to_schema_with_values``,
-# ``resolve_dynamic_choices``, ``resolve_dataset_callbacks`` and
-# ``resolve_dataset_active`` on ``guidata.dataset`` as a side effect. This
-# MUST run before ``processor`` is imported (which pulls those names).
+# Guidata 3.15 provides the JSON Schema API natively. This tracked patch only
+# adds the FloatArrayItem hints required by the browser array editor and must
+# run before ``processor`` imports the public schema helpers.
 importlib.import_module("_guidata_jsonschema_shim")
 
 if "dlw_processor" not in sys.modules:
