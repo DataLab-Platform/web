@@ -33,8 +33,8 @@ DataLab-Web requires guidata 3.15 or later. That release provides `guidata.datas
 
 | Package                  | How the runtime gets it                                  | Fast-audit source                                                                                                    |
 | ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `guidata`                | `micropip.install("guidata>=3.15.0")`                    | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
-| `sigima`                 | `micropip.install("sigima>=1.1.6")`                      | Latest PyPI release from `https://pypi.org/pypi/sigima/json`                                                         |
+| `guidata`                | `VITE_GUIDATA_INSTALL_SPEC` (default: `guidata>=3.15.0`) | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
+| `sigima`                 | `VITE_SIGIMA_INSTALL_SPEC` (default: `sigima>=1.1.6`)    | Latest PyPI release from `https://pypi.org/pypi/sigima/json`                                                         |
 | `numpy`, `scipy`, `h5py` | Bundled with the pinned Pyodide build (`py.loadPackage`) | `pyodide-lock.json` of the pinned `PYODIDE_VERSION` (from [src/runtime/workerBase.ts](../src/runtime/workerBase.ts)) |
 
 The fast audit infers these versions **without booting Pyodide**, so it is cheap and useful for routine monitoring. For PyPI packages it does not execute dependency resolution, so the latest release is only an approximation of what `micropip` will select. The live audit instead reads the versions actually resolved inside Pyodide via `DataLabRuntime.getInstalledVersions()` (backed by `importlib.metadata`), which is authoritative but pays the cold-start cost. Both feed the same `classifyShim` logic.
