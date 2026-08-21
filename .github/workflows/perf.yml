@@ -51,8 +51,22 @@ jobs:
           node-version: "20"
           cache: npm
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Build Sigima wheel
+        run: |
+          mkdir -p .wheels
+          python -m pip wheel --no-deps --wheel-dir .wheels \
+            "$(grep '^sigima @ ' requirements-dev.txt)"
+          wheel_path=$(find "$GITHUB_WORKSPACE/.wheels" -name 'sigima-*.whl' -print -quit)
+          test -n "$wheel_path"
+          echo "VITE_SIGIMA_INSTALL_SPEC=/@fs/$wheel_path" >> "$GITHUB_ENV"
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
