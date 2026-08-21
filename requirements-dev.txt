@@ -9,6 +9,7 @@
 # Core test runner and coverage tooling.
 pytest>=7.4
 pytest-cov>=4.1
+Babel>=2.17
 
 # Linters / formatters used by the VS Code tasks (Ruff + Pylint).
 ruff>=0.5

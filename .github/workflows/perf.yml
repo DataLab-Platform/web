@@ -61,9 +61,9 @@ jobs:
 
       - name: Build Sigima wheel
         run: |
-          mkdir -p .wheels
-          python -m pip wheel --no-deps --wheel-dir .wheels \
-            "$(grep '^sigima @ ' requirements-dev.txt)"
+          python -m pip install "$(grep '^Babel' requirements-dev.txt)"
+          python scripts/build_sigima_wheel.py \
+            "$(grep '^sigima @ ' requirements-dev.txt)" .wheels
           wheel_path=$(find "$GITHUB_WORKSPACE/.wheels" -name 'sigima-*.whl' -print -quit)
           test -n "$wheel_path"
           echo "VITE_SIGIMA_INSTALL_SPEC=/@fs/$wheel_path" >> "$GITHUB_ENV"
