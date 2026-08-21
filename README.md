@@ -62,6 +62,32 @@ npm run format   # Prettier
 
 The first dev load downloads Pyodide (~10 MB) and installs Sigima via `micropip` (30–60 s); subsequent loads are cached. Vite is configured with `base: "./"` so the build works under sub-paths.
 
+### Testing unreleased Sigima changes
+
+`PYTHONPATH` makes the sibling Sigima checkout available to the CPython tests,
+but the browser's Pyodide runtime requires a wheel. To test DataLab-Web against
+changes on Sigima's `develop` branch before they are released, first build the
+sibling checkout:
+
+```powershell
+cd ..\Sigima
+python scripts\run_with_env.py python -m build --wheel --outdir dist
+cd ..\DataLab-Web
+```
+
+Then add the generated wheel to the ignored `.env` file using Vite's `/@fs/`
+URL syntax (absolute path, forward slashes):
+
+```dotenv
+VITE_SIGIMA_INSTALL_SPEC=/@fs/C:/Dev/Sigima/dist/sigima-X.Y.Z-py3-none-any.whl
+```
+
+Replace `X.Y.Z` with the generated filename, then use the usual `npm run dev`
+or Playwright commands. The override applies to the main runtime and the macro
+and notebook workers. Rebuild the wheel and restart Vite after each Sigima
+change. Remove the line to return to the released PyPI requirement; `/@fs/`
+URLs are for local development only and must not be used for release builds.
+
 ## Documentation
 
 | Topic                                              | Guide                                              |
