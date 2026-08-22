@@ -31,6 +31,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { checkSigimaRelease } from "./check-sigima-release.mjs";
 import { extractSection, promoteSubHeadings } from "./extract-changelog.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -142,6 +143,13 @@ if (!version) {
     "Usage: node scripts/release.mjs <version|patch|minor|major|prerelease>\n" +
       "                              [--allow-empty-changelog]",
   );
+}
+
+// Refuse before any version, changelog, Git index, commit or tag mutation.
+try {
+  checkSigimaRelease();
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
 
 // 1. Working tree must be clean.

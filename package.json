@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/check-bundle-budget.mjs",
+    "build:release": "tsc -b && vite build --mode release && node scripts/check-bundle-budget.mjs",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,css,html,md,json}\"",
@@ -33,7 +34,8 @@
     "sdk:build": "npm --prefix packages/sdk run build",
     "sdk:pack": "node scripts/pack-sdk.mjs",
     "app:pack": "node scripts/pack-app.mjs",
-    "release:pack": "npm run format:check && npm run lint && npm run test && npm run build && npm run sdk:pack && npm run app:pack && node scripts/release-summary.mjs"
+    "release:guard": "node scripts/check-sigima-release.mjs",
+    "release:pack": "npm run release:guard && npm run format:check && npm run lint && npm run test && npm run build:release && npm run sdk:pack && npm run app:pack && node scripts/release-summary.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",

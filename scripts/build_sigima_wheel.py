@@ -20,6 +20,12 @@ def run(*args: str) -> None:
 def build_wheel(requirement: str, wheel_dir: Path) -> Path:
     """Build *requirement* into *wheel_dir* after compiling translations."""
     wheel_dir.mkdir(parents=True, exist_ok=True)
+    existing_wheels = sorted(wheel_dir.glob("sigima-*.whl"))
+    if existing_wheels:
+        names = ", ".join(wheel.name for wheel in existing_wheels)
+        raise RuntimeError(
+            f"Refusing to reuse Sigima wheels already present in {wheel_dir}: {names}"
+        )
     with tempfile.TemporaryDirectory(prefix="sigima-wheel-") as tmp:
         workspace = Path(tmp)
         downloads = workspace / "downloads"
@@ -65,7 +71,7 @@ def build_wheel(requirement: str, wheel_dir: Path) -> Path:
             str(project),
         )
 
-    wheels = list(wheel_dir.glob("sigima-*.whl"))
+    wheels = sorted(wheel_dir.glob("sigima-*.whl"))
     if len(wheels) != 1:
         raise RuntimeError(f"Expected one Sigima wheel, found {len(wheels)}")
     return wheels[0]

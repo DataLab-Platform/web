@@ -19,6 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Require a published Sigima dependency
+        run: node scripts/check-sigima-release.mjs
+
       - name: Check tag matches package.json and SDK versions
         run: |
           APP_VERSION=$(node -p "require('./package.json').version")
@@ -55,12 +58,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |
+            requirements-dev.txt
+            sigima-dependency.json
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          python scripts/sigima_dependency.py install --published
 
       - name: Run pytest
         run: python -m pytest tests/python
@@ -77,26 +82,15 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install npm dependencies
         run: npm ci
-
-      - name: Build Sigima wheel
-        run: |
-          python -m pip install "$(grep '^Babel' requirements-dev.txt)"
-          python scripts/build_sigima_wheel.py \
-            "$(grep '^sigima @ ' requirements-dev.txt)" .wheels
-          wheel_path=$(find "$GITHUB_WORKSPACE/.wheels" -name 'sigima-*.whl' -print -quit)
-          test -n "$wheel_path"
-          echo "VITE_SIGIMA_INSTALL_SPEC=/@fs/$wheel_path" >> "$GITHUB_ENV"
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
+        env:
+          VITE_SIGIMA_INSTALL_SPEC: ""
         run: npm run test:e2e
 
       - name: Upload Playwright report
@@ -135,7 +129,7 @@ jobs:
         run: npm run test
 
       - name: Build app bundle
-        run: npm run build
+        run: npm run build:release
 
       - name: Pack SDK tarball
         run: npm run sdk:pack

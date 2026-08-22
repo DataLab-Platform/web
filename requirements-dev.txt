@@ -19,9 +19,9 @@ pylint>=3.0
 # ``pre-commit install`` once after cloning. See CONTRIBUTING.md.
 pre-commit>=3.7
 
-# Sigima (= computation engine) and its mandatory dependencies.
-# Pin the unreleased revision that provides the annotation APIs used here.
-sigima @ https://github.com/DataLab-Platform/Sigima/archive/4442ada873655f63fabd14369fd11170f75a28b4.zip
+# Sigima (= computation engine) is selected through sigima-dependency.json.
+# Use scripts/sigima_dependency.py to install the configured revision together
+# with these mandatory dependencies.
 guidata>=3.15.0
 numpy>=1.22
 scipy>=1.10.1

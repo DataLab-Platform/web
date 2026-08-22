@@ -25,6 +25,7 @@ import dlwTitleFormatSource from "./dlw_title_format.py?raw";
 // compatibility patch only adds FloatArrayItem hints used by the browser
 // array editor and may be dropped once a later guidata release ships them.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
+import { SIGIMA_INSTALL_SPEC } from "./dependencyConfig";
 // Resolve the Pyodide ``LANG`` from the active UI locale so that
 // Sigima/guidata gettext labels match the rest of the interface. Import
 // from the React-free ``locale`` module to avoid pulling the provider in.
@@ -107,8 +108,6 @@ export interface PyProxy {
 
 const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
-const SIGIMA_INSTALL_SPEC =
-  import.meta.env.VITE_SIGIMA_INSTALL_SPEC || "sigima>=1.3.0";
 const GUIDATA_INSTALL_SPEC =
   import.meta.env.VITE_GUIDATA_INSTALL_SPEC || "guidata>=3.15.0";
 
