@@ -84,6 +84,7 @@ describe("HelpDialog environment view", () => {
     const copyButton = await screen.findByRole("button", {
       name: "Copy report",
     });
+    await waitFor(() => expect(copyButton).toBeEnabled());
     fireEvent.click(copyButton);
 
     await waitFor(() =>
