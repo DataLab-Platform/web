@@ -28,7 +28,7 @@ A continuous layer ties the three together: GitHub Actions (`tests.yml`) runs al
 # introspection).
 Copy-Item .env.template .env
 py -3.11 -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python scripts\sigima_dependency.py install
 
 # Python unit tests + coverage report (htmlcov-python/)
 .\.venv\Scripts\python -m pytest tests/python --cov=src/runtime --cov-report=html:htmlcov-python
@@ -48,6 +48,20 @@ npx playwright test --project=perf
 # Run a throwaway `_repro_*` probe (the default suite ignores them).
 $env:PW_REPRO=1; npx playwright test --project=repro tests/e2e/_repro_x.spec.ts
 ```
+
+The resolver reads [sigima-dependency.json](../sigima-dependency.json). Normal
+test and performance CI use its `developmentRef` when one is configured;
+release CI explicitly selects `publishedRequirement`. The browser receives a
+development snapshot only as a wheel through `VITE_SIGIMA_INSTALL_SPEC`.
+For rapid local iteration, the ignored `.env` may point to a wheel built from
+the sibling checkout, and its `PYTHONPATH` may prioritize sibling Python
+sources, but neither alters the versioned CI selection. Remove those local
+overrides when qualifying the exact manifest-selected dependency.
+
+When qualifying a published Sigima version for release, use a clean environment
+without `..\Sigima` in `PYTHONPATH` and without `VITE_SIGIMA_INSTALL_SPEC`.
+This ensures both pytest and Playwright exercise the exact PyPI version rather
+than a sibling checkout or cached local wheel.
 
 Test layout:
 

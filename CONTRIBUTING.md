@@ -81,6 +81,34 @@ DataLab-Web is fully internationalised: English is the source language and Frenc
 
 DataLab-Web sometimes backports a feature or patches a bug that is fixed upstream (`guidata`, `sigima`, …) but not yet in a released wheel. These **temporary shims** are tracked centrally so they can be audited and removed once upstream catches up. Every backport shim is declared once in [src/runtime/shims/registry.ts](src/runtime/shims/registry.ts), carries `# TEMPORARY SHIM` / `@shim-registry: <id>` markers in its source, and is kept in sync by a network-free anti-drift test that runs in `npm test`. Use `npm run audit:shims` for the fast PyPI/lockfile pre-audit and `npm run audit:shims:runtime` to verify the versions actually installed in Pyodide. A `ready-to-remove` version result is only a candidate: focused contract or E2E tests must also prove native behavioral parity before the shim is deleted. The full workflow is in [doc/shim-registry.md](doc/shim-registry.md).
 
+## Sigima development snapshots
+
+When DataLab-Web needs a Sigima change that is merged but not yet published,
+declare it in [sigima-dependency.json](sigima-dependency.json). Keep
+`publishedRequirement` as the exact release target (`sigima==X.Y.Z`) and set
+`developmentRef` to the full lowercase 40-character commit SHA. Branch names,
+tags, abbreviated SHAs and version ranges are rejected because they are not an
+immutable, release-qualified dependency.
+
+Do not add a source URL to [requirements-dev.txt](requirements-dev.txt) or copy
+the SHA into a workflow. The following command installs the common Python
+requirements and then resolves the configured Sigima selection:
+
+```powershell
+.\.venv\Scripts\python scripts\sigima_dependency.py install
+```
+
+The `PYTHONPATH` entries in `.env` take priority over installed packages;
+remove `..\Sigima` when the purpose of the test is to qualify the exact SHA
+declared in the manifest.
+
+CI uses the same resolver to build the Pyodide wheel. A non-null
+`developmentRef` blocks `release:guard`, `release:pack`, the tag helper and the
+release workflow. After the exact target version is published, qualify CPython
+and Pyodide without `PYTHONPATH` or `VITE_SIGIMA_INSTALL_SPEC`, then set
+`developmentRef` to `null`. See [doc/releasing.md](doc/releasing.md) for the
+release checklist.
+
 ## Branching model
 
 DataLab-Web follows the same two-branch model as the sibling repositories (DataLab, Sigima): day-to-day work lands on **`develop`**, and **`main`** is the release branch — `develop` is merged into `main` only when cutting a real release. CI ([tests.yml](.github/workflows/tests.yml)) runs the cheap regression suite on both branches and on pull requests targeting either. The multi-minute performance benchmarks are **not** part of that run; they are opt-in and driven by a separate on-demand workflow (see the **Performance benchmarks** section of [doc/testing-strategy.md](doc/testing-strategy.md)).

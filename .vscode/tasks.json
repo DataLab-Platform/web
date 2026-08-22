@@ -466,7 +466,7 @@
     },
     {
       "label": "📦 Release Package (app + SDK)",
-      "detail": "Lint + Vitest + build, then produce datalab-web-<v>.tgz and datalab-platform-web-sdk-<v>.tgz under release/.",
+      "detail": "Sigima release guard + lint + Vitest + qualified build, then produce both tarballs under release/.",
       "type": "shell",
       "command": "npm",
       "args": ["run", "release:pack"],

@@ -64,10 +64,25 @@ The first dev load downloads Pyodide (~10 MB) and installs Sigima via `micropip`
 
 ### Testing unreleased Sigima changes
 
-`PYTHONPATH` makes the sibling Sigima checkout available to the CPython tests,
-but the browser's Pyodide runtime requires a wheel. To test DataLab-Web against
-changes on Sigima's `develop` branch before they are released, first build the
-sibling checkout:
+Cross-repository integration snapshots are declared once in
+[`sigima-dependency.json`](sigima-dependency.json). `publishedRequirement` is
+the exact PyPI version qualified for releases; `developmentRef` is either
+`null` or a full 40-character commit SHA already merged into Sigima. The test
+and performance workflows turn that immutable SHA into both the CPython
+requirement and the Pyodide wheel. Install the same configured dependency
+locally with:
+
+```powershell
+.\.venv\Scripts\python scripts\sigima_dependency.py install
+```
+
+If `.env` still includes `..\Sigima` in `PYTHONPATH`, that sibling checkout
+intentionally takes priority for CPython. Remove the entry when qualifying the
+exact manifest-selected snapshot.
+
+For rapid work on an uncommitted sibling checkout, `PYTHONPATH` makes the local
+Sigima sources available to CPython, but the browser still requires a wheel.
+Build that checkout directly:
 
 ```powershell
 cd ..\Sigima
@@ -85,8 +100,15 @@ VITE_SIGIMA_INSTALL_SPEC=/@fs/C:/Dev/Sigima/dist/sigima-X.Y.Z-py3-none-any.whl
 Replace `X.Y.Z` with the generated filename, then use the usual `npm run dev`
 or Playwright commands. The override applies to the main runtime and the macro
 and notebook workers. Rebuild the wheel and restart Vite after each Sigima
-change. Remove the line to return to the released PyPI requirement; `/@fs/`
-URLs are for local development only and must not be used for release builds.
+change. This ignored `.env` override takes priority over the published
+requirement but does not change the versioned CI snapshot. Remove the line to
+return to the exact PyPI requirement; `/@fs/` URLs are for local development
+only and must not be used for release builds.
+
+Any non-null `developmentRef` deliberately blocks DataLab-Web releases. Once
+the target Sigima version is published and qualified without a local override,
+set the field to `null`; the generalized snapshot mechanism remains available
+for the next coordinated change.
 
 ## Documentation
 
