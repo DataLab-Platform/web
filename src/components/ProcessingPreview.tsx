@@ -16,9 +16,15 @@ import {
   ProcessingPreviewController,
   type ProcessingPreviewState,
 } from "../runtime/ProcessingPreviewController";
-import type { FeatureDescriptor, RuntimeApi } from "../runtime/runtime";
+import { getRootIconUrl } from "../assets/rootIcons";
+import type {
+  FeatureDescriptor,
+  ProcessingPreviewResult,
+  RuntimeApi,
+} from "../runtime/runtime";
 
 const ProcessingPreviewPlot = lazy(() => import("./ProcessingPreviewPlot"));
+const PREVIEW_ICON = getRootIconUrl("visualization.svg");
 
 interface Props {
   runtime: RuntimeApi;
@@ -55,6 +61,8 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
     const [result, setResult] = useState<
       Extract<ProcessingPreviewState, { status: "result" }>["result"] | null
     >(null);
+    const [sourceResult, setSourceResult] =
+      useState<ProcessingPreviewResult | null>(null);
     const mountedRef = useRef(true);
     const enabledRef = useRef(false);
     const timerRef = useRef<number | null>(null);
@@ -103,6 +111,34 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
         cancelled = true;
       };
     }, [runtime, sourceIds]);
+
+    useEffect(() => {
+      let cancelled = false;
+      setSourceResult(null);
+      if (!sourceId) return () => undefined;
+      const loadSource =
+        feature.object_kind === "image"
+          ? runtime
+              .getImagesData([sourceId], 512)
+              .then((images) =>
+                images[0]
+                  ? ({ kind: "image", data: images[0] } as const)
+                  : null,
+              )
+          : runtime
+              .getSignalData(sourceId)
+              .then((data) => ({ kind: "signal", data }) as const);
+      void loadSource
+        .then((loaded) => {
+          if (!cancelled) setSourceResult(loaded);
+        })
+        .catch(() => {
+          if (!cancelled) setSourceResult(null);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [feature.object_kind, runtime, sourceId, sourceRevision]);
 
     useEffect(() => {
       mountedRef.current = true;
@@ -239,7 +275,6 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
       controller.setEnabled(checked);
       if (!checked) {
         setState({ status: "idle" });
-        setResult(null);
       }
     };
 
@@ -263,6 +298,8 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
             : state.status === "error"
               ? t("Preview failed")
               : "";
+
+    const displayedResult = result ?? sourceResult;
 
     return (
       <section className="processing-preview" aria-label={t("Preview")}>
@@ -293,11 +330,27 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
             </label>
           )}
         </div>
-        <div className="processing-preview-stage">
-          {result && (
-            <Suspense fallback={null}>
-              <ProcessingPreviewPlot result={result} />
-            </Suspense>
+        <div
+          className={`processing-preview-stage${enabled ? "" : " processing-preview-stage--disabled"}`}
+          aria-disabled={!enabled}
+        >
+          {displayedResult && (
+            <div className="processing-preview-plot">
+              <Suspense fallback={null}>
+                <ProcessingPreviewPlot result={displayedResult} />
+              </Suspense>
+            </div>
+          )}
+          {!enabled && (
+            <div className="processing-preview-disabled-overlay">
+              <span
+                className="processing-preview-disabled-icon"
+                aria-hidden="true"
+              >
+                {PREVIEW_ICON && <img src={PREVIEW_ICON} alt="" />}
+              </span>
+              <span>{t("Preview disabled")}</span>
+            </div>
           )}
         </div>
         <div className="processing-preview-status" aria-live="polite">

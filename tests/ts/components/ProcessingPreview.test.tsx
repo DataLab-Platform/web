@@ -7,6 +7,10 @@ import type {
   RuntimeApi,
 } from "../../../src/runtime/runtime";
 
+vi.mock("../../../src/components/ProcessingPreviewPlot", () => ({
+  default: () => <div data-testid="preview-plot" />,
+}));
+
 const controllerSpies = vi.hoisted(() => ({
   request: vi.fn(),
   markDirty: vi.fn(),
@@ -46,6 +50,7 @@ const feature = {
 
 const runtime = {
   getObject: vi.fn(() => new Promise(() => undefined)),
+  getSignalData: vi.fn(() => new Promise(() => undefined)),
   onWorkspaceMutation: vi.fn((listener: () => void) => {
     mutationListener = listener;
     return () => {

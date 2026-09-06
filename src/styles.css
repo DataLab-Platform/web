@@ -3182,6 +3182,60 @@ input {
   min-height: 300px;
 }
 
+.processing-preview-plot {
+  width: 100%;
+  height: 100%;
+  transition:
+    filter 120ms ease,
+    opacity 120ms ease;
+}
+
+.processing-preview-stage--disabled .processing-preview-plot {
+  filter: grayscale(1);
+  opacity: 0.34;
+  pointer-events: none;
+}
+
+.processing-preview-disabled-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.processing-preview-disabled-icon {
+  position: relative;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: var(--text-dim);
+}
+
+.processing-preview-disabled-icon img {
+  width: 36px;
+  height: 36px;
+  filter: grayscale(1);
+  opacity: 0.72;
+}
+
+.processing-preview-disabled-icon::after {
+  position: absolute;
+  width: 46px;
+  height: 2px;
+  background: currentColor;
+  content: "";
+  transform: rotate(-45deg);
+}
+
 .processing-preview-status {
   min-height: 20px;
   color: var(--text-dim);

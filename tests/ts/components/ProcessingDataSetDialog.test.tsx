@@ -44,9 +44,15 @@ const previewResult: ProcessingPreviewResult = {
 
 function makeRuntime() {
   const previewFeature = vi.fn(async () => previewResult);
+  const getSignalData = vi.fn(async () => ({
+    ...previewResult.data,
+    id: "s1",
+    title: "Signal s1",
+  }));
   return {
     runtime: {
       previewFeature,
+      getSignalData,
       onWorkspaceMutation: vi.fn(() => () => undefined),
       getObject: vi.fn(async (id: string) => ({
         id,
@@ -98,11 +104,22 @@ describe("ProcessingDataSetDialog", () => {
   it("starts disabled, previews on the shared runtime, and cancels", async () => {
     const { runtime, previewFeature } = makeRuntime();
     const onCancel = vi.fn();
-    renderDialog(runtime, onCancel);
+    const { container } = renderDialog(runtime, onCancel);
 
     const checkbox = screen.getByRole("checkbox", { name: "Preview" });
     expect(checkbox).not.toBeChecked();
     expect(previewFeature).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByTestId("preview-plot")).toBeTruthy(),
+    );
+    expect(
+      container.querySelector(".processing-preview-stage"),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(checkbox).toBeEnabled();
+    expect(screen.getByText("Preview disabled")).toBeTruthy();
+    expect(
+      container.querySelector(".processing-preview-disabled-icon img"),
+    ).not.toBeNull();
 
     fireEvent.click(checkbox);
     await waitFor(() =>
@@ -113,7 +130,14 @@ describe("ProcessingDataSetDialog", () => {
     await waitFor(() =>
       expect(screen.getByTestId("preview-plot")).toBeTruthy(),
     );
+    expect(screen.queryByText("Preview disabled")).toBeNull();
     expect(screen.getByText("Preview up to date")).toBeTruthy();
+
+    fireEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByTestId("preview-plot")).toBeTruthy();
+    expect(screen.getByText("Preview disabled")).toBeTruthy();
+    expect(previewFeature).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalledOnce();

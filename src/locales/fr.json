@@ -775,6 +775,7 @@
   "Power…": "Puissance…",
   "Pre-filled from the OPENAI_API_KEY environment variable detected by the Vite dev server.": "Pré-rempli à partir de la variable d'environnement OPENAI_API_KEY détectée par le serveur de développement Vite.",
   "Preview": "Aperçu",
+  "Preview disabled": "Aperçu désactivé",
   "Preview failed": "Échec de l'aperçu",
   "Preview source": "Source de l'aperçu",
   "Preview up to date": "Aperçu à jour",

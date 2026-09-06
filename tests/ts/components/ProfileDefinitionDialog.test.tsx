@@ -72,6 +72,7 @@ function makeRuntime() {
   return {
     runtime: {
       previewFeature,
+      getImagesData: vi.fn(async () => [imageData]),
       onWorkspaceMutation: vi.fn(() => () => undefined),
       getObject: vi.fn(async () => ({
         id: "image-1",
@@ -131,7 +132,10 @@ describe("ProfileDefinitionDialog", () => {
       screen.getByRole("heading", { name: "Profile definition" }),
     ).toBeTruthy();
     expect(screen.getByRole("slider")).toBeTruthy();
-    expect(screen.getAllByTestId("profile-plot")).toHaveLength(1);
+    await waitFor(() =>
+      expect(screen.getAllByTestId("profile-plot")).toHaveLength(2),
+    );
+    expect(screen.getByText("Preview disabled")).toBeTruthy();
 
     const checkbox = screen.getByRole("checkbox", { name: "Preview" });
     expect(checkbox).not.toBeChecked();
@@ -148,6 +152,7 @@ describe("ProfileDefinitionDialog", () => {
     await waitFor(() =>
       expect(screen.getAllByTestId("profile-plot")).toHaveLength(2),
     );
+    expect(screen.queryByText("Preview disabled")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalledOnce();
