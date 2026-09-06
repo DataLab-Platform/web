@@ -12,7 +12,10 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-import { DataSetForm } from "../../../src/components/DataSetForm";
+import {
+  DataSetForm,
+  validateDataSetValues,
+} from "../../../src/components/DataSetForm";
 import type { JsonSchema } from "../../../src/runtime/runtime";
 
 // A minimal Arithmetic-like schema: an editable ``factor`` with a display
@@ -106,6 +109,184 @@ describe("DataSetForm display callbacks", () => {
     expect(resolveCallbacks).not.toHaveBeenCalled();
   });
 });
+
+describe("DataSetForm automatic sliders", () => {
+  it("keeps exact numeric input beside an opt-in bounded slider", () => {
+    const onChange = vi.fn();
+    const schema: JsonSchema = {
+      type: "object",
+      required: ["value"],
+      properties: {
+        value: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          "x-guidata-kind": "float",
+          "x-guidata-label": "Value",
+        },
+      },
+    };
+    render(
+      <DataSetForm
+        schema={schema}
+        values={{ value: 0.123456 }}
+        onChange={onChange}
+        autoSliders
+      />,
+    );
+
+    const number = screen.getByRole("spinbutton") as HTMLInputElement;
+    const range = screen.getByRole("slider") as HTMLInputElement;
+    expect(number.type).toBe("number");
+    expect(range.step).toBe("0.001");
+    fireEvent.change(number, { target: { value: "0.123456789" } });
+    expect(onChange).toHaveBeenCalledWith({ value: 0.123456789 });
+  });
+
+  it("aligns a parity-constrained integer slider with valid values", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      required: ["value"],
+      properties: {
+        value: {
+          type: "integer",
+          minimum: 0,
+          maximum: 10,
+          "x-guidata-kind": "int",
+          "x-guidata-even": false,
+        },
+      },
+    };
+    render(
+      <DataSetForm
+        schema={schema}
+        values={{ value: 3 }}
+        onChange={() => undefined}
+        autoSliders
+      />,
+    );
+
+    const range = screen.getByRole("slider") as HTMLInputElement;
+    expect(range.min).toBe("1");
+    expect(range.max).toBe("9");
+    expect(range.step).toBe("2");
+    expect(validateDataSetValues(schema, { value: 3 })).toBe(true);
+    expect(validateDataSetValues(schema, { value: 2 })).toBe(false);
+  });
+
+  it("respects a field-level automatic slider veto", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: {
+        value: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          "x-guidata-kind": "float",
+          "x-guidata-auto-slider": false,
+        },
+      },
+    };
+    render(
+      <DataSetForm
+        schema={schema}
+        values={{ value: 0.5 }}
+        onChange={() => undefined}
+        autoSliders
+      />,
+    );
+
+    expect(screen.getByRole("spinbutton")).toBeTruthy();
+    expect(screen.queryByRole("slider")).toBeNull();
+  });
+
+  it("reports the start and end of an automatic slider gesture", () => {
+    const onSliderInteraction = vi.fn();
+    const schema: JsonSchema = {
+      type: "object",
+      properties: {
+        value: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          "x-guidata-kind": "float",
+        },
+      },
+    };
+    render(
+      <DataSetForm
+        schema={schema}
+        values={{ value: 0.5 }}
+        onChange={() => undefined}
+        autoSliders
+        onSliderInteraction={onSliderInteraction}
+      />,
+    );
+
+    const range = screen.getByRole("slider");
+    fireEvent.pointerDown(range);
+    fireEvent.pointerUp(range);
+    expect(onSliderInteraction.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("reports resolver activity and ignores stale callback responses", async () => {
+    let resolveFirst!: (value: Record<string, unknown>) => void;
+    const first = new Promise<Record<string, unknown>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const stateChanges = vi.fn();
+    const resolveCallbacks = vi.fn(async () => first);
+    render(
+      <ControlledFormWithState
+        resolveCallbacks={resolveCallbacks}
+        onStateChange={stateChanges}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("1"), {
+      target: { value: "3" },
+    });
+    await waitFor(() =>
+      expect(stateChanges).toHaveBeenLastCalledWith({
+        valid: true,
+        resolving: true,
+      }),
+    );
+    fireEvent.change(screen.getByDisplayValue("obj3 = obj1"), {
+      target: { value: "manual" },
+    });
+    resolveFirst({ factor: 3, operation: "stale" });
+    await waitFor(() =>
+      expect(stateChanges).toHaveBeenLastCalledWith({
+        valid: true,
+        resolving: false,
+      }),
+    );
+    expect(screen.queryByDisplayValue("stale")).toBeNull();
+  });
+});
+
+function ControlledFormWithState(props: {
+  resolveCallbacks: (
+    itemName: string,
+    values: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
+  onStateChange: (state: { valid: boolean; resolving: boolean }) => void;
+}) {
+  const [values, setValues] = useState<Record<string, unknown>>({
+    factor: 1,
+    operation: "obj3 = obj1",
+  });
+  return (
+    <DataSetForm
+      schema={SCHEMA}
+      values={values}
+      onChange={setValues}
+      resolveCallbacks={props.resolveCallbacks}
+      onStateChange={props.onStateChange}
+    />
+  );
+}
 
 // A blob-detection-like schema: a controlling ``enable`` checkbox gates a
 // dynamic-active ``gated`` field (``x-guidata-active-dynamic``). Mirrors

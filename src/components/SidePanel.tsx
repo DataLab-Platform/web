@@ -17,7 +17,11 @@ import type {
   SchemaWithValues,
   RuntimeApi,
 } from "../runtime/runtime";
-import { DataSetForm } from "./DataSetForm";
+import {
+  DataSetForm,
+  validateDataSetValues,
+  type DataSetFormProps,
+} from "./DataSetForm";
 import { ObjectStatsCard } from "./ObjectStatsCard";
 import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
@@ -611,6 +615,32 @@ function ProcessingPanel({
   info,
   onApplied,
 }: ProcessingPanelProps) {
+  const sourceOid = info.source_ids[0];
+  const resolveChoices = useCallback(
+    (itemName: string, values: Record<string, unknown>) =>
+      runtime.resolveFeatureChoices(
+        info.feature_id,
+        itemName,
+        values,
+        sourceOid,
+      ),
+    [runtime, info.feature_id, sourceOid],
+  );
+  const resolveCallbacks = useCallback(
+    (itemName: string, values: Record<string, unknown>) =>
+      runtime.resolveFeatureCallbacks(
+        info.feature_id,
+        itemName,
+        values,
+        sourceOid,
+      ),
+    [runtime, info.feature_id, sourceOid],
+  );
+  const resolveActive = useCallback(
+    (values: Record<string, unknown>) =>
+      runtime.resolveFeatureActive(info.feature_id, values),
+    [runtime, info.feature_id],
+  );
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
       await runtime.reapplyLastProcessing(oid, values);
@@ -666,6 +696,11 @@ function ProcessingPanel({
         schema={info.schema}
         values={info.values ?? {}}
         onApply={apply}
+        resolveChoices={resolveChoices}
+        resolveCallbacks={resolveCallbacks}
+        resolveActive={resolveActive}
+        autoSliders
+        validateBeforeApply
       />
     </div>
   );
@@ -688,11 +723,16 @@ function ProcessingHeader({ info }: { info: LastProcessingInfo }) {
 // "DataSetEditDialog" Apply/Reset behaviour without modal blocking.
 // ---------------------------------------------------------------------------
 
-interface EditableFormProps {
+interface EditableFormProps extends Pick<
+  DataSetFormProps,
+  "resolveChoices" | "resolveCallbacks" | "resolveActive"
+> {
   schema: SchemaWithValues["schema"];
   values: Record<string, unknown>;
   onApply: (values: Record<string, unknown>) => Promise<void>;
   initialError?: string | null;
+  autoSliders?: boolean;
+  validateBeforeApply?: boolean;
 }
 
 function EditableForm({
@@ -700,6 +740,11 @@ function EditableForm({
   values,
   onApply,
   initialError = null,
+  resolveChoices,
+  resolveCallbacks,
+  resolveActive,
+  autoSliders = false,
+  validateBeforeApply = false,
 }: EditableFormProps) {
   // Snapshot of the values that are currently committed in Python.
   // Anything different from this counts as "unsaved".
@@ -707,15 +752,21 @@ function EditableForm({
   const [draft, setDraft] = useState(values);
   const [error, setError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
+  const [formState, setFormState] = useState({
+    valid: validateDataSetValues(schema, values),
+    resolving: false,
+  });
   const formRef = useRef<HTMLDivElement | null>(null);
 
   const dirty = useMemo(
     () => !valuesEqual(draft, appliedValues),
     [draft, appliedValues],
   );
+  const invalid = validateBeforeApply && !formState.valid;
+  const resolving = validateBeforeApply && formState.resolving;
 
   const handleApply = useCallback(async () => {
-    if (!dirty || busy) return;
+    if (!dirty || busy || invalid || resolving) return;
     setBusy(true);
     setError(null);
     try {
@@ -726,7 +777,7 @@ function EditableForm({
     } finally {
       setBusy(false);
     }
-  }, [dirty, busy, draft, onApply]);
+  }, [dirty, busy, draft, invalid, onApply, resolving]);
 
   const handleReset = useCallback(() => {
     setDraft(appliedValues);
@@ -747,7 +798,16 @@ function EditableForm({
   return (
     <div className="side-panel-form" ref={formRef} onKeyDown={handleKeyDown}>
       {error && <div className="error">{error}</div>}
-      <DataSetForm schema={schema} values={draft} onChange={setDraft} />
+      <DataSetForm
+        schema={schema}
+        values={draft}
+        onChange={setDraft}
+        resolveChoices={resolveChoices}
+        resolveCallbacks={resolveCallbacks}
+        resolveActive={resolveActive}
+        autoSliders={autoSliders}
+        onStateChange={validateBeforeApply ? setFormState : undefined}
+      />
       <div
         className={
           "editable-form-footer" + (dirty ? " editable-form-dirty" : "")
@@ -756,16 +816,20 @@ function EditableForm({
         <span className="editable-form-status" aria-live="polite">
           {busy
             ? "Applying…"
-            : dirty
-              ? "● Unsaved changes"
-              : "All changes applied"}
+            : resolving
+              ? t("Updating parameters…")
+              : invalid
+                ? t("Invalid parameters")
+                : dirty
+                  ? "● Unsaved changes"
+                  : "All changes applied"}
         </span>
         <div className="editable-form-buttons">
           <button
             type="button"
             className="editable-form-reset"
             onClick={handleReset}
-            disabled={!dirty || busy}
+            disabled={!dirty || busy || resolving}
             title="Discard unapplied changes"
           >
             Reset
@@ -774,7 +838,7 @@ function EditableForm({
             type="button"
             className="editable-form-apply"
             onClick={() => void handleApply()}
-            disabled={!dirty || busy}
+            disabled={!dirty || busy || invalid || resolving}
             title="Apply changes (Ctrl+Enter)"
           >
             Apply

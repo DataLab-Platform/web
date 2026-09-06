@@ -12,11 +12,13 @@ interface RuntimeContextValue {
   status: "loading" | "ready" | "error";
   message: string;
   error: string | null;
+  previewAvailable: boolean;
 }
 
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
+  const [runtimeMode] = useState(getRuntimeMode);
   const [runtime, setRuntime] = useState<RuntimeApi | null>(null);
   const [status, setStatus] =
     useState<RuntimeContextValue["status"]>("loading");
@@ -33,7 +35,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       if (!cancelled) setMessage(msg);
     };
     const boot =
-      getRuntimeMode() === "worker"
+      runtimeMode === "worker"
         ? createWorkerRuntime(onProgress)
         : import("./runtime").then(({ DataLabRuntime }) =>
             DataLabRuntime.load(onProgress),
@@ -86,7 +88,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       remoteBridgeHandle?.dispose();
       remoteBridgeHandle = null;
     };
-  }, []);
+  }, [runtimeMode]);
 
   // Hot-reload: a small Vite plugin (build-plugins/vite-plugin-python-hmr.ts)
   // watches .py files and pushes the new source via a custom HMR event.
@@ -109,8 +111,14 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   }, [runtime]);
 
   const value = useMemo<RuntimeContextValue>(
-    () => ({ runtime, status, message, error }),
-    [runtime, status, message, error],
+    () => ({
+      runtime,
+      status,
+      message,
+      error,
+      previewAvailable: runtimeMode === "worker",
+    }),
+    [runtime, status, message, error, runtimeMode],
   );
 
   return (

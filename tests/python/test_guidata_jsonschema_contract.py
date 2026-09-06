@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import guidata.dataset as gds
 import numpy as np
+import pytest
 
 
 def _schema_for(item: gds.FloatArrayItem) -> dict:
@@ -44,6 +45,23 @@ def test_float_array_variable_size_and_minmax():
 def test_float_array_fixed_size_omits_variable_flag():
     prop = _schema_for(gds.FloatArrayItem("A"))
     assert "x-guidata-variable-size" not in prop
+
+
+@pytest.mark.parametrize(("even", "expected"), [(True, True), (False, False)])
+def test_integer_parity_hint(even, expected):
+    class _DS(gds.DataSet):
+        value = gds.IntItem("Value", default=2 if even else 1, even=even)
+
+    prop = gds.dataset_to_schema(_DS)["properties"]["value"]
+    assert prop["x-guidata-even"] is expected
+
+
+def test_integer_without_parity_omits_hint():
+    class _DS(gds.DataSet):
+        value = gds.IntItem("Value", default=1)
+
+    prop = gds.dataset_to_schema(_DS)["properties"]["value"]
+    assert "x-guidata-even" not in prop
 
 
 def test_excluded_value_kind_is_not_serialised():

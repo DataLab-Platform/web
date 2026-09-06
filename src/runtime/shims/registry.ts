@@ -100,8 +100,8 @@ export const SHIM_REGISTRY: ShimDescriptor[] = [
   {
     id: "guidata-jsonschema",
     summary:
-      "Adds FloatArrayItem variable-size and min/max hints missing from " +
-      "guidata's native JSON Schema exporter.",
+      "Adds integer parity and FloatArrayItem hints missing from guidata's " +
+      "native JSON Schema exporter.",
     kind: "backport",
     targetPackage: "guidata",
     files: ["src/runtime/_guidata_jsonschema_shim.py"],

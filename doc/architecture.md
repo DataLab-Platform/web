@@ -33,11 +33,14 @@ flowchart TB
             Actions["Action registry<br/>(src/actions)"]
             DBridge["DialogBridge.tsx"]
             RT["DataLabRuntime (TS)<br/>(src/runtime/runtime.ts)"]
+            Preview["ProcessingPreviewController.ts<br/>bounded preview queue"]
             Py0["Pyodide #0 — main<br/>bootstrap.py · processor.py<br/>dlw_*.py · Sigima · numpy · scipy"]
 
             UI -->|dispatch| Actions
             Actions -->|typed calls| RT
             RT -->|runPython| Py0
+            UI --> Preview
+            Preview -->|previewFeature| RT
             Py0 -->|dialog requests| DBridge
             DBridge --> UI
         end
@@ -68,6 +71,9 @@ Key facts:
 - **Each macro / notebook runs in its own Web Worker** with its own
   Pyodide instance. Workers never touch the main object model directly:
   they call back to the main runtime through `proxyBridge`.
+- **Processing preview reuses the already-loaded computation runtime**. Python
+  deep-copies the source, computes a temporary plotting payload, and never
+  publishes the copy or result to the main object model.
 - **The host page (optional)** controls an embedded DataLab-Web through
   the same RPC vocabulary, but transported by `remoteBridge` over
   `window.postMessage`.
@@ -83,7 +89,7 @@ right.
 flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
     L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
-    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
+    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>ProcessingPreviewController.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
     L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 
@@ -128,9 +134,12 @@ Presentational React. Notable components:
   metadata / stats / history.
 - `SignalPlot.tsx`, `ImagePlot.tsx`, `MultiImagePlot.tsx`,
   `CentralViewSwitcher.tsx` — Plotly-based central plot area.
-- `DataSetDialog.tsx` + `DataSetForm/` — **auto-generated parameter
+- `DataSetDialog.tsx`, `ProcessingDataSetDialog.tsx` + `DataSetForm/` —
+  **auto-generated parameter
   dialogs** from guidata DataSet JSON schemas (do not hand-write a form
   unless the auto path genuinely cannot express it).
+- `ProcessingPreview.tsx` + `ProcessingPreviewPlot.tsx` — optional,
+  non-publishing signal/image result preview for eligible processing dialogs.
 - `DialogBridge.tsx` — single React entry-point that **receives dialog
   requests from Python** via `bootstrap.set_dialog_bridge()` and routes
   them to the appropriate React dialog component.
@@ -233,7 +242,9 @@ flowchart LR
         MR["MacroRuntime.ts<br/>spawns workers on demand<br/>keeps a warm standby<br/>postMessage glue"]
         PB2["proxyBridge.ts<br/>whitelisted command router"]
         RT3["DataLabRuntime"]
+        PC["ProcessingPreviewController.ts<br/>one active + latest pending"]
         PB2 --> RT3
+        PC -->|previewFeature| RT3
     end
 
     subgraph Workers2["Web Workers"]
@@ -260,6 +271,19 @@ Wire shape (same for both worker kinds):
 call. Workers cannot invoke arbitrary methods — only the ones explicitly
 listed (add_signal, add_image, list/get/delete object, add/set object
 from pickle, add_group, get/set selection, etc.).
+
+`ProcessingPreviewController` coordinates requests per `RuntimeApi`: one
+computation may run while a single pending slot retains only the latest
+parameters. `bootstrap.preview_feature` deep-copies the source and delegates
+to the same `BaseProcessor.apply` path as publication, then returns only a
+binary plotting payload. It never inserts the temporary object into `_MODEL`,
+updates processing history, or dirties the workspace.
+
+Disabling preview, Cancel, Escape, or dialog unmount drops pending work and
+invalidates late results. A Python call that has already started is allowed to
+finish; it may delay the next serialised runtime call. Preview controls are
+therefore exposed only for the default worker-hosted runtime and hidden in the
+`runtime=main` fallback, where computation would block the UI thread.
 
 #### Remote control bridge
 
@@ -457,12 +481,14 @@ compatibility independently of the application version.
 ```text
 1. User clicks  Processing › <feature>     in MenuBar
 2. action.run(ctx)  (from src/actions/registry.ts)
-3. If params needed → DataSetDialog (auto-generated from JSON schema)
-4. runtime.applyFeature(featureId, selectedOids, paramValues)
-5. pyodide.runPython → processor.apply_*(feature, oids, params)
-6. Sigima computes; new SignalObj/ImageObj added to _MODEL
-7. bootstrap returns new oids; UI refreshes ObjectTree + plots
-8. WorkspaceContext is marked dirty
+3. If params needed → ProcessingDataSetDialog (auto-generated from JSON schema)
+4. Optional Preview → runtime.previewFeature(featureId, sourceOid, paramValues)
+5. bootstrap deep-copies the source and returns a private plotting payload
+6. OK invalidates preview and calls runtime.applyFeature(featureId, selectedOids, paramValues)
+7. pyodide.runPython → processor.apply_*(feature, oids, params)
+8. Sigima computes; new SignalObj/ImageObj added to _MODEL
+9. bootstrap returns new oids; UI refreshes ObjectTree + plots
+10. WorkspaceContext is marked dirty
 ```
 
 ### 5.2 Running a macro

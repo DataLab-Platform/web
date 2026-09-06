@@ -42,6 +42,15 @@ type Values = Record<string, unknown>;
  *  entry falls back to the static ``x-guidata-active`` baked in the schema. */
 const ActiveOverridesContext = createContext<Record<string, boolean>>({});
 
+interface FormBehavior {
+  autoSliders: boolean;
+  onSliderInteraction?: (dragging: boolean) => void;
+}
+
+const FormBehaviorContext = createContext<FormBehavior>({
+  autoSliders: false,
+});
+
 /** Sanitise a guidata label before injecting it as HTML. Labels may
  *  legitimately carry simple inline markup (``<b>``, ``<sub>``, units
  *  like ``m<sup>2</sup>``), so we keep an HTML profile but strip any
@@ -75,6 +84,53 @@ export interface DataSetFormProps {
    *  cascade (e.g. ``BlobOpenCVParam.filter_by_circularity`` gating
    *  ``min_circularity``). */
   resolveActive?: (currentValues: Values) => Promise<Record<string, boolean>>;
+  /** Add a range control beside eligible bounded numeric fields. */
+  autoSliders?: boolean;
+  /** Notify the owner when an automatic slider drag starts or ends. */
+  onSliderInteraction?: (dragging: boolean) => void;
+  /** Report whether the current values are valid and fully resolved. */
+  onStateChange?: (state: { valid: boolean; resolving: boolean }) => void;
+}
+
+export function validateDataSetValues(
+  schema: JsonSchema,
+  values: Values,
+  activeOverrides: Record<string, boolean> = {},
+): boolean {
+  const properties = (schema.properties as Record<string, JsonSchema>) ?? {};
+  const required = new Set((schema.required as string[] | undefined) ?? []);
+  return Object.entries(properties).every(([name, prop]) => {
+    const override = activeOverrides[name];
+    const inactive =
+      override === false ||
+      (override === undefined && prop["x-guidata-active"] === false);
+    if (prop.readOnly === true || prop["x-guidata-hide"] === true || inactive) {
+      return true;
+    }
+    const value = values[name];
+    if (value == null || value === "") return !required.has(name);
+    const kind = prop["x-guidata-kind"];
+    if (kind === "int" || kind === "float") {
+      if (typeof value !== "number" || !Number.isFinite(value)) return false;
+      if (kind === "int" && !Number.isInteger(value)) return false;
+      if (typeof prop.minimum === "number" && value < prop.minimum)
+        return false;
+      if (typeof prop.maximum === "number" && value > prop.maximum)
+        return false;
+      if (prop["x-guidata-nonzero"] === true && value === 0) return false;
+      const even = prop["x-guidata-even"];
+      if (even === true && value % 2 !== 0) return false;
+      if (even === false && value % 2 === 0) return false;
+    }
+    if (typeof value === "string" && typeof prop.pattern === "string") {
+      try {
+        if (!new RegExp(prop.pattern).test(value)) return false;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  });
 }
 
 // Layout node as emitted by the Python side. Either a property name
@@ -93,7 +149,12 @@ type LayoutNode = LayoutLeaf | LayoutContainer;
 
 export function DataSetForm(props: DataSetFormProps) {
   const { schema, values, onChange, resolveChoices, resolveCallbacks } = props;
-  const { resolveActive } = props;
+  const {
+    resolveActive,
+    autoSliders = false,
+    onSliderInteraction,
+    onStateChange,
+  } = props;
   const properties = useMemo(
     () => (schema.properties as Record<string, JsonSchema>) ?? {},
     [schema],
@@ -123,19 +184,29 @@ export function DataSetForm(props: DataSetFormProps) {
   // Monotonic counter guarding against out-of-order callback responses:
   // the last edit wins, so a slow Python round-trip can never clobber a
   // newer one (cf. the ``cancelled`` flag in ``useChoices``).
-  const callbackSeq = useRef(0);
-  const activeSeq = useRef(0);
+  const resolutionSeq = useRef(0);
+  const [resolving, setResolving] = useState(
+    hasDynamicActive && resolveActive !== undefined,
+  );
 
   // Resolve the initial active state once (covers dynamic items whose
   // default state depends on sibling defaults). Subsequent edits refresh it
   // through ``setValue`` below.
   useEffect(() => {
     if (!hasDynamicActive || !resolveActive) return;
-    const seq = ++activeSeq.current;
-    resolveActive(values).then((map) => {
-      if (seq !== activeSeq.current) return;
-      if (map) setActiveOverrides(map);
-    });
+    const seq = ++resolutionSeq.current;
+    setResolving(true);
+    void resolveActive(values)
+      .then((map) => {
+        if (seq !== resolutionSeq.current) return;
+        if (map) setActiveOverrides(map);
+      })
+      .catch((error) =>
+        console.error("[dataset] active resolver failed", error),
+      )
+      .finally(() => {
+        if (seq === resolutionSeq.current) setResolving(false);
+      });
     // Run only on mount / when the resolver or schema shape changes; per-edit
     // refresh is handled in ``setValue``.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,22 +217,38 @@ export function DataSetForm(props: DataSetFormProps) {
       const newValues = { ...values, [name]: value };
       onChange(newValues);
       const prop = properties[name];
-      if (prop?.["x-guidata-has-callback"] === true && resolveCallbacks) {
-        const seq = ++callbackSeq.current;
-        resolveCallbacks(name, newValues).then((updated) => {
-          if (seq !== callbackSeq.current) return;
-          if (updated && Object.keys(updated).length > 0) {
-            onChange({ ...newValues, ...updated });
+      const hasCallback =
+        prop?.["x-guidata-has-callback"] === true && resolveCallbacks;
+      const needsResolution = Boolean(
+        hasCallback || (hasDynamicActive && resolveActive),
+      );
+      const seq = ++resolutionSeq.current;
+      setResolving(needsResolution);
+      if (!needsResolution) return;
+      void (async () => {
+        let resolvedValues = newValues;
+        try {
+          if (hasCallback && resolveCallbacks) {
+            const updated = await resolveCallbacks(name, newValues);
+            if (seq !== resolutionSeq.current) return;
+            if (updated && Object.keys(updated).length > 0) {
+              resolvedValues = { ...newValues, ...updated };
+              onChange(resolvedValues);
+            }
           }
-        });
-      }
-      if (hasDynamicActive && resolveActive) {
-        const seq = ++activeSeq.current;
-        resolveActive(newValues).then((map) => {
-          if (seq !== activeSeq.current) return;
-          if (map) setActiveOverrides(map);
-        });
-      }
+          if (hasDynamicActive && resolveActive) {
+            const map = await resolveActive(resolvedValues);
+            if (seq !== resolutionSeq.current) return;
+            if (map) setActiveOverrides(map);
+          }
+        } catch (error) {
+          if (seq === resolutionSeq.current) {
+            console.error("[dataset] resolver failed", error);
+          }
+        } finally {
+          if (seq === resolutionSeq.current) setResolving(false);
+        }
+      })();
     },
     [
       onChange,
@@ -173,21 +260,32 @@ export function DataSetForm(props: DataSetFormProps) {
     ],
   );
 
+  const valid = useMemo(
+    () => validateDataSetValues(schema, values, activeOverrides),
+    [schema, values, activeOverrides],
+  );
+
+  useEffect(() => {
+    onStateChange?.({ valid, resolving });
+  }, [onStateChange, resolving, valid]);
+
   return (
-    <ActiveOverridesContext.Provider value={activeOverrides}>
-      <div className="dataset-form">
-        {layout.map((node, idx) => (
-          <LayoutNodeView
-            key={idx}
-            node={node}
-            properties={properties}
-            values={values}
-            setValue={setValue}
-            resolveChoices={resolveChoices}
-          />
-        ))}
-      </div>
-    </ActiveOverridesContext.Provider>
+    <FormBehaviorContext.Provider value={{ autoSliders, onSliderInteraction }}>
+      <ActiveOverridesContext.Provider value={activeOverrides}>
+        <div className="dataset-form">
+          {layout.map((node, idx) => (
+            <LayoutNodeView
+              key={idx}
+              node={node}
+              properties={properties}
+              values={values}
+              setValue={setValue}
+              resolveChoices={resolveChoices}
+            />
+          ))}
+        </div>
+      </ActiveOverridesContext.Provider>
+    </FormBehaviorContext.Provider>
   );
 }
 
@@ -398,6 +496,7 @@ function FieldWidget(props: FieldRowProps & { disabled?: boolean }) {
 type LeafProps = FieldRowProps & { disabled?: boolean };
 
 function NumericField({
+  name,
   prop,
   value,
   onChange,
@@ -410,6 +509,58 @@ function NumericField({
     ? 1
     : ((prop["x-guidata-step"] as number | undefined) ?? "any");
   const slider = prop["x-guidata-slider"] === true;
+  const parity = prop["x-guidata-even"] as boolean | undefined;
+  const behavior = useContext(FormBehaviorContext);
+  const dragActive = useRef(false);
+  const finiteBounds =
+    typeof min === "number" &&
+    Number.isFinite(min) &&
+    typeof max === "number" &&
+    Number.isFinite(max) &&
+    min < max;
+  const integerRangeUsable =
+    !integer ||
+    (Number.isSafeInteger(min) &&
+      Number.isSafeInteger(max) &&
+      (max as number) - (min as number) < 2 ** 31);
+  const nonzeroCrossesZero =
+    prop["x-guidata-nonzero"] === true &&
+    finiteBounds &&
+    (min as number) <= 0 &&
+    (max as number) >= 0;
+  const matchesParity = (candidate: number) =>
+    parity === undefined || Math.abs(candidate % 2) === (parity ? 0 : 1);
+  const sliderMin =
+    integer && finiteBounds && !matchesParity(min as number)
+      ? (min as number) + 1
+      : min;
+  const sliderMax =
+    integer && finiteBounds && !matchesParity(max as number)
+      ? (max as number) - 1
+      : max;
+  const parityRangeUsable =
+    !integer ||
+    parity === undefined ||
+    (sliderMin as number) <= (sliderMax as number);
+  const automaticSlider =
+    behavior.autoSliders &&
+    !slider &&
+    prop["x-guidata-auto-slider"] !== false &&
+    finiteBounds &&
+    integerRangeUsable &&
+    parityRangeUsable &&
+    !nonzeroCrossesZero;
+  const span = finiteBounds ? (max as number) - (min as number) : 0;
+  const configuredStep = Number(prop["x-guidata-step"]);
+  const sliderStep = integer
+    ? parity === undefined
+      ? 1
+      : 2
+    : Number.isFinite(configuredStep) &&
+        configuredStep > 0 &&
+        span / configuredStep <= 100_000
+      ? configuredStep
+      : span / 1000;
   const handle = (raw: string) => {
     if (raw === "") {
       onChange(null);
@@ -419,7 +570,7 @@ function NumericField({
     onChange(Number.isFinite(n) ? n : null);
   };
   const v = value == null ? "" : String(value);
-  return (
+  const numberInput = (
     <input
       type={slider ? "range" : "number"}
       value={v}
@@ -429,6 +580,36 @@ function NumericField({
       disabled={disabled}
       onChange={(e) => handle(e.target.value)}
     />
+  );
+  if (!automaticSlider) return numberInput;
+  const startDragging = () => {
+    if (dragActive.current) return;
+    dragActive.current = true;
+    behavior.onSliderInteraction?.(true);
+  };
+  const stopDragging = () => {
+    if (!dragActive.current) return;
+    dragActive.current = false;
+    behavior.onSliderInteraction?.(false);
+  };
+  return (
+    <div className="dataset-form-numeric-slider">
+      {numberInput}
+      <input
+        type="range"
+        aria-label={`${name} slider`}
+        value={v}
+        min={sliderMin}
+        max={sliderMax}
+        step={sliderStep}
+        disabled={disabled}
+        onChange={(event) => handle(event.target.value)}
+        onPointerDown={startDragging}
+        onPointerUp={stopDragging}
+        onPointerCancel={stopDragging}
+        onBlur={stopDragging}
+      />
+    </div>
   );
 }
 

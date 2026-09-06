@@ -21,7 +21,7 @@ The latest release is deployed automatically to GitHub Pages. Open the link in a
 DataLab Web mirrors a large portion of the desktop application surface:
 
 - **Signal & image panels** — 1D curves and 2D arrays with a rich set of synthetic generators, full Plotly visualisation, cross-hair markers, contrast adjustment, cross profiles and stats area tools.
-- **Processing & analysis** — operations, transforms, filters, fitting, FFT/PSD, stability analyses, measurements and profile extraction, exposed automatically through the menu bar by introspecting Sigima's catalog.
+- **Processing & analysis** — operations, transforms, filters, fitting, FFT/PSD, stability analyses, measurements and profile extraction, exposed automatically through the menu bar by introspecting Sigima's catalog. Compatible parameterised processings offer an optional non-publishing live preview before anything is added to the workspace.
 - **ROI & object tree** — segment / rectangular / circular / polygonal regions of interest, plus a multi-group workspace with drag & drop, metadata editor, statistics card and computation history.
 - **Macros & notebooks** — embedded Python editor and multi-tab notebook panel, each running in dedicated Web Workers, with `.ipynb` import/export and bidirectional macro ⇄ notebook conversion. See [doc/notebooks.md](doc/notebooks.md).
 - **Plugins** — Qt-compatible `PluginBase` API: the same plugin source runs in DataLab desktop and DataLab Web. See [doc/plugins.md](doc/plugins.md).

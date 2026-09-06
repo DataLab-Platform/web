@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DataLabRuntime } from "../../../src/runtime/runtime";
 
@@ -12,7 +12,9 @@ interface RuntimeInternals {
     };
   };
   _queue: Promise<unknown>;
-  storageMode: "ram";
+  storageMode: "ram" | "disk";
+  opfsStore: { get: (oid: string) => Promise<Uint8Array> } | null;
+  spilledOids: Set<string>;
   _latestReadGenerations: Map<string, number>;
   callPy<T>(name: string, kwargs?: Record<string, unknown>): Promise<T>;
   callPyLatest<T>(
@@ -21,6 +23,7 @@ interface RuntimeInternals {
     kwargs?: Record<string, unknown>,
   ): Promise<T | null>;
   getSignalViewSnapshot: DataLabRuntime["getSignalViewSnapshot"];
+  previewFeature: DataLabRuntime["previewFeature"];
 }
 
 function deferred<T>() {
@@ -45,6 +48,8 @@ function makeRuntime(
   };
   runtime._queue = Promise.resolve();
   runtime.storageMode = "ram";
+  runtime.opfsStore = null;
+  runtime.spilledOids = new Set();
   runtime._latestReadGenerations = new Map();
   return runtime;
 }
@@ -110,5 +115,48 @@ describe("DataLabRuntime latest-read queue", () => {
     expect(snapshot?.current.x).toBeInstanceOf(Float64Array);
     expect(Array.from(snapshot?.current.y ?? [])).toEqual([2, 3]);
     expect(Array.from(snapshot?.extras[0].x ?? [])).toEqual([4]);
+  });
+
+  it("pages a spilled preview source in and releases it after the read", async () => {
+    const calls: string[] = [];
+    const sourceBytes = new Uint8Array([1, 2, 3]);
+    const runtime = makeRuntime((name) => {
+      calls.push(name);
+      if (name === "release_object_array") return true;
+      if (name === "preview_feature") {
+        return {
+          kind: "signal",
+          data: {
+            id: "preview",
+            uuid: null,
+            title: "Preview",
+            size: 2,
+            xlabel: "x",
+            ylabel: "y",
+            xunit: "",
+            yunit: "",
+            x: [0, 1],
+            y: [2, 3],
+          },
+        };
+      }
+      return null;
+    });
+    const get = vi.fn(async () => sourceBytes);
+    runtime.storageMode = "disk";
+    runtime.opfsStore = { get };
+    runtime.spilledOids.add("signal-1");
+
+    const result = await runtime.previewFeature("normalize", "signal-1", {});
+
+    expect(result.kind).toBe("signal");
+    expect(get).toHaveBeenCalledWith("signal-1");
+    expect(calls.indexOf("attach_object_array")).toBeLessThan(
+      calls.indexOf("preview_feature"),
+    );
+    expect(calls.indexOf("release_object_array")).toBeGreaterThan(
+      calls.indexOf("preview_feature"),
+    );
+    expect(runtime.spilledOids.has("signal-1")).toBe(true);
   });
 });

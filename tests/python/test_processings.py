@@ -15,8 +15,14 @@ def test_list_features_returns_metadata_records(bootstrap_module):
     feats = bs.list_features()
     assert feats
     sample = feats[0]
-    for key in ("id", "label", "menu_path", "pattern"):
+    for key in ("id", "label", "menu_path", "pattern", "preview_enabled"):
         assert key in sample
+
+    assert all(
+        feature["preview_enabled"] is False
+        for feature in feats
+        if feature["pattern"] != "1_to_1"
+    )
 
 
 def test_known_signal_features_present(bootstrap_module):
@@ -41,6 +47,50 @@ def test_apply_normalize_returns_new_signal(fresh_bootstrap):
     # Default normalisation method is min-max (0..1 range).
     assert max(payload["y"]) == pytest.approx(1.0, abs=1e-6)
     assert min(payload["y"]) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_preview_feature_is_private_and_non_mutating(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src = bs.add_signal_from_arrays(
+        "raw", np.linspace(0, 1, 64), np.linspace(0, 10, 64)
+    )
+    source = bs._MODEL.get(src)
+    source.metadata["preview_nested"] = {"values": [1, 2]}
+    bs.set_signal_roi(src, [{"xmin": 0.2, "xmax": 0.8, "title": "range"}])
+    tree_before = bs.get_panel_tree("signal")
+
+    def mutate_source(obj):
+        obj.y[:] = -1
+        obj.metadata["preview_nested"]["values"].append(3)
+        assert obj.roi is not None
+        obj.roi.single_rois[0].coords[0] = 0.0
+        return obj
+
+    feature_id = "test_mutating_preview"
+    bs._CATALOG[feature_id] = bs._proc.FeatureSpec(
+        feature_id=feature_id,
+        label="Mutating preview",
+        menu_path="Tests/Mutating preview",
+        pattern="1_to_1",
+        icon=None,
+        operand_label="Operand",
+        paramclass=None,
+        func=mutate_source,
+        object_kind="signal",
+        output_kind="signal",
+        preview_enabled=True,
+    )
+    try:
+        bs.preview_feature(feature_id, src)
+    finally:
+        bs._CATALOG.pop(feature_id)
+
+    np.testing.assert_allclose(bs.get_signal_xy(src)["y"], np.linspace(0, 10, 64))
+    assert source.metadata["preview_nested"] == {"values": [1, 2]}
+    assert source.roi is not None
+    np.testing.assert_allclose(source.roi.single_rois[0].coords, [0.2, 0.8])
+    assert bs.get_panel_tree("signal") == tree_before
+    assert bs.get_last_processing(src) is None
 
 
 def test_apply_unknown_feature_raises(fresh_bootstrap):

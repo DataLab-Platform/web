@@ -2,12 +2,13 @@
  * Modal dialog for image-profile feature parameters with an interactive
  * preview, mirroring DataLab desktop's ``ProfileExtractionDialog``.
  *
- * Splits the layout horizontally:
+ * Splits the layout into three coordinated areas:
  *
  * * left:  the image preview (heatmap + draggable shape) so the user can
  *   sketch the profile geometry directly on the image;
- * * right: the regular ``DataSetForm`` so numeric values can also be
- *   typed in.
+ * * centre: the regular ``DataSetForm`` so numeric values can also be
+ *   typed in;
+ * * right: the optional isolated processing result preview.
  *
  * Param ⇄ shape are kept in sync both ways:
  *
@@ -21,15 +22,22 @@
  * ``runFeature`` pipeline is unchanged.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
-import { DataSetForm } from "./DataSetForm";
+import { DataSetForm, validateDataSetValues } from "./DataSetForm";
+import { t } from "../i18n/translate";
 import type {
   DynamicChoice,
+  FeatureDescriptor,
   ImageData,
   JsonSchema,
+  RuntimeApi,
   SchemaWithValues,
 } from "../runtime/runtime";
+import {
+  ProcessingPreview,
+  type ProcessingPreviewHandle,
+} from "./ProcessingPreview";
 
 export type ProfileFeatureId =
   | "line_profile"
@@ -39,6 +47,10 @@ export type ProfileFeatureId =
 interface Props {
   title: string;
   featureId: ProfileFeatureId;
+  feature: FeatureDescriptor;
+  runtime: RuntimeApi;
+  previewAvailable: boolean;
+  sourceIds: string[];
   payload: SchemaWithValues;
   imageData: ImageData;
   resolveChoices?: (
@@ -69,7 +81,6 @@ const yToPix = (img: ImageData, y: number) =>
     0,
     Math.min(img.height - 1, Math.round((y - img.y0) / img.dy - 0.5)),
   );
-
 // ---------------------------------------------------------------------------
 // Profile shape derivation
 // ---------------------------------------------------------------------------
@@ -229,6 +240,10 @@ export function ProfileDefinitionDialog(props: Props) {
   const {
     title,
     featureId,
+    feature,
+    runtime,
+    previewAvailable,
+    sourceIds,
     payload,
     imageData,
     resolveChoices,
@@ -240,8 +255,17 @@ export function ProfileDefinitionDialog(props: Props) {
   const [values, setValues] = useState<Record<string, unknown>>(payload.values);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formState, setFormState] = useState({
+    valid: validateDataSetValues(payload.schema, payload.values),
+    resolving: resolveActive !== undefined,
+  });
+  const [dragging, setDragging] = useState(false);
+  const previewRef = useRef<ProcessingPreviewHandle | null>(null);
+  const canPreview = previewAvailable && feature.preview_enabled;
 
   const submit = async () => {
+    if (!formState.valid || formState.resolving) return;
+    previewRef.current?.stop();
     setError(null);
     setSubmitting(true);
     try {
@@ -252,6 +276,19 @@ export function ProfileDefinitionDialog(props: Props) {
       setSubmitting(false);
     }
   };
+
+  const cancel = useCallback(() => {
+    previewRef.current?.stop();
+    onCancel();
+  }, [onCancel]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting) cancel();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cancel, submitting]);
 
   const description = (payload.schema as JsonSchema).description as
     | string
@@ -339,30 +376,39 @@ export function ProfileDefinitionDialog(props: Props) {
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">
-      <div className="card profile-dialog">
+      <div
+        className={
+          "card profile-dialog" +
+          (canPreview ? " profile-dialog--result-preview" : "")
+        }
+      >
         <h2>{title}</h2>
         {description && <p className="dataset-dialog-desc">{description}</p>}
         <div className="profile-dialog-body">
-          <div className="profile-dialog-plot">
-            <Plot
-              data={traces as never}
-              layout={layout as never}
-              style={{ width: "100%", height: "100%" }}
-              useResizeHandler
-              config={
-                {
-                  responsive: true,
-                  displaylogo: false,
-                  editable: true,
-                  edits: {
-                    shapePosition: true,
-                  },
-                } as never
-              }
-              onRelayout={handleRelayout}
-            />
+          <div className="profile-dialog-geometry">
+            <h3>{t("Profile definition")}</h3>
+            <div className="profile-dialog-plot">
+              <Plot
+                data={traces as never}
+                layout={layout as never}
+                style={{ width: "100%", height: "100%" }}
+                useResizeHandler
+                config={
+                  {
+                    responsive: true,
+                    displaylogo: false,
+                    editable: true,
+                    edits: {
+                      shapePosition: true,
+                    },
+                  } as never
+                }
+                onRelayout={handleRelayout}
+              />
+            </div>
           </div>
           <div className="profile-dialog-form">
+            <h3>{t("Parameters")}</h3>
             <DataSetForm
               schema={payload.schema}
               values={values}
@@ -370,16 +416,37 @@ export function ProfileDefinitionDialog(props: Props) {
               resolveChoices={resolveChoices}
               resolveCallbacks={resolveCallbacks}
               resolveActive={resolveActive}
+              autoSliders
+              onSliderInteraction={setDragging}
+              onStateChange={setFormState}
             />
           </div>
+          {canPreview && (
+            <div className="profile-dialog-result">
+              <h3>{t("Profile result")}</h3>
+              <ProcessingPreview
+                ref={previewRef}
+                runtime={runtime}
+                feature={feature}
+                sourceIds={sourceIds}
+                values={values}
+                valid={formState.valid}
+                resolving={formState.resolving}
+                dragging={dragging}
+              />
+            </div>
+          )}
         </div>
         {error && <div className="error">{error}</div>}
         <div className="actions">
-          <button onClick={onCancel} disabled={submitting}>
-            Cancel
+          <button onClick={cancel} disabled={submitting}>
+            {t("Cancel")}
           </button>
-          <button onClick={submit} disabled={submitting}>
-            {submitting ? "Applying…" : "OK"}
+          <button
+            onClick={submit}
+            disabled={submitting || !formState.valid || formState.resolving}
+          >
+            {submitting ? t("Applying…") : t("OK")}
           </button>
         </div>
       </div>

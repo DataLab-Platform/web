@@ -32,6 +32,7 @@ when it changes.  We therefore preserve the live :data:`_MODEL` and
 from __future__ import annotations
 
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -499,6 +500,7 @@ def _build_full_catalog() -> dict[str, _proc.FeatureSpec]:
             object_kind=spec.object_kind,
             skip_xarray_compat=spec.skip_xarray_compat,
             output_kind=spec.output_kind,
+            preview_enabled=spec.preview_enabled,
         )
     return catalog
 
@@ -1120,32 +1122,14 @@ def add_image_from_array(
     return _MODEL.add_object("image", obj, group_id=group_id)
 
 
-def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
-    """Return the X / Y arrays of *oid* in JSON-friendly form.
-
-    Args:
-        oid: signal identifier in the in-memory store.
-        encoding: ``"list"`` (default) returns ``x``/``y`` as Python
-         lists (slow but JSON-trivial — kept for backwards compat).
-         ``"bytes"`` returns ``x_bytes``/``y_bytes`` as raw
-         little-endian ``float64`` byte strings — Pyodide hands them
-         to JS as a single ``Uint8Array`` memcpy, which the front-end
-         decodes into a typed array.  Use this on the remote bridge
-         for large signals: a 1 M-sample signal goes from ~50 MB of
-         intermediate JSON allocations to a single 8 MB memcpy.
-    """
-    obj = _MODEL.get(oid)
+def _signal_data_payload(obj: Any, oid: str, encoding: str = "list") -> dict[str, Any]:
+    """Return a plotting payload for a resident signal object."""
     payload: dict[str, Any] = {
         "id": oid,
         **_object_meta(_ObjectEntry(oid=oid, kind="signal", obj=obj)),
     }
-    # Complex-valued Y arrays (e.g. raw FFT output) cannot be sent as
-    # plain ``float64`` to the JS side without losing information AND
-    # without crashing JS code that assumes ``y[i]`` is a number
-    # (``v.toPrecision`` etc.). Mirror NumPy/Plotly defaults: take the
-    # real part for both the ``list`` and ``bytes`` encodings. Sigima
-    # exposes the imaginary part separately when the user actually
-    # needs it (e.g. ``fft_imag``).
+    # Complex-valued Y arrays cannot be represented as plain ``float64``.
+    # Mirror NumPy/Plotly defaults and the historical bridge contract.
     y_arr = obj.y
     if np.iscomplexobj(y_arr):
         y_arr = y_arr.real
@@ -1162,6 +1146,23 @@ def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
         payload["y"] = np.asarray(y_arr, dtype=np.float64).tolist()
         payload["encoding"] = "list"
     return payload
+
+
+def get_signal_xy(oid: str, encoding: str = "list") -> dict[str, Any]:
+    """Return the X / Y arrays of *oid* in JSON-friendly form.
+
+    Args:
+        oid: signal identifier in the in-memory store.
+        encoding: ``"list"`` (default) returns ``x``/``y`` as Python
+         lists (slow but JSON-trivial — kept for backwards compat).
+         ``"bytes"`` returns ``x_bytes``/``y_bytes`` as raw
+         little-endian ``float64`` byte strings — Pyodide hands them
+         to JS as a single ``Uint8Array`` memcpy, which the front-end
+         decodes into a typed array.  Use this on the remote bridge
+         for large signals: a 1 M-sample signal goes from ~50 MB of
+         intermediate JSON allocations to a single 8 MB memcpy.
+    """
+    return _signal_data_payload(_MODEL.get(oid), oid, encoding)
 
 
 def get_signal_data_preview(oid: str, head: int = 5, tail: int = 5) -> dict[str, Any]:
@@ -3208,6 +3209,33 @@ def _eliminate_outliers_range(
     return vmin, vmax
 
 
+def _build_image_display_summary(data: "np.ndarray") -> dict[str, Any]:
+    """Return the data range, histogram and default LUT for an image array."""
+    finite = data[np.isfinite(data)]
+    if finite.size:
+        data_min = float(np.min(finite))
+        data_max = float(np.max(finite))
+    else:
+        data_min = data_max = float("nan")
+    histogram = (
+        np.histogram(finite, bins=_LUT_HIST_BINS)
+        if finite.size and data_max > data_min
+        else (np.array([], dtype=np.int64), np.array([], dtype=float))
+    )
+    lut_default = _eliminate_outliers_range(
+        data,
+        data_min,
+        data_max,
+        histogram=histogram if histogram[0].size else None,
+    )
+    return {
+        "data_min": data_min,
+        "data_max": data_max,
+        "histogram": histogram,
+        "lut_default": lut_default,
+    }
+
+
 def _build_data_summary(oid: str) -> dict[str, Any]:
     """Build the complete data-derived summary for *oid*."""
     obj = _MODEL.get(oid)
@@ -3231,25 +3259,9 @@ def _build_data_summary(oid: str) -> dict[str, Any]:
         }
 
     data = obj.data
-    data_min = float(np.nanmin(data))
-    data_max = float(np.nanmax(data))
-    finite = data[np.isfinite(data)]
-    histogram = (
-        np.histogram(finite, bins=_LUT_HIST_BINS)
-        if finite.size and data_max > data_min
-        else (np.array([], dtype=np.int64), np.array([], dtype=float))
-    )
-    lut_min, lut_max = _eliminate_outliers_range(
-        data,
-        data_min,
-        data_max,
-        histogram=histogram if histogram[0].size else None,
-    )
+    display = _build_image_display_summary(data)
     return {
-        "data_min": data_min,
-        "data_max": data_max,
-        "histogram": histogram,
-        "lut_default": (lut_min, lut_max),
+        **display,
         "stats": {
             "kind": "image",
             "shape": list(data.shape),
@@ -3293,6 +3305,70 @@ def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
     return data[::stride, ::stride]
 
 
+def _image_data_payload(
+    obj: Any,
+    oid: str,
+    max_size: int | None = None,
+    encoding: str = "list",
+    summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a plotting payload for a resident image object."""
+    raw = obj.data
+    md = getattr(obj, "metadata", None) or {}
+    colormap = md.get("colormap") or md.get("colourmap")
+    invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
+    resample = md.get("resample_method")
+    display = summary or _build_image_display_summary(raw)
+    data_min = display["data_min"]
+    data_max = display["data_max"]
+    lut_min, lut_max = display["lut_default"]
+    data = _maybe_downsample(raw, max_size)
+    is_uniform = bool(getattr(obj, "is_uniform_coords", True))
+    xcoords: list[float] = []
+    ycoords: list[float] = []
+    if not is_uniform:
+        xc = getattr(obj, "xcoords", None)
+        yc = getattr(obj, "ycoords", None)
+        if xc is not None and yc is not None and len(xc) and len(yc):
+            xstride = int(np.ceil(raw.shape[1] / data.shape[1]))
+            ystride = int(np.ceil(raw.shape[0] / data.shape[0]))
+            xcoords = np.asarray(xc, dtype=float)[::xstride].tolist()
+            ycoords = np.asarray(yc, dtype=float)[::ystride].tolist()
+    payload: dict[str, Any] = {
+        "id": oid,
+        "title": obj.title or "",
+        "width": int(data.shape[1]),
+        "height": int(data.shape[0]),
+        "dtype": str(data.dtype),
+        "x0": float(getattr(obj, "x0", 0.0) or 0.0),
+        "y0": float(getattr(obj, "y0", 0.0) or 0.0),
+        "dx": float(getattr(obj, "dx", 1.0) or 1.0) * (raw.shape[1] / data.shape[1]),
+        "dy": float(getattr(obj, "dy", 1.0) or 1.0) * (raw.shape[0] / data.shape[0]),
+        "is_uniform_coords": is_uniform,
+        "xcoords": xcoords,
+        "ycoords": ycoords,
+        "data_min": data_min,
+        "data_max": data_max,
+        "lut_default": [lut_min, lut_max],
+        "xlabel": obj.xlabel or "",
+        "ylabel": obj.ylabel or "",
+        "zlabel": getattr(obj, "zlabel", "") or "",
+        "xunit": obj.xunit or "",
+        "yunit": obj.yunit or "",
+        "zunit": getattr(obj, "zunit", "") or "",
+        "colormap": str(colormap) if colormap else None,
+        "invert_colormap": bool(invert_cm) if invert_cm is not None else False,
+        "resample_method": (str(resample) if resample in _RESAMPLE_METHODS else None),
+    }
+    if encoding == "bytes":
+        payload["data"] = np.ascontiguousarray(data, dtype=np.float32).tobytes()
+        payload["encoding"] = "f32"
+    else:
+        payload["data"] = data.tolist()
+        payload["encoding"] = "list"
+    return payload
+
+
 def get_image_data(
     oid: str,
     max_size: int | None = None,
@@ -3320,78 +3396,13 @@ def get_image_data(
             payload from Python).
     """
     obj = _MODEL.get(oid)
-    raw = obj.data
-    md = getattr(obj, "metadata", None) or {}
-    colormap = md.get("colormap") or md.get("colourmap")
-    invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
-    resample = md.get("resample_method")
-    # LUT extrema are computed on the *full* resolution so the colour
-    # range stays representative even when we ship a downsampled view.
-    summary = _get_data_summary(oid)
-    data_min = summary["data_min"]
-    data_max = summary["data_max"]
-    # Default LUT range with the histogram outlier tails removed, mirroring
-    # DataLab desktop's ``ima_eliminate_outliers`` auto-contrast.  Computed on
-    # the full-resolution data; the front-end uses it as the default range
-    # while ``data_min``/``data_max`` still bound the contrast slider.
-    lut_min, lut_max = summary["lut_default"]
-    data = _maybe_downsample(raw, max_size)
-    # Non-uniform images carry explicit per-column / per-row pixel-center
-    # coordinates (``is_uniform_coords`` is ``False``).  The front-end needs
-    # these to render variable-width cells exactly; ``x0``/``dx`` are
-    # meaningless in that case.  When the data was striped down to fit
-    # ``max_size``, subsample the coordinate arrays with the *same* stride so
-    # each shipped pixel keeps its true coordinate.
-    is_uniform = bool(getattr(obj, "is_uniform_coords", True))
-    xcoords: list[float] = []
-    ycoords: list[float] = []
-    if not is_uniform:
-        xc = getattr(obj, "xcoords", None)
-        yc = getattr(obj, "ycoords", None)
-        if xc is not None and yc is not None and len(xc) and len(yc):
-            xstride = int(np.ceil(raw.shape[1] / data.shape[1]))
-            ystride = int(np.ceil(raw.shape[0] / data.shape[0]))
-            xcoords = np.asarray(xc, dtype=float)[::xstride].tolist()
-            ycoords = np.asarray(yc, dtype=float)[::ystride].tolist()
-    payload: dict[str, Any] = {
-        "id": oid,
-        "title": obj.title or "",
-        "width": int(data.shape[1]),
-        "height": int(data.shape[0]),
-        "dtype": str(data.dtype),
-        # Adjust pixel spacing if we downsampled so physical
-        # coordinates remain correct (one pixel covers ``stride * dx``
-        # of the original image).
-        "x0": float(getattr(obj, "x0", 0.0) or 0.0),
-        "y0": float(getattr(obj, "y0", 0.0) or 0.0),
-        "dx": float(getattr(obj, "dx", 1.0) or 1.0) * (raw.shape[1] / data.shape[1]),
-        "dy": float(getattr(obj, "dy", 1.0) or 1.0) * (raw.shape[0] / data.shape[0]),
-        "is_uniform_coords": is_uniform,
-        "xcoords": xcoords,
-        "ycoords": ycoords,
-        "data_min": data_min,
-        "data_max": data_max,
-        "lut_default": [lut_min, lut_max],
-        "xlabel": obj.xlabel or "",
-        "ylabel": obj.ylabel or "",
-        "zlabel": getattr(obj, "zlabel", "") or "",
-        "xunit": obj.xunit or "",
-        "yunit": obj.yunit or "",
-        "zunit": getattr(obj, "zunit", "") or "",
-        "colormap": str(colormap) if colormap else None,
-        "invert_colormap": bool(invert_cm) if invert_cm is not None else False,
-        "resample_method": (str(resample) if resample in _RESAMPLE_METHODS else None),
-    }
-    if encoding == "bytes":
-        # ``np.ascontiguousarray`` guarantees the byte buffer is a
-        # tight (H, W) float32 grid — required because ``_maybe_
-        # downsample`` returns a strided view.
-        payload["data"] = np.ascontiguousarray(data, dtype=np.float32).tobytes()
-        payload["encoding"] = "f32"
-    else:
-        payload["data"] = data.tolist()
-        payload["encoding"] = "list"
-    return payload
+    return _image_data_payload(
+        obj,
+        oid,
+        max_size=max_size,
+        encoding=encoding,
+        summary=_get_data_summary(oid),
+    )
 
 
 def get_images_data(
@@ -4590,6 +4601,42 @@ def apply_feature(
             "params": dict(params) if params else {},
         }
     return new_ids
+
+
+def preview_feature(
+    feature_id: str,
+    source_id: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compute one private 1-to-1 preview without publishing its result."""
+    catalog = _full_catalog_with_plugins()
+    spec = catalog.get(feature_id)
+    if spec is None:
+        raise ValueError(f"Unknown preview feature: {feature_id!r}")
+    if spec.pattern != "1_to_1":
+        raise ValueError("Live preview currently supports 1-to-1 features only.")
+    if not spec.preview_enabled:
+        raise ValueError(f"Live preview is disabled for {feature_id!r}.")
+    if hasattr(params, "to_py"):
+        params = params.to_py()
+    source = deepcopy(_MODEL.get(source_id))
+    context = _proc.ApplyContext(feature=spec, sources=[source], params=params)
+    result = _proc.BaseProcessor(spec.object_kind).apply(context, [source_id])
+    if len(result.items) != 1:
+        raise ValueError("Preview processing did not produce exactly one result.")
+    _, output = result.items[0]
+    patch_title_with_ids(output, [source_id])
+    if spec.output_kind == "signal":
+        return {
+            "kind": "signal",
+            "data": _signal_data_payload(output, "preview", encoding="bytes"),
+        }
+    if spec.output_kind == "image":
+        return {
+            "kind": "image",
+            "data": _image_data_payload(output, "preview", encoding="bytes"),
+        }
+    raise ValueError(f"Unsupported preview result kind: {spec.output_kind!r}")
 
 
 def _apply_feature_grouped(
@@ -6557,6 +6604,7 @@ __all__ = [
     "list_images",
     "get_object",
     "get_object_uuids",
+    "preview_feature",
     "get_signal_xy",
     "get_signal_data_preview",
     "get_signals_xy",

@@ -6,12 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Optional processing previews:** compatible signal and image processings
+  can now render a temporary result while their parameters are edited. The
+  preview is disabled by default, reuses the already-loaded computation worker
+  without changing the workspace, supports bounded numeric sliders and
+  image-profile geometry, and is discarded on Cancel or Escape; OK still
+  performs the normal processing from the original source.
+
 ### Changed
 
 - **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
   its native async DataSet backend and JSON Schema exporter. The former
   backend backport has been removed; a focused compatibility patch preserves
-  the `FloatArrayItem` sizing hints required by the browser array editor.
+  the `FloatArrayItem` sizing and numeric-parity hints required by browser
+  editors.
 
 ## [0.9.0] - 2026-08-11
 

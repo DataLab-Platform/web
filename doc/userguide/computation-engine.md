@@ -33,6 +33,27 @@ Each processing's parameters are described by a
 reads that schema and renders the dialog automatically — the same data
 model that the desktop application uses to draw its Qt forms.
 
+Eligible bounded numeric parameters also get a slider beside the exact
+numeric input. The slider never replaces typed entry and is omitted when the
+schema does not provide safe finite bounds.
+
+Compatible one-input/one-output processings expose an optional **Preview**
+checkbox, initially off. Enabling it reuses the already-loaded computation
+runtime to process a private copy of the source; it does not add an object,
+alter history, or mark the workspace as modified. Edits are debounced while
+typing and sampled while dragging a slider, with an immediate refresh when the
+slider is released. If several objects were selected, **Preview source**
+chooses the representative input without changing the selection or the final
+batch operation.
+
+**Cancel** and **Esc** discard the temporary result and any waiting refresh.
+An already-running computation finishes in the background and its late result
+is ignored. **OK** runs the normal processing path from the original source
+and current parameters. Preview is hidden in the `runtime=main` fallback to
+avoid running this interactive work on the UI thread. The Processing tab in
+the object side panel retains its explicit **Apply** and **Reset** controls;
+editing that tab never republishes a result automatically.
+
 ## What the desktop docs do **not** cover
 
 - The **runtime constraints** of the browser (memory limits, OPFS,

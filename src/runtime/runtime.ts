@@ -222,7 +222,14 @@ export interface FeatureDescriptor {
    *  profiles / projections / histogram (image → signal) and
    *  ``signals_to_image`` (signal → image). */
   output_kind: PanelKind;
+  /** Whether the feature can run speculatively on a private source copy. */
+  preview_enabled: boolean;
 }
+
+/** Temporary, non-published result returned by ``preview_feature``. */
+export type ProcessingPreviewResult =
+  | { kind: "signal"; data: SignalData }
+  | { kind: "image"; data: ImageData };
 
 /** One entry of the "Processing > Fitting > Interactive fitting" submenu. */
 export interface InteractiveFitInfo {
@@ -1139,7 +1146,7 @@ function toJs(value: unknown): unknown {
  * Inputs already in the legacy ``number[][]`` form (Python tests, the
  * notebook display path) are returned unchanged.
  */
-function decodeImagePayload<
+export function decodeImagePayload<
   T extends { encoding?: string; data: unknown; width: number; height: number },
 >(payload: T): T {
   if (payload.encoding !== "f32") return payload;
@@ -1171,7 +1178,7 @@ function decodeImagePayload<
  * large signals.  Payloads already in the legacy ``list`` form (Python
  * tests, notebook display) are returned unchanged.
  */
-function decodeSignalPayload(
+export function decodeSignalPayload(
   payload: SignalData & {
     encoding?: string;
     x_bytes?: ArrayBufferView | ArrayBuffer;
@@ -2618,6 +2625,38 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
   /** Ids of every object hosted by *panel* (``"signal"`` or ``"image"``). */
   async getObjectUuids(panel: string): Promise<string[]> {
     return (await this.callPy("get_object_uuids", { panel })) as string[];
+  }
+
+  /** Compute a private 1-to-1 result without publishing it to the workspace. */
+  async previewFeature(
+    featureId: string,
+    sourceId: string,
+    params: Record<string, unknown>,
+  ): Promise<ProcessingPreviewResult> {
+    const result = (await this.callPy("preview_feature", {
+      feature_id: featureId,
+      source_id: sourceId,
+      params,
+    })) as
+      | {
+          kind: "signal";
+          data: SignalData & {
+            encoding?: string;
+            x_bytes?: ArrayBufferView | ArrayBuffer;
+            y_bytes?: ArrayBufferView | ArrayBuffer;
+          };
+        }
+      | {
+          kind: "image";
+          data: ImageData & { encoding?: string; data: unknown };
+        };
+    if (result.kind === "signal") {
+      return { kind: "signal", data: decodeSignalPayload(result.data) };
+    }
+    return {
+      kind: "image",
+      data: decodeImagePayload(result.data) as ImageData,
+    };
   }
 
   async getSignalData(id: string): Promise<SignalData> {

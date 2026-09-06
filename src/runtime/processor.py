@@ -61,6 +61,7 @@ class FeatureOverride:
     icon: str | None = None
     operand_label: str = "Operand"
     skip_xarray_compat: bool = False
+    preview_enabled: bool = True
     # Destination panel for results.  ``None`` means "same as input panel"
     # (the default for the vast majority of features).  Set to e.g.
     # ``"signal"`` on an image feature whose result is a signal
@@ -86,6 +87,7 @@ class FeatureSpec:
     skip_xarray_compat: bool = False
     # Resolved at catalog-build time (defaults to ``object_kind``).
     output_kind: str = "signal"
+    preview_enabled: bool = True
 
 
 # Curated catalogue.  Keys must match the Sigima function name.  Functions
@@ -1004,6 +1006,7 @@ def _build_catalog_for_kind(
             object_kind=kind,
             skip_xarray_compat=override.skip_xarray_compat,
             output_kind=override.output_kind or kind,
+            preview_enabled=override.preview_enabled,
         )
     missing = [k for k in overrides if k not in catalog]
     if missing:
@@ -1058,6 +1061,7 @@ def merge_plugin_features(
             object_kind=kind,
             skip_xarray_compat=extra.skip_xarray_compat,
             output_kind=kind,
+            preview_enabled=False,
         )
     return merged
 
@@ -1264,6 +1268,7 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
             "operand_label": spec.operand_label,
             "object_kind": spec.object_kind,
             "output_kind": spec.output_kind,
+            "preview_enabled": spec.preview_enabled and spec.pattern == "1_to_1",
         }
         for spec in catalog.values()
     ]

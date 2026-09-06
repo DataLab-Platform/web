@@ -3116,6 +3116,87 @@ input {
   font-size: 12px;
 }
 
+.processing-dataset-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  overflow: auto;
+}
+
+.processing-dataset-dialog--preview {
+  width: min(1120px, calc(100vw - 32px));
+}
+
+.processing-dataset-dialog-body {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.processing-dataset-dialog:not(.processing-dataset-dialog--preview)
+  .processing-dataset-dialog-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.processing-dataset-form {
+  min-width: 0;
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.processing-preview {
+  display: grid;
+  grid-template-rows: auto minmax(300px, 1fr) auto;
+  min-width: 0;
+  min-height: 420px;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
+.processing-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 32px;
+}
+
+.processing-preview-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.processing-preview-source select {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.processing-preview-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 300px;
+}
+
+.processing-preview-status {
+  min-height: 20px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.processing-preview-error {
+  max-height: 96px;
+  margin: 4px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--danger);
+  font-size: 11px;
+}
+
 .applications-dialog {
   width: min(860px, calc(100vw - 32px));
   max-height: min(720px, calc(100vh - 32px));
@@ -3404,12 +3485,16 @@ input {
   min-width: 0;
 }
 
-/* ProfileDefinitionDialog — image preview (left) + form (right) */
+/* ProfileDefinitionDialog — geometry, parameters, and result preview */
 .profile-dialog {
   width: min(92vw, 1100px);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+}
+
+.profile-dialog--result-preview {
+  width: min(96vw, 1480px);
 }
 
 .profile-dialog-body {
@@ -3420,7 +3505,28 @@ input {
   min-height: 0;
 }
 
+.profile-dialog--result-preview .profile-dialog-body {
+  grid-template-columns:
+    minmax(360px, 1.2fr) minmax(270px, 0.75fr)
+    minmax(380px, 1.1fr);
+}
+
+.profile-dialog-geometry,
+.profile-dialog-result {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.profile-dialog-geometry > h3,
+.profile-dialog-form > h3,
+.profile-dialog-result > h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 .profile-dialog-plot {
+  flex: 1 1 auto;
   min-height: 360px;
   min-width: 0;
   border: 1px solid var(--border);
@@ -3436,6 +3542,40 @@ input {
 .profile-dialog-form {
   overflow: auto;
   padding-right: 6px;
+}
+
+.profile-dialog-result .processing-preview {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 1180px) {
+  .profile-dialog--result-preview .profile-dialog-body {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  }
+
+  .profile-dialog-result {
+    grid-column: 1 / -1;
+  }
+
+  .profile-dialog-result .processing-preview {
+    min-height: 360px;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 800px) {
+  .profile-dialog-body,
+  .profile-dialog--result-preview .profile-dialog-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+
+  .profile-dialog-result {
+    grid-column: auto;
+  }
 }
 
 .dataset-form {
@@ -3483,6 +3623,38 @@ input {
 .dataset-form-control > textarea {
   flex: 1;
   min-width: 0;
+}
+
+.dataset-form-numeric-slider {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.45fr) minmax(110px, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.dataset-form-numeric-slider > input {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .processing-dataset-dialog-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .processing-preview {
+    min-height: 340px;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+
+  .dataset-form-numeric-slider {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .dataset-form-unit {

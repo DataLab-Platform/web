@@ -90,6 +90,7 @@ import {
 import { MULTI_SIGNAL_LIMIT, useSelectionView } from "./hooks/useSelectionView";
 import { useSignalAxisGroups } from "./hooks/useSignalAxisGroups";
 import { DataSetDialog } from "./components/DataSetDialog";
+import { ProcessingDataSetDialog } from "./components/ProcessingDataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
@@ -389,7 +390,7 @@ function usePersistedSignalLayoutMode(): [
 }
 
 export default function App() {
-  const { runtime, status, message, error } = useRuntime();
+  const { runtime, status, message, error, previewAvailable } = useRuntime();
   const workspace = useWorkspace();
   const confirm = useConfirm();
   const notify = useMessage();
@@ -5129,9 +5130,13 @@ export default function App() {
           />
         )}
         {pending && runtime && (
-          <DataSetDialog
+          <ProcessingDataSetDialog
             title={pending.feature.label.replace(/\u2026$/, "")}
             payload={pending.schema!}
+            runtime={runtime}
+            previewAvailable={previewAvailable}
+            feature={pending.feature}
+            sourceIds={pending.sourceIds}
             resolveChoices={(itemName, currentValues) =>
               runtime.resolveFeatureChoices(
                 pending.feature.id,
@@ -5159,6 +5164,10 @@ export default function App() {
           <Suspense fallback={null}>
             <ProfileDefinitionDialog
               title={pendingProfile.feature.label.replace(/\u2026$/, "")}
+              runtime={runtime}
+              previewAvailable={previewAvailable}
+              feature={pendingProfile.feature}
+              sourceIds={pendingProfile.sourceIds}
               featureId={
                 pendingProfile.feature.id.replace(
                   /^image:/,
@@ -5172,6 +5181,7 @@ export default function App() {
                   pendingProfile.feature.id,
                   itemName,
                   currentValues,
+                  pendingProfile.sourceIds[0],
                 )
               }
               resolveCallbacks={(itemName, currentValues) =>
@@ -5179,6 +5189,7 @@ export default function App() {
                   pendingProfile.feature.id,
                   itemName,
                   currentValues,
+                  pendingProfile.sourceIds[0],
                 )
               }
               resolveActive={(currentValues) =>
