@@ -69,9 +69,11 @@ const profileResult: ProcessingPreviewResult = {
 
 function makeRuntime() {
   const previewFeature = vi.fn(async () => profileResult);
+  const releasePreviewResult = vi.fn(async () => undefined);
   return {
     runtime: {
       previewFeature,
+      releasePreviewResult,
       getImagesData: vi.fn(async () => [imageData]),
       onWorkspaceMutation: vi.fn(() => () => undefined),
       getObject: vi.fn(async () => ({
@@ -88,6 +90,10 @@ function renderDialog(
   runtime: RuntimeApi,
   onCancel: () => void,
   previewAvailable = true,
+  onSubmit: (
+    values: Record<string, unknown>,
+    previewToken?: string | null,
+  ) => void | Promise<void> = () => undefined,
 ) {
   return render(
     <ThemeProvider>
@@ -115,7 +121,7 @@ function renderDialog(
           values: { row: 0, direction: "horizontal" },
         }}
         imageData={imageData}
-        onSubmit={() => undefined}
+        onSubmit={onSubmit}
         onCancel={onCancel}
       />
     </ThemeProvider>,
@@ -147,6 +153,7 @@ describe("ProfileDefinitionDialog", () => {
         "image:line_profile",
         "image-1",
         { row: 0, direction: "horizontal" },
+        expect.any(String),
       ),
     );
     await waitFor(() =>
@@ -166,5 +173,22 @@ describe("ProfileDefinitionDialog", () => {
     expect(screen.getByRole("slider")).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: "Preview" })).toBeNull();
     expect(previewFeature).not.toHaveBeenCalled();
+  });
+
+  it("hands a current profile preview to submit", async () => {
+    const { runtime } = makeRuntime();
+    const onSubmit = vi.fn(async () => undefined);
+    renderDialog(runtime, () => undefined, true, onSubmit);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Preview" }));
+    await screen.findByText("Preview up to date");
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        { row: 0, direction: "horizontal" },
+        expect.any(String),
+      ),
+    );
   });
 });

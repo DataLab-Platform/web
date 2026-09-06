@@ -48,11 +48,14 @@ batch operation.
 
 **Cancel** and **Esc** discard the temporary result and any waiting refresh.
 An already-running computation finishes in the background and its late result
-is ignored. **OK** runs the normal processing path from the original source
-and current parameters. Preview is hidden in the `runtime=main` fallback to
-avoid running this interactive work on the UI thread. The Processing tab in
-the object side panel retains its explicit **Apply** and **Reset** controls;
-editing that tab never republishes a result automatically.
+is ignored. With one source, **OK** consumes a completed, up-to-date preview
+once and publishes it through the normal processing path. A running or stale
+preview, a changed source, and multi-object or group selections fall back to
+normal computation from the original source and current parameters. Preview is
+hidden in the `runtime=main` fallback to avoid running this interactive work on
+the UI thread. The Processing tab in the object side panel retains its explicit
+**Apply** and **Reset** controls; editing that tab never republishes a result
+automatically.
 
 ## What the desktop docs do **not** cover
 

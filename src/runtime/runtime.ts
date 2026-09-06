@@ -2632,11 +2632,13 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     featureId: string,
     sourceId: string,
     params: Record<string, unknown>,
+    previewToken: string | null = null,
   ): Promise<ProcessingPreviewResult> {
     const result = (await this.callPy("preview_feature", {
       feature_id: featureId,
       source_id: sourceId,
       params,
+      preview_token: previewToken,
     })) as
       | {
           kind: "signal";
@@ -2657,6 +2659,13 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
       kind: "image",
       data: decodeImagePayload(result.data) as ImageData,
     };
+  }
+
+  /** Release an unpublished result that was not handed to ``applyFeature``. */
+  async releasePreviewResult(previewToken: string): Promise<void> {
+    await this.callPy("release_preview_result", {
+      preview_token: previewToken,
+    });
   }
 
   async getSignalData(id: string): Promise<SignalData> {
@@ -3468,6 +3477,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     operandId: string | null = null,
     params: Record<string, unknown> | null = null,
     groupIds: string[] = [],
+    previewToken: string | null = null,
   ): Promise<string[]> {
     return (await this.callPy("apply_feature", {
       feature_id: featureId,
@@ -3475,6 +3485,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
       operand_id: operandId,
       params,
       group_ids: groupIds,
+      preview_token: previewToken,
     })) as string[];
   }
 

@@ -52,9 +52,11 @@ function fakeRuntime() {
     pending.push(call);
     return call.promise;
   });
+  const releasePreviewResult = vi.fn(async () => undefined);
   return {
-    runtime: { previewFeature } as unknown as RuntimeApi,
+    runtime: { previewFeature, releasePreviewResult } as unknown as RuntimeApi,
     previewFeature,
+    releasePreviewResult,
     pending,
   };
 }
@@ -78,9 +80,14 @@ describe("ProcessingPreviewController", () => {
     expect(previewFeature).toHaveBeenCalledTimes(1);
     pending[0].resolve(signalResult(3));
     await vi.waitFor(() => expect(previewFeature).toHaveBeenCalledTimes(2));
-    expect(previewFeature).toHaveBeenLastCalledWith("moving_average", "s1", {
-      n: 7,
-    });
+    expect(previewFeature).toHaveBeenLastCalledWith(
+      "moving_average",
+      "s1",
+      {
+        n: 7,
+      },
+      expect.any(String),
+    );
     expect(states).toContainEqual(
       expect.objectContaining({ status: "result", current: false }),
     );
@@ -89,6 +96,46 @@ describe("ProcessingPreviewController", () => {
     await vi.waitFor(() =>
       expect(states.at(-1)).toMatchObject({ status: "result", current: true }),
     );
+  });
+
+  it("detaches a current result token exactly once", async () => {
+    const { runtime, pending, releasePreviewResult } = fakeRuntime();
+    const controller = new ProcessingPreviewController(
+      () => undefined,
+      runtime,
+    );
+    controller.setEnabled(true);
+    controller.request(request(3));
+    pending[0].resolve(signalResult(3));
+    await vi.waitFor(() =>
+      expect(controller.takeCurrentResult()).not.toBeNull(),
+    );
+
+    expect(controller.takeCurrentResult()).toBeNull();
+    controller.close();
+    expect(releasePreviewResult).not.toHaveBeenCalled();
+  });
+
+  it("releases a current result when the source is invalidated", async () => {
+    const { runtime, previewFeature, pending, releasePreviewResult } =
+      fakeRuntime();
+    const states: ProcessingPreviewState[] = [];
+    const controller = new ProcessingPreviewController(
+      (state) => states.push(state),
+      runtime,
+    );
+    controller.setEnabled(true);
+    controller.request(request(3));
+    const token = previewFeature.mock.calls[0][3];
+    pending[0].resolve(signalResult(3));
+    await vi.waitFor(() =>
+      expect(states.at(-1)).toMatchObject({ status: "result", current: true }),
+    );
+
+    controller.invalidateSource();
+
+    expect(controller.takeCurrentResult()).toBeNull();
+    expect(releasePreviewResult).toHaveBeenCalledWith(token);
   });
 
   it("ignores an invalidated response and stale error", async () => {
@@ -183,7 +230,8 @@ describe("ProcessingPreviewController", () => {
   });
 
   it("recovers the shared queue after a current failure", async () => {
-    const { runtime, previewFeature, pending } = fakeRuntime();
+    const { runtime, previewFeature, pending, releasePreviewResult } =
+      fakeRuntime();
     const states: ProcessingPreviewState[] = [];
     const controller = new ProcessingPreviewController(
       (state) => states.push(state),
@@ -195,6 +243,9 @@ describe("ProcessingPreviewController", () => {
 
     pending[0].reject(new Error("failed"));
     await vi.waitFor(() => expect(previewFeature).toHaveBeenCalledTimes(2));
+    expect(releasePreviewResult).toHaveBeenCalledWith(
+      previewFeature.mock.calls[0][3],
+    );
     pending[1].resolve(signalResult(5));
     await vi.waitFor(() =>
       expect(states.at(-1)).toMatchObject({ status: "result", current: true }),

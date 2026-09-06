@@ -32,7 +32,10 @@ interface Props {
   resolveActive?: (
     currentValues: Record<string, unknown>,
   ) => Promise<Record<string, boolean>>;
-  onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
+  onSubmit: (
+    values: Record<string, unknown>,
+    previewToken?: string | null,
+  ) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -64,11 +67,12 @@ export function ProcessingDataSetDialog(props: Props) {
 
   const submit = async () => {
     if (!formState.valid || formState.resolving) return;
+    const previewToken = previewRef.current?.takeCurrentResult() ?? null;
     previewRef.current?.stop();
     setError(null);
     setSubmitting(true);
     try {
-      await onSubmit(values);
+      await onSubmit(values, previewToken);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {

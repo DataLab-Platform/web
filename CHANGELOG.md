@@ -12,8 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   can now render a temporary result while their parameters are edited. The
   preview is disabled by default, reuses the already-loaded computation worker
   without changing the workspace, supports bounded numeric sliders and
-  image-profile geometry, and is discarded on Cancel or Escape; OK still
-  performs the normal processing from the original source.
+  image-profile geometry, and is discarded on Cancel or Escape. For a single
+  source, OK reuses a completed current preview once; stale, running and
+  multi-selection previews fall back to normal processing.
 
 ### Changed
 

@@ -541,6 +541,45 @@ _CATALOG: dict[str, _proc.FeatureSpec] = globals().get(
 _PROCESSOR: _proc.BaseProcessor = globals().get(
     "_PROCESSOR", _proc.BaseProcessor("signal")
 )
+_PREVIEW_RESULT: dict[str, Any] | None = None
+
+
+def release_preview_result(preview_token: str) -> None:
+    """Release the private preview result owned by *preview_token*."""
+    global _PREVIEW_RESULT  # pylint: disable=global-statement
+
+    if _PREVIEW_RESULT is not None and _PREVIEW_RESULT["token"] == preview_token:
+        _PREVIEW_RESULT = None
+
+
+def _take_preview_result(
+    preview_token: str | None,
+    feature_id: str,
+    source_ids: list[str],
+    params: dict[str, Any] | None,
+    group_ids: list[str] | None,
+) -> _proc.ApplyResult | None:
+    """Consume a matching single-source preview result, or return ``None``."""
+    global _PREVIEW_RESULT  # pylint: disable=global-statement
+
+    candidate = _PREVIEW_RESULT
+    if preview_token is None or candidate is None:
+        return None
+    if candidate["token"] != preview_token:
+        return None
+    _PREVIEW_RESULT = None
+    try:
+        matches = (
+            len(source_ids) == 1
+            and not group_ids
+            and candidate["feature_id"] == feature_id
+            and candidate["source_id"] == source_ids[0]
+            and candidate["source_revision"] == _DATA_REVISIONS.get(source_ids[0], 0)
+            and candidate["params"] == (dict(params) if params else {})
+        )
+    except (TypeError, ValueError):
+        matches = False
+    return candidate["result"] if matches else None
 
 
 # ---------------------------------------------------------------------------
@@ -2699,6 +2738,9 @@ def reset_all() -> None:
     is fully reset to its post-bootstrap value.  Used by the E2E test
     fixture that reuses a single Pyodide worker across multiple tests.
     """
+    global _PREVIEW_RESULT  # pylint: disable=global-statement
+
+    _PREVIEW_RESULT = None
     for kind, panel in list(_MODEL._panels.items()):  # noqa: SLF001
         for oid in [
             entry.oid
@@ -4517,6 +4559,7 @@ def apply_feature(
     operand_id: str | None = None,
     params: dict[str, Any] | None = None,
     group_ids: list[str] | None = None,
+    preview_token: str | None = None,
 ) -> list[str]:
     """Apply *feature_id* to *source_ids* and return the new object ids.
 
@@ -4567,7 +4610,11 @@ def apply_feature(
     ctx = _proc.ApplyContext(
         feature=spec, sources=sources, operand=operand, params=params
     )
-    result = _PROCESSOR.apply(ctx, source_ids)
+    result = _take_preview_result(
+        preview_token, feature_id, source_ids, params, group_ids
+    )
+    if result is None:
+        result = _PROCESSOR.apply(ctx, source_ids)
     new_ids: list[str] = []
     for source_oid, dst in result.items:
         # Resolve the placeholder-based title produced by Sigima
@@ -4607,8 +4654,13 @@ def preview_feature(
     feature_id: str,
     source_id: str,
     params: dict[str, Any] | None = None,
+    preview_token: str | None = None,
 ) -> dict[str, Any]:
     """Compute one private 1-to-1 preview without publishing its result."""
+    global _PREVIEW_RESULT  # pylint: disable=global-statement
+
+    if preview_token is not None:
+        _PREVIEW_RESULT = None
     catalog = _full_catalog_with_plugins()
     spec = catalog.get(feature_id)
     if spec is None:
@@ -4625,18 +4677,33 @@ def preview_feature(
     if len(result.items) != 1:
         raise ValueError("Preview processing did not produce exactly one result.")
     _, output = result.items[0]
+    original_title = output.title
     patch_title_with_ids(output, [source_id])
-    if spec.output_kind == "signal":
-        return {
-            "kind": "signal",
-            "data": _signal_data_payload(output, "preview", encoding="bytes"),
+    try:
+        if spec.output_kind == "signal":
+            payload = {
+                "kind": "signal",
+                "data": _signal_data_payload(output, "preview", encoding="bytes"),
+            }
+        elif spec.output_kind == "image":
+            payload = {
+                "kind": "image",
+                "data": _image_data_payload(output, "preview", encoding="bytes"),
+            }
+        else:
+            raise ValueError(f"Unsupported preview result kind: {spec.output_kind!r}")
+    finally:
+        output.title = original_title
+    if preview_token is not None:
+        _PREVIEW_RESULT = {
+            "token": preview_token,
+            "feature_id": feature_id,
+            "source_id": source_id,
+            "source_revision": _DATA_REVISIONS.get(source_id, 0),
+            "params": dict(params) if params else {},
+            "result": result,
         }
-    if spec.output_kind == "image":
-        return {
-            "kind": "image",
-            "data": _image_data_payload(output, "preview", encoding="bytes"),
-        }
-    raise ValueError(f"Unsupported preview result kind: {spec.output_kind!r}")
+    return payload
 
 
 def _apply_feature_grouped(

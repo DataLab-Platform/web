@@ -1511,8 +1511,16 @@ export default function App() {
       operandId: string | null,
       values: Record<string, unknown> | null,
       groupIds: string[] = [],
+      previewToken: string | null = null,
     ) => {
       if (!runtime) return;
+      const reusablePreviewToken =
+        previewToken !== null &&
+        feature.pattern === "1_to_1" &&
+        sourceIds.length === 1 &&
+        groupIds.length === 0
+          ? previewToken
+          : null;
       setBusy(true);
       try {
         // Cooperative cancellation: when a 1-to-1 / 2-to-1 feature is applied
@@ -1541,6 +1549,7 @@ export default function App() {
                 operandId,
                 values,
                 [],
+                null,
               ),
           });
           newIds = results.flat();
@@ -1564,6 +1573,7 @@ export default function App() {
                 operandId,
                 values,
                 groupIds,
+                reusablePreviewToken,
               ),
           });
           newIds = results[0] ?? [];
@@ -1589,6 +1599,11 @@ export default function App() {
           traceback: err instanceof Error ? err.message : String(err),
         });
       } finally {
+        if (previewToken !== null) {
+          await runtime
+            .releasePreviewResult(previewToken)
+            .catch(() => undefined);
+        }
         setBusy(false);
       }
     },
@@ -1844,21 +1859,41 @@ export default function App() {
   );
 
   const handleSubmitParams = useCallback(
-    async (values: Record<string, unknown>) => {
+    async (
+      values: Record<string, unknown>,
+      previewToken: string | null = null,
+    ) => {
       if (!pending) return;
       const { feature, sourceIds, operandId, groupIds } = pending;
       setPending(null);
-      await runFeature(feature, sourceIds, operandId, values, groupIds);
+      await runFeature(
+        feature,
+        sourceIds,
+        operandId,
+        values,
+        groupIds,
+        previewToken,
+      );
     },
     [pending, runFeature],
   );
 
   const handleSubmitProfile = useCallback(
-    async (values: Record<string, unknown>) => {
+    async (
+      values: Record<string, unknown>,
+      previewToken: string | null = null,
+    ) => {
       if (!pendingProfile) return;
       const { feature, sourceIds, groupIds } = pendingProfile;
       setPendingProfile(null);
-      await runFeature(feature, sourceIds, null, values, groupIds);
+      await runFeature(
+        feature,
+        sourceIds,
+        null,
+        values,
+        groupIds,
+        previewToken,
+      );
     },
     [pendingProfile, runFeature],
   );

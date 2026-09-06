@@ -44,6 +44,7 @@ const previewResult: ProcessingPreviewResult = {
 
 function makeRuntime() {
   const previewFeature = vi.fn(async () => previewResult);
+  const releasePreviewResult = vi.fn(async () => undefined);
   const getSignalData = vi.fn(async () => ({
     ...previewResult.data,
     id: "s1",
@@ -52,6 +53,7 @@ function makeRuntime() {
   return {
     runtime: {
       previewFeature,
+      releasePreviewResult,
       getSignalData,
       onWorkspaceMutation: vi.fn(() => () => undefined),
       getObject: vi.fn(async (id: string) => ({
@@ -61,6 +63,7 @@ function makeRuntime() {
       })),
     } as unknown as RuntimeApi,
     previewFeature,
+    releasePreviewResult,
   };
 }
 
@@ -68,6 +71,11 @@ function renderDialog(
   runtime: RuntimeApi,
   onCancel: () => void,
   previewAvailable = true,
+  onSubmit: (
+    values: Record<string, unknown>,
+    previewToken?: string | null,
+  ) => void | Promise<void> = () => undefined,
+  sourceIds = ["s1", "s2"],
 ) {
   return render(
     <ThemeProvider>
@@ -92,8 +100,8 @@ function renderDialog(
         runtime={runtime}
         previewAvailable={previewAvailable}
         feature={feature}
-        sourceIds={["s1", "s2"]}
-        onSubmit={() => undefined}
+        sourceIds={sourceIds}
+        onSubmit={onSubmit}
         onCancel={onCancel}
       />
     </ThemeProvider>,
@@ -123,9 +131,12 @@ describe("ProcessingDataSetDialog", () => {
 
     fireEvent.click(checkbox);
     await waitFor(() =>
-      expect(previewFeature).toHaveBeenCalledWith("moving_average", "s1", {
-        n: 3,
-      }),
+      expect(previewFeature).toHaveBeenCalledWith(
+        "moving_average",
+        "s1",
+        { n: 3 },
+        null,
+      ),
     );
     await waitFor(() =>
       expect(screen.getByTestId("preview-plot")).toBeTruthy(),
@@ -141,6 +152,21 @@ describe("ProcessingDataSetDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it("hands a current single-source preview to submit", async () => {
+    const { runtime, releasePreviewResult } = makeRuntime();
+    const onSubmit = vi.fn(async () => undefined);
+    renderDialog(runtime, () => undefined, true, onSubmit, ["s1"]);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Preview" }));
+    await screen.findByText("Preview up to date");
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({ n: 3 }, expect.any(String)),
+    );
+    expect(releasePreviewResult).not.toHaveBeenCalled();
   });
 
   it("logically cancels the shared preview when Escape closes the dialog", async () => {

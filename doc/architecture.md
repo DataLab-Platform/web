@@ -275,9 +275,13 @@ from pickle, add_group, get/set selection, etc.).
 `ProcessingPreviewController` coordinates requests per `RuntimeApi`: one
 computation may run while a single pending slot retains only the latest
 parameters. `bootstrap.preview_feature` deep-copies the source and delegates
-to the same `BaseProcessor.apply` path as publication, then returns only a
-binary plotting payload. It never inserts the temporary object into `_MODEL`,
-updates processing history, or dirties the workspace.
+to the same `BaseProcessor.apply` path as publication, then returns a binary
+plotting payload. For a single-source dialog it also retains the complete raw
+result behind an opaque token. `apply_feature` consumes that result at most once
+after checking the feature, source data revision and parameters, then performs
+the usual publication and history updates. A missing, stale or mismatched token
+falls back to normal computation. Preview never inserts the temporary object
+into `_MODEL`, updates processing history, or dirties the workspace.
 
 Disabling preview, Cancel, Escape, or dialog unmount drops pending work and
 invalidates late results. A Python call that has already started is allowed to
@@ -484,9 +488,9 @@ compatibility independently of the application version.
 3. If params needed → ProcessingDataSetDialog (auto-generated from JSON schema)
 4. Optional Preview → runtime.previewFeature(featureId, sourceOid, paramValues)
 5. bootstrap deep-copies the source and returns a private plotting payload
-6. OK invalidates preview and calls runtime.applyFeature(featureId, selectedOids, paramValues)
-7. pyodide.runPython → processor.apply_*(feature, oids, params)
-8. Sigima computes; new SignalObj/ImageObj added to _MODEL
+6. OK detaches a current single-source preview token, if available, and calls runtime.applyFeature(featureId, selectedOids, paramValues, token)
+7. bootstrap consumes a matching result once, or calls processor.apply_*(feature, oids, params)
+8. The result is published as a new SignalObj/ImageObj in _MODEL
 9. bootstrap returns new oids; UI refreshes ObjectTree + plots
 10. WorkspaceContext is marked dirty
 ```

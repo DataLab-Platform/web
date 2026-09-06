@@ -38,6 +38,7 @@ interface Props {
 
 export interface ProcessingPreviewHandle {
   stop: () => void;
+  takeCurrentResult: () => string | null;
 }
 
 interface SourceOption {
@@ -91,7 +92,15 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
       controller.close();
     }, [controller]);
 
-    useImperativeHandle(ref, () => ({ stop }), [stop]);
+    const takeCurrentResult = useCallback(
+      () => controller.takeCurrentResult(),
+      [controller],
+    );
+
+    useImperativeHandle(ref, () => ({ stop, takeCurrentResult }), [
+      stop,
+      takeCurrentResult,
+    ]);
 
     useEffect(() => {
       let cancelled = false;
@@ -177,8 +186,17 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
         featureId: feature.id,
         sourceId,
         params: values,
+        reuseResult: sourceIds.length === 1,
       });
-    }, [controller, feature.id, resolving, sourceId, valid, values]);
+    }, [
+      controller,
+      feature.id,
+      resolving,
+      sourceId,
+      sourceIds.length,
+      valid,
+      values,
+    ]);
 
     useLayoutEffect(() => {
       requestPreviewRef.current = requestPreview;

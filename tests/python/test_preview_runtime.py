@@ -40,6 +40,102 @@ def test_signal_preview_matches_published_processing(fresh_bootstrap):
     )
 
 
+def test_current_preview_result_is_consumed_once_by_apply(fresh_bootstrap):
+    bs = fresh_bootstrap
+    source_id = bs.add_signal_from_arrays(
+        "raw", np.arange(32, dtype=float), np.arange(32, dtype=float) ** 2
+    )
+    feature_id = "test_preview_handoff"
+    original = bs._CATALOG["moving_average"]
+    calls = []
+
+    def counted(source, param):
+        calls.append(param.n)
+        return original.func(source, param)
+
+    bs._CATALOG[feature_id] = replace(
+        original,
+        feature_id=feature_id,
+        func=counted,
+    )
+    try:
+        params = {"n": 5}
+        bs.preview_feature(
+            feature_id,
+            source_id,
+            params=params,
+            preview_token="preview-1",
+        )
+        assert calls == [5]
+
+        [published_id] = bs.apply_feature(
+            feature_id,
+            [source_id],
+            params=params,
+            preview_token="preview-1",
+        )
+        assert calls == [5]
+        assert bs.get_last_processing(published_id) is not None
+
+        bs.apply_feature(
+            feature_id,
+            [source_id],
+            params=params,
+            preview_token="preview-1",
+        )
+        assert calls == [5, 5]
+
+        bs.preview_feature(
+            feature_id,
+            source_id,
+            params=params,
+            preview_token="preview-2",
+        )
+        bs.apply_feature(
+            feature_id,
+            [source_id],
+            params={"n": 7},
+            preview_token="preview-2",
+        )
+        assert calls == [5, 5, 5, 7]
+
+        bs.preview_feature(
+            feature_id,
+            source_id,
+            params=params,
+            preview_token="preview-3",
+        )
+        bs.release_preview_result("preview-3")
+        bs.apply_feature(
+            feature_id,
+            [source_id],
+            params=params,
+            preview_token="preview-3",
+        )
+        assert calls == [5, 5, 5, 7, 5, 5]
+
+        bs.preview_feature(
+            feature_id,
+            source_id,
+            params=params,
+            preview_token="preview-4",
+        )
+        bs.set_signal_xydata(
+            source_id,
+            np.arange(32, dtype=float),
+            np.arange(32, dtype=float) ** 3,
+        )
+        bs.apply_feature(
+            feature_id,
+            [source_id],
+            params=params,
+            preview_token="preview-4",
+        )
+        assert calls == [5, 5, 5, 7, 5, 5, 5, 5]
+    finally:
+        bs._CATALOG.pop(feature_id)
+
+
 def test_image_preview_matches_published_processing(fresh_bootstrap):
     bs = fresh_bootstrap
     data = np.arange(16 * 12, dtype=float).reshape(12, 16)

@@ -26,6 +26,9 @@ vi.mock("../../../src/runtime/ProcessingPreviewController", () => ({
     invalidate = controllerSpies.invalidate;
     invalidateSource = controllerSpies.invalidateSource;
     close = controllerSpies.close;
+    takeCurrentResult() {
+      return null;
+    }
     needsSource() {
       return false;
     }

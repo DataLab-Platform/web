@@ -4,6 +4,7 @@ export interface ProcessingPreviewRequest {
   featureId: string;
   sourceId: string;
   params: Record<string, unknown>;
+  reuseResult?: boolean;
 }
 
 export type ProcessingPreviewState =
@@ -19,6 +20,13 @@ interface QueuedRequest extends ProcessingPreviewRequest {
   id: number;
   epoch: number;
   revision: number;
+  previewToken: string | null;
+}
+
+let nextPreviewToken = 1;
+
+function createPreviewToken(): string {
+  return `preview-${Date.now().toString(36)}-${nextPreviewToken++}`;
 }
 
 function cloneParams(values: Record<string, unknown>): Record<string, unknown> {
@@ -80,11 +88,18 @@ export class ProcessingPreviewController {
   private nextId = 1;
   private epoch = 0;
   private revision = 0;
+  private currentResult: Pick<
+    QueuedRequest,
+    "previewToken" | "epoch" | "revision"
+  > | null = null;
   private readonly coordinator: ProcessingPreviewCoordinator;
 
   constructor(
     private readonly onState: (state: ProcessingPreviewState) => void,
-    private readonly runtime: Pick<RuntimeApi, "previewFeature">,
+    private readonly runtime: Pick<
+      RuntimeApi,
+      "previewFeature" | "releasePreviewResult"
+    >,
   ) {
     this.coordinator = coordinatorFor(runtime as RuntimeApi);
   }
@@ -99,11 +114,13 @@ export class ProcessingPreviewController {
   }
 
   markDirty(): void {
+    this.releaseCurrentResult();
     this.revision += 1;
     this.coordinator.cancelPending(this);
   }
 
   invalidate(): void {
+    this.releaseCurrentResult();
     this.epoch += 1;
     this.revision += 1;
     this.coordinator.cancelPending(this);
@@ -115,6 +132,7 @@ export class ProcessingPreviewController {
 
   request(request: ProcessingPreviewRequest): void {
     if (!this.enabled) return;
+    this.releaseCurrentResult();
     if (this.targetSourceId !== request.sourceId) {
       this.epoch += 1;
       this.targetSourceId = request.sourceId;
@@ -126,6 +144,7 @@ export class ProcessingPreviewController {
       id: this.nextId++,
       epoch: this.epoch,
       revision: this.revision,
+      previewToken: request.reuseResult === false ? null : createPreviewToken(),
     };
     this.onState({ status: "computing" });
     this.coordinator.submit({
@@ -146,15 +165,26 @@ export class ProcessingPreviewController {
         request.featureId,
         request.sourceId,
         request.params,
+        request.previewToken,
       );
       const sameEpoch = this.enabled && request.epoch === this.epoch;
-      if (!sameEpoch) return;
+      if (!sameEpoch) {
+        this.releaseToken(request.previewToken);
+        return;
+      }
+      const current = request.revision === this.revision;
+      if (current && request.previewToken !== null) {
+        this.currentResult = request;
+      } else {
+        this.releaseToken(request.previewToken);
+      }
       this.onState({
         status: "result",
         result,
-        current: request.revision === this.revision,
+        current,
       });
     } catch (error) {
+      this.releaseToken(request.previewToken);
       const current =
         this.enabled &&
         request.epoch === this.epoch &&
@@ -177,9 +207,36 @@ export class ProcessingPreviewController {
   }
 
   private invalidateSession(): void {
+    this.releaseCurrentResult();
     this.epoch += 1;
     this.revision += 1;
     this.targetSourceId = null;
     this.coordinator.cancelPending(this);
+  }
+
+  takeCurrentResult(): string | null {
+    const candidate = this.currentResult;
+    this.currentResult = null;
+    if (
+      !this.enabled ||
+      candidate === null ||
+      candidate.epoch !== this.epoch ||
+      candidate.revision !== this.revision
+    ) {
+      this.releaseToken(candidate?.previewToken ?? null);
+      return null;
+    }
+    return candidate.previewToken;
+  }
+
+  private releaseCurrentResult(): void {
+    const token = this.currentResult?.previewToken ?? null;
+    this.currentResult = null;
+    this.releaseToken(token);
+  }
+
+  private releaseToken(token: string | null): void {
+    if (token === null) return;
+    void this.runtime.releasePreviewResult(token).catch(() => undefined);
   }
 }
