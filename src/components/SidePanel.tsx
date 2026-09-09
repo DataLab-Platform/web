@@ -19,6 +19,7 @@ import type {
 } from "../runtime/runtime";
 import {
   DataSetForm,
+  stripTransientValues,
   validateDataSetValues,
   type DataSetFormProps,
 } from "./DataSetForm";
@@ -616,6 +617,20 @@ function ProcessingPanel({
   onApplied,
 }: ProcessingPanelProps) {
   const sourceOid = info.source_ids[0];
+  const missingDependencyMessages = [
+    info.missing_source_ids.length > 0
+      ? t("Source object(s) no longer exist: {ids}", {
+          ids: info.missing_source_ids.join(", "),
+        })
+      : null,
+    info.missing_operand_id
+      ? t("Operand object no longer exists: {id}", {
+          id: info.missing_operand_id,
+        })
+      : null,
+  ].filter((message): message is string => message !== null);
+  const dependenciesMissing = missingDependencyMessages.length > 0;
+  const dependencyError = missingDependencyMessages.join(" ");
   const resolveChoices = useCallback(
     (itemName: string, values: Record<string, unknown>) =>
       runtime.resolveFeatureChoices(
@@ -643,10 +658,23 @@ function ProcessingPanel({
   );
   const apply = useCallback(
     async (values: Record<string, unknown>) => {
-      await runtime.reapplyLastProcessing(oid, values);
+      if (dependenciesMissing) return;
+      const runtimeValues = info.schema
+        ? stripTransientValues(info.schema, values)
+        : values;
+      await runtime.reapplyLastProcessing(oid, runtimeValues);
       onApplied();
     },
-    [runtime, oid, onApplied],
+    [dependenciesMissing, runtime, oid, info.schema, onApplied],
+  );
+
+  const persistentValues = useMemo(
+    () => stripTransientValues(info.schema ?? {}, info.values ?? {}),
+    [info.schema, info.values],
+  );
+  const transientValues = useMemo(
+    () => extractTransientValues(info.schema ?? {}, info.values ?? {}),
+    [info.schema, info.values],
   );
 
   // Key on the canonical applied values (not ``refreshNonce``) so the
@@ -659,8 +687,8 @@ function ProcessingPanel({
   // Computed unconditionally to satisfy the rules-of-hooks even when the
   // early-return branch below is taken.
   const valuesKey = useMemo(
-    () => JSON.stringify(info.values ?? {}),
-    [info.values],
+    () => JSON.stringify(persistentValues),
+    [persistentValues],
   );
 
   // Parameterless features: nothing to edit, just expose a "Re-apply"
@@ -669,6 +697,7 @@ function ProcessingPanel({
     return (
       <div className="processing-panel">
         <ProcessingHeader info={info} />
+        {dependenciesMissing && <div className="error">{dependencyError}</div>}
         <div className="side-panel-info">
           This processing has no parameters.
         </div>
@@ -679,6 +708,7 @@ function ProcessingPanel({
               type="button"
               className="editable-form-apply"
               onClick={() => void apply({})}
+              disabled={dependenciesMissing}
               title="Re-apply this processing"
             >
               Re-apply
@@ -691,16 +721,19 @@ function ProcessingPanel({
   return (
     <div className="processing-panel">
       <ProcessingHeader info={info} />
+      {dependenciesMissing && <div className="error">{dependencyError}</div>}
       <EditableForm
         key={`processing:${oid}:${valuesKey}`}
         schema={info.schema}
-        values={info.values ?? {}}
+        values={persistentValues}
+        transientValues={transientValues}
         onApply={apply}
-        resolveChoices={resolveChoices}
-        resolveCallbacks={resolveCallbacks}
-        resolveActive={resolveActive}
+        resolveChoices={dependenciesMissing ? undefined : resolveChoices}
+        resolveCallbacks={dependenciesMissing ? undefined : resolveCallbacks}
+        resolveActive={dependenciesMissing ? undefined : resolveActive}
         autoSliders
         validateBeforeApply
+        disabled={dependenciesMissing}
       />
     </div>
   );
@@ -729,15 +762,18 @@ interface EditableFormProps extends Pick<
 > {
   schema: SchemaWithValues["schema"];
   values: Record<string, unknown>;
+  transientValues?: Record<string, unknown>;
   onApply: (values: Record<string, unknown>) => Promise<void>;
   initialError?: string | null;
   autoSliders?: boolean;
   validateBeforeApply?: boolean;
+  disabled?: boolean;
 }
 
 function EditableForm({
   schema,
   values,
+  transientValues,
   onApply,
   initialError = null,
   resolveChoices,
@@ -745,11 +781,13 @@ function EditableForm({
   resolveActive,
   autoSliders = false,
   validateBeforeApply = false,
+  disabled = false,
 }: EditableFormProps) {
   // Snapshot of the values that are currently committed in Python.
   // Anything different from this counts as "unsaved".
-  const [appliedValues, setAppliedValues] = useState(values);
-  const [draft, setDraft] = useState(values);
+  const initialValues = { ...values, ...transientValues };
+  const [appliedValues, setAppliedValues] = useState(initialValues);
+  const [draft, setDraft] = useState(initialValues);
   const [error, setError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
   const [formState, setFormState] = useState({
@@ -757,6 +795,16 @@ function EditableForm({
     resolving: false,
   });
   const formRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!transientValues) return;
+    const mergeLatestContext = (current: Record<string, unknown>) => ({
+      ...stripTransientValues(schema, current),
+      ...transientValues,
+    });
+    setAppliedValues(mergeLatestContext);
+    setDraft(mergeLatestContext);
+  }, [schema, transientValues]);
 
   const dirty = useMemo(
     () => !valuesEqual(draft, appliedValues),
@@ -766,7 +814,7 @@ function EditableForm({
   const resolving = validateBeforeApply && formState.resolving;
 
   const handleApply = useCallback(async () => {
-    if (!dirty || busy || invalid || resolving) return;
+    if (disabled || !dirty || busy || invalid || resolving) return;
     setBusy(true);
     setError(null);
     try {
@@ -777,7 +825,7 @@ function EditableForm({
     } finally {
       setBusy(false);
     }
-  }, [dirty, busy, draft, invalid, onApply, resolving]);
+  }, [disabled, dirty, busy, draft, invalid, onApply, resolving]);
 
   const handleReset = useCallback(() => {
     setDraft(appliedValues);
@@ -798,16 +846,18 @@ function EditableForm({
   return (
     <div className="side-panel-form" ref={formRef} onKeyDown={handleKeyDown}>
       {error && <div className="error">{error}</div>}
-      <DataSetForm
-        schema={schema}
-        values={draft}
-        onChange={setDraft}
-        resolveChoices={resolveChoices}
-        resolveCallbacks={resolveCallbacks}
-        resolveActive={resolveActive}
-        autoSliders={autoSliders}
-        onStateChange={validateBeforeApply ? setFormState : undefined}
-      />
+      <fieldset className="editable-form-fields" disabled={disabled}>
+        <DataSetForm
+          schema={schema}
+          values={draft}
+          onChange={setDraft}
+          resolveChoices={resolveChoices}
+          resolveCallbacks={resolveCallbacks}
+          resolveActive={resolveActive}
+          autoSliders={autoSliders}
+          onStateChange={validateBeforeApply ? setFormState : undefined}
+        />
+      </fieldset>
       <div
         className={
           "editable-form-footer" + (dirty ? " editable-form-dirty" : "")
@@ -816,20 +866,22 @@ function EditableForm({
         <span className="editable-form-status" aria-live="polite">
           {busy
             ? "Applying…"
-            : resolving
-              ? t("Updating parameters…")
-              : invalid
-                ? t("Invalid parameters")
-                : dirty
-                  ? "● Unsaved changes"
-                  : "All changes applied"}
+            : disabled
+              ? t("Processing unavailable")
+              : resolving
+                ? t("Updating parameters…")
+                : invalid
+                  ? t("Invalid parameters")
+                  : dirty
+                    ? "● Unsaved changes"
+                    : "All changes applied"}
         </span>
         <div className="editable-form-buttons">
           <button
             type="button"
             className="editable-form-reset"
             onClick={handleReset}
-            disabled={!dirty || busy || resolving}
+            disabled={disabled || !dirty || busy || resolving}
             title="Discard unapplied changes"
           >
             Reset
@@ -838,7 +890,7 @@ function EditableForm({
             type="button"
             className="editable-form-apply"
             onClick={() => void handleApply()}
-            disabled={!dirty || busy || invalid || resolving}
+            disabled={disabled || !dirty || busy || invalid || resolving}
             title="Apply changes (Ctrl+Enter)"
           >
             Apply
@@ -859,6 +911,16 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function extractTransientValues(
+  schema: SchemaWithValues["schema"],
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const persistent = stripTransientValues(schema, values);
+  return Object.fromEntries(
+    Object.entries(values).filter(([name]) => !(name in persistent)),
+  );
 }
 
 // ---------------------------------------------------------------------------

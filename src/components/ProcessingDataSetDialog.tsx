@@ -8,7 +8,11 @@ import type {
   RuntimeApi,
   SchemaWithValues,
 } from "../runtime/runtime";
-import { DataSetForm, validateDataSetValues } from "./DataSetForm";
+import {
+  DataSetForm,
+  stripTransientValues,
+  validateDataSetValues,
+} from "./DataSetForm";
 import {
   ProcessingPreview,
   type ProcessingPreviewHandle,
@@ -64,6 +68,7 @@ export function ProcessingDataSetDialog(props: Props) {
   const previewRef = useRef<ProcessingPreviewHandle | null>(null);
   const canPreview =
     previewAvailable && feature.preview_enabled && feature.pattern === "1_to_1";
+  const runtimeValues = stripTransientValues(payload.schema, values);
 
   const submit = async () => {
     if (!formState.valid || formState.resolving) return;
@@ -72,7 +77,7 @@ export function ProcessingDataSetDialog(props: Props) {
     setError(null);
     setSubmitting(true);
     try {
-      await onSubmit(values, previewToken);
+      await onSubmit(runtimeValues, previewToken);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -129,7 +134,7 @@ export function ProcessingDataSetDialog(props: Props) {
               runtime={runtime}
               feature={feature}
               sourceIds={sourceIds}
-              values={values}
+              values={runtimeValues}
               valid={formState.valid}
               resolving={formState.resolving}
               dragging={dragging}

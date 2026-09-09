@@ -28,6 +28,8 @@ import DOMPurify from "dompurify";
 import type { DynamicChoice, JsonSchema } from "../../runtime/runtime";
 import { t } from "../../i18n/translate";
 import { ArrayEditorDialog, normalizeToMatrix } from "../ArrayEditorDialog";
+import { HistogramRangeField } from "./HistogramRangeField";
+import { histogramRangeState, numericValueValid } from "./rangeValidation";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,6 +94,18 @@ export interface DataSetFormProps {
   onStateChange?: (state: { valid: boolean; resolving: boolean }) => void;
 }
 
+export function stripTransientValues(
+  schema: JsonSchema,
+  values: Values,
+): Values {
+  const properties = (schema.properties as Record<string, JsonSchema>) ?? {};
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([name]) => properties[name]?.["x-guidata-transient"] !== true,
+    ),
+  );
+}
+
 export function validateDataSetValues(
   schema: JsonSchema,
   values: Values,
@@ -99,6 +113,17 @@ export function validateDataSetValues(
 ): boolean {
   const properties = (schema.properties as Record<string, JsonSchema>) ?? {};
   const required = new Set((schema.required as string[] | undefined) ?? []);
+  for (const [name, prop] of Object.entries(properties)) {
+    if (prop["x-guidata-kind"] !== "histogram_range") continue;
+    const state = histogramRangeState(
+      name,
+      prop,
+      properties,
+      values,
+      activeOverrides,
+    );
+    if (state.editable && !state.valid) return false;
+  }
   return Object.entries(properties).every(([name, prop]) => {
     const override = activeOverrides[name];
     const inactive =
@@ -111,16 +136,7 @@ export function validateDataSetValues(
     if (value == null || value === "") return !required.has(name);
     const kind = prop["x-guidata-kind"];
     if (kind === "int" || kind === "float") {
-      if (typeof value !== "number" || !Number.isFinite(value)) return false;
-      if (kind === "int" && !Number.isInteger(value)) return false;
-      if (typeof prop.minimum === "number" && value < prop.minimum)
-        return false;
-      if (typeof prop.maximum === "number" && value > prop.maximum)
-        return false;
-      if (prop["x-guidata-nonzero"] === true && value === 0) return false;
-      const even = prop["x-guidata-even"];
-      if (even === true && value % 2 !== 0) return false;
-      if (even === false && value % 2 === 0) return false;
+      if (!numericValueValid(prop, value)) return false;
     }
     if (typeof value === "string" && typeof prop.pattern === "string") {
       try {
@@ -212,17 +228,35 @@ export function DataSetForm(props: DataSetFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasDynamicActive, resolveActive]);
 
-  const setValue = useCallback(
-    (name: string, value: unknown) => {
-      const newValues = { ...values, [name]: value };
-      onChange(newValues);
+  const setValues = useCallback(
+    (name: string, newValues: Values) => {
       const prop = properties[name];
+      const seq = ++resolutionSeq.current;
+      if (prop?.["x-guidata-kind"] === "histogram_range") {
+        const state = histogramRangeState(
+          name,
+          prop,
+          properties,
+          newValues,
+          activeOverrides,
+        );
+        if (!state.editable) {
+          setResolving(false);
+          return;
+        }
+        onChange(newValues);
+        if (!state.valid) {
+          setResolving(false);
+          return;
+        }
+      } else {
+        onChange(newValues);
+      }
       const hasCallback =
         prop?.["x-guidata-has-callback"] === true && resolveCallbacks;
       const needsResolution = Boolean(
         hasCallback || (hasDynamicActive && resolveActive),
       );
-      const seq = ++resolutionSeq.current;
       setResolving(needsResolution);
       if (!needsResolution) return;
       void (async () => {
@@ -252,12 +286,19 @@ export function DataSetForm(props: DataSetFormProps) {
     },
     [
       onChange,
-      values,
       properties,
       resolveCallbacks,
       hasDynamicActive,
       resolveActive,
+      activeOverrides,
     ],
+  );
+
+  const setValue = useCallback(
+    (name: string, value: unknown) => {
+      setValues(name, { ...values, [name]: value });
+    },
+    [setValues, values],
   );
 
   const valid = useMemo(
@@ -280,6 +321,7 @@ export function DataSetForm(props: DataSetFormProps) {
               properties={properties}
               values={values}
               setValue={setValue}
+              setValues={setValues}
               resolveChoices={resolveChoices}
             />
           ))}
@@ -294,6 +336,7 @@ interface NodeProps {
   properties: Record<string, JsonSchema>;
   values: Values;
   setValue: (name: string, value: unknown) => void;
+  setValues: (name: string, values: Values) => void;
   resolveChoices?: DataSetFormProps["resolveChoices"];
 }
 
@@ -302,6 +345,7 @@ function LayoutNodeView({
   properties,
   values,
   setValue,
+  setValues,
   resolveChoices,
 }: NodeProps) {
   if (typeof node === "string") {
@@ -311,9 +355,11 @@ function LayoutNodeView({
     return (
       <FieldRow
         name={node}
+        properties={properties}
         prop={prop}
         value={values[node]}
         onChange={(v) => setValue(node, v)}
+        onValuesChange={(nextValues) => setValues(node, nextValues)}
         currentValues={values}
         resolveChoices={resolveChoices}
       />
@@ -329,6 +375,7 @@ function LayoutNodeView({
         properties={properties}
         values={values}
         setValue={setValue}
+        setValues={setValues}
         resolveChoices={resolveChoices}
       />
     );
@@ -347,6 +394,7 @@ function LayoutNodeView({
           properties={properties}
           values={values}
           setValue={setValue}
+          setValues={setValues}
           resolveChoices={resolveChoices}
         />
       ))}
@@ -359,12 +407,14 @@ function TabGroup({
   properties,
   values,
   setValue,
+  setValues,
   resolveChoices,
 }: {
   node: LayoutContainer;
   properties: Record<string, JsonSchema>;
   values: Values;
   setValue: (name: string, value: unknown) => void;
+  setValues: (name: string, values: Values) => void;
   resolveChoices?: DataSetFormProps["resolveChoices"];
 }) {
   const tabs = (node.items ?? []).filter(
@@ -395,6 +445,7 @@ function TabGroup({
             properties={properties}
             values={values}
             setValue={setValue}
+            setValues={setValues}
             resolveChoices={resolveChoices}
           />
         ))}
@@ -409,9 +460,11 @@ function TabGroup({
 
 interface FieldRowProps {
   name: string;
+  properties: Record<string, JsonSchema>;
   prop: JsonSchema;
   value: unknown;
   onChange: (v: unknown) => void;
+  onValuesChange: (values: Values) => void;
   currentValues: Values;
   resolveChoices?: DataSetFormProps["resolveChoices"];
 }
@@ -432,6 +485,25 @@ function FieldRow(props: FieldRowProps) {
     prop.readOnly === true ||
     override === false ||
     (override === undefined && prop["x-guidata-active"] === false);
+  if (prop["x-guidata-kind"] === "histogram_range") {
+    const state = histogramRangeState(
+      name,
+      prop,
+      props.properties,
+      props.currentValues,
+      activeOverrides,
+    );
+    return (
+      <div
+        className={`dataset-form-row dataset-form-row-histogram${readOnly ? " dataset-form-row-disabled" : ""}`}
+        title={help}
+      >
+        <div className="dataset-form-control">
+          <FieldWidget {...props} disabled={!state.editable} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className={
@@ -455,6 +527,7 @@ function FieldRow(props: FieldRowProps) {
 
 function FieldWidget(props: FieldRowProps & { disabled?: boolean }) {
   const kind = props.prop["x-guidata-kind"] as string | undefined;
+  const behavior = useContext(FormBehaviorContext);
   switch (kind) {
     case "int":
       return <NumericField {...props} integer />;
@@ -482,6 +555,28 @@ function FieldWidget(props: FieldRowProps & { disabled?: boolean }) {
       return <FileField {...props} />;
     case "float_array":
       return <FloatArrayField {...props} />;
+    case "histogram_range": {
+      return (
+        <HistogramRangeField
+          prop={props.prop}
+          minimumProp={
+            props.properties[
+              String(props.prop["x-guidata-minimum-field"] ?? "minimum")
+            ]
+          }
+          maximumProp={
+            props.properties[
+              String(props.prop["x-guidata-maximum-field"] ?? "maximum")
+            ]
+          }
+          value={props.value}
+          values={props.currentValues}
+          disabled={props.disabled}
+          onValuesChange={props.onValuesChange}
+          onSliderInteraction={behavior.onSliderInteraction}
+        />
+      );
+    }
     case "dict":
       return <JsonField {...props} />;
     default:

@@ -1185,6 +1185,13 @@ input {
   gap: 6px;
 }
 
+.editable-form-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .editable-form-footer {
   display: flex;
   align-items: center;
@@ -3693,6 +3700,63 @@ input {
   width: 100%;
 }
 
+.dataset-form-row-histogram {
+  display: block;
+}
+
+.dataset-form-row-histogram .dataset-form-control,
+.histogram-range-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.histogram-range-field {
+  display: grid;
+  gap: 7px;
+}
+
+.histogram-range-plot {
+  width: 100%;
+  min-height: 132px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.histogram-range-control {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 156px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.histogram-range-control input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.histogram-range-control input[type="number"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.histogram-range-control output {
+  width: 28px;
+  justify-self: end;
+  text-align: right;
+  color: var(--text-dim);
+}
+
+.histogram-range-control input[aria-invalid="true"] {
+  border-color: var(--danger, #c24136);
+  background-color: rgba(194, 65, 54, 0.08);
+}
+
+.histogram-range-actions {
+  display: flex;
+  gap: 6px;
+}
+
 @media (max-width: 800px) {
   .processing-dataset-dialog-body {
     grid-template-columns: minmax(0, 1fr);
@@ -3708,6 +3772,10 @@ input {
 
   .dataset-form-numeric-slider {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .histogram-range-control {
+    grid-template-columns: 72px minmax(0, 1fr) 156px;
   }
 }
 

@@ -34,6 +34,66 @@ def test_known_signal_features_present(bootstrap_module):
         assert expected in ids, f"feature {expected!r} missing from catalogue"
 
 
+def test_brightness_contrast_contract_and_processing(fresh_bootstrap):
+    """Brightness/contrast supports batches and keeps persistent parameters."""
+    bs = fresh_bootstrap
+    feature = next(
+        item
+        for item in bs.list_features()
+        if item["id"] == "image:adjust_brightness_contrast"
+    )
+    assert feature["menu_path"] == "Processing/Exposure/Brightness and contrast"
+    assert feature["icon"] == "exposure.svg"
+    assert "max_sources" not in feature
+
+    data = np.array([[0, 64, 128, 255]], dtype=np.uint8)
+    src = bs.add_image_from_array("image", data)
+    other_data = data.astype(np.uint16)
+    other = bs.add_image_from_array(
+        "other", other_data.tobytes(), width=4, height=1, dtype="uint16"
+    )
+    feature_id = "image:adjust_brightness_contrast"
+    schema_with_values = bs.get_feature_schema(feature_id, src)
+    assert schema_with_values is not None
+    histogram_schema = schema_with_values["schema"]["properties"]["histogram"]
+    assert histogram_schema["x-guidata-kind"] == "histogram_range"
+    assert histogram_schema["x-guidata-transient"] is True
+    assert histogram_schema["x-guidata-histogram-presentation"] == "brightness_contrast"
+    assert schema_with_values["values"]["histogram"]["domain"] == [0.0, 255.0]
+
+    values = dict(schema_with_values["values"])
+    values.update({"minimum": 64.0, "maximum": 192.0})
+    new_oid, other_oid = bs.apply_feature(feature_id, [src, other], params=values)
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(new_oid)["data"]), [[0.0, 0.0, 127.5, 255.0]]
+    )
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(other_oid)["data"]),
+        [[0.0, 0.0, 32768.0, 65535.0]],
+    )
+    assert bs._LAST_PROCESSING[new_oid]["source_ids"] == [src]
+    assert bs._LAST_PROCESSING[other_oid]["source_ids"] == [other]
+    assert "histogram" not in bs._LAST_PROCESSING[new_oid]["params"]
+    assert set(bs._LAST_PROCESSING[new_oid]["params"]) == {"minimum", "maximum"}
+
+    last = bs.get_last_processing(new_oid)
+    assert last is not None
+    assert last["values"]["minimum"] == 64.0
+    assert last["values"]["maximum"] == 192.0
+    assert last["values"]["histogram"]["domain"] == [0.0, 255.0]
+
+    bs.delete_object(src)
+    missing_source = bs.get_last_processing(new_oid)
+    assert missing_source is not None
+    assert missing_source["missing_source_ids"] == [src]
+    assert missing_source["missing_operand_id"] is None
+    assert missing_source["values"]["minimum"] == 64.0
+    assert missing_source["values"]["maximum"] == 192.0
+    assert missing_source["values"]["histogram"] == {}
+    with pytest.raises(ValueError, match="no longer exist"):
+        bs.reapply_last_processing(new_oid, missing_source["values"])
+
+
 def test_apply_normalize_returns_new_signal(fresh_bootstrap):
     bs = fresh_bootstrap
     src = bs.add_signal_from_arrays(
@@ -268,6 +328,62 @@ def test_apply_1_to_1_on_multiple_groups_creates_one_group_each(fresh_bootstrap)
     assert f"normalize({g2})" in groups
     assert len(groups[f"normalize({g1})"]["objects"]) == 1
     assert len(groups[f"normalize({g2})"]["objects"]) == 1
+
+
+def test_grouped_brightness_contrast_keeps_per_result_source(fresh_bootstrap):
+    """Grouped outputs retain their source and source-specific output range."""
+    bs = fresh_bootstrap
+    source_group = bs.create_group("image", "Images")
+    data = np.array([[0, 64, 128, 255]], dtype=np.uint8)
+    first = bs.add_image_from_array(
+        "first",
+        data.tobytes(),
+        group_id=source_group,
+        width=4,
+        height=1,
+        dtype="uint8",
+    )
+    second = bs.add_image_from_array(
+        "second",
+        data.astype(np.uint16).tobytes(),
+        group_id=source_group,
+        width=4,
+        height=1,
+        dtype="uint16",
+    )
+    feature_id = "image:adjust_brightness_contrast"
+    values = bs.get_feature_schema(feature_id, first)["values"]
+    values.update({"minimum": 64.0, "maximum": 192.0})
+
+    first_result, second_result = bs.apply_feature(
+        feature_id,
+        [first, second],
+        params=values,
+        group_ids=[source_group],
+    )
+
+    result_group = _result_group(bs, [first_result, second_result], kind="image")
+    assert result_group["gid"] != source_group
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(first_result)["data"]),
+        [[0.0, 0.0, 128.0, 255.0]],
+    )
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(second_result)["data"]),
+        [[0.0, 0.0, 32768.0, 65535.0]],
+    )
+    assert bs._LAST_PROCESSING[first_result]["source_ids"] == [first]
+    assert bs._LAST_PROCESSING[second_result]["source_ids"] == [second]
+
+    bs.delete_object(first)
+    last = bs.get_last_processing(second_result)
+    assert last is not None
+    assert last["missing_source_ids"] == []
+    reapplied = bs.reapply_last_processing(second_result, last["values"])
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(reapplied)["data"]),
+        [[0.0, 0.0, 32768.0, 65535.0]],
+    )
 
 
 def test_apply_n_to_1_on_groups_aggregates_per_group(fresh_bootstrap):

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **Brightness and contrast:** a Fiji-style image processing now combines a live histogram with synchronized minimum, maximum, brightness and contrast controls, deterministic Auto and Reset actions, ROI-aware remapping, and optional live preview. One input window is initialized from the first selected image and applied to the full selection; every result retains its source image's output range.
 - **Optional processing previews:** compatible signal and image processings
   can now render a temporary result while their parameters are edited. The
   preview is disabled by default, reuses the already-loaded computation worker
@@ -18,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Histogram range editors:** generic parameter intervals now respect linked numeric constraints and read-only states. Brightness and contrast retains its specialized controls, including exact float64 window editing outside the source image's observed range.
 - **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
   its native async DataSet backend and JSON Schema exporter. The former
   backend backport has been removed; a focused compatibility patch preserves

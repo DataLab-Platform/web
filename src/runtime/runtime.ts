@@ -201,6 +201,8 @@ export interface LastProcessingInfo {
   menu_path: string;
   source_ids: string[];
   operand_id: string | null;
+  missing_source_ids: string[];
+  missing_operand_id: string | null;
   has_params: boolean;
   schema: SchemaWithValues["schema"] | null;
   values: Record<string, unknown> | null;

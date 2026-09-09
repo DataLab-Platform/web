@@ -504,6 +504,10 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
         "Yen thresholding", "Processing/Thresholding/Yen thresholding"
     ),
     # Processing / Exposure ----------------------------------------------
+    "adjust_brightness_contrast": FeatureOverride(
+        "Brightness and contrast…",
+        "Processing/Exposure/Brightness and contrast",
+    ),
     "adjust_gamma": FeatureOverride(
         "Gamma correction…", "Processing/Exposure/Gamma correction"
     ),
@@ -927,6 +931,7 @@ _FEATURE_ICON_DEFAULTS: dict[str, str] = {
     "threshold_triangle": "thresholding.svg",
     "threshold_yen": "thresholding.svg",
     # Processing / Exposure ----------------------------------------------
+    "adjust_brightness_contrast": "exposure.svg",
     "adjust_gamma": "exposure.svg",
     "adjust_log": "exposure.svg",
     "adjust_sigmoid": "exposure.svg",
@@ -1245,8 +1250,9 @@ class BaseProcessor:
         if spec.paramclass is None:
             return None
         instance = spec.paramclass()
-        if params:
-            update_dataset(instance, params)
+        persistent_params = filter_transient_params(spec, params)
+        if persistent_params:
+            update_dataset(instance, persistent_params)
         return instance
 
 
@@ -1274,6 +1280,22 @@ def serialize_catalog(catalog: dict[str, FeatureSpec]) -> list[dict[str, Any]]:
     ]
 
 
+def filter_transient_params(
+    spec: FeatureSpec, params: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Return *params* without non-persistent DataSet items."""
+    if not params or spec.paramclass is None:
+        return params
+    transient_names = {
+        item.get_name()
+        for item in spec.paramclass._items
+        if item.get_name() and item.get_prop("data", "transient", False)
+    }
+    return {
+        name: value for name, value in params.items() if name not in transient_names
+    }
+
+
 def _bind_source_obj(instance: Any, source_obj: Any | None) -> None:
     """Bind *source_obj* to *instance* if the param class supports it.
 
@@ -1295,13 +1317,25 @@ def get_schema(
     catalog: dict[str, FeatureSpec],
     feature_id: str,
     source_obj: Any | None = None,
+    values: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Return the JSON schema for the parameters of *feature_id* (or ``None``)."""
     spec = catalog[feature_id]
     if spec.paramclass is None:
         return None
     instance = spec.paramclass()
-    _bind_source_obj(instance, source_obj)
+    persistent_values = filter_transient_params(spec, values)
+    update_editor_context = getattr(instance, "update_editor_context", None)
+    if values is None:
+        _bind_source_obj(instance, source_obj)
+    elif callable(update_editor_context):
+        if persistent_values:
+            update_dataset(instance, persistent_values)
+        update_editor_context(source_obj)
+    else:
+        _bind_source_obj(instance, source_obj)
+        if persistent_values:
+            update_dataset(instance, persistent_values)
     return dataset_to_schema_with_values(instance)
 
 

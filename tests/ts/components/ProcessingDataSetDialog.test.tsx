@@ -93,9 +93,15 @@ function renderDialog(
                 "x-guidata-kind": "int",
                 "x-guidata-label": "Window",
               },
+              ui_state: {
+                type: "object",
+                "x-guidata-kind": "dict",
+                "x-guidata-hide": true,
+                "x-guidata-transient": true,
+              },
             },
           },
-          values: { n: 3 },
+          values: { n: 3, ui_state: { bins: [1, 2, 3] } },
         }}
         runtime={runtime}
         previewAvailable={previewAvailable}

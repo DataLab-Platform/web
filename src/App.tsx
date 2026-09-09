@@ -2315,6 +2315,7 @@ export default function App() {
         setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
         setCurrentId((prev) => (prev && ids.includes(prev) ? null : prev));
         await refresh(null);
+        setSideRefreshNonce((nonce) => nonce + 1);
       } finally {
         setBusy(false);
       }
@@ -2516,6 +2517,7 @@ export default function App() {
       try {
         await runtime.deleteGroup(gid, treeKind);
         await refresh();
+        setSideRefreshNonce((nonce) => nonce + 1);
       } finally {
         setBusy(false);
       }

@@ -4586,6 +4586,7 @@ def apply_feature(
         params = params.to_py()
     if hasattr(group_ids, "to_py"):
         group_ids = group_ids.to_py()
+    params = _proc.filter_transient_params(spec, params)
     sources = [_MODEL.get(oid) for oid in source_ids]
     operand = _MODEL.get(operand_id) if operand_id else None
     src_panel = _MODEL.panel(spec.object_kind)
@@ -4643,7 +4644,9 @@ def apply_feature(
         # tab can re-edit its parameters and re-apply it on the same source(s).
         _LAST_PROCESSING[new_oid] = {
             "feature_id": feature_id,
-            "source_ids": list(source_ids),
+            "source_ids": (
+                [source_oid] if source_oid is not None else list(source_ids)
+            ),
             "operand_id": operand_id,
             "params": dict(params) if params else {},
         }
@@ -4671,6 +4674,7 @@ def preview_feature(
         raise ValueError(f"Live preview is disabled for {feature_id!r}.")
     if hasattr(params, "to_py"):
         params = params.to_py()
+    params = _proc.filter_transient_params(spec, params)
     source = deepcopy(_MODEL.get(source_id))
     context = _proc.ApplyContext(feature=spec, sources=[source], params=params)
     result = _proc.BaseProcessor(spec.object_kind).apply(context, [source_id])
@@ -4803,12 +4807,9 @@ _LAST_PROCESSING: dict[str, dict[str, Any]] = globals().get("_LAST_PROCESSING", 
 def get_last_processing(oid: str) -> dict[str, Any] | None:
     """Return the last processing applied to produce *oid*, or ``None``.
 
-    Payload: ``{"feature_id", "label", "menu_path", "schema", "values",
-    "source_ids", "operand_id", "has_params"}``.  ``schema`` / ``values``
-    are absent (set to ``None``) when the feature is parameterless.
+    ``schema`` / ``values`` are absent (set to ``None``) when the feature is
+    parameterless. Missing dependencies are reported without hiding the record.
     """
-    from guidata.dataset import dataset_to_schema_with_values, update_dataset
-
     record = _LAST_PROCESSING.get(oid)
     if record is None:
         return None
@@ -4816,24 +4817,33 @@ def get_last_processing(oid: str) -> dict[str, Any] | None:
     spec = catalog.get(record["feature_id"])
     if spec is None:
         return None
+    source_ids = list(record["source_ids"])
+    operand_id = record["operand_id"]
+    missing_source_ids = [sid for sid in source_ids if not _MODEL.has(sid)]
+    missing_operand_id = (
+        operand_id if operand_id is not None and not _MODEL.has(operand_id) else None
+    )
     payload: dict[str, Any] = {
         "feature_id": spec.feature_id,
         "label": spec.label,
         "menu_path": spec.menu_path,
-        "source_ids": list(record["source_ids"]),
-        "operand_id": record["operand_id"],
+        "source_ids": source_ids,
+        "operand_id": operand_id,
+        "missing_source_ids": missing_source_ids,
+        "missing_operand_id": missing_operand_id,
         "has_params": spec.paramclass is not None,
         "schema": None,
         "values": None,
     }
     if spec.paramclass is not None:
-        instance = spec.paramclass()
-        if record["params"]:
-            try:
-                update_dataset(instance, record["params"])
-            except Exception:  # pylint: disable=broad-except
-                pass
-        sw = dataset_to_schema_with_values(instance)
+        source_obj = (
+            _MODEL.get(source_ids[0])
+            if source_ids and source_ids[0] not in missing_source_ids
+            else None
+        )
+        sw = _proc.get_schema(catalog, spec.feature_id, source_obj, record["params"])
+        if sw is None:
+            return payload
         payload["schema"] = sw["schema"]
         payload["values"] = sw["values"]
     return payload
@@ -4856,6 +4866,7 @@ def reapply_last_processing(oid: str, values: dict[str, Any] | None = None) -> s
     spec = catalog.get(record["feature_id"])
     if spec is None:
         raise ValueError(f"Processing {record['feature_id']!r} is no longer available.")
+    values = _proc.filter_transient_params(spec, values)
     source_ids = record["source_ids"]
     missing = [sid for sid in source_ids if not _MODEL.has(sid)]
     if missing:
