@@ -31,3 +31,7 @@ pandas>=1.4
 
 # Used by the HDF5 browser shim (``dlw_h5browser.py``).
 h5py>=3.6
+
+# DataLab-Capsule (provenance) is selected through datalab-capsule-dependency.json
+# (scripts/capsule_dependency.py); this is its only core dependency.
+jsonschema>=4.17

@@ -73,6 +73,7 @@ export default defineConfig({
         __dirname,
         resolve(__dirname, "../Sigima/dist"),
         resolve(__dirname, "../guidata/dist"),
+        resolve(__dirname, "../DataLab-Capsule/dist"),
       ],
     },
     // NOTE: do NOT enable Cross-Origin-Embedder-Policy=require-corp here.

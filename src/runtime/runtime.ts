@@ -25,7 +25,10 @@ import dlwTitleFormatSource from "./dlw_title_format.py?raw";
 // compatibility patch only adds FloatArrayItem hints used by the browser
 // array editor and may be dropped once a later guidata release ships them.
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
-import { SIGIMA_INSTALL_SPEC } from "./dependencyConfig";
+import {
+  DATALAB_CAPSULE_INSTALL_SPEC,
+  SIGIMA_INSTALL_SPEC,
+} from "./dependencyConfig";
 // Resolve the Pyodide ``LANG`` from the active UI locale so that
 // Sigima/guidata gettext labels match the rest of the interface. Import
 // from the React-free ``locale`` module to avoid pulling the provider in.
@@ -1485,9 +1488,17 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
     // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
     // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
+    // DataLab-Capsule (provenance) is optional and only needed by the runtime
+    // that owns the workspace (main thread or kernel worker).
+    const bootRequirements = [
+      SIGIMA_INSTALL_SPEC,
+      GUIDATA_INSTALL_SPEC,
+      "tifffile<2025",
+      ...(DATALAB_CAPSULE_INSTALL_SPEC ? [DATALAB_CAPSULE_INSTALL_SPEC] : []),
+    ];
     await py.runPythonAsync(`
 import micropip
-await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify(GUIDATA_INSTALL_SPEC)}, "tifffile<2025"])
+await micropip.install(${JSON.stringify(bootRequirements)})
 `);
 
     onProgress?.(t("Initialising Sigima namespace…"));
