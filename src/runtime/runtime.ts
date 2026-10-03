@@ -2068,7 +2068,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   /** Re-spill paged-in operands and spill freshly-produced results. */
   private async diskGuardAfter(
     name: string,
-    _kwargs: Record<string, unknown>,
+    kwargs: Record<string, unknown>,
     value: unknown,
     pagedIn: string[],
   ): Promise<void> {
@@ -2077,10 +2077,13 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       return;
     }
     if (DataLabRuntime.REPLACES_MODEL.has(name)) {
-      // The model was replaced wholesale: forget the old store and
-      // spill every freshly-loaded object.
-      this.spilledOids.clear();
-      await this.requireStore().clear();
+      // A replaced model forgets the old store; an appended file keeps the
+      // current objects and their on-disk copies. Either way, spill every
+      // freshly-loaded (resident) object.
+      if (kwargs.replace !== false) {
+        this.spilledOids.clear();
+        await this.requireStore().clear();
+      }
       await this.spillAllResidentDirect();
       return;
     }
