@@ -113,6 +113,30 @@ def test_round_trip_in_a_fresh_runtime():
     check_chain(reader, "web")
 
 
+def test_capsule_export_and_open():
+    """An exported capsule validates on its own and reopens like a workspace."""
+    from datalab_capsule.archive import read_capsule
+    from datalab_capsule.manifest import inspect_manifest
+
+    writer = fresh_runtime()
+    build_chain(writer)
+    data = writer.export_workspace_capsule(name="chain")
+    summary = inspect_manifest(read_capsule(data).manifest)
+    assert summary["name"] == "chain"
+    assert [a["replayable"] for a in summary["activities"]] == [
+        False,
+        True,
+        True,
+        True,
+    ]
+    reader = fresh_runtime()
+    reader.open_workspace_capsule("chain.dlcapsule", data, replace=True)
+    check_chain(reader, "web")
+    with pytest.raises(ValueError):
+        reader.open_workspace_capsule("bad.dlcapsule", b"not a zip", replace=True)
+    check_chain(reader, "web")
+
+
 def test_processing_tab_records_are_rebuilt():
     """Replayable results get their Processing-tab record back after reopening."""
     writer = fresh_runtime()

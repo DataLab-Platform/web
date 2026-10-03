@@ -1801,11 +1801,13 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   private static readonly NEEDS_ALL_RESIDENT: ReadonlySet<string> = new Set([
     "save_workspace_to_bytes",
     "replay_activity",
+    "export_workspace_capsule",
   ]);
   /** Calls that replace the whole model with freshly-loaded objects, so
    *  the on-disk store must be reset and every new object re-spilled. */
   private static readonly REPLACES_MODEL: ReadonlySet<string> = new Set([
     "open_workspace_from_bytes",
+    "open_workspace_capsule",
     "reset_all",
   ]);
   /** Calls that mutate an existing object's heavy array **in place**, so
@@ -3063,6 +3065,34 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       },
       { silent: options.silent },
     )) as WorkspaceLoadResult;
+  }
+
+  /** Return a workspace capsule (``.dlcapsule``): the HDF5 workspace and an
+   *  RO-Crate manifest of its provenance.  Requires DataLab-Capsule. */
+  async exportWorkspaceCapsule(
+    name: string | null = null,
+  ): Promise<Uint8Array> {
+    const result = (await this.callPy("export_workspace_capsule", { name })) as
+      | Uint8Array
+      | ArrayBuffer
+      | number[];
+    if (result instanceof Uint8Array) return result;
+    if (result instanceof ArrayBuffer) return new Uint8Array(result);
+    return Uint8Array.from(result as number[]);
+  }
+
+  /** Validate a workspace capsule, then open its workspace (replacing the
+   *  current one by default). */
+  async openWorkspaceCapsule(
+    filename: string,
+    bytes: Uint8Array,
+    replace: boolean = true,
+  ): Promise<WorkspaceLoadResult> {
+    return (await this.callPy("open_workspace_capsule", {
+      filename,
+      data: bytes,
+      replace,
+    })) as WorkspaceLoadResult;
   }
 
   /** Prepare typed bindings and parameters for one active plugin recipe. */

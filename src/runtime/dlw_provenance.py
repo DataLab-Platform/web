@@ -24,6 +24,7 @@ from importlib import metadata
 from typing import Any
 
 try:
+    from datalab_capsule.archive import create_from_hdf5, read_capsule
     from datalab_capsule.calls import make_call
     from datalab_capsule.compare import (
         build_report,
@@ -180,6 +181,18 @@ class WebProvenance:
             return
         self.ledger, self.state_status = block
         self.file_status = "loaded"
+
+    def export_capsule(self, workspace: bytes, name: str | None = None) -> bytes:
+        """Return the capsule of a saved workspace (``.dlcapsule`` bytes)."""
+        if not self.available:
+            raise RuntimeError(UNAVAILABLE_REASON)
+        return create_from_hdf5(workspace, name=name)
+
+    def open_capsule(self, data: bytes) -> bytes:
+        """Validate a capsule and return its workspace bytes."""
+        if not self.available:
+            raise RuntimeError(UNAVAILABLE_REASON)
+        return read_capsule(data).workspace
 
     def replayable_function(self, activity: dict[str, Any]) -> Callable | None:
         """Return the local function of a replayable activity, or None."""

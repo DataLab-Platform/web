@@ -134,11 +134,12 @@ const FIXTURES = path.join(
   "provenance",
 );
 
-/** Run the chain scenario (S0 -> S1 opaque -> S2 -> S3, S0 -> S4) and save. */
+/** Run the chain scenario (S0 -> S1 opaque -> S2 -> S3, S0 -> S4), then save
+ *  it as an HDF5 workspace and as a capsule. */
 async function saveChain(
   page: Page,
   mode: "ram" | "disk",
-): Promise<{ available: boolean; bytes: number[] }> {
+): Promise<{ available: boolean; bytes: number[]; capsule: number[] }> {
   return page.evaluate(async (storageMode) => {
     interface Runtime {
       resetAll(): Promise<void>;
@@ -156,6 +157,7 @@ async function saveChain(
         params: Record<string, unknown> | null,
       ): Promise<string[]>;
       saveWorkspaceHdf5(): Promise<Uint8Array>;
+      exportWorkspaceCapsule(name: string): Promise<Uint8Array>;
       getProvenanceLedger(): Promise<{ available: boolean }>;
     }
     const runtime = (window as unknown as { runtime: Runtime }).runtime;
@@ -178,6 +180,9 @@ async function saveChain(
       return {
         available,
         bytes: Array.from(await runtime.saveWorkspaceHdf5()),
+        capsule: available
+          ? Array.from(await runtime.exportWorkspaceCapsule("chain"))
+          : [],
       };
     } finally {
       await runtime.resetAll();
@@ -198,14 +203,15 @@ interface ReopenResult {
   environmentMatch: string[];
 }
 
-/** Open a workspace, then replay its activities S0 -> S4 and S1 -> S2. */
+/** Open a workspace (or a capsule), then replay S0 -> S4 and S1 -> S2. */
 async function reopenChain(
   page: Page,
   mode: "ram" | "disk",
   bytes: number[],
+  format: "hdf5" | "capsule" = "hdf5",
 ): Promise<ReopenResult> {
   return page.evaluate(
-    async ({ storageMode, data }) => {
+    async ({ storageMode, data, fileFormat }) => {
       interface Activity {
         activity_id: string;
         edition: string;
@@ -216,6 +222,7 @@ async function reopenChain(
         resetAll(): Promise<void>;
         setStorageMode(mode: "ram" | "disk"): Promise<void>;
         openWorkspaceHdf5(name: string, bytes: Uint8Array): Promise<unknown>;
+        openWorkspaceCapsule(name: string, bytes: Uint8Array): Promise<unknown>;
         listSignals(): Promise<{ id: string; uuid: string | null }[]>;
         getSignalData(id: string): Promise<{ y: ArrayLike<number> }>;
         getProvenanceLedger(): Promise<{
@@ -237,7 +244,14 @@ async function reopenChain(
       await runtime.resetAll();
       await runtime.setStorageMode(storageMode);
       try {
-        await runtime.openWorkspaceHdf5("chain.h5", new Uint8Array(data));
+        if (fileFormat === "capsule") {
+          await runtime.openWorkspaceCapsule(
+            "chain.dlcapsule",
+            new Uint8Array(data),
+          );
+        } else {
+          await runtime.openWorkspaceHdf5("chain.h5", new Uint8Array(data));
+        }
         const info = await runtime.getProvenanceLedger();
         const ledger = info.ledger;
         if (ledger === null) {
@@ -279,7 +293,7 @@ async function reopenChain(
         await runtime.setStorageMode("ram");
       }
     },
-    { storageMode: mode, data: bytes },
+    { storageMode: mode, data: bytes, fileFormat: format },
   );
 }
 
@@ -380,6 +394,13 @@ for (const runtimeMode of ["main", "worker"] as const) {
         }
         const result = await reopenChain(reader, storageMode, saved.bytes);
         expectChain(result, "web");
+        const fromCapsule = await reopenChain(
+          reader,
+          storageMode,
+          saved.capsule,
+          "capsule",
+        );
+        expectChain(fromCapsule, "web");
       });
 
       test(`reopens and replays the Desktop reference file (${storageMode})`, async () => {

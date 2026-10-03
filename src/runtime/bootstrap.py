@@ -6403,6 +6403,21 @@ def open_workspace_from_bytes(
     return counts
 
 
+def export_workspace_capsule(name: str | None = None) -> bytes:
+    """Return a capsule (``.dlcapsule`` bytes) of the workspace and its provenance."""
+    return _PROVENANCE.export_capsule(save_workspace_to_bytes(), name=name)
+
+
+def open_workspace_capsule(
+    filename: str, data: Any, *, replace: bool = True
+) -> dict[str, int]:
+    """Validate a capsule, then open its workspace like an HDF5 workspace file."""
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    workspace = _PROVENANCE.open_capsule(bytes(data))
+    return open_workspace_from_bytes(filename, workspace, replace=replace)
+
+
 def _rebuild_last_processing() -> None:
     """Rebuild the Processing-tab records of replayable activities from the ledger.
 
@@ -6946,6 +6961,8 @@ __all__ = [
     "get_provenance_ledger",
     "replay_activity",
     "set_provenance_edition_version",
+    "export_workspace_capsule",
+    "open_workspace_capsule",
     "get_image_grid_param_schema",
     "distribute_images_on_grid",
     "reset_image_positions",
