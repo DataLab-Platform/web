@@ -6233,6 +6233,7 @@ def save_workspace_to_bytes() -> bytes:
                                 writer.write_str(ntb["title"])
                             with writer.group("contents"):
                                 writer.write_str(ntb["content"])
+            _PROVENANCE.save(writer.h5)
         finally:
             writer.close()
         with open(path, "rb") as fh:
@@ -6263,8 +6264,11 @@ def open_workspace_from_bytes(
         ``{"signals": n, "images": n, "groups": n}`` for diagnostics.
 
     Raises:
-        ValueError: when *data* is not a DataLab-compatible HDF5 workspace.
+        ValueError: when *data* is not a DataLab-compatible HDF5 workspace or
+         its provenance block is invalid. The current workspace is unchanged.
     """
+    global _PREVIEW_RESULT  # pylint: disable=global-statement
+
     import os
     import tempfile
 
@@ -6281,6 +6285,11 @@ def open_workspace_from_bytes(
     with open(path, "wb") as fh:
         fh.write(bytes(data))
     counts = {"signals": 0, "images": 0, "groups": 0}
+    # Everything is read into staging lists first, so that a failure leaves
+    # the current workspace untouched.
+    groups: list[tuple[str, str, list[Any]]] = []
+    macros: list[dict[str, str]] = []
+    notebooks: list[dict[str, str]] = []
     try:
         try:
             reader = HDF5Reader(path)
@@ -6292,12 +6301,7 @@ def open_workspace_from_bytes(
                     "Not a DataLab HDF5 workspace "
                     f"(missing {_H5_DATALAB_VERSION_KEY!r} root attribute)"
                 )
-            if replace:
-                _MODEL._panels.clear()  # noqa: SLF001
-                _MODEL._objects.clear()  # noqa: SLF001
-                _clear_data_summary_cache()
-                _MACROS.clear()
-                _NOTEBOOKS.clear()
+            block = _PROVENANCE.read(reader.h5)
             klass_for_kind = {"signal": SignalObj, "image": _ImageObj}
             for kind, prefix in _H5_PANEL_PREFIXES.items():
                 if prefix not in reader.h5:
@@ -6311,8 +6315,8 @@ def open_workspace_from_bytes(
                                     grp_title = reader.read_str() or group_name
                             except Exception:  # noqa: BLE001
                                 grp_title = group_name
-                            gid = _MODEL.create_group(kind, name=grp_title)
-                            counts["groups"] += 1
+                            objs: list[Any] = []
+                            groups.append((kind, grp_title, objs))
                             for obj_name in list(reader.h5[f"{prefix}/{group_name}"]):
                                 if obj_name == "title":
                                     continue
@@ -6320,17 +6324,9 @@ def open_workspace_from_bytes(
                                     obj = klass()
                                     obj.deserialize(reader)
                                     migrate_legacy_plotpy_annotations(obj)
-                                _MODEL.add_object(
-                                    kind, obj, group_id=gid, preserve_uuid=True
-                                )
-                                if kind == "signal":
-                                    counts["signals"] += 1
-                                else:
-                                    counts["images"] += 1
+                                objs.append(obj)
             # Macros (mirror Qt layout — see ``save_workspace_to_bytes``).
             if _H5_MACRO_PREFIX in reader.h5:
-                if replace:
-                    _MACROS.clear()
                 with reader.group(_H5_MACRO_PREFIX):
                     for name in list(reader.h5[_H5_MACRO_PREFIX]):
                         with reader.group(name):
@@ -6344,7 +6340,7 @@ def open_workspace_from_bytes(
                                     code = reader.read_str() or ""
                             except Exception:  # noqa: BLE001
                                 code = ""
-                        _MACROS.append(
+                        macros.append(
                             {
                                 "id": _new_id("m"),
                                 "title": title,
@@ -6353,8 +6349,6 @@ def open_workspace_from_bytes(
                         )
             # Notebooks — symmetric to macros.
             if _H5_NOTEBOOK_PREFIX in reader.h5:
-                if replace:
-                    _NOTEBOOKS.clear()
                 with reader.group(_H5_NOTEBOOK_PREFIX):
                     for name in list(reader.h5[_H5_NOTEBOOK_PREFIX]):
                         with reader.group(name):
@@ -6368,7 +6362,7 @@ def open_workspace_from_bytes(
                                     content = reader.read_str() or ""
                             except Exception:  # noqa: BLE001
                                 content = ""
-                        _NOTEBOOKS.append(
+                        notebooks.append(
                             {
                                 "id": _new_id("n"),
                                 "title": title,
@@ -6386,7 +6380,65 @@ def open_workspace_from_bytes(
             os.rmdir(tmpdir)
         except OSError:
             pass
+    if replace:
+        _MODEL._panels.clear()  # noqa: SLF001
+        _MODEL._objects.clear()  # noqa: SLF001
+        _clear_data_summary_cache()
+        _MACROS.clear()
+        _NOTEBOOKS.clear()
+        _LAST_PROCESSING.clear()
+        _PREVIEW_RESULT = None
+        _SPILLED.clear()
+    for kind, grp_title, objs in groups:
+        gid = _MODEL.create_group(kind, name=grp_title)
+        counts["groups"] += 1
+        for obj in objs:
+            _MODEL.add_object(kind, obj, group_id=gid, preserve_uuid=True)
+            counts["signals" if kind == "signal" else "images"] += 1
+    _MACROS.extend(macros)
+    _NOTEBOOKS.extend(notebooks)
+    _PROVENANCE.load(block, replace)
+    if replace:
+        _rebuild_last_processing()
     return counts
+
+
+def _rebuild_last_processing() -> None:
+    """Rebuild the Processing-tab records of replayable activities from the ledger.
+
+    Only results whose current state is the activity's output, computed from a
+    source still present, get a record.
+    """
+    ledger = _PROVENANCE.ledger
+    if ledger is None:
+        return
+    oid_of = {
+        _object_uuid(entry.obj): oid
+        for oid, entry in _MODEL._objects.items()  # noqa: SLF001
+    }
+    for activity in ledger.activities:
+        function = _PROVENANCE.replayable_function(activity)
+        spec = None if function is None else _feature_spec_of(function)
+        if spec is None:
+            continue
+        output = ledger.states[activity["outputs"][0]["state_id"]]
+        source = ledger.states[activity["call"]["inputs"][0]["binding"]["state_id"]]
+        latest = ledger.latest_state(output["object_uuid"])
+        out_oid = oid_of.get(output["object_uuid"])
+        src_oid = oid_of.get(source["object_uuid"])
+        if (
+            out_oid is None
+            or src_oid is None
+            or latest["state_id"] != output["state_id"]
+            or output["state_id"] in _PROVENANCE.state_status
+        ):
+            continue
+        _LAST_PROCESSING[out_oid] = {
+            "feature_id": spec.feature_id,
+            "source_ids": [src_oid],
+            "operand_id": None,
+            "params": dict(activity["call"]["parameters"] or {}),
+        }
 
 
 # ---------------------------------------------------------------------------

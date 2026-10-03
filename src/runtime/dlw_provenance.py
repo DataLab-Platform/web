@@ -31,6 +31,7 @@ try:
         compare_exact,
     )
     from datalab_capsule.environment import collect_environment, environment_id
+    from datalab_capsule.hdf5 import load_ledger, save_ledger
     from datalab_capsule.integrity import signal_state_facts
     from datalab_capsule.ledger import Ledger, utc_timestamp
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
@@ -120,6 +121,8 @@ class WebProvenance:
         self.ledger = None if UNAVAILABLE_REASON else Ledger()
         self.state_status: dict[str, str] = {}
         self.notices: list[str] = []
+        #: ``"loaded"`` or ``"absent"`` after opening a workspace file, else None.
+        self.file_status: str | None = None
 
     @property
     def available(self) -> bool:
@@ -134,6 +137,62 @@ class WebProvenance:
             self.ledger = Ledger()
         self.state_status = {}
         self.notices = []
+        self.file_status = None
+
+    def save(self, h5file: Any) -> None:
+        """Write the ledger block into a workspace file, after its panels."""
+        if self.available:
+            save_ledger(h5file, self.ledger)
+
+    def read(self, h5file: Any) -> tuple[Any, dict[str, str]] | None:
+        """Read and validate the block of a workspace file before anything changes.
+
+        Returns:
+            ``(ledger, state_status)``, or None without block or without
+            DataLab-Capsule.
+
+        Raises:
+            ProvenanceFormatError: If the block is invalid.
+        """
+        return load_ledger(h5file) if self.available else None
+
+    def load(self, block: tuple[Any, dict[str, str]] | None, replaced: bool) -> None:
+        """Adopt the ledger read from a workspace file, after its objects.
+
+        Args:
+            block: Result of :meth:`read`.
+            replaced: False when the file was appended to the current workspace:
+             ledgers are not merged and the file's block is ignored.
+        """
+        if not self.available:
+            return
+        if not replaced:
+            if block is not None:
+                message = (
+                    "Provenance import into an existing workspace is not supported yet"
+                )
+                _logger.warning(message)
+                self.notices.append(message)
+            return
+        self.reset()
+        if block is None:
+            self.file_status = "absent"
+            return
+        self.ledger, self.state_status = block
+        self.file_status = "loaded"
+
+    def replayable_function(self, activity: dict[str, Any]) -> Callable | None:
+        """Return the local function of a replayable activity, or None."""
+        operation = activity["call"]["operation"]
+        if operation is None:
+            return None
+        try:
+            contract = self._resolve_contract(
+                operation["id"], operation["contract_version"]
+            )
+        except IneligibleError:
+            return None
+        return contract.function
 
     def set_edition_version(self, version: str) -> None:
         """Set the application version recorded in environments."""
@@ -156,6 +215,7 @@ class WebProvenance:
             "state_status": dict(self.state_status),
             "capture_failures": self.capture_failures,
             "notices": list(self.notices),
+            "file_status": self.file_status,
         }
 
     # -- Capture ------------------------------------------------------------

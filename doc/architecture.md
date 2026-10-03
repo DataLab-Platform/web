@@ -370,7 +370,7 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
   - **Typed generators**: `list_signal_creation_types`,
     `create_signal_typed`, `update_signal_creation_params`, idem image.
   - **IO**: `list_signal_io_formats`, `open_signal_from_bytes`,
-    `save_signal_to_bytes`, idem image. HDF5 workspace serialisation.
+    `save_signal_to_bytes`, idem image. HDF5 workspace serialisation (`save_workspace_to_bytes` / `open_workspace_from_bytes`, same layout as DataLab desktop, provenance block included). Opening is transactional: the file is fully read and validated before the current workspace is replaced, so an invalid file leaves it untouched.
   - **Macros / notebooks**: full CRUD + reorder + replace (used by the
     in-browser recovery cache when restoring from IndexedDB).
   - **Dialog bridge**: `set_dialog_bridge(bridge)` registers the JS
@@ -410,7 +410,7 @@ param.edit_async(...)` for parameter dialogs.
 - **`dlw_title_format.py`** — central title formatting for computed
   results (mirrors Sigima's title strategy).
 
-- **`dlw_provenance.py`** — workspace provenance ledger. Every signal 1-to-1 processing (ordinary, adopted preview, group-wise, or in-place re-application from the Processing tab) is recorded with fingerprints of its input and output states, using DataLab-Capsule (ledger, fingerprints, replay preparation, reports) and Sigima operation contracts. `replay_activity` recomputes a recorded activity as a separate candidate and compares it with the stored result, leaving the workspace unchanged. DataLab-Capsule is optional: without it, processing is unchanged and `get_provenance_ledger` reports provenance as unavailable. Spilled (on-disk) arrays are never fingerprinted; capture failures never break processing.
+- **`dlw_provenance.py`** — workspace provenance ledger. Every signal 1-to-1 processing (ordinary, adopted preview, group-wise, or in-place re-application from the Processing tab) is recorded with fingerprints of its input and output states, using DataLab-Capsule (ledger, fingerprints, replay preparation, reports) and Sigima operation contracts. `replay_activity` recomputes a recorded activity as a separate candidate and compares it with the stored result, leaving the workspace unchanged. DataLab-Capsule is optional: without it, processing is unchanged and `get_provenance_ledger` reports provenance as unavailable. Spilled (on-disk) arrays are never fingerprinted; capture failures never break processing. The ledger is saved in the workspace file (`/DataLab_Provenance`, shared with DataLab desktop) and reloaded on open, after checking every located object against its recorded fingerprint; Processing-tab records of replayable results are rebuilt from it.
 
 - **`notebook_display.py`** — implements Jupyter-like `display()` and
   cell execution semantics inside the notebook worker.

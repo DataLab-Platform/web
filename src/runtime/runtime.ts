@@ -231,6 +231,8 @@ export interface ProvenanceLedgerInfo {
   state_status: Record<string, string>;
   capture_failures: number;
   notices: string[];
+  /** ``"loaded"`` or ``"absent"`` after opening a workspace file, else null. */
+  file_status: "loaded" | "absent" | null;
 }
 
 /** Verification report (DataLab-Capsule ``report-1`` document). */
@@ -1173,6 +1175,18 @@ function toJs(value: unknown): unknown {
     });
     proxy.destroy?.();
     return result;
+  }
+  return value;
+}
+
+/** Map ``undefined`` (Pyodide's conversion of ``None``) back to JSON ``null``. */
+function restoreJsonNulls(value: unknown): unknown {
+  if (value === undefined) return null;
+  if (Array.isArray(value)) return value.map(restoreJsonNulls);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, restoreJsonNulls(item)]),
+    );
   }
   return value;
 }
@@ -3742,15 +3756,17 @@ await micropip.install(${JSON.stringify(bootRequirements)})
 
   /** Return the workspace provenance ledger and its runtime status. */
   async getProvenanceLedger(): Promise<ProvenanceLedgerInfo> {
-    return (await this.callPy("get_provenance_ledger")) as ProvenanceLedgerInfo;
+    return restoreJsonNulls(
+      await this.callPy("get_provenance_ledger"),
+    ) as ProvenanceLedgerInfo;
   }
 
   /** Verify a recorded activity by recomputing it as a separate candidate.
    *  The workspace and the ledger are left unchanged. */
   async replayActivity(activityId: string): Promise<ProvenanceReport> {
-    return (await this.callPy("replay_activity", {
-      activity_id: activityId,
-    })) as ProvenanceReport;
+    return restoreJsonNulls(
+      await this.callPy("replay_activity", { activity_id: activityId }),
+    ) as ProvenanceReport;
   }
 
   // ---------------------------------------------------------------------
