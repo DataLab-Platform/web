@@ -1917,10 +1917,13 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     let value: T;
     try {
       value = await this.invokePy<T>(name, kwargs, options);
-    } finally {
-      // Re-spill anything we paged in even when the call throws, so a failed
-      // operation never leaves the WASM heap inflated.
+    } catch (err) {
+      // Re-spill anything we paged in when the call throws, so a failed
+      // operation never leaves the WASM heap inflated. On success,
+      // ``diskGuardAfter`` re-spills instead: it must rewrite the on-disk
+      // copy of objects mutated in place, which a release would skip.
       await this.diskGuardReleaseFailsafe(name, pagedIn);
+      throw err;
     }
     await this.diskGuardAfter(name, kwargs, value, pagedIn);
     return value;

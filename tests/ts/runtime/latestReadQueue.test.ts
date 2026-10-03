@@ -13,7 +13,10 @@ interface RuntimeInternals {
   };
   _queue: Promise<unknown>;
   storageMode: "ram" | "disk";
-  opfsStore: { get: (oid: string) => Promise<Uint8Array> } | null;
+  opfsStore: {
+    get: (oid: string) => Promise<Uint8Array>;
+    put?: (oid: string, bytes: Uint8Array) => Promise<void>;
+  } | null;
   spilledOids: Set<string>;
   _latestReadGenerations: Map<string, number>;
   callPy<T>(name: string, kwargs?: Record<string, unknown>): Promise<T>;
@@ -157,6 +160,52 @@ describe("DataLabRuntime latest-read queue", () => {
     expect(calls.indexOf("release_object_array")).toBeGreaterThan(
       calls.indexOf("preview_feature"),
     );
+    expect(runtime.spilledOids.has("signal-1")).toBe(true);
+  });
+
+  it("rewrites the on-disk copy of an object mutated in place", async () => {
+    const calls: string[] = [];
+    const newBytes = new Uint8Array([9, 9]);
+    const runtime = makeRuntime((name) => {
+      calls.push(name);
+      if (name === "detach_object_array") return newBytes;
+      if (name === "release_object_array") return true;
+      if (name === "set_signal_xydata") return null;
+      return null;
+    });
+    const put = vi.fn(async () => {});
+    runtime.storageMode = "disk";
+    runtime.opfsStore = { get: async () => new Uint8Array([1]), put };
+    runtime.spilledOids.add("signal-1");
+
+    await runtime.callPy("set_signal_xydata", { oid: "signal-1" });
+
+    expect(calls).not.toContain("release_object_array");
+    expect(calls.indexOf("detach_object_array")).toBeGreaterThan(
+      calls.indexOf("set_signal_xydata"),
+    );
+    expect(put).toHaveBeenCalledWith("signal-1", newBytes);
+    expect(runtime.spilledOids.has("signal-1")).toBe(true);
+  });
+
+  it("releases paged-in objects when the call fails", async () => {
+    const calls: string[] = [];
+    const runtime = makeRuntime((name) => {
+      calls.push(name);
+      if (name === "release_object_array") return true;
+      if (name === "set_signal_xydata") throw new Error("failed");
+      return null;
+    });
+    runtime.storageMode = "disk";
+    runtime.opfsStore = { get: async () => new Uint8Array([1]) };
+    runtime.spilledOids.add("signal-1");
+
+    await expect(
+      runtime.callPy("set_signal_xydata", { oid: "signal-1" }),
+    ).rejects.toThrow("failed");
+
+    expect(calls).toContain("release_object_array");
+    expect(calls).not.toContain("detach_object_array");
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
   });
 });
