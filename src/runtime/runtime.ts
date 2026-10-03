@@ -15,6 +15,7 @@ import dlwApplicationsSource from "./dlw_applications.py?raw";
 import dlwH5BrowserSource from "./dlw_h5browser.py?raw";
 import dlwInteractiveFitSource from "./dlw_interactive_fit.py?raw";
 import dlwMacroLintSource from "./dlw_macro_lint.py?raw";
+import dlwProvenanceSource from "./dlw_provenance.py?raw";
 import macroProxySource from "./macro_proxy.py?raw";
 // Tiny module that installs Sigima's ``PlaceholderTitleFormatter`` as the
 // default; pushed into every Pyodide instance (main runtime + workers)
@@ -209,6 +210,44 @@ export interface LastProcessingInfo {
   has_params: boolean;
   schema: SchemaWithValues["schema"] | null;
   values: Record<string, unknown> | null;
+}
+
+/** Workspace provenance ledger (DataLab-Capsule ``ledger-1`` document). */
+export interface ProvenanceLedger {
+  schema: string;
+  schema_version: number;
+  workspace_id: string;
+  environments: Record<string, Record<string, unknown>>;
+  states: Record<string, Record<string, unknown>>;
+  activities: Record<string, unknown>[];
+}
+
+/** Snapshot returned by ``get_provenance_ledger()``.  ``available`` is
+ *  false (and ``ledger`` null) when DataLab-Capsule is not installed. */
+export interface ProvenanceLedgerInfo {
+  available: boolean;
+  reason: string | null;
+  ledger: ProvenanceLedger | null;
+  state_status: Record<string, string>;
+  capture_failures: number;
+  notices: string[];
+}
+
+/** Verification report (DataLab-Capsule ``report-1`` document). */
+export interface ProvenanceReport {
+  report: string;
+  report_version: number;
+  activity_id: string;
+  restoration: string;
+  eligibility: string;
+  reason?: string;
+  inputs: Record<string, unknown>[];
+  reference: Record<string, unknown> | null;
+  environment: Record<string, unknown>;
+  verdict: string;
+  rule: string | null;
+  observed: Record<string, unknown> | null;
+  verification_activity: Record<string, unknown> | null;
 }
 
 export type Pattern = "1_to_1" | "2_to_1" | "n_to_1";
@@ -1532,6 +1571,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       dlwInteractiveFitSource,
     );
     py.FS.writeFile("/home/pyodide/dlw_title_format.py", dlwTitleFormatSource);
+    py.FS.writeFile("/home/pyodide/dlw_provenance.py", dlwProvenanceSource);
     // ``macro_proxy.py`` is normally only loaded into worker Pyodides,
     // but the main instance needs the source so :mod:`dlw_macro_lint`
     // can introspect the ``_Proxy`` API surface.
@@ -1593,6 +1633,11 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     await py.runPythonAsync(
       `set_default_labels(${JSON.stringify(groupLabel)}, ${JSON.stringify(
         untitledLabel,
+      )})`,
+    );
+    await py.runPythonAsync(
+      `set_provenance_edition_version(${JSON.stringify(
+        String(import.meta.env.VITE_APP_VERSION ?? "dev"),
       )})`,
     );
 
@@ -1741,6 +1786,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  (e.g. workspace serialisation). */
   private static readonly NEEDS_ALL_RESIDENT: ReadonlySet<string> = new Set([
     "save_workspace_to_bytes",
+    "replay_activity",
   ]);
   /** Calls that replace the whole model with freshly-loaded objects, so
    *  the on-disk store must be reset and every new object re-spilled. */
@@ -3678,15 +3724,33 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   }
 
   /** Re-run the last processing applied to *id* with *values* and
-   *  replace its data in place.  Returns the same id. */
+   *  replace its data in place.  Returns the same id.  The recorded
+   *  source ids are passed along so that on-disk sources are paged in. */
   async reapplyLastProcessing(
     id: string,
     values: Record<string, unknown> | null,
   ): Promise<string> {
+    const record = await this.getLastProcessing(id);
     return (await this.callPy("reapply_last_processing", {
       oid: id,
       values,
+      ...(record
+        ? { source_ids: record.source_ids, operand_id: record.operand_id }
+        : {}),
     })) as string;
+  }
+
+  /** Return the workspace provenance ledger and its runtime status. */
+  async getProvenanceLedger(): Promise<ProvenanceLedgerInfo> {
+    return (await this.callPy("get_provenance_ledger")) as ProvenanceLedgerInfo;
+  }
+
+  /** Verify a recorded activity by recomputing it as a separate candidate.
+   *  The workspace and the ledger are left unchanged. */
+  async replayActivity(activityId: string): Promise<ProvenanceReport> {
+    return (await this.callPy("replay_activity", {
+      activity_id: activityId,
+    })) as ProvenanceReport;
   }
 
   // ---------------------------------------------------------------------

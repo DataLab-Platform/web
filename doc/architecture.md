@@ -90,7 +90,7 @@ flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
     L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
     L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>ProcessingPreviewController.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
-    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
+    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>dlw_provenance.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 
     L1 --> L2 --> L3 --> L4 --> L5
@@ -410,6 +410,8 @@ param.edit_async(...)` for parameter dialogs.
 - **`dlw_title_format.py`** — central title formatting for computed
   results (mirrors Sigima's title strategy).
 
+- **`dlw_provenance.py`** — workspace provenance ledger. Every signal 1-to-1 processing (ordinary, adopted preview, group-wise, or in-place re-application from the Processing tab) is recorded with fingerprints of its input and output states, using DataLab-Capsule (ledger, fingerprints, replay preparation, reports) and Sigima operation contracts. `replay_activity` recomputes a recorded activity as a separate candidate and compares it with the stored result, leaving the workspace unchanged. DataLab-Capsule is optional: without it, processing is unchanged and `get_provenance_ledger` reports provenance as unavailable. Spilled (on-disk) arrays are never fingerprinted; capture failures never break processing.
+
 - **`notebook_display.py`** — implements Jupyter-like `display()` and
   cell execution semantics inside the notebook worker.
 
@@ -490,7 +492,7 @@ compatibility independently of the application version.
 5. bootstrap deep-copies the source and returns a private plotting payload
 6. OK detaches a current single-source preview token, if available, and calls runtime.applyFeature(featureId, selectedOids, paramValues, token)
 7. bootstrap consumes a matching result once, or calls processor.apply_*(feature, oids, params)
-8. The result is published as a new SignalObj/ImageObj in _MODEL
+8. The result is published as a new SignalObj/ImageObj in _MODEL; a signal 1-to-1 execution is also recorded in the provenance ledger
 9. bootstrap returns new oids; UI refreshes ObjectTree + plots
 10. WorkspaceContext is marked dirty
 ```

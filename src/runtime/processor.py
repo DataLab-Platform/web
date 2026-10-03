@@ -1136,6 +1136,8 @@ class ApplyContext:
         sources: The source objects (list, even for 1_to_1 / 2_to_1).
         operand: Optional operand object (2_to_1 only).
         params: Optional dict of user-edited parameter values.
+        param_instance: Optional parameter instance, used as is (no second
+            instantiation) when given.
     """
 
     # Pure data container.
@@ -1145,6 +1147,7 @@ class ApplyContext:
     sources: list[Any]
     operand: Any | None = None
     params: dict[str, Any] | None = None
+    param_instance: Any | None = None
 
 
 @dataclass
@@ -1154,13 +1157,15 @@ class ApplyResult:
     Each entry is ``(source_oid_or_None, result_object)``.  The
     ``source_oid`` is used by the caller to decide which group hosts the
     result (for ``n_to_1`` it is ``None`` — the caller picks the first
-    source's group).
+    source's group). ``param`` is the parameter instance actually passed to
+    the function (``None`` for parameterless features).
     """
 
     # Pure data container (a frozen-style dataclass with one field).
     # pylint: disable=too-few-public-methods
 
     items: list[tuple[str | None, Any]] = field(default_factory=list)
+    param: Any | None = None
 
 
 class BaseProcessor:
@@ -1178,7 +1183,26 @@ class BaseProcessor:
     def apply(self, ctx: ApplyContext, source_ids: list[str]) -> ApplyResult:
         """Apply the feature described by *ctx* to *source_ids* and return the result."""
         spec = ctx.feature
-        instance = self._build_param_instance(spec, ctx.params)
+        instance = ctx.param_instance
+        if instance is None:
+            instance = self._build_param_instance(spec, ctx.params)
+        result = self._dispatch(spec, ctx, source_ids, instance)
+        result.param = instance
+        return result
+
+    def build_param_instance(
+        self, spec: FeatureSpec, params: dict[str, Any] | None
+    ) -> gds.DataSet | None:
+        """Return the parameter instance that :meth:`apply` would use."""
+        return self._build_param_instance(spec, params)
+
+    def _dispatch(
+        self,
+        spec: FeatureSpec,
+        ctx: ApplyContext,
+        source_ids: list[str],
+        instance: gds.DataSet | None,
+    ) -> ApplyResult:
         if spec.pattern == "1_to_1":
             return self._compute_1_to_1(spec, ctx.sources, source_ids, instance)
         if spec.pattern == "2_to_1":

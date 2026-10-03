@@ -57,6 +57,7 @@ import dlw_interactive_fit as _ifit
 # a fresh Pyodide instance always boots with the right ``LANG``. See the
 # "Internationalisation" section of ``README.md``.
 import dlw_processor as _proc
+import dlw_provenance as _prov
 
 # ``dlw_title_format`` installs Sigima's ``PlaceholderTitleFormatter`` as
 # the default. Imported for its side-effect; the actual substitution of
@@ -2755,6 +2756,7 @@ def reset_all() -> None:
     _clear_data_summary_cache()
     _MACROS.clear()
     _NOTEBOOKS.clear()
+    _PROVENANCE.reset()
 
 
 def collect_garbage() -> dict[str, int]:
@@ -4553,6 +4555,89 @@ def patch_title_with_ids(dst: Any, src_oids: list[str]) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Workspace provenance
+# ---------------------------------------------------------------------------
+
+
+def _find_object_by_uuid(object_uuid: str) -> Any:
+    """Return the workspace object whose persistent UUID is *object_uuid*."""
+    for entry in _MODEL._objects.values():  # noqa: SLF001
+        if _object_uuid(entry.obj) == object_uuid:
+            return entry.obj
+    return None
+
+
+def _is_spilled_object(obj: Any) -> bool:
+    """Return True when *obj*'s heavy array currently lives on disk."""
+    return any(
+        entry.obj is obj and oid in _SPILLED
+        for oid, entry in _MODEL._objects.items()  # noqa: SLF001
+    )
+
+
+_PROVENANCE: _prov.WebProvenance = globals().get(  # type: ignore[assignment]
+    "_PROVENANCE"
+) or _prov.WebProvenance(_find_object_by_uuid, _object_uuid, _is_spilled_object)
+
+
+def set_provenance_edition_version(version: str) -> None:
+    """Set the application version recorded in provenance environments."""
+    _PROVENANCE.set_edition_version(version)
+
+
+def get_provenance_ledger() -> dict[str, Any]:
+    """Return the workspace provenance ledger and its runtime status."""
+    return _PROVENANCE.info()
+
+
+def _begin_provenance(
+    spec: Any,
+    param: Any,
+    sources: list[Any],
+    source_ids: list[str],
+    origin: str = "ordinary",
+    command_id: str | None = None,
+) -> dict[str, Any]:
+    """Record the input states of a 1-to-1 execution, keyed by source id."""
+    if spec.pattern != "1_to_1":
+        return {}
+    command_id = command_id or str(uuid.uuid4())
+    pendings: dict[str, Any] = {}
+    for oid, src in zip(source_ids, sources):
+        pending = _PROVENANCE.begin(spec.func, param, src, command_id, origin)
+        if pending is not None:
+            pendings[oid] = pending
+    return pendings
+
+
+def _feature_spec_of(function: Any) -> Any:
+    """Return the catalogue feature whose function is *function* (identity)."""
+    for spec in _full_catalog_with_plugins().values():
+        if spec.func is function and spec.pattern == "1_to_1":
+            return spec
+    return None
+
+
+def replay_activity(activity_id: str) -> dict[str, Any]:
+    """Verify a recorded activity by recomputing it as a separate candidate.
+
+    The candidate is never inserted in the workspace and the ledger is not
+    changed; the returned report describes the comparison with the recorded
+    result.
+    """
+
+    def execute_candidate(function: Any, source: Any, param: Any) -> Any:
+        spec = _feature_spec_of(function)
+        if spec is None:
+            raise ValueError("The operation is not available in this catalogue")
+        ctx = _proc.ApplyContext(feature=spec, sources=[source], param_instance=param)
+        result = _proc.BaseProcessor(spec.object_kind).apply(ctx, ["candidate"])
+        return result.items[0][1] if result.items else None
+
+    return _PROVENANCE.verify(activity_id, execute_candidate)
+
+
 def apply_feature(
     feature_id: str,
     source_ids: list[str],
@@ -4608,14 +4693,22 @@ def apply_feature(
     # Snapshot the source ID list *before* running the computation so
     # title patching is robust against any concurrent model mutation.
     src_ids_snapshot = list(source_ids)
-    ctx = _proc.ApplyContext(
-        feature=spec, sources=sources, operand=operand, params=params
-    )
     result = _take_preview_result(
         preview_token, feature_id, source_ids, params, group_ids
     )
     if result is None:
+        param = _PROCESSOR.build_param_instance(spec, params)
+        pendings = _begin_provenance(spec, param, sources, src_ids_snapshot)
+        ctx = _proc.ApplyContext(
+            feature=spec,
+            sources=sources,
+            operand=operand,
+            params=params,
+            param_instance=param,
+        )
         result = _PROCESSOR.apply(ctx, source_ids)
+    else:
+        pendings = _begin_provenance(spec, result.param, sources, src_ids_snapshot)
     new_ids: list[str] = []
     for source_oid, dst in result.items:
         # Resolve the placeholder-based title produced by Sigima
@@ -4640,6 +4733,7 @@ def apply_feature(
             group = src_panel.find_group_of(anchor)
         new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=group.gid)
         new_ids.append(new_oid)
+        _PROVENANCE.complete(pendings.get(source_oid), dst)
         # Record the originating processing so the "Processing" side panel
         # tab can re-edit its parameters and re-apply it on the same source(s).
         _LAST_PROCESSING[new_oid] = {
@@ -4739,6 +4833,8 @@ def _apply_feature_grouped(
     func_name = getattr(spec.func, "__name__", feature_id)
     selected = set(source_ids)
     new_ids: list[str] = []
+    command_id = str(uuid.uuid4())
+    pendings: dict[str, Any] = {}
 
     def _members(gid: str) -> list[str]:
         """Return the *gid* group's object ids that are part of the selection."""
@@ -4758,6 +4854,7 @@ def _apply_feature_grouped(
         patch_title_with_ids(dst, patch_oids)
         new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=gid)
         new_ids.append(new_oid)
+        _PROVENANCE.complete(pendings.pop(source_oid, None), dst)
         _LAST_PROCESSING[new_oid] = {
             "feature_id": feature_id,
             "source_ids": [source_oid] if source_oid is not None else list(n_src_ids),
@@ -4788,8 +4885,18 @@ def _apply_feature_grouped(
             if not member_ids:
                 continue
             member_objs = [_MODEL.get(oid) for oid in member_ids]
+            param = _PROCESSOR.build_param_instance(spec, params)
+            pendings.update(
+                _begin_provenance(
+                    spec, param, member_objs, member_ids, command_id=command_id
+                )
+            )
             ctx = _proc.ApplyContext(
-                feature=spec, sources=member_objs, operand=operand, params=params
+                feature=spec,
+                sources=member_objs,
+                operand=operand,
+                params=params,
+                param_instance=param,
             )
             result = _PROCESSOR.apply(ctx, member_ids)
             dst_gid = _MODEL.create_group(spec.object_kind, name=f"{func_name}({gid})")
@@ -4849,19 +4956,35 @@ def get_last_processing(oid: str) -> dict[str, Any] | None:
     return payload
 
 
-def reapply_last_processing(oid: str, values: dict[str, Any] | None = None) -> str:
+def reapply_last_processing(
+    oid: str,
+    values: dict[str, Any] | None = None,
+    source_ids: list[str] | None = None,
+    operand_id: str | None = None,
+) -> str:
     """Re-run the last processing that produced *oid* with *values*.
 
-    The result replaces *oid* in place: same id, same group position,
-    so plots and tree selection stay anchored.  Source / operand objects
-    are looked up by their original ids; if any of them no longer exists,
-    a :class:`ValueError` is raised.
+    The result replaces *oid* in place: same id, same UUID, same group
+    position, so plots and tree selection stay anchored.  Source / operand
+    objects are looked up by their original ids; if any of them no longer
+    exists, a :class:`ValueError` is raised.
+
+    *source_ids* / *operand_id*, when given, must match the recorded ones:
+    the TypeScript runtime passes them so that on-disk sources are paged in
+    for the call.
     """
     if hasattr(values, "to_py"):
         values = values.to_py()
+    if hasattr(source_ids, "to_py"):
+        source_ids = source_ids.to_py()
     record = _LAST_PROCESSING.get(oid)
     if record is None:
         raise ValueError(f"Object {oid!r} has no recorded processing.")
+    if source_ids is not None and (
+        list(source_ids) != list(record["source_ids"])
+        or operand_id != record["operand_id"]
+    ):
+        raise ValueError(f"Sources of {oid!r} do not match its recorded processing.")
     catalog = _full_catalog_with_plugins()
     spec = catalog.get(record["feature_id"])
     if spec is None:
@@ -4876,21 +4999,32 @@ def reapply_last_processing(oid: str, values: dict[str, Any] | None = None) -> s
         raise ValueError(f"Operand object {operand_id!r} no longer exists.")
     sources = [_MODEL.get(sid) for sid in source_ids]
     operand = _MODEL.get(operand_id) if operand_id else None
+    params = dict(values) if values else None
+    param = _PROCESSOR.build_param_instance(spec, params)
+    pendings = _begin_provenance(
+        spec, param, sources[:1], source_ids[:1], origin="recompute_in_place"
+    )
     ctx = _proc.ApplyContext(
         feature=spec,
         sources=sources,
         operand=operand,
-        params=dict(values) if values else None,
+        params=params,
+        param_instance=param,
     )
     result = _PROCESSOR.apply(ctx, source_ids)
     if not result.items:
         raise ValueError("Processing produced no result.")
     # Take the first (and for 1_to_1/2_to_1 only) result and swap it into
-    # the existing entry.  This preserves the oid, group position and any
-    # downstream references the UI may hold.
+    # the existing entry.  This preserves the oid, the persistent UUID, the
+    # group position and any downstream references the UI may hold.
     _, new_obj = result.items[0]
+    old_uuid = _object_uuid(_MODEL._objects[oid].obj)  # noqa: SLF001
+    if old_uuid is not None:
+        new_obj.set_metadata_option("uuid", old_uuid)
     _MODEL._objects[oid].obj = new_obj  # noqa: SLF001
     _mark_object_data_changed(oid)
+    if pendings:
+        _PROVENANCE.complete(pendings.get(source_ids[0]), new_obj)
     # Update the recorded params so subsequent edits start from the new
     # baseline (mirrors how DataLab desktop persists the edited DataSet).
     _LAST_PROCESSING[oid] = {
@@ -6757,6 +6891,9 @@ __all__ = [
     "apply_processing",
     "get_last_processing",
     "reapply_last_processing",
+    "get_provenance_ledger",
+    "replay_activity",
+    "set_provenance_edition_version",
     "get_image_grid_param_schema",
     "distribute_images_on_grid",
     "reset_image_positions",
