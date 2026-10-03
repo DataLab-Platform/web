@@ -155,6 +155,81 @@ def test_replay_activity_verifies_without_changing_the_workspace(fresh_bootstrap
     assert report["verdict"] == "not_verified"
 
 
+@pytest.fixture
+def counted_apply(monkeypatch, fresh_bootstrap):
+    """Count (and optionally alter) every computation run by the processor."""
+    calls = {"count": 0, "alter": False}
+    original = fresh_bootstrap._proc.BaseProcessor.apply
+
+    def apply(self, ctx, source_ids):
+        calls["count"] += 1
+        result = original(self, ctx, source_ids)
+        if calls["alter"]:
+            result.items[0][1].y[2] += 0.5
+        return result
+
+    monkeypatch.setattr(fresh_bootstrap._proc.BaseProcessor, "apply", apply)
+    return calls
+
+
+def test_replay_really_computes_and_detects_divergence(fresh_bootstrap, counted_apply):
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    bs.apply_feature("normalize", [src], params={"method": "maximum"})
+    (activity,) = ledger(bs).activities
+    count = counted_apply["count"]
+    assert bs.replay_activity(activity["activity_id"])["verdict"] == "exact"
+    assert counted_apply["count"] == count + 1
+    counted_apply["alter"] = True
+    report = bs.replay_activity(activity["activity_id"])
+    assert report["verdict"] == "different"
+    assert report["observed"]["mismatches"] == 1
+    assert report["observed"]["max_abs_error"] == 0.5
+    assert len(ledger(bs).activities) == 1
+
+
+def test_refusals_happen_before_any_computation(fresh_bootstrap, counted_apply):
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    bs.apply_feature("normalize", [src], params={"method": "maximum"})
+    (activity,) = ledger(bs).activities
+    act_id = activity["activity_id"]
+    operation = activity["call"]["operation"]
+    count = counted_apply["count"]
+
+    operation["id"] = "sigima.signal.unknown"
+    assert bs.replay_activity(act_id)["eligibility"] == "unsupported_operation"
+    operation.update(id="sigima.signal.normalize", contract_version=2)
+    assert bs.replay_activity(act_id)["eligibility"] == "unsupported_contract"
+    operation["contract_version"] = 1
+
+    bs.set_signal_roi(src, [{"xmin": 0.5, "xmax": 2.5, "title": "range"}])
+    assert bs.replay_activity(act_id)["eligibility"] == "unsupported_context"
+    bs._MODEL.get(src).roi = None
+
+    obj = bs._MODEL.get(src)
+    obj.set_xydata(obj.x, obj.y + 1.0)
+    report = bs.replay_activity(act_id)
+    assert (report["eligibility"], report["verdict"]) == (
+        "input_changed",
+        "not_verified",
+    )
+    assert counted_apply["count"] == count
+
+
+def test_omitted_parameters_record_effective_values(fresh_bootstrap):
+    """Without remembered values, an omitted method is the class default."""
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    bs.apply_feature("normalize", [src], params={"method": "amplitude"})
+    (result,) = bs.apply_feature("normalize", [src])
+    np.testing.assert_array_equal(bs._MODEL.get(result).y, MAXIMUM_Y)
+    first, second = ledger(bs).activities
+    assert first["call"]["parameters"] == {"method": "amplitude"}
+    assert second["call"]["parameters"] == {"method": "maximum"}
+    assert bs.replay_activity(second["activity_id"])["verdict"] == "exact"
+
+
 def test_spilled_objects_are_never_fingerprinted(fresh_bootstrap):
     bs = fresh_bootstrap
     src = add_signal(bs)

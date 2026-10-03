@@ -418,3 +418,98 @@ for (const runtimeMode of ["main", "worker"] as const) {
     }
   });
 }
+
+/** Reopen a workspace and return the verification report of every activity. */
+async function verifyAll(page: Page, bytes: number[]): Promise<unknown> {
+  return page.evaluate(async (data) => {
+    interface Activity {
+      activity_id: string;
+      call: { operation: { id: string } | null; parameters: unknown };
+      implementation: { python_name: string } | null;
+    }
+    interface Runtime {
+      resetAll(): Promise<void>;
+      openWorkspaceHdf5(name: string, bytes: Uint8Array): Promise<unknown>;
+      getProvenanceLedger(): Promise<{
+        file_status: string | null;
+        state_status: Record<string, string>;
+        ledger: { activities: Activity[] };
+      }>;
+      replayActivity(id: string): Promise<unknown>;
+    }
+    const runtime = (window as unknown as { runtime: Runtime }).runtime;
+    await runtime.resetAll();
+    await runtime.openWorkspaceHdf5("workspace.h5", new Uint8Array(data));
+    const info = await runtime.getProvenanceLedger();
+    const activities = [];
+    for (const activity of info.ledger.activities) {
+      activities.push({
+        activity_id: activity.activity_id,
+        name:
+          activity.call.operation?.id ?? activity.implementation?.python_name,
+        parameters: activity.call.parameters,
+        report: await runtime.replayActivity(activity.activity_id),
+      });
+    }
+    await runtime.resetAll();
+    return {
+      file_status: info.file_status,
+      state_status: info.state_status,
+      activities,
+    };
+  }, bytes);
+}
+
+test.describe("workspace provenance evidence", () => {
+  const outdir = process.env.DLW_PROVENANCE_EVIDENCE_DIR;
+  test.describe.configure({ timeout: 600_000 });
+
+  test("writes the Web evidence files", async ({ browser }) => {
+    test.skip(!outdir, "Set DLW_PROVENANCE_EVIDENCE_DIR to write evidence");
+    const dir = outdir as string;
+    const writerContext = await browser.newContext();
+    const writer = await writerContext.newPage();
+    await writer.goto("/");
+    await waitForRuntimeReady(writer);
+    const saved = await saveChain(writer, "ram");
+    expect(saved.available).toBe(true);
+    await writerContext.close();
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, "web_chain.h5"), Buffer.from(saved.bytes));
+    writeFileSync(
+      path.join(dir, "web_chain.dlcapsule"),
+      Buffer.from(saved.capsule),
+    );
+
+    const readerContext = await browser.newContext();
+    const reader = await readerContext.newPage();
+    await reader.goto("/");
+    await waitForRuntimeReady(reader);
+    const desktop =
+      process.env.DLW_DESKTOP_WORKSPACE ??
+      path.join(FIXTURES, "desktop_chain.h5");
+    const reports = [];
+    for (const [name, bytes] of [
+      ["web_chain.h5", saved.bytes],
+      [path.basename(desktop), Array.from(readFileSync(desktop))],
+    ] as const) {
+      reports.push({ workspace: name, ...(await verifyAll(reader, bytes)) });
+    }
+    const versions = await reader.evaluate(() =>
+      (
+        window as unknown as {
+          runtime: { getPythonEnvironmentInfo(): Promise<unknown> };
+        }
+      ).runtime.getPythonEnvironmentInfo(),
+    );
+    await readerContext.close();
+    writeFileSync(
+      path.join(dir, "web_reports.json"),
+      JSON.stringify(reports, null, 2),
+    );
+    writeFileSync(
+      path.join(dir, "web_versions.json"),
+      JSON.stringify(versions, null, 2),
+    );
+  });
+});
