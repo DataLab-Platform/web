@@ -289,12 +289,7 @@ export interface PluginRecipeSummary {
   version: string;
   title: string;
   description: string;
-  inputs: Array<{
-    id: string;
-    object_type: PanelKind;
-    cardinality: "one" | "many";
-    required: boolean;
-  }>;
+  inputs: PluginRecipeSlot[];
   has_params: boolean;
 }
 
@@ -302,7 +297,8 @@ export interface PluginExampleSummary {
   id: string;
   title: string;
   description: string;
-  recipe_id: string | null;
+  /** Recipes the example is designed for; empty for a plain dataset. */
+  recipe_ids: string[];
   expected_checks: string[];
 }
 
@@ -358,9 +354,13 @@ export interface PluginRecord {
 
 export interface PluginRecipeSlot {
   id: string;
+  title: string;
+  description: string;
   object_type: "signal" | "image";
   cardinality: "one" | "many";
   required: boolean;
+  min_count: number;
+  metadata: Array<{ key: string; description: string; required: boolean }>;
 }
 
 export interface PluginRecipeCandidate {
@@ -368,7 +368,48 @@ export interface PluginRecipeCandidate {
   kind: "signal" | "image";
   title: string;
   compatible_slots: string[];
+  /** Required metadata keys the candidate lacks, per compatible slot. */
+  missing_metadata: Record<string, string[]>;
 }
+
+export type PluginRecipeIssueCode =
+  | "missing"
+  | "ambiguous"
+  | "too_few"
+  | "too_many"
+  | "wrong_type"
+  | "missing_metadata"
+  | "duplicate";
+
+export interface PluginRecipeInputIssue {
+  code: PluginRecipeIssueCode;
+  slot_id: string;
+  details: {
+    count?: number;
+    min_count?: number;
+    key?: string;
+    titles?: string[];
+  };
+}
+
+export type PluginRecipeReadinessStatus =
+  | "no_input"
+  | "needs_assignment"
+  | "not_ready"
+  | "warnings"
+  | "ready";
+
+export interface PluginRecipeReadiness {
+  status: PluginRecipeReadinessStatus;
+  bindings: Record<string, string[]>;
+  issues: PluginRecipeInputIssue[];
+  diagnostics: PluginRecipeDiagnostic[];
+}
+
+/** Readiness of one recipe, or the error raised while assessing it. */
+export type PluginRecipeAssessment =
+  | PluginRecipeReadiness
+  | { status: "error"; error: string };
 
 export interface PluginRecipePreparation {
   plugin_id: string;
@@ -380,6 +421,7 @@ export interface PluginRecipePreparation {
   bindings: Record<string, string[]>;
   ambiguous_slots: string[];
   missing_slots: string[];
+  readiness: PluginRecipeReadiness;
   parameters: SchemaWithValues | null;
 }
 
@@ -416,13 +458,16 @@ export interface PluginRecipeCommit {
 export interface PluginExampleOpenResult extends WorkspaceLoadResult {
   plugin_id: string;
   example_id: string;
+  /** Recipe the example was opened for (requested, or its first one). */
   recipe_id: string | null;
+  recipe_ids: string[];
   filename: string | null;
   panel: "signal" | "image" | null;
   selected_ids: string[];
   current_id: string | null;
   dirty: boolean;
-  parameter_values: Record<string, unknown>;
+  /** Parameter values suited to the example, per recipe ID. */
+  parameter_values: Record<string, Record<string, unknown>>;
 }
 
 export interface PluginMenuAction {
@@ -1558,6 +1603,8 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     reset_all,
   )
   from dlw_applications import (
+    assess_plugin_recipes,
+    check_plugin_recipe_bindings,
     get_plugin_recipe_schema,
     open_plugin_example,
     prepare_plugin_recipe,
@@ -3009,12 +3056,42 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     pluginId: string,
     recipeId: string,
     candidateIds: string[],
+    parameterValues: Record<string, unknown> = {},
   ): Promise<PluginRecipePreparation> {
     return (await this.callPy("prepare_plugin_recipe", {
       plugin_id: pluginId,
       recipe_id: recipeId,
       candidate_ids: candidateIds,
+      parameter_values: parameterValues,
     })) as PluginRecipePreparation;
+  }
+
+  /** Assess whether each recipe of a plugin can run on candidate objects. */
+  async assessPluginRecipes(
+    pluginId: string,
+    candidateIds: string[],
+    parameterValues: Record<string, Record<string, unknown>> = {},
+  ): Promise<Record<string, PluginRecipeAssessment>> {
+    return (await this.callPy("assess_plugin_recipes", {
+      plugin_id: pluginId,
+      candidate_ids: candidateIds,
+      parameter_values: parameterValues,
+    })) as Record<string, PluginRecipeAssessment>;
+  }
+
+  /** Assess bindings edited by the user, without running the recipe. */
+  async checkPluginRecipeBindings(
+    pluginId: string,
+    recipeId: string,
+    bindings: Record<string, string[]>,
+    parameterValues: Record<string, unknown> = {},
+  ): Promise<PluginRecipeReadiness> {
+    return (await this.callPy("check_plugin_recipe_bindings", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      bindings,
+      parameter_values: parameterValues,
+    })) as PluginRecipeReadiness;
   }
 
   /** Return the live guidata parameter schema for one plugin recipe. */
@@ -3086,16 +3163,18 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     })) as PluginRecipeCommit;
   }
 
-  /** Open one packaged HDF5 example from an active plugin. */
+  /** Open one packaged or generated example from an active plugin. */
   async openPluginExample(
     pluginId: string,
     exampleId: string,
     replace: boolean = true,
+    recipeId: string | null = null,
   ): Promise<PluginExampleOpenResult> {
     return (await this.callPy("open_plugin_example", {
       plugin_id: pluginId,
       example_id: exampleId,
       replace,
+      recipe_id: recipeId,
     })) as PluginExampleOpenResult;
   }
 

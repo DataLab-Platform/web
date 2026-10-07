@@ -126,11 +126,11 @@ my-plugin = "my_package.adapters.desktop:MyDesktopPlugin"
 The Web target must be a subclass of the portable `PluginBase` and provide a
 stable namespaced `PluginInfo.id`. Application plugins include
 `PluginCapability.APPLICATION`, declare `RECIPES` and optionally `EXAMPLES`,
-and may implement `suggest_recipe_bindings()` or `materialize_example()`.
-Recipe slots carry signal/image type, `ONE`/`MANY` cardinality, and required
-state. Parameters are guidata `DataSet` classes. Outputs are returned as a
+and may implement `materialize_example()`. Recipe slots carry signal/image type, `ONE`/`MANY` cardinality, required state, a title and description, a minimum count, and metadata requirements; recipes may add `suggest_bindings` and `check_inputs` hooks. An example lists the recipes it is designed for in `recipe_ids`, and generated examples key their parameter values by recipe ID. Parameters are guidata `DataSet` classes. Outputs are returned as a
 `RecipeOutcome`; DataLab-Web commits objects, anchored scalar results,
 diagnostics, and provenance transactionally.
+
+The Applications dialog presents each recipe as a method card: expected inputs, a readiness status re-assessed when the selection changes, a _Run on selection…_ button, and _Try with this example_ for each example designed for it. Examples without a recipe are listed as datasets. Readiness and binding checks use the same `datalab.recipe_binding` module as DataLab Desktop, copied into the host shim, so both hosts accept the same selections. Desktop-only plugin tools are not listed.
 
 Version 1 of the installer deliberately accepts only local `*-none-any`
 pure-Python wheels compatible with Pyodide's Python version. Native payloads,
@@ -167,7 +167,7 @@ through the real worker-hosted Pyodide runtime. It requires a visible Plotly
 response trace, decoded non-blank PRNU-map pixels, and the anchored metrics
 table in the Results panel. It also limits incremental WASM-heap growth to
 64 MiB and retained output arrays to three times the input arrays. The status
-qualifies DataLab-Web 0.8.0, Pyodide 0.26.4, Camera 0.1.0, and relative-DN
+qualifies DataLab-Web 0.8.0, Pyodide 0.26.4, Camera 0.2.0, and relative-DN
 recipe 1.1.0.
 
 The Pulse gate in `tests/e2e/pulse_bundle.spec.ts` executes the deterministic
@@ -176,7 +176,9 @@ outputs plus the anchored 500-row metrics table. It requires visible Plotly
 traces for amplitude, raw mean, and aligned mean; all six quality statuses;
 489 valid/aligned shots; no more than 64 MiB incremental WASM heap; and exactly
 24,032 bytes of retained output arrays. This qualifies DataLab-Web 0.8.0,
-Pyodide 0.26.4, Pulse 0.1.0, and pulse campaign recipe 1.1.0.
+Pyodide 0.26.4, Pulse 0.2.0, and pulse campaign recipe 1.1.0.
+
+Since version 0.2.0, Camera also offers photon transfer and dark-current recipes, and Pulse offers shot-to-shot stability, step-response, two-channel delay and pulse-height spectrum recipes, each with a generated example. `tests/e2e/application_methods.spec.ts` opens every new example through its deep link, checks that its method is ready, runs it from the Applications dialog and checks the created outputs in the visible object tree; it also runs the relative-DN method through _Try with this example_ on the photon transfer ladder. `tests/python/test_camera_application.py` and `tests/python/test_pulse_application.py` run the same pairs, plus the photon transfer → relative-DN and laser warm-up → campaign pairs, through the generic host and check that every example binds its recipe slots without ambiguity.
 
 ## Hot reload
 

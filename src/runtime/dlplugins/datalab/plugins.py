@@ -37,8 +37,8 @@ import os
 import os.path as osp
 import sys
 import traceback
-from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Any
+from collections.abc import Collection
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 # Re-export Sigima I/O bases so plugins can subclass them without ever
@@ -309,6 +309,14 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         return recipes
 
     @classmethod
+    def get_recipe(cls, recipe_id: str) -> RecipeDescriptor:
+        """Return one recipe descriptor by its namespaced ID."""
+        for recipe in cls.get_recipes():
+            if recipe.recipe_id == recipe_id:
+                return recipe
+        raise KeyError(f"Plugin recipe {recipe_id!r} not found")
+
+    @classmethod
     def get_examples(cls) -> tuple[PluginExample, ...]:
         """Return validated packaged examples exposed by this plugin."""
         examples = tuple(cls.EXAMPLES)
@@ -319,11 +327,12 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         for example in examples:
             if example.id in example_ids:
                 raise ValueError(f"Duplicate plugin example ID: {example.id!r}")
-            if example.recipe_id is not None and example.recipe_id not in recipe_ids:
-                raise ValueError(
-                    f"Plugin example {example.id!r} references unknown recipe "
-                    f"{example.recipe_id!r}"
-                )
+            for recipe_id in example.recipe_ids:
+                if recipe_id not in recipe_ids:
+                    raise ValueError(
+                        f"Plugin example {example.id!r} references unknown recipe "
+                        f"{recipe_id!r}"
+                    )
             example_ids.add(example.id)
         return examples
 
@@ -340,16 +349,6 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         """Generate one example in memory, or defer to its package resource."""
         cls.get_example(example_id)
         return None
-
-    @classmethod
-    def suggest_recipe_bindings(
-        cls,
-        recipe: RecipeDescriptor,
-        candidates: Collection[Any],
-    ) -> Mapping[str, Collection[Any]]:
-        """Suggest scientific objects for recipe slots, when unambiguous."""
-        del recipe, candidates
-        return {}
 
     # -- Convenience accessors -----------------------------------------
 

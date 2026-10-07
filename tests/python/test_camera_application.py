@@ -18,10 +18,12 @@ CAMERA_WHEEL = (
     / "src"
     / "runtime"
     / "builtin_wheels"
-    / "datalab_camera_characterization-0.1.0-py3-none-any.whl"
+    / "datalab_camera_characterization-0.2.0-py3-none-any.whl"
 )
 PLUGIN_ID = "org.datalab.camera-characterization"
 RECIPE_ID = f"{PLUGIN_ID}:relative-dn-characterization"
+PTC_RECIPE_ID = f"{PLUGIN_ID}:photon-transfer"
+DARK_RECIPE_ID = f"{PLUGIN_ID}:dark-current"
 
 
 @pytest.fixture
@@ -92,12 +94,27 @@ def test_camera_registry_contract_and_quickstart_binding(camera_application) -> 
 
     assert record["source"] == "bundled-wheel"
     assert record["trust"] == "verified"
-    assert record["version"] == "0.1.0"
+    assert record["version"] == "0.2.0"
     assert record["info"]["capabilities"] == ["application", "processing"]
+    assert [recipe["id"] for recipe in record["recipes"]] == [
+        RECIPE_ID,
+        PTC_RECIPE_ID,
+        DARK_RECIPE_ID,
+    ]
+    assert [example["id"] for example in record["examples"]] == [
+        "quickstart",
+        "photon-transfer",
+        "dark-ramp",
+    ]
     assert record["recipes"][0]["id"] == RECIPE_ID
     assert record["recipes"][0]["version"] == "1.1.0"
     assert record["examples"][0]["id"] == "quickstart"
-    assert record["examples"][0]["recipe_id"] == RECIPE_ID
+    assert record["examples"][0]["recipe_ids"] == [RECIPE_ID]
+    assert record["examples"][1]["recipe_ids"] == [PTC_RECIPE_ID, RECIPE_ID]
+    flat_slot = record["recipes"][0]["inputs"][1]
+    assert flat_slot["title"] == "Flat frames"
+    assert flat_slot["min_count"] == 4
+    assert [item["required"] for item in flat_slot["metadata"]] == [True, False]
 
     opened, prepared = _open_and_prepare(bootstrap)
 
@@ -207,3 +224,74 @@ def test_camera_recipe_rolls_back_partial_cross_panel_commit(
     assert {
         kind: bootstrap._MODEL.panel_tree(kind) for kind in ("signal", "image")
     } == before
+
+
+@pytest.mark.parametrize(
+    ("example_id", "recipe_id", "image_count", "slots", "anchor", "table_title"),
+    [
+        (
+            "photon-transfer",
+            PTC_RECIPE_ID,
+            36,
+            {"dark_frames", "flat_frames"},
+            "ptc",
+            "Photon transfer metrics",
+        ),
+        (
+            "photon-transfer",
+            RECIPE_ID,
+            36,
+            {"dark_frames", "flat_frames"},
+            "response",
+            "Relative Camera characterization metrics",
+        ),
+        (
+            "dark-ramp",
+            DARK_RECIPE_ID,
+            20,
+            {"dark_frames"},
+            "dark_ramp",
+            "Dark-current metrics",
+        ),
+    ],
+)
+def test_camera_generated_examples_bind_and_run(
+    camera_application,
+    example_id: str,
+    recipe_id: str,
+    image_count: int,
+    slots: set[str],
+    anchor: str,
+    table_title: str,
+) -> None:
+    """Each generated example binds unambiguously and runs each of its recipes."""
+    bootstrap = camera_application
+    opened = dlw_applications.open_plugin_example(
+        PLUGIN_ID, example_id, recipe_id=recipe_id
+    )
+    prepared = dlw_applications.prepare_plugin_recipe(
+        PLUGIN_ID,
+        recipe_id,
+        opened["selected_ids"],
+        opened["parameter_values"].get(recipe_id),
+    )
+
+    assert opened["recipe_id"] == recipe_id
+    assert opened["panel"] == "image"
+    assert len(opened["selected_ids"]) == image_count
+    assert prepared["readiness"]["status"] == "ready"
+    assert set(prepared["bindings"]) == slots
+
+    committed = dlw_applications.run_plugin_recipe(
+        PLUGIN_ID,
+        recipe_id,
+        prepared["bindings"],
+        {
+            **prepared["parameters"]["values"],
+            **opened["parameter_values"].get(recipe_id, {}),
+        },
+    )
+
+    outputs = {output["output_id"]: output for output in committed["objects"]}
+    results = bootstrap.list_signal_results(outputs[anchor]["id"])
+    assert [result["title"] for result in results] == [table_title]

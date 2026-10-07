@@ -4,7 +4,7 @@ import { disableQuickstartTemplate, waitForRuntimeReady } from "./fixtures";
 
 const PULSE_LINK = new URLSearchParams({
   plugin: "org.datalab.pulse-characterization",
-  pluginVersion: "0.1.0",
+  pluginVersion: "0.2.0",
   recipe: "org.datalab.pulse-characterization:single-channel-campaign",
   recipeVersion: "1.1.0",
   example: "demo",
@@ -32,7 +32,17 @@ test("Pulse example analysis completes through the Applications UI", async ({
   await expect(page.locator(".object-tree-item")).toHaveCount(500);
   await expect(page.locator(".object-tree-item.selected")).toHaveCount(1);
 
-  await applications.getByRole("button", { name: "Start analysis…" }).click();
+  // Only one signal is visibly selected, yet the method is assessed (and run)
+  // on the 500 signals selected by the example.
+  const card = applications.locator(
+    `[data-recipe-id="${PULSE_LINK.get("recipe")}"]`,
+  );
+  await expect(card.locator("[data-readiness]")).toHaveAttribute(
+    "data-readiness",
+    "ready",
+    { timeout: 60_000 },
+  );
+  await card.getByRole("button", { name: "Run on selection…" }).click();
   const parameters = page.getByRole("dialog").filter({
     has: page.getByRole("heading", {
       name: "Single-channel pulse campaign",

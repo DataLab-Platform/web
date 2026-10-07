@@ -247,7 +247,7 @@ describe("buildPluginActions", () => {
           id: "quickstart",
           title: "Open quickstart",
           description: "Open an example",
-          recipe_id: "org.example.application:analyze",
+          recipe_ids: ["org.example.application:analyze"],
           expected_checks: [],
         },
       ],

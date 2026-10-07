@@ -16,7 +16,7 @@ All five parameters are required. For example, the Camera quickstart link is:
 
 ```text
 ?plugin=org.datalab.camera-characterization
-&pluginVersion=0.1.0
+&pluginVersion=0.2.0
 &recipe=org.datalab.camera-characterization:relative-dn-characterization
 &recipeVersion=1.1.0
 &example=quickstart
@@ -26,11 +26,22 @@ The Pulse demo uses:
 
 ```text
 ?plugin=org.datalab.pulse-characterization
-&pluginVersion=0.1.0
+&pluginVersion=0.2.0
 &recipe=org.datalab.pulse-characterization:single-channel-campaign
 &recipeVersion=1.1.0
 &example=demo
 ```
+
+The other bundled methods use recipe version `1.0.0` with these recipe and example pairs:
+
+| Plugin | Recipe (local ID)       | Example              |
+| ------ | ----------------------- | -------------------- |
+| Camera | `photon-transfer`       | `photon-transfer`    |
+| Camera | `dark-current`          | `dark-ramp`          |
+| Pulse  | `shot-stability`        | `stability-demo`     |
+| Pulse  | `step-response`         | `step-response-demo` |
+| Pulse  | `two-channel-delay`     | `two-channel-demo`   |
+| Pulse  | `pulse-height-spectrum` | `spectrum-demo`      |
 
 These blocks are wrapped for readability. Remove the line breaks when building
 a URL, or construct the query with `URLSearchParams` so identifiers are encoded
@@ -41,8 +52,8 @@ correctly.
 Once Pyodide is ready, DataLab-Web resolves the request from the live managed
 plugin registry. The matching record must be loaded and enabled, have source
 `bundled-wheel`, and have trust status `verified`. Plugin ID, plugin version,
-recipe ID, recipe version, example ID, and the example-to-recipe link must all
-match exactly.
+recipe ID, recipe version, and example ID must all match exactly, and the
+example must list the recipe among the methods it is designed for.
 
 Validation finishes before the workspace is changed. An unknown plugin,
 incomplete request, version mismatch, unsupported example, disabled plugin, or
@@ -56,9 +67,7 @@ After validation:
   Images panel, and marks the loaded workspace clean.
 - Pulse replaces the workspace with its deterministic 500-shot campaign, opens
   the Signals panel, and marks the generated workspace as unsaved.
-- The Applications dialog selects the requested plugin, highlights the recipe,
-  and carries any generated example parameter defaults into its parameter
-  dialog. The recipe is never executed until the user clicks _Start analysis_.
+- The Applications dialog selects the requested plugin and highlights the method. Its readiness status covers every object selected by the example, even when only part of them is visibly selected, and the example's parameter values for this method prefill its parameter dialog. The method never runs until the user clicks _Run on selection…_.
 
 The generic same-origin `preload` workspace parameter remains available for
 ordinary HDF5 demos. When Applications parameters are present, their validated

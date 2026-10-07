@@ -53,7 +53,7 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
       plugin.plugin_id!,
       recipe.id,
       prepared.bindings,
-      opened.parameter_values,
+      opened.parameter_values[recipe.id] ?? {},
     );
     const dataAfter = (await window.runtime.getDataMemoryBytes()) ?? 0;
     const wasmAfter = window.runtime.getMemoryUsage().wasmBytes ?? 0;
@@ -100,7 +100,7 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
 
   expect(result.plugin).toMatchObject({
     plugin_id: PULSE_PLUGIN_ID,
-    version: "0.1.0",
+    version: "0.2.0",
     source: "bundled-wheel",
     trust: "verified",
     enabled: true,
@@ -110,7 +110,7 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
     id: PULSE_RECIPE_ID,
     version: "1.1.0",
   });
-  expect(result.example.recipe_id).toBe(PULSE_RECIPE_ID);
+  expect(result.example.recipe_ids).toContain(PULSE_RECIPE_ID);
   expect(result.opened.signals).toBe(500);
   expect(result.opened.selected_ids).toHaveLength(500);
   expect(result.prepared.bindings.signals).toHaveLength(500);
