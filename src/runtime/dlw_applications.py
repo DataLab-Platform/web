@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 import os
 from collections.abc import Callable, Mapping, Sequence
@@ -81,6 +82,8 @@ _OBJECT_UUID: Callable[[Any], str | None] | None = globals().get("_OBJECT_UUID")
 _WORKSPACE_LOADER: WorkspaceLoader | None = globals().get("_WORKSPACE_LOADER")
 _RESET_WORKSPACE: Callable[[], None] | None = globals().get("_RESET_WORKSPACE")
 _DATALAB_WEB_VERSION: str = globals().get("_DATALAB_WEB_VERSION", "0.0.0")
+_SIGNAL_PAYLOAD: Callable[..., dict[str, Any]] | None = globals().get("_SIGNAL_PAYLOAD")
+_IMAGE_PAYLOAD: Callable[..., dict[str, Any]] | None = globals().get("_IMAGE_PAYLOAD")
 
 
 def install_host(
@@ -89,10 +92,16 @@ def install_host(
     workspace_loader: WorkspaceLoader,
     datalab_web_version: str,
     reset_workspace: Callable[[], None] | None = None,
+    signal_payload: Callable[..., dict[str, Any]] | None = None,
+    image_payload: Callable[..., dict[str, Any]] | None = None,
 ) -> None:
-    """Install the live model, UUID accessor, workspace loader, and version."""
+    """Install the live model, accessors, workspace loader, and version.
+
+    ``signal_payload`` and ``image_payload`` encode the transient objects
+    shown by instrument windows, like the plots of workspace objects.
+    """
     global _DATALAB_WEB_VERSION, _MODEL, _OBJECT_UUID, _RESET_WORKSPACE
-    global _WORKSPACE_LOADER
+    global _WORKSPACE_LOADER, _SIGNAL_PAYLOAD, _IMAGE_PAYLOAD
     required_methods = (
         "has",
         "get",
@@ -114,6 +123,8 @@ def install_host(
     _WORKSPACE_LOADER = workspace_loader
     _RESET_WORKSPACE = reset_workspace
     _DATALAB_WEB_VERSION = datalab_web_version
+    _SIGNAL_PAYLOAD = signal_payload
+    _IMAGE_PAYLOAD = image_payload
 
 
 def _require_host() -> tuple[ApplicationModel, Callable[[Any], str | None]]:
@@ -781,14 +792,166 @@ def open_plugin_example(
     }
 
 
+def _object_ids(model: ApplicationModel) -> dict[str, list[str]]:
+    """Return the IDs of the objects of each panel."""
+    return {
+        kind: [
+            obj["id"]
+            for group in model.panel_tree(kind)["groups"]
+            for obj in group["objects"]
+        ]
+        for kind in ("signal", "image")
+    }
+
+
+async def launch_plugin_tool(
+    plugin_id: str,
+    tool_id: str,
+    selected_ids: Sequence[str] = (),
+) -> dict[str, list[str]]:
+    """Run the launcher of a plugin tool on the selected objects.
+
+    Args:
+        plugin_id: Plugin owning the tool.
+        tool_id: Tool to open.
+        selected_ids: Objects selected in the active panel.
+
+    Returns:
+        IDs of the objects added by the tool, per panel.
+    """
+    model, _object_uuid = _require_host()
+    plugin = dlw_plugins.get_plugin_instance(plugin_id)
+    objects = tuple(obj for _oid, obj in _candidates(selected_ids))
+    before = _object_ids(model)
+    plugin.selected_objects = objects
+    try:
+        result = plugin.launch_tool(tool_id)
+        if inspect.isawaitable(result):
+            await result
+    finally:
+        plugin.selected_objects = ()
+    after = _object_ids(model)
+    return {
+        kind: [oid for oid in ids if oid not in set(before[kind])]
+        for kind, ids in after.items()
+    }
+
+
+def _instrument(
+    plugin_id: str, tool_id: str, values: Mapping[str, object] | None = None
+) -> Any:
+    """Return a tool's instrument, after writing edited settings into it."""
+    instrument = dlw_plugins.get_plugin_instance(plugin_id).get_instrument(tool_id)
+    normalized = _normalize_mapping(values, "Instrument settings")
+    if normalized:
+        from guidata.dataset import update_dataset
+
+        update_dataset(instrument.settings, normalized)
+    return instrument
+
+
+def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
+    """Return what an instrument window shows: title, settings, live period."""
+    from guidata.dataset import dataset_to_schema_with_values
+
+    plugin = dlw_plugins.get_plugin_instance(plugin_id)
+    tool = plugin.get_tool(tool_id)
+    instrument = plugin.get_instrument(tool_id)
+    title = tool.title.rstrip(".…")
+    settings = dataset_to_schema_with_values(instrument.settings)
+    settings["title"] = title
+    return {
+        "plugin_id": plugin_id,
+        "tool_id": tool_id,
+        "title": title,
+        "settings": settings,
+        "live_interval_ms": int(instrument.live_interval_ms),
+    }
+
+
+def preview_plugin_instrument(
+    plugin_id: str,
+    tool_id: str,
+    values: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Return a live frame of an instrument for edited settings."""
+    if _SIGNAL_PAYLOAD is None or _IMAGE_PAYLOAD is None:
+        raise RuntimeError("Instrument frame encoders are not installed")
+    frame = _instrument(plugin_id, tool_id, values).preview()
+    first = frame.objects[0]
+    if isinstance(first, ImageObj):
+        kind = "image"
+        items = [_IMAGE_PAYLOAD(first, "instrument", encoding="bytes")]
+    else:
+        kind = "signals"
+        items = [
+            _SIGNAL_PAYLOAD(obj, f"instrument-{index}", encoding="bytes")
+            for index, obj in enumerate(frame.objects)
+        ]
+    return {
+        "kind": kind,
+        "items": items,
+        "summary": frame.summary,
+        "value_range": None if frame.value_range is None else list(frame.value_range),
+    }
+
+
+def acquire_plugin_instrument(
+    plugin_id: str,
+    tool_id: str,
+    values: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Add an instrument acquisition to the workspace, in a new group."""
+    model, _object_uuid = _require_host()
+    acquisition = _instrument(plugin_id, tool_id, values).acquire()
+    kind = _output_kind(acquisition.objects[0])
+    group_id = model.create_group(kind, acquisition.group_title)
+    added: list[str] = []
+    try:
+        for obj in acquisition.objects:
+            added.append(model.add_object(kind, obj, group_id))
+    except Exception as exc:
+        for oid in reversed(added):
+            model.delete_object(oid)
+        model.delete_group(kind, group_id)
+        raise RecipeCommitError(str(exc)) from exc
+    return {
+        "panel": kind,
+        "group_id": group_id,
+        "group_title": acquisition.group_title,
+        "object_ids": added,
+    }
+
+
+def resolve_plugin_instrument_active(
+    plugin_id: str,
+    tool_id: str,
+    values: Mapping[str, object] | None = None,
+) -> dict[str, bool]:
+    """Evaluate guidata display-active rules for edited instrument settings."""
+    from guidata.dataset import resolve_dataset_active, update_dataset
+
+    instrument = dlw_plugins.get_plugin_instance(plugin_id).get_instrument(tool_id)
+    settings = instrument.settings.__class__()
+    normalized = _normalize_mapping(values, "Instrument settings")
+    if normalized:
+        update_dataset(settings, normalized)
+    return resolve_dataset_active(settings)
+
+
 __all__ = [
     "RecipeCommitError",
+    "acquire_plugin_instrument",
     "assess_plugin_recipes",
     "check_plugin_recipe_bindings",
     "get_plugin_recipe_schema",
     "install_host",
+    "launch_plugin_tool",
     "open_plugin_example",
+    "open_plugin_instrument",
     "prepare_plugin_recipe",
+    "preview_plugin_instrument",
+    "resolve_plugin_instrument_active",
     "resolve_plugin_recipe_active",
     "resolve_plugin_recipe_callbacks",
     "resolve_plugin_recipe_choices",

@@ -3,6 +3,7 @@ import { getRootIconUrl } from "../assets/rootIcons";
 import { t } from "../i18n/translate";
 import { useRuntime } from "../runtime/RuntimeContext";
 import type {
+  PanelKind,
   PluginExampleOpenResult,
   PluginRecipeAssessment,
   PluginRecord,
@@ -10,6 +11,7 @@ import type {
   PluginRecipePreparation,
 } from "../runtime/runtime";
 import { usePersistedBool } from "../utils/persisted";
+import { toolSelectionIssue } from "../utils/pluginTools";
 import { ApplicationMethodCard } from "./ApplicationMethodCard";
 import { DataSetDialog } from "./DataSetDialog";
 import { RecipeInputResolverDialog } from "./RecipeInputResolverDialog";
@@ -27,11 +29,14 @@ export interface PluginExampleContext {
 
 interface Props {
   candidateIds: string[];
+  /** Panel of the candidates; tools of the other panel need a switch. */
+  activePanel: PanelKind;
   exampleContext?: PluginExampleContext | null;
   initialTarget?: { pluginId: string; recipeId: string } | null;
   confirmOpenExample: () => boolean | Promise<boolean>;
   onCommitted: (commit: PluginRecipeCommit) => void | Promise<void>;
   onExampleOpened: (result: PluginExampleOpenResult) => void | Promise<void>;
+  onOpenTool: (pluginId: string, toolId: string) => void;
   onClose: () => void;
 }
 
@@ -52,7 +57,9 @@ const READINESS_DELAY_MS = 250;
 export const APPLICATIONS_LIST_COLLAPSED_KEY =
   "datalab-web.applications.listCollapsed";
 
-/** Accordion key of the datasets section (recipe IDs contain the plugin ID). */
+/** Accordion keys of the tools and datasets sections (recipe IDs contain the
+ *  plugin ID, so they never start with a colon). */
+const TOOLS_SECTION = ":tools";
 const DATASETS_SECTION = ":datasets";
 
 function isApplication(record: PluginRecord): boolean {
@@ -61,7 +68,9 @@ function isApplication(record: PluginRecord): boolean {
     record.loaded &&
     record.plugin_id &&
     record.info?.capabilities.includes("application") &&
-    (record.recipes.length > 0 || record.examples.length > 0),
+    (record.recipes.length > 0 ||
+      record.examples.length > 0 ||
+      record.tools.length > 0),
   );
 }
 
@@ -104,11 +113,13 @@ function withValues(
 
 export function ApplicationsDialog({
   candidateIds,
+  activePanel,
   exampleContext = null,
   initialTarget = null,
   confirmOpenExample,
   onCommitted,
   onExampleOpened,
+  onOpenTool,
   onClose,
 }: Props) {
   const { runtime } = useRuntime();
@@ -402,6 +413,7 @@ export function ApplicationsDialog({
   const datasets =
     selected?.examples.filter((example) => example.recipe_ids.length === 0) ??
     [];
+  const tools = selected?.tools ?? [];
   const listToggleLabel = listCollapsed
     ? t("Show the application list")
     : t("Hide the application list");
@@ -413,7 +425,11 @@ export function ApplicationsDialog({
   const defaultSection =
     focusedRecipeId ??
     selected?.recipes[0]?.id ??
-    (datasets.length > 0 ? DATASETS_SECTION : null);
+    (tools.length > 0
+      ? TOOLS_SECTION
+      : datasets.length > 0
+        ? DATASETS_SECTION
+        : null);
   const openSection =
     selectedPluginId !== null && selectedPluginId in openSections
       ? openSections[selectedPluginId]
@@ -512,7 +528,9 @@ export function ApplicationsDialog({
                     </div>
                   </div>
 
-                  {(selected.recipes.length > 0 || datasets.length > 0) && (
+                  {(selected.recipes.length > 0 ||
+                    tools.length > 0 ||
+                    datasets.length > 0) && (
                     <div className="application-accordion">
                       {selected.recipes.map((recipe) => (
                         <ApplicationMethodCard
@@ -541,6 +559,55 @@ export function ApplicationsDialog({
                           }
                         />
                       ))}
+                      {tools.length > 0 && (
+                        <details
+                          className="application-tools"
+                          name={accordionName}
+                          open={openSection === TOOLS_SECTION}
+                          onToggle={(event) =>
+                            toggleSection(
+                              TOOLS_SECTION,
+                              event.currentTarget.open,
+                            )
+                          }
+                        >
+                          <summary>
+                            {t("Tools ({count})", { count: tools.length })}
+                          </summary>
+                          <div className="application-accordion-body">
+                            {tools.map((tool) => {
+                              const issue = toolSelectionIssue(
+                                tool,
+                                activePanel,
+                                candidateIds.length,
+                              );
+                              return (
+                                <div
+                                  className="application-entry"
+                                  data-tool-id={tool.id}
+                                  key={tool.id}
+                                >
+                                  <div>
+                                    <strong>{tool.title}</strong>
+                                    {tool.description && (
+                                      <p>{tool.description}</p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      onOpenTool(selected.plugin_id!, tool.id)
+                                    }
+                                    disabled={busy || issue !== null}
+                                    title={issue ?? undefined}
+                                  >
+                                    {t("Open tool")}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      )}
                       {datasets.length > 0 && (
                         <details
                           className="application-datasets"

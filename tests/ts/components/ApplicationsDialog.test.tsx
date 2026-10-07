@@ -106,6 +106,7 @@ const APPLICATION: PluginRecord = {
       expected_checks: [],
     },
   ],
+  tools: [],
   operations: {
     can_enable: true,
     can_disable: true,
@@ -217,9 +218,11 @@ function renderDialog(
   return render(
     <ApplicationsDialog
       candidateIds={["image-1", "image-2"]}
+      activePanel="image"
       confirmOpenExample={() => true}
       onCommitted={() => {}}
       onExampleOpened={() => {}}
+      onOpenTool={() => {}}
       onClose={() => {}}
       {...props}
     />,
@@ -245,6 +248,53 @@ beforeEach(() => {
 });
 
 describe("ApplicationsDialog", () => {
+  it("lists tools and opens those the selection allows", async () => {
+    const onOpenTool = vi.fn();
+    runtimeMock.listPlugins.mockResolvedValue([
+      {
+        ...APPLICATION,
+        recipes: [],
+        examples: [],
+        tools: [
+          {
+            id: "simulator",
+            title: "Camera simulator…",
+            description: "Acquire frames from a simulated camera.",
+            kind: "instrument",
+            object_type: "image",
+            selection: "none",
+          },
+          {
+            id: "inspect",
+            title: "Frame inspector…",
+            description: "",
+            kind: "launcher",
+            object_type: "image",
+            selection: "at_least_two",
+          },
+        ],
+      },
+    ]);
+    renderDialog({ candidateIds: ["image-1"], onOpenTool });
+
+    // A tools-only application is listed, its tools section open
+    const section = (await screen.findByText("Tools (2)")).closest("details")!;
+    expect(section.open).toBe(true);
+    const simulator = within(
+      section.querySelector<HTMLElement>('[data-tool-id="simulator"]')!,
+    ).getByRole("button", { name: "Open tool" });
+    const inspect = within(
+      section.querySelector<HTMLElement>('[data-tool-id="inspect"]')!,
+    ).getByRole("button", { name: "Open tool" });
+    expect(
+      screen.getByText("Acquire frames from a simulated camera."),
+    ).toBeTruthy();
+    expect(inspect).toHaveProperty("disabled", true);
+    expect(inspect.getAttribute("title")).toBe("Select at least two images");
+    fireEvent.click(simulator);
+    expect(onOpenTool).toHaveBeenCalledWith(PLUGIN_ID, "simulator");
+  });
+
   it("reuses the launcher icon in the window header", async () => {
     render(
       <ApplicationsDialog

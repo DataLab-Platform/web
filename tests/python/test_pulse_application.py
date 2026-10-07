@@ -334,3 +334,43 @@ def test_pulse_recipe_rolls_back_partial_output_commit(
         )
 
     assert bootstrap._MODEL.panel_tree("signal") == before
+
+
+def test_oscilloscope_simulator_acquires_pairs_for_the_delay_method(
+    pulse_application,
+) -> None:
+    """The oscilloscope tool shows both channels and acquires paired shots."""
+    bootstrap = pulse_application
+    dlw_applications.install_host(
+        bootstrap._MODEL,
+        bootstrap._object_uuid,
+        bootstrap.open_workspace_from_bytes,
+        "0.9.0",
+        bootstrap.reset_all,
+        signal_payload=bootstrap._signal_data_payload,
+        image_payload=bootstrap._image_data_payload,
+    )
+    record = next(
+        item for item in dlw_plugins.list_plugins() if item["plugin_id"] == PLUGIN_ID
+    )
+    (tool,) = record["tools"]
+    assert tool["id"] == "oscilloscope-simulator"
+    assert tool["kind"] == "instrument"
+    assert tool["object_type"] == "signal"
+
+    values = {"source": "pulse-pair", "trigger_count": 20}
+    frame = dlw_applications.preview_plugin_instrument(
+        PLUGIN_ID, "oscilloscope-simulator", values
+    )
+    assert frame["kind"] == "signals"
+    assert [item["title"] for item in frame["items"]] == ["CH1", "CH2"]
+
+    acquired = dlw_applications.acquire_plugin_instrument(
+        PLUGIN_ID, "oscilloscope-simulator", values
+    )
+    assert acquired["group_title"] == "Oscilloscope - Pulse pair - acquisition 001"
+    assert len(acquired["object_ids"]) == 40
+    assessments = dlw_applications.assess_plugin_recipes(
+        PLUGIN_ID, acquired["object_ids"]
+    )
+    assert assessments[f"{PLUGIN_ID}:two-channel-delay"]["status"] == "ready"
