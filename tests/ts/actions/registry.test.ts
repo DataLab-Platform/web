@@ -203,9 +203,10 @@ describe("buildPlotResultsAction", () => {
 });
 
 describe("buildPluginActions", () => {
-  it("projects application recipes and examples under the plugin menu", () => {
+  it("projects application recipes, examples and tools under the plugin menu", () => {
     const onOpenApplicationRecipe = vi.fn();
     const onOpenApplicationExample = vi.fn();
+    const onLaunchApplicationTool = vi.fn();
     const record: PluginRecord = {
       name: "application",
       record_id: "application",
@@ -251,6 +252,32 @@ describe("buildPluginActions", () => {
           expected_checks: [],
         },
       ],
+      tools: [
+        {
+          id: "generator",
+          title: "Signal generator…",
+          description: "",
+          kind: "instrument",
+          object_type: "signal",
+          selection: "none",
+        },
+        {
+          id: "inspect",
+          title: "Inspect signals…",
+          description: "",
+          kind: "launcher",
+          object_type: "signal",
+          selection: "at_least_one",
+        },
+        {
+          id: "frames",
+          title: "Frame editor…",
+          description: "",
+          kind: "launcher",
+          object_type: "image",
+          selection: "none",
+        },
+      ],
       operations: {
         can_enable: true,
         can_disable: true,
@@ -263,6 +290,7 @@ describe("buildPluginActions", () => {
       onOpenApplications: vi.fn(),
       onOpenApplicationRecipe,
       onOpenApplicationExample,
+      onLaunchApplicationTool,
       onOpenManager: vi.fn(),
       onReloadAll: vi.fn(),
     });
@@ -295,6 +323,27 @@ describe("buildPluginActions", () => {
     expect(onOpenApplicationExample).toHaveBeenCalledWith(
       "org.example.application",
       "quickstart",
+    );
+
+    // Only the tools of the active panel are listed, after a separator
+    const tools = actions.filter((action) =>
+      action.id.startsWith("plugin.application.tool."),
+    );
+    expect(tools.map((action) => action.menuPath)).toEqual([
+      "Plugins/Example & Application/Signal generator…",
+      "Plugins/Example & Application/Inspect signals…",
+    ]);
+    expect(tools.map((action) => action.beginGroup)).toEqual([true, false]);
+    const state = makeState();
+    const [generator, inspect] = tools;
+    expect(generator.enabled(state)).toBe(true);
+    expect(inspect.enabled(state)).toBe(false);
+    expect(inspect.enabled({ ...state, selectedIds: ["s1"] })).toBe(true);
+    expect(inspect.enabled({ ...state, currentId: "s1" })).toBe(true);
+    inspect.run();
+    expect(onLaunchApplicationTool).toHaveBeenCalledWith(
+      "org.example.application",
+      "inspect",
     );
   });
 });

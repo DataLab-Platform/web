@@ -25,6 +25,7 @@ import type {
   JsonSchema,
   PanelTree,
   PluginExampleOpenResult,
+  PluginInstrumentAcquisition,
   PluginMenuAction,
   PluginRecord,
   PluginRecipeCommit,
@@ -117,6 +118,7 @@ import {
   ApplicationsDialog,
   type PluginExampleContext,
 } from "./components/ApplicationsDialog";
+import { InstrumentWindow } from "./components/InstrumentWindow";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
@@ -848,6 +850,11 @@ export default function App() {
   // (possibly reduced) one set on opening it; its values prefill recipes.
   const [pluginExampleContext, setPluginExampleContext] =
     useState<PluginExampleContext | null>(null);
+  // Plugin tool whose instrument window is open.
+  const [instrumentTool, setInstrumentTool] = useState<{
+    pluginId: string;
+    toolId: string;
+  } | null>(null);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -1672,6 +1679,8 @@ export default function App() {
   const handleReloadPlugins = useCallback(async () => {
     if (!runtime) return;
     setBusy(true);
+    // Reloaded plugins create new instruments
+    setInstrumentTool(null);
     try {
       await runtime.reloadPlugins();
       await refreshPluginActions();
@@ -1770,6 +1779,85 @@ export default function App() {
       setApplicationsOpen(true);
     },
     [],
+  );
+
+  const handleLaunchApplicationTool = useCallback(
+    async (pluginId: string, toolId: string) => {
+      if (!runtime) return;
+      const tool = pluginRecords
+        .find((record) => record.plugin_id === pluginId)
+        ?.tools.find((item) => item.id === toolId);
+      if (tool?.kind === "instrument") {
+        setInstrumentTool({ pluginId, toolId });
+        return;
+      }
+      setBusy(true);
+      try {
+        const added = await runtime.launchPluginTool(
+          pluginId,
+          toolId,
+          selectedIds.length > 0 ? selectedIds : currentId ? [currentId] : [],
+        );
+        const newImage = added.image[added.image.length - 1] ?? null;
+        const newSignal = added.signal[added.signal.length - 1] ?? null;
+        if (newImage && treeKind !== "image") {
+          await refreshPanelKind("image", newImage);
+        } else if (newSignal && treeKind !== "signal") {
+          await refreshPanelKind("signal", newSignal);
+        } else {
+          await refresh(
+            treeKind === "image" ? newImage : (newSignal ?? newImage),
+          );
+        }
+      } catch (err) {
+        await showProcessingError({
+          context: t("Plugin action: {action}", {
+            action: tool?.title ?? toolId,
+          }),
+          traceback: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      currentId,
+      pluginRecords,
+      refresh,
+      refreshPanelKind,
+      runtime,
+      selectedIds,
+      showProcessingError,
+      treeKind,
+    ],
+  );
+
+  const handleInstrumentAcquired = useCallback(
+    async (result: PluginInstrumentAcquisition) => {
+      const lastId = result.object_ids[result.object_ids.length - 1] ?? null;
+      await refreshPanelKind(result.panel, lastId);
+      const visualSelection =
+        result.panel === "signal" &&
+        result.object_ids.length > MULTI_SIGNAL_LIMIT
+          ? lastId
+            ? [lastId]
+            : []
+          : result.object_ids;
+      setSelectedIds(visualSelection);
+      setCurrentId(lastId);
+      // Methods started on the visible selection use the whole acquisition
+      setPluginExampleContext(
+        instrumentTool
+          ? {
+              pluginId: instrumentTool.pluginId,
+              objectIds: result.object_ids,
+              visibleIds: visualSelection,
+              parameterValues: {},
+            }
+          : null,
+      );
+    },
+    [instrumentTool, refreshPanelKind, setSelectedIds],
   );
 
   const handleOpenApplicationExample = useCallback(
@@ -4448,6 +4536,9 @@ export default function App() {
         onOpenApplicationExample: (pluginId, exampleId) => {
           void handleOpenApplicationExample(pluginId, exampleId);
         },
+        onLaunchApplicationTool: (pluginId, toolId) => {
+          void handleLaunchApplicationTool(pluginId, toolId);
+        },
         onOpenManager: () => setPluginManagerOpen(true),
         onReloadAll: handleReloadPlugins,
       }),
@@ -4509,6 +4600,7 @@ export default function App() {
       handleTriggerPluginAction,
       handleOpenApplicationRecipe,
       handleOpenApplicationExample,
+      handleLaunchApplicationTool,
       handleReloadPlugins,
       interactiveFits,
       handleLaunchInteractiveFit,
@@ -5383,12 +5475,25 @@ export default function App() {
         {applicationsOpen && (
           <ApplicationsDialog
             candidateIds={applicationCandidateIds}
+            activePanel={treeKind}
             exampleContext={pluginExampleContext}
             initialTarget={applicationTarget}
             confirmOpenExample={confirmOpenPluginExample}
             onCommitted={handlePluginRecipeCommitted}
             onExampleOpened={handlePluginExampleOpened}
+            onOpenTool={(pluginId, toolId) => {
+              void handleLaunchApplicationTool(pluginId, toolId);
+            }}
             onClose={() => setApplicationsOpen(false)}
+          />
+        )}
+        {instrumentTool && (
+          <InstrumentWindow
+            key={`${instrumentTool.pluginId}:${instrumentTool.toolId}`}
+            pluginId={instrumentTool.pluginId}
+            toolId={instrumentTool.toolId}
+            onAcquired={handleInstrumentAcquired}
+            onClose={() => setInstrumentTool(null)}
           />
         )}
         {separateViewOpen &&

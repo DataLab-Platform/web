@@ -22,6 +22,7 @@ import datalabIconUrl from "../assets/DataLab.svg?url";
 import { t } from "../i18n/translate";
 import type { SupportedLocale } from "../i18n/locale";
 import type { SignalLayoutMode } from "../components/signalPlotLayout";
+import { toolSelectionIssue } from "../utils/pluginTools";
 import type { ActionDescriptor, ActionState } from "./types";
 
 /** Callbacks needed to build the static (non-feature) actions. */
@@ -1188,6 +1189,7 @@ export interface PluginActionCallbacks {
   onOpenApplications: () => void;
   onOpenApplicationRecipe: (pluginId: string, recipeId: string) => void;
   onOpenApplicationExample: (pluginId: string, exampleId: string) => void;
+  onLaunchApplicationTool: (pluginId: string, toolId: string) => void;
   onOpenManager: () => void;
   onReloadAll: () => void;
 }
@@ -1288,7 +1290,27 @@ export function buildPluginActions(
           run: () => cb.onOpenApplicationExample(pluginId, example.id),
         }),
       );
-      return [...recipes, ...examples];
+      // Tools follow their panel; tools without object type are in both
+      const tools = record.tools
+        .filter(
+          (tool) =>
+            tool.object_type === null || tool.object_type === activePanel,
+        )
+        .map<ActionDescriptor>((tool, index) => ({
+          id: `plugin.application.tool.${pluginId}.${tool.id}`,
+          label: tool.title,
+          menuPath: `Plugins/${pluginName}/${tool.title}`,
+          beginGroup: recipes.length + examples.length > 0 && index === 0,
+          enabled: (s) =>
+            ready(s) &&
+            toolSelectionIssue(
+              tool,
+              activePanel,
+              s.selectedIds.length || (s.currentId !== null ? 1 : 0),
+            ) === null,
+          run: () => cb.onLaunchApplicationTool(pluginId, tool.id),
+        }));
+      return [...recipes, ...examples, ...tools];
     },
   );
 

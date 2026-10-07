@@ -471,7 +471,11 @@ interface FieldRowProps {
 
 function FieldRow(props: FieldRowProps) {
   const { name, prop } = props;
-  const label = (prop["x-guidata-label"] as string | undefined) ?? name;
+  // Like guidata on Desktop, a ``BoolItem`` without a label only shows
+  // the text of its checkbox.
+  const label =
+    (prop["x-guidata-label"] as string | undefined) ??
+    (prop["x-guidata-kind"] === "bool" && prop["x-guidata-text"] ? "" : name);
   const help = prop.description as string | undefined;
   const unit = prop["x-guidata-unit"] as string | undefined;
   const activeOverrides = useContext(ActiveOverridesContext);

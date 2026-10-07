@@ -295,3 +295,52 @@ def test_camera_generated_examples_bind_and_run(
     outputs = {output["output_id"]: output for output in committed["objects"]}
     results = bootstrap.list_signal_results(outputs[anchor]["id"])
     assert [result["title"] for result in results] == [table_title]
+
+
+def test_camera_simulator_acquires_frames_ready_for_the_methods(
+    camera_application,
+) -> None:
+    """The simulator tool shows live frames and acquires a usable campaign."""
+    bootstrap = camera_application
+    dlw_applications.install_host(
+        bootstrap._MODEL,
+        bootstrap._object_uuid,
+        bootstrap.open_workspace_from_bytes,
+        "0.9.0",
+        bootstrap.reset_all,
+        signal_payload=bootstrap._signal_data_payload,
+        image_payload=bootstrap._image_data_payload,
+    )
+    record = next(
+        item for item in dlw_plugins.list_plugins() if item["plugin_id"] == PLUGIN_ID
+    )
+    assert record["tools"] == [
+        {
+            "id": "camera-simulator",
+            "title": "Scientific camera simulator...",
+            "description": (
+                "Acquire dark and flat frames from a simulated camera with live view"
+            ),
+            "kind": "instrument",
+            "object_type": "image",
+            "selection": "none",
+        }
+    ]
+
+    opened = dlw_applications.open_plugin_instrument(PLUGIN_ID, "camera-simulator")
+    assert opened["title"] == "Scientific camera simulator"
+    frame = dlw_applications.preview_plugin_instrument(PLUGIN_ID, "camera-simulator")
+    assert frame["kind"] == "image"
+    assert frame["value_range"] == [0.0, 4095.0]
+    assert frame["items"][0]["width"] == 128
+
+    acquired = dlw_applications.acquire_plugin_instrument(
+        PLUGIN_ID, "camera-simulator", {"mode": "sequence"}
+    )
+    assert acquired["panel"] == "image"
+    assert len(acquired["object_ids"]) == 4 + 2 * 12
+    assessments = dlw_applications.assess_plugin_recipes(
+        PLUGIN_ID, acquired["object_ids"]
+    )
+    assert assessments[RECIPE_ID]["status"] == "ready"
+    assert assessments[PTC_RECIPE_ID]["status"] == "ready"

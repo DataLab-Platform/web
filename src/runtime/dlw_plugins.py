@@ -173,6 +173,7 @@ def _activate_plugin_class(record: PluginRecord, plugin_cls: type[PluginBase]) -
         raise ValueError(f"Plugin ID {plugin_id!r} already registered")
     plugin_cls.get_recipes()
     plugin_cls.get_examples()
+    plugin_cls.get_tools()
     instance = plugin_cls()
     try:
         if _MAIN is not None:
@@ -630,6 +631,21 @@ def get_plugin_class(
     return record.classes[0]
 
 
+def get_plugin_instance(plugin_id: str) -> PluginBase:
+    """Return the registered instance of an enabled plugin.
+
+    Raises:
+        KeyError: If no managed plugin has this identifier.
+        RuntimeError: If the plugin is disabled or failed to load.
+    """
+    record = _RECORDS.get(plugin_id)
+    if record is None or record.plugin_id != plugin_id:
+        raise KeyError(f"Unknown plugin {plugin_id!r}")
+    if not record.enabled or record.instance is None:
+        raise RuntimeError(f"Plugin {plugin_id!r} is disabled")
+    return record.instance
+
+
 def declared_metadata_keys(object_type: str) -> list[tuple[str, str]]:
     """Return the metadata keys expected by the methods of active applications.
 
@@ -711,6 +727,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         plugin_cls = record.classes[0]
     recipes = []
     examples = []
+    tools = []
     if plugin_cls is not None:
         recipes = [
             {
@@ -733,6 +750,19 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
             }
             for example in plugin_cls.get_examples()
         ]
+        tools = [
+            {
+                "id": tool.id,
+                "title": tool.title,
+                "description": tool.description,
+                "kind": "launcher" if tool.launcher is not None else "instrument",
+                "object_type": (
+                    None if tool.object_type is None else tool.object_type.value
+                ),
+                "selection": tool.selection.value,
+            }
+            for tool in plugin_cls.get_tools()
+        ]
     return {
         "name": record.name,
         "record_id": record.name,
@@ -753,6 +783,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         "info": info,
         "recipes": recipes,
         "examples": examples,
+        "tools": tools,
         "operations": {
             "can_enable": bool(record.classes),
             "can_disable": record.instance is not None,
@@ -769,6 +800,7 @@ __all__ = [
     "declared_metadata_keys",
     "discover_plugins_in_dir",
     "get_plugin_class",
+    "get_plugin_instance",
     "inspect_plugin_wheel",
     "install_main",
     "list_plugins",

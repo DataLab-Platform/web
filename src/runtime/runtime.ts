@@ -302,6 +302,50 @@ export interface PluginExampleSummary {
   expected_checks: string[];
 }
 
+/** Selection a plugin tool needs (names follow menu select conditions). */
+export type PluginToolSelection =
+  | "none"
+  | "exactly_one"
+  | "at_least_one"
+  | "at_least_two";
+
+export interface PluginToolSummary {
+  id: string;
+  title: string;
+  description: string;
+  /** ``launcher``: plugin code; ``instrument``: window drawn by DataLab. */
+  kind: "launcher" | "instrument";
+  /** Panel of the objects the tool works on; ``null`` for both panels. */
+  object_type: PanelKind | null;
+  selection: PluginToolSelection;
+}
+
+/** What an instrument window shows when it opens. */
+export interface PluginInstrumentSession {
+  plugin_id: string;
+  tool_id: string;
+  title: string;
+  settings: SchemaWithValues;
+  live_interval_ms: number;
+}
+
+/** Live frame of an instrument: signals drawn together, or one image. */
+export type PluginInstrumentFrame = (
+  | { kind: "signals"; items: SignalData[] }
+  | { kind: "image"; items: ImageData[] }
+) & {
+  summary: string;
+  /** Fixed Y range of signals, or color range of the image. */
+  value_range: [number, number] | null;
+};
+
+export interface PluginInstrumentAcquisition {
+  panel: PanelKind;
+  group_id: string;
+  group_title: string;
+  object_ids: string[];
+}
+
 export interface PluginWheelInspection {
   filename: string;
   distribution: string;
@@ -344,6 +388,7 @@ export interface PluginRecord {
   info: PluginInfoMeta | null;
   recipes: PluginRecipeSummary[];
   examples: PluginExampleSummary[];
+  tools: PluginToolSummary[];
   operations: {
     can_enable: boolean;
     can_disable: boolean;
@@ -1371,6 +1416,8 @@ export class DataLabRuntime {
       "run_signal_analysis",
       "run_image_analysis",
       "run_plugin_recipe",
+      "launch_plugin_tool",
+      "acquire_plugin_instrument",
       "open_signal_from_bytes",
       "open_image_from_bytes",
       "open_from_directory_chunk",
@@ -1601,13 +1648,20 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
     open_workspace_from_bytes,
     ${JSON.stringify(import.meta.env.VITE_APP_VERSION)},
     reset_all,
+    signal_payload=_signal_data_payload,
+    image_payload=_image_data_payload,
   )
   from dlw_applications import (
+    acquire_plugin_instrument,
     assess_plugin_recipes,
     check_plugin_recipe_bindings,
     get_plugin_recipe_schema,
+    launch_plugin_tool,
     open_plugin_example,
+    open_plugin_instrument,
     prepare_plugin_recipe,
+    preview_plugin_instrument,
+    resolve_plugin_instrument_active,
     resolve_plugin_recipe_active,
     resolve_plugin_recipe_callbacks,
     resolve_plugin_recipe_choices,
@@ -3176,6 +3230,98 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
       replace,
       recipe_id: recipeId,
     })) as PluginExampleOpenResult;
+  }
+
+  /** Run the launcher of a plugin tool on the selected objects.
+   *
+   *  Returns the IDs of the objects the tool added, per panel. */
+  async launchPluginTool(
+    pluginId: string,
+    toolId: string,
+    selectedIds: string[],
+  ): Promise<{ signal: string[]; image: string[] }> {
+    return (await this.callPy("launch_plugin_tool", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      selected_ids: selectedIds,
+    })) as { signal: string[]; image: string[] };
+  }
+
+  /** Return the title, settings and live period of a plugin instrument. */
+  async openPluginInstrument(
+    pluginId: string,
+    toolId: string,
+  ): Promise<PluginInstrumentSession> {
+    return (await this.callPy("open_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+    })) as PluginInstrumentSession;
+  }
+
+  /** Return a live frame of a plugin instrument for edited settings. */
+  async previewPluginInstrument(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<PluginInstrumentFrame> {
+    const raw = (await this.callPy("preview_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as {
+      kind: "signals" | "image";
+      items: Array<Record<string, unknown>>;
+      summary: string;
+      value_range: [number, number] | null;
+    };
+    const common = { summary: raw.summary, value_range: raw.value_range };
+    if (raw.kind === "image") {
+      return {
+        ...common,
+        kind: "image",
+        items: raw.items.map(
+          (item) =>
+            decodeImagePayload(
+              item as unknown as ImageData & { encoding?: string },
+            ) as ImageData,
+        ),
+      };
+    }
+    return {
+      ...common,
+      kind: "signals",
+      items: raw.items.map((item) =>
+        decodeSignalPayload(
+          item as unknown as SignalData & { encoding?: string },
+        ),
+      ),
+    };
+  }
+
+  /** Add an acquisition of a plugin instrument to the workspace. */
+  async acquirePluginInstrument(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<PluginInstrumentAcquisition> {
+    return (await this.callPy("acquire_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as PluginInstrumentAcquisition;
+  }
+
+  /** Resolve which instrument settings are active for edited values. */
+  async resolvePluginInstrumentActive(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_plugin_instrument_active", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as Record<string, boolean>;
   }
 
   // ------------------------------------------------------------------

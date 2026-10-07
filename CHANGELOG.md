@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   source, OK reuses a completed current preview once; stale, running and
   multi-selection previews fall back to normal processing.
 - **Add metadata:** _Edit > Metadata > Add metadata…_ can now extract the value from the formatted text with a regular expression, for example an exposure time or a shot number read from object titles. Objects without a match are left unchanged unless you ask for an error, a scale factor converts numeric values (e.g. milliseconds to seconds), and a live preview shows the resulting values. Keys may contain dots and hyphens, as used by plugin keys, and a **Known keys** list copies a key already present on the selected objects. Invalid settings are reported and the dialog reopens with your entries.
+- **Application tools:** applications can now offer tools, listed in a **Tools** section of the Applications window and in their _Plugins_ submenu, and enabled only when the selection suits them. Instrument tools open a window with a live view next to their settings, and add each acquisition to a new group. The bundled Camera and Pulse applications use it for a scientific camera simulator and an oscilloscope simulator, whose acquisitions are ready for their methods.
 
 ### Changed
 
@@ -35,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
+- **Parameter forms:** a checkbox that has only its own text, as in DataLab Desktop, no longer shows its internal field name as a label.
 
 ## [0.9.0] - 2026-08-11
 
