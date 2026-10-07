@@ -100,6 +100,9 @@ export function formatReadiness(
   const reasons = assessment.issues.map((issue) =>
     formatInputIssue(issue, slots),
   );
+  if (assessment.issues.some((issue) => issue.code === "missing_metadata")) {
+    reasons.push(t("To set it, use Edit > Metadata > Add metadata…"));
+  }
   if (assessment.status !== "no_input") {
     reasons.push(...assessment.diagnostics.map(formatDiagnostic));
   }

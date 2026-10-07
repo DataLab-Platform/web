@@ -199,6 +199,15 @@ export function ApplicationsDialog({
   const selectedPluginId = selected?.plugin_id ?? null;
   const recipeKey = selected?.recipes.map((recipe) => recipe.id).join("\n");
   const candidateKey = candidateIds.join("\n");
+  // Edits such as Add metadata change readiness without changing the selection
+  const [objectsRevision, setObjectsRevision] = useState(0);
+  useEffect(
+    () =>
+      runtime?.onWorkspaceMutation(() =>
+        setObjectsRevision((revision) => revision + 1),
+      ),
+    [runtime],
+  );
   useEffect(() => {
     if (!runtime || !selectedPluginId || !recipeKey || busy) return;
     let cancelled = false;
@@ -235,6 +244,7 @@ export function ApplicationsDialog({
     busy,
     candidateKey,
     exampleContext,
+    objectsRevision,
     recipeKey,
     runtime,
     selectedPluginId,

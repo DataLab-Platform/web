@@ -34,7 +34,7 @@ from typing import Any, Callable
 # pattern that lets ``install_main`` swap the live bridge after HMR.
 # pylint: disable=import-error,global-statement,broad-exception-caught
 from datalab import registries  # noqa: F401  # used elsewhere in module
-from datalab.plugins import PluginBase, PluginRegistry  # noqa: F401
+from datalab.plugins import PluginBase, PluginCapability, PluginRegistry  # noqa: F401
 from dlw_wheels import inspect_wheel
 
 PLUGINS_ROOT = "/home/pyodide/dlw_plugins"
@@ -630,6 +630,34 @@ def get_plugin_class(
     return record.classes[0]
 
 
+def declared_metadata_keys(object_type: str) -> list[tuple[str, str]]:
+    """Return the metadata keys expected by the methods of active applications.
+
+    Args:
+        object_type: type of the objects carrying the metadata ("signal" or
+         "image")
+
+    Returns:
+        ``(key, description)`` pairs, in declaration order, without duplicates
+    """
+    keys: dict[str, str] = {}
+    for record in _RECORDS.values():
+        instance = record.instance
+        if not record.enabled or instance is None or not record.classes:
+            continue
+        if instance.info is None or (
+            PluginCapability.APPLICATION not in instance.info.capabilities
+        ):
+            continue
+        for recipe in record.classes[0].get_recipes():
+            for slot in recipe.inputs:
+                if slot.object_type.value != object_type:
+                    continue
+                for requirement in slot.metadata:
+                    keys.setdefault(requirement.key, requirement.description)
+    return list(keys.items())
+
+
 def slot_payload(slot: Any) -> dict[str, Any]:
     """Return the JSON description of one recipe input slot."""
     return {
@@ -738,6 +766,7 @@ __all__ = [
     "PLUGINS_ROOT",
     "PluginRecord",
     "add_change_listener",
+    "declared_metadata_keys",
     "discover_plugins_in_dir",
     "get_plugin_class",
     "inspect_plugin_wheel",

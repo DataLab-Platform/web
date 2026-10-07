@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -30,7 +31,10 @@ const runtimeMock = vi.hoisted(() => ({
   resolvePluginRecipeChoices: vi.fn(),
   resolvePluginRecipeCallbacks: vi.fn(),
   resolvePluginRecipeActive: vi.fn(),
+  onWorkspaceMutation: vi.fn(),
 }));
+
+const mutationListeners: ((name: string) => void)[] = [];
 
 vi.mock("../../../src/runtime/RuntimeContext", () => ({
   useRuntime: () => ({ runtime: runtimeMock as unknown as RuntimeApi }),
@@ -224,6 +228,15 @@ function renderDialog(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mutationListeners.length = 0;
+  runtimeMock.onWorkspaceMutation.mockImplementation(
+    (listener: (name: string) => void) => {
+      mutationListeners.push(listener);
+      return () => {
+        mutationListeners.splice(mutationListeners.indexOf(listener), 1);
+      };
+    },
+  );
   runtimeMock.listPlugins.mockResolvedValue([APPLICATION]);
   runtimeMock.assessPluginRecipes.mockResolvedValue({ [RECIPE_ID]: READY });
   runtimeMock.preparePluginRecipe.mockResolvedValue(PREPARATION);
@@ -318,6 +331,39 @@ describe("ApplicationsDialog", () => {
       PLUGIN_ID,
       ["image-3"],
       { [RECIPE_ID]: {} },
+    );
+  });
+
+  it("re-assesses the methods when workspace objects change", async () => {
+    renderDialog();
+    await screen.findByText("Ready to run on the current selection");
+    const assessments = runtimeMock.assessPluginRecipes.mock.calls.length;
+
+    runtimeMock.assessPluginRecipes.mockResolvedValueOnce({
+      [RECIPE_ID]: {
+        status: "not_ready",
+        bindings: { frames: ["image-1", "image-2"] },
+        issues: [
+          {
+            code: "missing_metadata",
+            slot_id: "frames",
+            details: { key: "exposure_time", count: 2, titles: ["A", "B"] },
+          },
+        ],
+        diagnostics: [],
+      },
+    });
+    act(() => {
+      for (const listener of [...mutationListeners]) {
+        listener("delete_object_metadata");
+      }
+    });
+
+    expect(
+      await screen.findByText("To set it, use Edit > Metadata > Add metadata…"),
+    ).toBeInTheDocument();
+    expect(runtimeMock.assessPluginRecipes).toHaveBeenCalledTimes(
+      assessments + 1,
     );
   });
 

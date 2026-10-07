@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import dlw_applications
 import dlw_plugins
 import numpy as np
@@ -134,6 +136,31 @@ def applications_env(fresh_bootstrap, monkeypatch):
 
 def _add_input_signal(bootstrap) -> str:
     return bootstrap.add_signal_from_arrays("Input", [0.0, 1.0], [1.0, 3.0])
+
+
+def test_add_metadata_suggests_keys_declared_by_applications(
+    applications_env, monkeypatch
+) -> None:
+    bootstrap, record = applications_env
+    key = "plugin.org.example.generic-application.gain"
+    slot = RecipeInputSlot(
+        "source",
+        RecipeObjectType.SIGNAL,
+        RecipeCardinality.ONE,
+        metadata=(RecipeMetadataRequirement(key, "Detector gain"),),
+    )
+    recipe = dataclasses.replace(GENERIC_RECIPE, inputs=(slot,))
+    monkeypatch.setattr(GenericApplicationPlugin, "RECIPES", (recipe,))
+    signal = bootstrap._MODEL.get(_add_input_signal(bootstrap))
+    signal.metadata["operator"] = "Ada"
+
+    assert bootstrap._metadata_key_suggestions([signal]) == [
+        ("operator", "e.g. 'Ada'"),
+        (key, "Detector gain"),
+    ]
+    assert dlw_plugins.declared_metadata_keys("image") == []
+    record.enabled = False
+    assert dlw_plugins.declared_metadata_keys("signal") == []
 
 
 def test_prepare_recipe_returns_schema_and_unambiguous_binding(
