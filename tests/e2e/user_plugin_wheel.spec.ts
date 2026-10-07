@@ -241,7 +241,7 @@ test("local plugin wheel persists and follows its managed lifecycle", async ({
     .getByRole("button")
     .filter({ hasText: "Local Wheel Application" })
     .click();
-  await applications.getByRole("button", { name: "Start analysis…" }).click();
+  await applications.getByRole("button", { name: "Run on selection…" }).click();
   await expect(applications).toContainText("Created 1 objects");
   await closeDialog(page);
   await expect(

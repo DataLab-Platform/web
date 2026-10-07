@@ -19,7 +19,7 @@ describe.each(BUNDLED_PLUGIN_WHEELS)("bundled $distribution wheel", (wheel) => {
   it("matches its committed version, size, and SHA-256 manifest", async () => {
     const bytes = await readFile(wheelPath);
 
-    expect(wheel.version).toBe("0.1.0");
+    expect(wheel.version).toBe("0.2.0");
     expect(bytes.byteLength).toBe(wheel.sizeBytes);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(wheel.sha256);
   });

@@ -17,6 +17,7 @@ from datalab.recipes import (
     RecipeDiagnostic,
     RecipeDiagnosticLevel,
     RecipeInputSlot,
+    RecipeMetadataRequirement,
     RecipeObjectOutput,
     RecipeObjectType,
     RecipeOutcome,
@@ -150,15 +151,135 @@ def test_prepare_recipe_returns_schema_and_unambiguous_binding(
     assert prepared["bindings"] == {"source": [input_id]}
     assert prepared["ambiguous_slots"] == []
     assert prepared["missing_slots"] == []
+    assert prepared["readiness"]["status"] == "ready"
     assert prepared["parameters"]["values"]["gain"] == 2.0
     assert prepared["slots"] == [
         {
             "id": "source",
+            "title": "Source",
+            "description": "",
             "object_type": "signal",
             "cardinality": "one",
             "required": True,
+            "min_count": 1,
+            "metadata": [],
         }
     ]
+
+
+def _frames_recipe(**kwargs) -> RecipeDescriptor:
+    """Return a recipe requiring two labeled frames, with an input check."""
+
+    def check(inputs, parameters):
+        if parameters.gain > 5.0:
+            return [RecipeDiagnostic("error", "high-gain", "Gain too high")]
+        return [RecipeDiagnostic("warning", "few-frames", "Few frames")]
+
+    values = {
+        "recipe_id": f"{PLUGIN_ID}:frames",
+        "plugin_version": "1.0.0",
+        "title": "Frames",
+        "version": "1.0.0",
+        "run": _run_generic_recipe,
+        "inputs": (
+            RecipeInputSlot(
+                "frames",
+                RecipeObjectType.SIGNAL,
+                RecipeCardinality.MANY,
+                title="Frames",
+                description="Labeled frames",
+                min_count=2,
+                metadata=(RecipeMetadataRequirement("label", "Frame label"),),
+            ),
+        ),
+        "parameter_class": GenericRecipeParameters,
+        "check_inputs": check,
+    }
+    values.update(kwargs)
+    return RecipeDescriptor(**values)
+
+
+def test_recipes_are_assessed_on_the_selection_with_example_values(
+    applications_env, monkeypatch
+) -> None:
+    """Readiness explains missing metadata, counts, and recipe diagnostics."""
+    bootstrap, _record = applications_env
+    recipe = _frames_recipe()
+    monkeypatch.setattr(GenericApplicationPlugin, "RECIPES", (GENERIC_RECIPE, recipe))
+    first, second = _add_input_signal(bootstrap), _add_input_signal(bootstrap)
+    bootstrap._MODEL.get(first).metadata["label"] = "A"
+
+    assessed = dlw_applications.assess_plugin_recipes(PLUGIN_ID, [first, second])
+    assert assessed[RECIPE_ID]["status"] == "needs_assignment"
+    frames = assessed[recipe.recipe_id]
+    assert frames["status"] == "not_ready"
+    assert frames["bindings"] == {"frames": [first, second]}
+    assert frames["issues"] == [
+        {
+            "code": "missing_metadata",
+            "slot_id": "frames",
+            "details": {"key": "label", "count": 1, "titles": ["Input"]},
+        }
+    ]
+
+    bootstrap._MODEL.get(second).metadata["label"] = "B"
+    assessed = dlw_applications.assess_plugin_recipes(
+        PLUGIN_ID, [first, second], {recipe.recipe_id: {"gain": 9.0}}
+    )
+    assert assessed[recipe.recipe_id]["status"] == "not_ready"
+    assert assessed[recipe.recipe_id]["diagnostics"][0]["code"] == "high-gain"
+    assessed = dlw_applications.assess_plugin_recipes(PLUGIN_ID, [first, second])
+    assert assessed[recipe.recipe_id]["status"] == "warnings"
+
+    prepared = dlw_applications.prepare_plugin_recipe(
+        PLUGIN_ID, recipe.recipe_id, [first]
+    )
+    assert prepared["readiness"]["issues"][0]["code"] == "too_few"
+    assert prepared["candidates"][0]["missing_metadata"] == {}
+
+    def broken_suggestion(_candidates):
+        raise RuntimeError("broken suggestion")
+
+    monkeypatch.setattr(
+        GenericApplicationPlugin,
+        "RECIPES",
+        (GENERIC_RECIPE, _frames_recipe(suggest_bindings=broken_suggestion)),
+    )
+    assessed = dlw_applications.assess_plugin_recipes(PLUGIN_ID, [first, second])
+    assert assessed[recipe.recipe_id] == {
+        "status": "error",
+        "error": "broken suggestion",
+    }
+
+
+def test_edited_bindings_are_checked_without_running(
+    applications_env, monkeypatch
+) -> None:
+    """User assignments are assessed, then enforced when the recipe runs."""
+    bootstrap, _record = applications_env
+    recipe = _frames_recipe()
+    monkeypatch.setattr(GenericApplicationPlugin, "RECIPES", (recipe,))
+    first, second = _add_input_signal(bootstrap), _add_input_signal(bootstrap)
+    bootstrap._MODEL.get(first).metadata["label"] = "A"
+
+    checked = dlw_applications.check_plugin_recipe_bindings(
+        PLUGIN_ID, recipe.recipe_id, {"frames": [first, first]}
+    )
+    assert [issue["code"] for issue in checked["issues"]] == ["duplicate"]
+
+    with pytest.raises(RecipeValidationError, match="at least 2 objects"):
+        dlw_applications.run_plugin_recipe(
+            PLUGIN_ID, recipe.recipe_id, {"frames": [first]}
+        )
+    with pytest.raises(RecipeValidationError, match="metadata 'label'"):
+        dlw_applications.run_plugin_recipe(
+            PLUGIN_ID, recipe.recipe_id, {"frames": [first, second]}
+        )
+    bootstrap._MODEL.get(second).metadata["label"] = "B"
+    with pytest.raises(RecipeValidationError, match="Gain too high"):
+        dlw_applications.run_plugin_recipe(
+            PLUGIN_ID, recipe.recipe_id, {"frames": [first, second]}, {"gain": 9.0}
+        )
 
 
 def test_prepare_recipe_does_not_duplicate_candidates_across_same_type_slots(
@@ -365,7 +486,7 @@ def test_open_example_returns_recipe_driven_navigation(
     class Example:
         id = "quickstart"
         resource_path = "examples/quickstart.h5"
-        recipe_id = RECIPE_ID
+        recipe_ids = (RECIPE_ID,)
 
         @staticmethod
         def resolve() -> Resource:
@@ -398,7 +519,13 @@ def test_open_example_returns_recipe_driven_navigation(
     assert opened["selected_ids"] == [opened["current_id"]]
     assert opened["filename"] == "quickstart.h5"
     assert opened["dirty"] is False
+    assert opened["recipe_id"] == RECIPE_ID
+    assert opened["recipe_ids"] == [RECIPE_ID]
     assert opened["parameter_values"] == {}
+    with pytest.raises(RecipeValidationError, match="not designed for"):
+        dlw_applications.open_plugin_example(
+            PLUGIN_ID, "quickstart", replace=False, recipe_id=f"{PLUGIN_ID}:other"
+        )
 
 
 def test_open_generated_example_replaces_workspace_and_returns_defaults(
@@ -411,7 +538,7 @@ def test_open_generated_example_replaces_workspace_and_returns_defaults(
         id = "generated"
         title = "Generated campaign"
         resource = None
-        recipe_id = RECIPE_ID
+        recipe_ids = (RECIPE_ID,)
 
     generated = create_signal(
         "Generated input",
@@ -425,7 +552,7 @@ def test_open_generated_example_replaces_workspace_and_returns_defaults(
 
     def materialize(_cls, example_id):
         assert example_id == "generated"
-        return PluginExampleData((generated,), {"gain": 4.0})
+        return PluginExampleData((generated,), {RECIPE_ID: {"gain": 4.0}})
 
     monkeypatch.setattr(
         GenericApplicationPlugin,
@@ -456,5 +583,5 @@ def test_open_generated_example_replaces_workspace_and_returns_defaults(
     assert opened["selected_ids"] == [opened["current_id"]]
     assert opened["filename"] is None
     assert opened["dirty"] is True
-    assert opened["parameter_values"] == {"gain": 4.0}
+    assert opened["parameter_values"] == {RECIPE_ID: {"gain": 4.0}}
     assert [item["title"] for item in bootstrap.list_signals()] == ["Generated input"]

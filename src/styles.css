@@ -3426,6 +3426,100 @@ input {
   margin-top: 18px;
 }
 
+.application-method {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.application-method.focused {
+  margin-inline: -8px;
+  padding-inline: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.application-method-header,
+.application-method-example {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.application-method-header button,
+.application-method-example button {
+  flex: 0 0 auto;
+}
+
+.application-method p,
+.recipe-slot-description {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.application-method-inputs,
+.application-method-examples,
+.application-readiness,
+.recipe-readiness {
+  margin-top: 10px;
+}
+
+.application-method-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.application-method-inputs ul,
+.application-slot-metadata,
+.recipe-slot-metadata,
+.application-readiness ul,
+.recipe-readiness ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.application-slot-kind,
+.application-slot-metadata,
+.recipe-slot-metadata {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.application-readiness,
+.recipe-readiness {
+  padding: 6px 10px;
+  border-left: 3px solid var(--border);
+  background: var(--panel-alt);
+  font-size: 12px;
+}
+
+.application-readiness-summary {
+  font-weight: 600;
+}
+
+.readiness-ready {
+  border-left-color: #2e8b57;
+}
+
+.readiness-warnings,
+.readiness-needs_assignment {
+  border-left-color: #b27a19;
+}
+
+.readiness-not_ready,
+.readiness-error {
+  border-left-color: #c0392b;
+}
+
+.application-method-example {
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--border);
+}
+
 .applications-dialog > .error,
 .applications-status,
 .applications-diagnostics {
@@ -3460,7 +3554,6 @@ input {
   align-items: baseline;
   gap: 8px;
   padding: 0 4px;
-  text-transform: capitalize;
 }
 
 .recipe-slot legend small,
@@ -3507,7 +3600,9 @@ input {
   }
 
   .application-title-row,
-  .application-entry {
+  .application-entry,
+  .application-method-header,
+  .application-method-example {
     flex-direction: column;
   }
 }

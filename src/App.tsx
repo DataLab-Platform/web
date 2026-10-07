@@ -113,7 +113,10 @@ import { useProgress } from "./components/ProgressDialog";
 import { useToast } from "./components/Toast";
 import type { SeparateViewContent } from "./components/SeparateViewDialog";
 import { PluginManagerDialog } from "./components/PluginManagerDialog";
-import { ApplicationsDialog } from "./components/ApplicationsDialog";
+import {
+  ApplicationsDialog,
+  type PluginExampleContext,
+} from "./components/ApplicationsDialog";
 import { ObjectPropertiesDialog } from "./components/ObjectPropertiesDialog";
 import { RoiPanel } from "./components/RoiPanel";
 import type { RoiDrawGeometry } from "./components/RoiPanel";
@@ -839,9 +842,12 @@ export default function App() {
   const [applicationTarget, setApplicationTarget] = useState<{
     pluginId: string;
     recipeId: string;
-    parameterValues: Record<string, unknown>;
-    candidateIds?: string[];
   } | null>(null);
+  // Last example opened from an application plugin. Its full selection
+  // stays the recipe candidate set while the visible selection is the
+  // (possibly reduced) one set on opening it; its values prefill recipes.
+  const [pluginExampleContext, setPluginExampleContext] =
+    useState<PluginExampleContext | null>(null);
   const [annotations, setAnnotations] = useState<PlotlyAnnotations>({
     shapes: [],
     annotations: [],
@@ -1687,6 +1693,18 @@ export default function App() {
     });
   }, [confirm, workspaceDirty]);
 
+  // Recipe candidates: the live selection, or the full selection of the
+  // last opened example while the visible selection is still the one set
+  // on opening it (large signal sets are only partly displayed).
+  const applicationCandidateIds = useMemo(() => {
+    const live =
+      selectedIds.length > 0 ? selectedIds : currentId ? [currentId] : [];
+    const context = pluginExampleContext;
+    if (!context || context.visibleIds.length !== live.length) return live;
+    const visible = new Set(context.visibleIds);
+    return live.every((id) => visible.has(id)) ? context.objectIds : live;
+  }, [currentId, pluginExampleContext, selectedIds]);
+
   const handlePluginRecipeCommitted = useCallback(
     async (commit: PluginRecipeCommit) => {
       const primaryOutput =
@@ -1725,7 +1743,14 @@ export default function App() {
             : result.selected_ids;
         setSelectedIds(visualSelection);
         setCurrentId(result.current_id);
+        setPluginExampleContext({
+          pluginId: result.plugin_id,
+          objectIds: result.selected_ids,
+          visibleIds: visualSelection,
+          parameterValues: result.parameter_values,
+        });
       } else {
+        setPluginExampleContext(null);
         await refresh(null);
       }
     },
@@ -1741,7 +1766,7 @@ export default function App() {
 
   const handleOpenApplicationRecipe = useCallback(
     (pluginId: string, recipeId: string) => {
-      setApplicationTarget({ pluginId, recipeId, parameterValues: {} });
+      setApplicationTarget({ pluginId, recipeId });
       setApplicationsOpen(true);
     },
     [],
@@ -1758,16 +1783,8 @@ export default function App() {
           true,
         );
         await handlePluginExampleOpened(result);
-        const example = pluginRecords
-          .find((record) => record.plugin_id === pluginId)
-          ?.examples.find((candidate) => candidate.id === exampleId);
-        if (example?.recipe_id) {
-          setApplicationTarget({
-            pluginId,
-            recipeId: example.recipe_id,
-            parameterValues: result.parameter_values,
-            candidateIds: result.selected_ids,
-          });
+        if (result.recipe_id) {
+          setApplicationTarget({ pluginId, recipeId: result.recipe_id });
           setApplicationsOpen(true);
         }
       } catch (error) {
@@ -1782,7 +1799,6 @@ export default function App() {
     [
       confirmOpenPluginExample,
       handlePluginExampleOpened,
-      pluginRecords,
       runtime,
       showProcessingError,
     ],
@@ -3654,8 +3670,6 @@ export default function App() {
         setApplicationTarget({
           pluginId: result.pluginId,
           recipeId: result.recipeId,
-          parameterValues: result.example.parameter_values,
-          candidateIds: result.example.selected_ids,
         });
         setApplicationsOpen(true);
         pushToast({
@@ -5371,13 +5385,8 @@ export default function App() {
         )}
         {applicationsOpen && (
           <ApplicationsDialog
-            candidateIds={
-              selectedIds.length > 0
-                ? selectedIds
-                : currentId
-                  ? [currentId]
-                  : []
-            }
+            candidateIds={applicationCandidateIds}
+            exampleContext={pluginExampleContext}
             initialTarget={applicationTarget}
             confirmOpenExample={confirmOpenPluginExample}
             onCommitted={handlePluginRecipeCommitted}

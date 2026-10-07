@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Applications:** each method now shows the inputs it expects and a live status telling whether the current selection can be analyzed, and why not. _Run on selection…_ runs a ready method directly and asks for the input assignment only when it is ambiguous or invalid; the assignment dialog describes each input, flags objects lacking required metadata, and checks the chosen objects before _Continue_. Examples are listed under the methods they are designed for: _Try with this example_ opens the example and runs the method with prefilled parameters. One example may serve several methods, and examples designed for no method are listed as datasets.
 - **Histogram range editors:** generic parameter intervals now respect linked numeric constraints and read-only states. Brightness and contrast retains its specialized controls, including exact float64 window editing outside the source image's observed range.
 - **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
   its native async DataSet backend and JSON Schema exporter. The former

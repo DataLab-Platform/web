@@ -630,6 +630,27 @@ def get_plugin_class(
     return record.classes[0]
 
 
+def slot_payload(slot: Any) -> dict[str, Any]:
+    """Return the JSON description of one recipe input slot."""
+    return {
+        "id": slot.id,
+        "title": slot.display_title,
+        "description": slot.description,
+        "object_type": slot.object_type.value,
+        "cardinality": slot.cardinality.value,
+        "required": slot.required,
+        "min_count": slot.min_count,
+        "metadata": [
+            {
+                "key": item.key,
+                "description": item.description,
+                "required": item.required,
+            }
+            for item in slot.metadata
+        ],
+    }
+
+
 def _record_payload(record: PluginRecord) -> dict[str, Any]:
     info = None
     if record.instance is not None and record.instance.info is not None:
@@ -669,15 +690,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
                 "version": recipe.version,
                 "title": recipe.title,
                 "description": recipe.description,
-                "inputs": [
-                    {
-                        "id": slot.id,
-                        "object_type": slot.object_type.value,
-                        "cardinality": slot.cardinality.value,
-                        "required": slot.required,
-                    }
-                    for slot in recipe.inputs
-                ],
+                "inputs": [slot_payload(slot) for slot in recipe.inputs],
                 "has_params": recipe.parameter_class is not None,
             }
             for recipe in plugin_cls.get_recipes()
@@ -687,7 +700,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
                 "id": example.id,
                 "title": example.title,
                 "description": example.description,
-                "recipe_id": example.recipe_id,
+                "recipe_ids": list(example.recipe_ids),
                 "expected_checks": list(example.expected_checks),
             }
             for example in plugin_cls.get_examples()

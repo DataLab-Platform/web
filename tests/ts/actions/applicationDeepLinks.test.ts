@@ -28,6 +28,7 @@ const CAMERA_EXAMPLE: PluginExampleOpenResult = {
   plugin_id: CAMERA_REQUEST.pluginId,
   example_id: CAMERA_REQUEST.exampleId,
   recipe_id: CAMERA_REQUEST.recipeId,
+  recipe_ids: [CAMERA_REQUEST.recipeId],
   filename: "camera_quickstart.h5",
   panel: "image",
   selected_ids: ["camera-image"],
@@ -40,12 +41,13 @@ const PULSE_EXAMPLE: PluginExampleOpenResult = {
   plugin_id: PULSE_REQUEST.pluginId,
   example_id: PULSE_REQUEST.exampleId,
   recipe_id: PULSE_REQUEST.recipeId,
+  recipe_ids: [PULSE_REQUEST.recipeId],
   filename: null,
   panel: "signal",
   selected_ids: ["pulse-1", "pulse-2"],
   current_id: "pulse-2",
   dirty: true,
-  parameter_values: { minimum_snr_db: 12 },
+  parameter_values: { [PULSE_REQUEST.recipeId]: { minimum_snr_db: 12 } },
 };
 
 function bundledRecord(
@@ -93,7 +95,7 @@ function bundledRecord(
         id: request.exampleId,
         title: "Test example",
         description: "",
-        recipe_id: request.recipeId,
+        recipe_ids: [request.recipeId],
         expected_checks: [],
       },
     ],
@@ -168,8 +170,38 @@ describe("openBundledApplicationDeepLink", () => {
       CAMERA_REQUEST.pluginId,
       CAMERA_REQUEST.exampleId,
       true,
+      CAMERA_REQUEST.recipeId,
     );
     expect(runtime.runPluginRecipe).not.toHaveBeenCalled();
+  });
+
+  it("rejects a recipe the example is not designed for", async () => {
+    const runtime = runtimeMock();
+    const record = bundledRecord(CAMERA_REQUEST);
+    runtime.listPlugins.mockResolvedValue([
+      {
+        ...record,
+        examples: [
+          {
+            ...record.examples[0],
+            recipe_ids: ["org.datalab.camera-characterization:dark-current"],
+          },
+        ],
+      },
+    ]);
+    const result = await openBundledApplicationDeepLink(
+      runtime as unknown as RuntimeApi,
+      CAMERA_REQUEST,
+    );
+    expect(result).toEqual({
+      kind: "mismatch",
+      mismatch: {
+        field: "recipe",
+        requested: CAMERA_REQUEST.recipeId,
+        bundled: "org.datalab.camera-characterization:dark-current",
+      },
+    });
+    expect(runtime.openPluginExample).not.toHaveBeenCalled();
   });
 
   it("opens the generated Pulse demo without executing its recipe", async () => {

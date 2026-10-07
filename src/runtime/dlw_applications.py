@@ -16,11 +16,22 @@ import dlw_plugins
 import guidata.dataset as gds
 import sigima
 from datalab.plugin_examples import PluginExampleData
+from datalab.recipe_binding import (
+    RecipeInputIssueCode,
+    RecipeReadiness,
+    assess_recipe_inputs,
+    check_recipe_inputs,
+    find_input_issues,
+    is_compatible,
+)
 from datalab.recipes import (
     RECIPE_RUN_RECORD_OPTION,
     RecipeCardinality,
     RecipeDescriptor,
+    RecipeDiagnostic,
+    RecipeDiagnosticLevel,
     RecipeExecutionContext,
+    RecipeInputSlot,
     RecipeRunRecord,
     RecipeRunStatus,
     RecipeValidationError,
@@ -143,108 +154,197 @@ def _normalize_mapping(value: Any, field_name: str) -> dict[str, Any]:
     return dict(value)
 
 
-def _candidate_payload(oid: str, kind: str, title: str, slots: list[str]) -> dict:
-    return {"id": oid, "kind": kind, "title": title, "compatible_slots": slots}
+def _candidates(candidate_ids: Sequence[str]) -> list[tuple[str, Any]]:
+    """Resolve unique candidate object IDs to live objects."""
+    model, _object_uuid = _require_host()
+    normalized_ids = _normalize_sequence(candidate_ids, "Recipe candidate IDs")
+    if any(not isinstance(oid, str) or not model.has(oid) for oid in normalized_ids):
+        raise RecipeValidationError("Recipe candidates reference an unknown object")
+    return [(oid, model.get(oid)) for oid in dict.fromkeys(normalized_ids)]
+
+
+def _missing_metadata(slot: RecipeInputSlot, obj: Any) -> list[str]:
+    """Return the required metadata keys an object lacks for one slot."""
+    return [
+        item.key
+        for item in slot.metadata
+        if item.required and obj.metadata.get(item.key) is None
+    ]
+
+
+def _candidate_payload(
+    descriptor: RecipeDescriptor, oid: str, obj: Any
+) -> dict[str, Any] | None:
+    """Describe one candidate and the slots that accept its type."""
+    slots = [slot for slot in descriptor.inputs if is_compatible(slot, obj)]
+    if not slots:
+        return None
+    return {
+        "id": oid,
+        "kind": _output_kind(obj),
+        "title": obj.title,
+        "compatible_slots": [slot.id for slot in slots],
+        "missing_metadata": {
+            slot.id: keys for slot in slots if (keys := _missing_metadata(slot, obj))
+        },
+    }
+
+
+def _json_value(value: Any) -> Any:
+    """Return a JSON-friendly copy of issue details."""
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _diagnostic_payload(diagnostic: RecipeDiagnostic) -> dict[str, Any]:
+    return {
+        "level": diagnostic.level.value,
+        "code": diagnostic.code,
+        "message": diagnostic.message,
+        "details": {
+            key: _json_value(value) for key, value in diagnostic.details.items()
+        },
+    }
+
+
+def _readiness_payload(
+    readiness: RecipeReadiness, ids_by_object: Mapping[int, str]
+) -> dict[str, Any]:
+    """Describe a readiness assessment with object IDs instead of objects."""
+    return {
+        "status": readiness.status.value,
+        "bindings": {
+            slot_id: [ids_by_object[id(obj)] for obj in objects]
+            for slot_id, objects in readiness.bindings.items()
+        },
+        "issues": [
+            {
+                "code": issue.code.value,
+                "slot_id": issue.slot_id,
+                "details": {
+                    key: _json_value(value) for key, value in issue.details.items()
+                },
+            }
+            for issue in readiness.issues
+        ],
+        "diagnostics": [_diagnostic_payload(item) for item in readiness.diagnostics],
+    }
+
+
+def _assess(
+    descriptor: RecipeDescriptor,
+    candidates: Sequence[tuple[str, Any]],
+    parameter_values: Mapping[str, object] | None,
+) -> tuple[RecipeReadiness, dict[int, str]]:
+    """Assess a recipe on candidates with parameters updated by values."""
+    ids_by_object = {id(obj): oid for oid, obj in candidates}
+    readiness = assess_recipe_inputs(
+        descriptor,
+        [obj for _oid, obj in candidates],
+        _parameters(descriptor, parameter_values),
+    )
+    return readiness, ids_by_object
 
 
 def prepare_plugin_recipe(
     plugin_id: str,
     recipe_id: str,
     candidate_ids: Sequence[str],
+    parameter_values: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
-    """Resolve compatible candidates and conservative initial slot bindings."""
-    model, _object_uuid = _require_host()
+    """Bind candidates to the recipe inputs and assess them before a run."""
     descriptor = _recipe(plugin_id, recipe_id)
-    normalized_ids = _normalize_sequence(candidate_ids, "Recipe candidate IDs")
-    if any(not isinstance(oid, str) or not model.has(oid) for oid in normalized_ids):
-        raise RecipeValidationError("Recipe candidates reference an unknown object")
-
-    candidates: list[tuple[str, Any]] = []
-    payloads: list[dict[str, Any]] = []
-    for oid in dict.fromkeys(normalized_ids):
-        kind = model.kind_of(oid)
-        compatible_slots = [
-            slot.id for slot in descriptor.inputs if slot.object_type.value == kind
-        ]
-        if compatible_slots:
-            obj = model.get(oid)
-            candidates.append((oid, obj))
-            payloads.append(_candidate_payload(oid, kind, obj.title, compatible_slots))
-
-    suggested: dict[str, list[str]] = {}
-    hook = getattr(_plugin_class(plugin_id), "suggest_recipe_bindings", None)
-    if callable(hook):
-        objects_to_ids = {id(obj): oid for oid, obj in candidates}
-        raw_suggested = hook(descriptor, tuple(obj for _oid, obj in candidates))
-        for slot_id, objects in _normalize_mapping(
-            raw_suggested, "Suggested recipe bindings"
-        ).items():
-            suggested[slot_id] = []
-            for obj in _normalize_sequence(objects, f"Binding {slot_id!r}"):
-                oid = objects_to_ids.get(id(obj))
-                if oid is None:
-                    raise RecipeValidationError(
-                        f"Binding suggestion {slot_id!r} references an object "
-                        "outside the candidates"
-                    )
-                suggested[slot_id].append(oid)
-
-    known_slots = {slot.id for slot in descriptor.inputs}
-    unknown_suggestions = set(suggested).difference(known_slots)
-    if unknown_suggestions:
-        raise RecipeValidationError(
-            "Binding suggestions reference unknown slots: "
-            + ", ".join(sorted(unknown_suggestions))
-        )
-
-    bindings: dict[str, list[str]] = {}
-    ambiguous: list[str] = []
-    missing: list[str] = []
-    for slot in descriptor.inputs:
-        compatible = [
-            candidate["id"]
-            for candidate in payloads
-            if slot.id in candidate["compatible_slots"]
-        ]
-        proposed = suggested.get(slot.id)
-        if proposed is not None:
-            bindings[slot.id] = proposed
-        elif sum(
-            candidate.object_type is slot.object_type for candidate in descriptor.inputs
-        ) == 1 and (slot.cardinality is RecipeCardinality.MANY or len(compatible) == 1):
-            bindings[slot.id] = compatible
-        elif compatible:
-            bindings[slot.id] = []
-            ambiguous.append(slot.id)
-        else:
-            bindings[slot.id] = []
-        if slot.required and not bindings[slot.id]:
-            missing.append(slot.id)
-
-    validated = _validate_bindings(descriptor, bindings, allow_missing=True)
+    candidates = _candidates(candidate_ids)
+    readiness, ids_by_object = _assess(descriptor, candidates, parameter_values)
+    payload = _readiness_payload(readiness, ids_by_object)
     return {
         "plugin_id": plugin_id,
         "recipe_id": descriptor.recipe_id,
         "title": descriptor.title,
         "description": descriptor.description,
-        "slots": [
-            {
-                "id": slot.id,
-                "object_type": slot.object_type.value,
-                "cardinality": slot.cardinality.value,
-                "required": slot.required,
-            }
-            for slot in descriptor.inputs
+        "slots": [dlw_plugins.slot_payload(slot) for slot in descriptor.inputs],
+        "candidates": [
+            item
+            for oid, obj in candidates
+            if (item := _candidate_payload(descriptor, oid, obj)) is not None
         ],
-        "candidates": payloads,
-        "bindings": {
-            slot_id: [oid for oid, _obj in objects]
-            for slot_id, objects in validated.items()
-        },
-        "ambiguous_slots": ambiguous,
-        "missing_slots": missing,
+        "bindings": payload["bindings"],
+        "ambiguous_slots": [
+            issue.slot_id
+            for issue in readiness.issues
+            if issue.code is RecipeInputIssueCode.AMBIGUOUS
+        ],
+        "missing_slots": [
+            slot.id
+            for slot in descriptor.inputs
+            if slot.required and not readiness.bindings.get(slot.id)
+        ],
+        "readiness": payload,
         "parameters": get_plugin_recipe_schema(plugin_id, recipe_id),
     }
+
+
+def assess_plugin_recipes(
+    plugin_id: str,
+    candidate_ids: Sequence[str],
+    parameter_values: Mapping[str, Mapping[str, object]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Assess whether each recipe of a plugin can run on the candidates.
+
+    Args:
+        plugin_id: Plugin owning the recipes.
+        candidate_ids: Candidate objects, typically the current selection.
+        parameter_values: Optional parameter values per recipe ID.
+
+    Returns:
+        Readiness payload per recipe ID; an assessment that fails reports the
+        ``error`` status and message instead of failing the whole call.
+    """
+    candidates = _candidates(candidate_ids)
+    values_by_recipe = _normalize_mapping(parameter_values, "Recipe parameters")
+    assessments: dict[str, dict[str, Any]] = {}
+    for descriptor in _plugin_class(plugin_id).get_recipes():
+        try:
+            readiness, ids_by_object = _assess(
+                descriptor, candidates, values_by_recipe.get(descriptor.recipe_id)
+            )
+        except Exception as exc:  # noqa: BLE001 - plugin code must not break others
+            assessments[descriptor.recipe_id] = {"status": "error", "error": str(exc)}
+            continue
+        assessments[descriptor.recipe_id] = _readiness_payload(readiness, ids_by_object)
+    return assessments
+
+
+def check_plugin_recipe_bindings(
+    plugin_id: str,
+    recipe_id: str,
+    bindings: Mapping[str, Sequence[str]],
+    parameter_values: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Assess bindings edited by the user, without running the recipe."""
+    model, _object_uuid = _require_host()
+    descriptor = _recipe(plugin_id, recipe_id)
+    normalized = _normalize_mapping(bindings, "Recipe bindings")
+    objects: dict[str, tuple[Any, ...]] = {}
+    ids_by_object: dict[int, str] = {}
+    for slot_id, oids in normalized.items():
+        values = []
+        for oid in _normalize_sequence(oids, f"Recipe binding {slot_id!r}"):
+            if not isinstance(oid, str) or not model.has(oid):
+                raise RecipeValidationError(
+                    f"Recipe input {slot_id!r} references an unknown object"
+                )
+            obj = model.get(oid)
+            ids_by_object[id(obj)] = oid
+            values.append(obj)
+        objects[slot_id] = tuple(values)
+    readiness = assess_recipe_inputs(
+        descriptor,
+        parameters=_parameters(descriptor, parameter_values),
+        bindings=objects,
+    )
+    return _readiness_payload(readiness, ids_by_object)
 
 
 def get_plugin_recipe_schema(plugin_id: str, recipe_id: str) -> dict[str, Any] | None:
@@ -358,6 +458,24 @@ def _validate_bindings(
                 )
             values.append((oid, model.get(oid)))
         resolved[slot.id] = tuple(values)
+    if not allow_missing:
+        for issue in find_input_issues(
+            descriptor,
+            {
+                slot_id: [obj for _oid, obj in values]
+                for slot_id, values in resolved.items()
+            },
+        ):
+            if issue.code is RecipeInputIssueCode.TOO_FEW:
+                raise RecipeValidationError(
+                    f"Recipe input {issue.slot_id!r} requires at least "
+                    f"{issue.details['min_count']} objects"
+                )
+            if issue.code is RecipeInputIssueCode.MISSING_METADATA:
+                raise RecipeValidationError(
+                    f"Recipe input {issue.slot_id!r} requires metadata "
+                    f"{issue.details['key']!r} on every object"
+                )
     return resolved
 
 
@@ -421,6 +539,13 @@ def run_plugin_recipe(
             raise RecipeValidationError("Recipe inputs require persistent UUIDs")
         input_uuids[slot_id] = tuple(value for value in uuids if value is not None)
     parameters = _parameters(descriptor, parameter_values)
+    errors = [
+        diagnostic.message
+        for diagnostic in check_recipe_inputs(descriptor, inputs, parameters)
+        if diagnostic.level is RecipeDiagnosticLevel.ERROR
+    ]
+    if errors:
+        raise RecipeValidationError("\n".join(errors))
     started_at = _utc_now()
     outcome = descriptor.run(inputs, parameters, RecipeExecutionContext())
     input_object_ids = {id(obj) for values in inputs.values() for obj in values}
@@ -520,15 +645,7 @@ def run_plugin_recipe(
             for output in outcome.objects
         ],
         "results": committed_results,
-        "diagnostics": [
-            {
-                "level": diagnostic.level.value,
-                "code": diagnostic.code,
-                "message": diagnostic.message,
-                "details": dict(diagnostic.details),
-            }
-            for diagnostic in outcome.diagnostics
-        ],
+        "diagnostics": [_diagnostic_payload(item) for item in outcome.diagnostics],
     }
 
 
@@ -536,11 +653,26 @@ def open_plugin_example(
     plugin_id: str,
     example_id: str,
     replace: bool = True,
+    recipe_id: str | None = None,
 ) -> dict[str, Any]:
-    """Open one packaged or generated example through the generic host."""
+    """Open one packaged or generated example through the generic host.
+
+    Args:
+        plugin_id: Plugin owning the example.
+        example_id: Example to open.
+        replace: Replace the current workspace.
+        recipe_id: Recipe the example is opened for (default: its first one);
+         its input types choose the panel and the selected objects.
+    """
     model, _object_uuid = _require_host()
     plugin_cls = _plugin_class(plugin_id)
     example = plugin_cls.get_example(example_id)
+    if recipe_id is None:
+        recipe_id = example.recipe_ids[0] if example.recipe_ids else None
+    elif recipe_id not in example.recipe_ids:
+        raise RecipeValidationError(
+            f"Example {example_id!r} is not designed for recipe {recipe_id!r}"
+        )
     before_ids = {
         kind: [
             obj["id"]
@@ -550,7 +682,7 @@ def open_plugin_example(
         for kind in ("signal", "image")
     }
     materialized = plugin_cls.materialize_example(example_id)
-    parameter_values: dict[str, object] = {}
+    parameter_values: dict[str, dict[str, object]] = {}
     filename: str | None = None
     dirty = False
     if materialized is not None:
@@ -560,6 +692,12 @@ def open_plugin_example(
             )
         if len({id(obj) for obj in materialized.objects}) != len(materialized.objects):
             raise ValueError("Generated plugin example objects must be distinct")
+        unknown = set(materialized.parameter_values).difference(example.recipe_ids)
+        if unknown:
+            raise ValueError(
+                f"Plugin example {example_id!r} provides parameters for recipes it "
+                f"is not designed for: {', '.join(sorted(unknown))}"
+            )
         if replace:
             if _RESET_WORKSPACE is None:
                 raise RuntimeError("Plugin application reset hook is not installed")
@@ -591,7 +729,9 @@ def open_plugin_example(
             kind: [oid for object_kind, oid in added_objects if object_kind == kind]
             for kind in ("signal", "image")
         }
-        parameter_values = dict(materialized.parameter_values)
+        parameter_values = {
+            key: dict(values) for key, values in materialized.parameter_values.items()
+        }
         dirty = True
     else:
         if _WORKSPACE_LOADER is None:
@@ -615,8 +755,8 @@ def open_plugin_example(
             for kind, ids in after_ids.items()
         }
     panel = next((kind for kind, ids in selected_by_kind.items() if ids), None)
-    if example.recipe_id is not None:
-        descriptor = _recipe(plugin_id, example.recipe_id)
+    if recipe_id is not None:
+        descriptor = _recipe(plugin_id, recipe_id)
         panel = next(
             (
                 slot.object_type.value
@@ -630,7 +770,8 @@ def open_plugin_example(
         **result,
         "plugin_id": plugin_id,
         "example_id": example.id,
-        "recipe_id": example.recipe_id,
+        "recipe_id": recipe_id,
+        "recipe_ids": list(example.recipe_ids),
         "filename": filename,
         "panel": panel,
         "selected_ids": selected_ids,
@@ -642,6 +783,8 @@ def open_plugin_example(
 
 __all__ = [
     "RecipeCommitError",
+    "assess_plugin_recipes",
+    "check_plugin_recipe_bindings",
     "get_plugin_recipe_schema",
     "install_host",
     "open_plugin_example",

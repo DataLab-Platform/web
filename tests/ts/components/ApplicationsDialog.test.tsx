@@ -3,14 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationsDialog } from "../../../src/components/ApplicationsDialog";
 import type {
+  PluginExampleOpenResult,
   PluginRecord,
   PluginRecipeCommit,
   PluginRecipePreparation,
+  PluginRecipeReadiness,
 } from "../../../src/runtime/runtime";
 import type { RuntimeApi } from "../../../src/runtime/RuntimeApi";
 
 const runtimeMock = vi.hoisted(() => ({
   listPlugins: vi.fn(),
+  assessPluginRecipes: vi.fn(),
+  checkPluginRecipeBindings: vi.fn(),
   preparePluginRecipe: vi.fn(),
   runPluginRecipe: vi.fn(),
   openPluginExample: vi.fn(),
@@ -25,6 +29,24 @@ vi.mock("../../../src/runtime/RuntimeContext", () => ({
 
 const PLUGIN_ID = "org.example.camera";
 const RECIPE_ID = `${PLUGIN_ID}:analyze`;
+const SECOND_RECIPE_ID = `${PLUGIN_ID}:dark-current`;
+
+const FRAMES_SLOT = {
+  id: "frames",
+  title: "Frames",
+  description: "Frames of the exposure ladder.",
+  object_type: "image" as const,
+  cardinality: "many" as const,
+  required: true,
+  min_count: 2,
+  metadata: [
+    {
+      key: "exposure_time",
+      description: "Exposure time in seconds",
+      required: true,
+    },
+  ],
+};
 
 const APPLICATION: PluginRecord = {
   name: PLUGIN_ID,
@@ -58,14 +80,7 @@ const APPLICATION: PluginRecord = {
       version: "1.0.0",
       title: "Camera analysis",
       description: "Analyze selected images.",
-      inputs: [
-        {
-          id: "images",
-          object_type: "image",
-          cardinality: "many",
-          required: true,
-        },
-      ],
+      inputs: [FRAMES_SLOT],
       has_params: false,
     },
   ],
@@ -74,7 +89,7 @@ const APPLICATION: PluginRecord = {
       id: "quickstart",
       title: "Camera quickstart",
       description: "Open a prepared campaign.",
-      recipe_id: RECIPE_ID,
+      recipe_ids: [RECIPE_ID],
       expected_checks: [],
     },
   ],
@@ -86,31 +101,72 @@ const APPLICATION: PluginRecord = {
   },
 };
 
+const READY: PluginRecipeReadiness = {
+  status: "ready",
+  bindings: { frames: ["image-1", "image-2"] },
+  issues: [],
+  diagnostics: [],
+};
+
 const PREPARATION: PluginRecipePreparation = {
   plugin_id: PLUGIN_ID,
   recipe_id: RECIPE_ID,
   title: "Camera analysis",
   description: "Analyze selected images.",
-  slots: [
-    {
-      id: "images",
-      object_type: "image",
-      cardinality: "many",
-      required: true,
-    },
-  ],
+  slots: [FRAMES_SLOT],
   candidates: [
     {
       id: "image-1",
       kind: "image",
       title: "Frame 1",
-      compatible_slots: ["images"],
+      compatible_slots: ["frames"],
+      missing_metadata: { frames: [] },
+    },
+    {
+      id: "image-2",
+      kind: "image",
+      title: "Frame 2",
+      compatible_slots: ["frames"],
+      missing_metadata: { frames: [] },
     },
   ],
-  bindings: { images: ["image-1"] },
+  bindings: { frames: ["image-1", "image-2"] },
   ambiguous_slots: [],
   missing_slots: [],
+  readiness: READY,
   parameters: null,
+};
+
+const GAIN_PARAMETERS: NonNullable<PluginRecipePreparation["parameters"]> = {
+  schema: {
+    type: "object",
+    properties: {
+      gain: {
+        type: "number",
+        "x-guidata-kind": "float",
+        "x-guidata-label": "Gain",
+        "x-guidata-name": "gain",
+      },
+    },
+    "x-guidata-property-order": ["gain"],
+  },
+  values: { gain: 2 },
+};
+
+const OPENED: PluginExampleOpenResult = {
+  signals: 0,
+  images: 2,
+  groups: 1,
+  plugin_id: PLUGIN_ID,
+  example_id: "quickstart",
+  recipe_id: RECIPE_ID,
+  recipe_ids: [RECIPE_ID],
+  filename: "quickstart.h5",
+  panel: "image",
+  selected_ids: ["image-1", "image-2"],
+  current_id: "image-1",
+  dirty: false,
+  parameter_values: {},
 };
 
 const COMMIT: PluginRecipeCommit = {
@@ -142,25 +198,28 @@ const COMMIT: PluginRecipeCommit = {
   ],
 };
 
+function renderDialog(
+  props: Partial<Parameters<typeof ApplicationsDialog>[0]> = {},
+) {
+  return render(
+    <ApplicationsDialog
+      candidateIds={["image-1", "image-2"]}
+      confirmOpenExample={() => true}
+      onCommitted={() => {}}
+      onExampleOpened={() => {}}
+      onClose={() => {}}
+      {...props}
+    />,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   runtimeMock.listPlugins.mockResolvedValue([APPLICATION]);
+  runtimeMock.assessPluginRecipes.mockResolvedValue({ [RECIPE_ID]: READY });
   runtimeMock.preparePluginRecipe.mockResolvedValue(PREPARATION);
   runtimeMock.runPluginRecipe.mockResolvedValue(COMMIT);
-  runtimeMock.openPluginExample.mockResolvedValue({
-    signals: 0,
-    images: 1,
-    groups: 1,
-    plugin_id: PLUGIN_ID,
-    example_id: "quickstart",
-    recipe_id: RECIPE_ID,
-    filename: "quickstart.h5",
-    panel: "image",
-    selected_ids: ["image-1"],
-    current_id: "image-1",
-    dirty: false,
-    parameter_values: {},
-  });
+  runtimeMock.openPluginExample.mockResolvedValue(OPENED);
 });
 
 describe("ApplicationsDialog", () => {
@@ -187,33 +246,91 @@ describe("ApplicationsDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("prepares and runs an unambiguous recipe from the current selection", async () => {
-    const onCommitted = vi.fn();
-    render(
+  it("describes the expected inputs and the live readiness of each method", async () => {
+    const { container } = renderDialog();
+
+    expect(await screen.findByText("Expected inputs")).toBeInTheDocument();
+    expect(screen.getByText("Frames")).toBeInTheDocument();
+    expect(screen.getByText("At least 2 images")).toBeInTheDocument();
+    expect(
+      screen.getByText("Frames of the exposure ladder."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("exposure_time")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Ready to run on the current selection"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(
+        `[data-recipe-id="${RECIPE_ID}"] [data-readiness]`,
+      ),
+    ).toHaveAttribute("data-readiness", "ready");
+    expect(runtimeMock.assessPluginRecipes).toHaveBeenCalledWith(
+      PLUGIN_ID,
+      ["image-1", "image-2"],
+      { [RECIPE_ID]: {} },
+    );
+  });
+
+  it("re-assesses the methods when the selection changes", async () => {
+    const { rerender } = renderDialog();
+    await screen.findByText("Ready to run on the current selection");
+
+    runtimeMock.assessPluginRecipes.mockResolvedValueOnce({
+      [RECIPE_ID]: {
+        status: "not_ready",
+        bindings: { frames: ["image-3"] },
+        issues: [
+          {
+            code: "too_few",
+            slot_id: "frames",
+            details: { count: 1, min_count: 2 },
+          },
+        ],
+        diagnostics: [],
+      },
+    });
+    rerender(
       <ApplicationsDialog
-        candidateIds={["image-1"]}
+        candidateIds={["image-3"]}
         confirmOpenExample={() => true}
-        onCommitted={onCommitted}
+        onCommitted={() => {}}
         onExampleOpened={() => {}}
         onClose={() => {}}
       />,
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Camera Application" }),
+      await screen.findByText("The current selection cannot be analyzed"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Start analysis…" }));
+    expect(
+      screen.getByText("Frames: 1 object(s) assigned, at least 2 required"),
+    ).toBeInTheDocument();
+    expect(runtimeMock.assessPluginRecipes).toHaveBeenLastCalledWith(
+      PLUGIN_ID,
+      ["image-3"],
+      { [RECIPE_ID]: {} },
+    );
+  });
+
+  it("runs a ready method directly on the current selection", async () => {
+    const onCommitted = vi.fn();
+    renderDialog({ onCommitted });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Run on selection…" }),
+    );
 
     await waitFor(() => {
       expect(runtimeMock.preparePluginRecipe).toHaveBeenCalledWith(
         PLUGIN_ID,
         RECIPE_ID,
-        ["image-1"],
+        ["image-1", "image-2"],
+        {},
       );
       expect(runtimeMock.runPluginRecipe).toHaveBeenCalledWith(
         PLUGIN_ID,
         RECIPE_ID,
-        { images: ["image-1"] },
+        { frames: ["image-1", "image-2"] },
         {},
       );
       expect(onCommitted).toHaveBeenCalledWith(COMMIT);
@@ -222,169 +339,228 @@ describe("ApplicationsDialog", () => {
     expect(screen.getAllByText(/has low SNR/)).toHaveLength(2);
   });
 
-  it("opens a packaged example only after caller confirmation", async () => {
-    const confirmOpenExample = vi.fn().mockResolvedValue(true);
-    const onExampleOpened = vi.fn();
-    render(
-      <ApplicationsDialog
-        candidateIds={[]}
-        confirmOpenExample={confirmOpenExample}
-        onCommitted={() => {}}
-        onExampleOpened={onExampleOpened}
-        onClose={() => {}}
-      />,
-    );
+  it("asks for the inputs when the selection is not ready", async () => {
+    runtimeMock.preparePluginRecipe.mockResolvedValueOnce({
+      ...PREPARATION,
+      readiness: {
+        status: "not_ready",
+        bindings: { frames: ["image-1"] },
+        issues: [
+          {
+            code: "missing_metadata",
+            slot_id: "frames",
+            details: { key: "exposure_time", count: 1, titles: ["Frame 1"] },
+          },
+        ],
+        diagnostics: [],
+      },
+    });
+    renderDialog();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open example" }),
+      await screen.findByRole("button", { name: "Run on selection…" }),
     );
 
-    await waitFor(() => {
-      expect(confirmOpenExample).toHaveBeenCalledOnce();
-      expect(runtimeMock.openPluginExample).toHaveBeenCalledWith(
-        PLUGIN_ID,
-        "quickstart",
-        true,
-      );
-      expect(onExampleOpened).toHaveBeenCalledOnce();
-    });
-    expect(screen.getByText("Example opened")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", {
+        name: "Inputs of 'Camera analysis'",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Frames: metadata 'exposure_time' missing on 1 object(s) (Frame 1)",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    expect(runtimeMock.runPluginRecipe).not.toHaveBeenCalled();
   });
 
-  it("prefills recipe parameters returned by a generated example", async () => {
+  it("tries an example: opens it, prefills the parameters and runs", async () => {
+    const confirmOpenExample = vi.fn().mockResolvedValue(true);
+    const onExampleOpened = vi.fn();
     runtimeMock.openPluginExample.mockResolvedValueOnce({
-      signals: 0,
-      images: 1,
-      groups: 1,
-      plugin_id: PLUGIN_ID,
-      example_id: "quickstart",
-      recipe_id: RECIPE_ID,
-      filename: null,
-      panel: "image",
-      selected_ids: ["image-1"],
-      current_id: "image-1",
-      dirty: true,
-      parameter_values: { gain: 4 },
+      ...OPENED,
+      parameter_values: { [RECIPE_ID]: { gain: 4 } },
     });
     runtimeMock.preparePluginRecipe.mockResolvedValueOnce({
       ...PREPARATION,
-      parameters: {
-        schema: {
-          type: "object",
-          properties: {
-            gain: {
-              type: "number",
-              "x-guidata-kind": "float",
-              "x-guidata-label": "Gain",
-              "x-guidata-name": "gain",
-            },
-          },
-          "x-guidata-property-order": ["gain"],
-        },
-        values: { gain: 2 },
-      },
+      parameters: GAIN_PARAMETERS,
     });
-    render(
-      <ApplicationsDialog
-        candidateIds={["image-1"]}
-        confirmOpenExample={() => true}
-        onCommitted={() => {}}
-        onExampleOpened={() => {}}
-        onClose={() => {}}
-      />,
-    );
+    renderDialog({ candidateIds: [], confirmOpenExample, onExampleOpened });
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open example" }),
+      await screen.findByRole("button", { name: "Try with this example" }),
     );
-    await screen.findByText("Example opened");
-    fireEvent.click(screen.getByRole("button", { name: "Start analysis…" }));
 
     expect(await screen.findByDisplayValue("4")).toBeInTheDocument();
+    expect(confirmOpenExample).toHaveBeenCalledOnce();
+    expect(runtimeMock.openPluginExample).toHaveBeenCalledWith(
+      PLUGIN_ID,
+      "quickstart",
+      true,
+      RECIPE_ID,
+    );
+    expect(onExampleOpened).toHaveBeenCalledOnce();
+    expect(runtimeMock.preparePluginRecipe).toHaveBeenCalledWith(
+      PLUGIN_ID,
+      RECIPE_ID,
+      ["image-1", "image-2"],
+      { gain: 4 },
+    );
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
     await waitFor(() => {
       expect(runtimeMock.runPluginRecipe).toHaveBeenCalledWith(
         PLUGIN_ID,
         RECIPE_ID,
-        { images: ["image-1"] },
+        { frames: ["image-1", "image-2"] },
         { gain: 4 },
       );
     });
   });
 
-  it("keeps generated example inputs independent from visual selection", async () => {
-    runtimeMock.openPluginExample.mockResolvedValueOnce({
-      signals: 3,
-      images: 0,
-      groups: 1,
-      plugin_id: PLUGIN_ID,
-      example_id: "quickstart",
-      recipe_id: RECIPE_ID,
-      filename: null,
-      panel: "signal",
-      selected_ids: ["signal-1", "signal-2", "signal-3"],
-      current_id: "signal-1",
-      dirty: true,
-      parameter_values: {},
-    });
-    render(
-      <ApplicationsDialog
-        candidateIds={["signal-1"]}
-        confirmOpenExample={() => true}
-        onCommitted={() => {}}
-        onExampleOpened={() => {}}
-        onClose={() => {}}
-      />,
-    );
+  it("does not open an example the user declined to load", async () => {
+    renderDialog({ confirmOpenExample: () => false });
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open example" }),
+      await screen.findByRole("button", { name: "Try with this example" }),
     );
-    await screen.findByText("Example opened");
-    fireEvent.click(screen.getByRole("button", { name: "Start analysis…" }));
 
+    await waitFor(() => {
+      expect(runtimeMock.openPluginExample).not.toHaveBeenCalled();
+      expect(runtimeMock.preparePluginRecipe).not.toHaveBeenCalled();
+    });
+  });
+
+  it("offers a shared example under each method it is designed for", async () => {
+    runtimeMock.listPlugins.mockResolvedValueOnce([
+      {
+        ...APPLICATION,
+        recipes: [
+          ...APPLICATION.recipes,
+          {
+            ...APPLICATION.recipes[0],
+            id: SECOND_RECIPE_ID,
+            title: "Dark current",
+          },
+        ],
+        examples: [
+          {
+            ...APPLICATION.examples[0],
+            recipe_ids: [RECIPE_ID, SECOND_RECIPE_ID],
+          },
+        ],
+      },
+    ]);
+    const { container } = renderDialog();
+
+    expect(await screen.findByText("Dark current")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Run on selection…" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Try with this example" }),
+    ).toHaveLength(2);
+
+    const darkRecipe = container.querySelector(
+      `[data-recipe-id="${SECOND_RECIPE_ID}"]`,
+    );
+    fireEvent.click(
+      darkRecipe!.querySelector('[data-example-id="quickstart"] button')!,
+    );
+    await waitFor(() => {
+      expect(runtimeMock.openPluginExample).toHaveBeenCalledWith(
+        PLUGIN_ID,
+        "quickstart",
+        true,
+        SECOND_RECIPE_ID,
+      );
+      expect(runtimeMock.preparePluginRecipe).toHaveBeenCalledWith(
+        PLUGIN_ID,
+        SECOND_RECIPE_ID,
+        ["image-1", "image-2"],
+        {},
+      );
+    });
+  });
+
+  it("lists examples without a method as datasets", async () => {
+    runtimeMock.listPlugins.mockResolvedValueOnce([
+      {
+        ...APPLICATION,
+        examples: [
+          ...APPLICATION.examples,
+          {
+            id: "raw",
+            title: "Raw frames",
+            description: "Frames without exposure metadata.",
+            recipe_ids: [],
+            expected_checks: [],
+          },
+        ],
+      },
+    ]);
+    const { container } = renderDialog();
+
+    expect(await screen.findByText("Datasets")).toBeInTheDocument();
+    const dataset = container.querySelector('[data-example-id="raw"]');
+    expect(dataset?.closest("[data-recipe-id]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open dataset" }));
+
+    await waitFor(() => {
+      expect(runtimeMock.openPluginExample).toHaveBeenCalledWith(
+        PLUGIN_ID,
+        "raw",
+        true,
+        null,
+      );
+    });
+    expect(await screen.findByText("Example opened")).toBeInTheDocument();
+    expect(runtimeMock.preparePluginRecipe).not.toHaveBeenCalled();
+  });
+
+  it("applies example values only while the candidates come from the example", async () => {
+    const exampleContext = {
+      pluginId: PLUGIN_ID,
+      objectIds: ["signal-1", "signal-2", "signal-3"],
+      visibleIds: ["signal-1"],
+      parameterValues: { [RECIPE_ID]: { gain: 4 } },
+    };
+    const { unmount } = renderDialog({
+      candidateIds: ["signal-1", "signal-2", "signal-3"],
+      exampleContext,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Run on selection…" }),
+    );
     await waitFor(() => {
       expect(runtimeMock.preparePluginRecipe).toHaveBeenCalledWith(
         PLUGIN_ID,
         RECIPE_ID,
         ["signal-1", "signal-2", "signal-3"],
+        { gain: 4 },
+      );
+    });
+    unmount();
+
+    renderDialog({ candidateIds: ["signal-1", "other"], exampleContext });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Run on selection…" }),
+    );
+    await waitFor(() => {
+      expect(runtimeMock.preparePluginRecipe).toHaveBeenLastCalledWith(
+        PLUGIN_ID,
+        RECIPE_ID,
+        ["signal-1", "other"],
+        {},
       );
     });
   });
 
-  it("focuses a deep-linked recipe without running it", async () => {
-    runtimeMock.preparePluginRecipe.mockResolvedValueOnce({
-      ...PREPARATION,
-      parameters: {
-        schema: {
-          type: "object",
-          properties: {
-            gain: {
-              type: "number",
-              "x-guidata-kind": "float",
-              "x-guidata-label": "Gain",
-              "x-guidata-name": "gain",
-            },
-          },
-          "x-guidata-property-order": ["gain"],
-        },
-        values: { gain: 2 },
-      },
+  it("focuses a deep-linked method without running it", async () => {
+    const { container } = renderDialog({
+      initialTarget: { pluginId: PLUGIN_ID, recipeId: RECIPE_ID },
     });
-    const { container } = render(
-      <ApplicationsDialog
-        candidateIds={["image-1"]}
-        initialTarget={{
-          pluginId: PLUGIN_ID,
-          recipeId: RECIPE_ID,
-          parameterValues: { gain: 4 },
-        }}
-        confirmOpenExample={() => true}
-        onCommitted={() => {}}
-        onExampleOpened={() => {}}
-        onClose={() => {}}
-      />,
-    );
 
     expect(
       await screen.findByRole("heading", { name: "Camera Application" }),
@@ -393,11 +569,6 @@ describe("ApplicationsDialog", () => {
       container.querySelector(`[data-recipe-id="${RECIPE_ID}"]`),
     ).toHaveClass("focused");
     expect(runtimeMock.preparePluginRecipe).not.toHaveBeenCalled();
-    expect(runtimeMock.runPluginRecipe).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Start analysis…" }));
-
-    expect(await screen.findByDisplayValue("4")).toBeInTheDocument();
     expect(runtimeMock.runPluginRecipe).not.toHaveBeenCalled();
   });
 });
