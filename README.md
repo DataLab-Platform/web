@@ -110,6 +110,8 @@ the target Sigima version is published and qualified without a local override,
 set the field to `null`; the generalized snapshot mechanism remains available
 for the next coordinated change.
 
+[`guidata-dependency.json`](guidata-dependency.json) applies the same mechanism to guidata when Sigima or DataLab-Web needs unreleased guidata changes. Its `publishedRequirement` may be an exact pin or a lower bound (`guidata>=X.Y.Z`). The install command above and the CI wheel preparation handle both manifests, and `VITE_GUIDATA_INSTALL_SPEC` is the matching local browser override.
+
 ## Documentation
 
 | Topic                                              | Guide                                              |
