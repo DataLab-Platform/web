@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { getRootIconUrl } from "../assets/rootIcons";
 import { t } from "../i18n/translate";
 import { useRuntime } from "../runtime/RuntimeContext";
@@ -9,6 +9,7 @@ import type {
   PluginRecipeCommit,
   PluginRecipePreparation,
 } from "../runtime/runtime";
+import { usePersistedBool } from "../utils/persisted";
 import { ApplicationMethodCard } from "./ApplicationMethodCard";
 import { DataSetDialog } from "./DataSetDialog";
 import { RecipeInputResolverDialog } from "./RecipeInputResolverDialog";
@@ -46,6 +47,13 @@ interface PendingInputs {
 
 /** Delay before assessing the recipes on a new selection. */
 const READINESS_DELAY_MS = 250;
+
+/** Storage key remembering whether the application list is hidden. */
+export const APPLICATIONS_LIST_COLLAPSED_KEY =
+  "datalab-web.applications.listCollapsed";
+
+/** Accordion key of the datasets section (recipe IDs contain the plugin ID). */
+const DATASETS_SECTION = ":datasets";
 
 function isApplication(record: PluginRecord): boolean {
   return Boolean(
@@ -122,9 +130,25 @@ export function ApplicationsDialog({
   );
   const [pendingParameters, setPendingParameters] =
     useState<PendingParameters | null>(null);
+  const [listCollapsed, setListCollapsed] = usePersistedBool(
+    APPLICATIONS_LIST_COLLAPSED_KEY,
+    false,
+  );
+  const listId = useId();
+  const accordionName = useId();
+  /** Open accordion section per plugin, once the user changed it. */
+  const [openSections, setOpenSections] = useState<
+    Record<string, string | null>
+  >({});
 
   useEffect(() => {
-    if (initialTarget) setSelectedId(initialTarget.pluginId);
+    if (!initialTarget) return;
+    setSelectedId(initialTarget.pluginId);
+    setOpenSections((current) => {
+      const next = { ...current };
+      delete next[initialTarget.pluginId];
+      return next;
+    });
   }, [initialTarget]);
 
   useEffect(() => {
@@ -368,6 +392,33 @@ export function ApplicationsDialog({
   const datasets =
     selected?.examples.filter((example) => example.recipe_ids.length === 0) ??
     [];
+  const listToggleLabel = listCollapsed
+    ? t("Show the application list")
+    : t("Hide the application list");
+  const focusedRecipeId = selected?.recipes.some(
+    (recipe) => recipe.id === initialTarget?.recipeId,
+  )
+    ? initialTarget!.recipeId
+    : null;
+  const defaultSection =
+    focusedRecipeId ??
+    selected?.recipes[0]?.id ??
+    (datasets.length > 0 ? DATASETS_SECTION : null);
+  const openSection =
+    selectedPluginId !== null && selectedPluginId in openSections
+      ? openSections[selectedPluginId]
+      : defaultSection;
+  const toggleSection = (section: string, isOpen: boolean) => {
+    if (selectedPluginId === null) return;
+    setOpenSections((current) => {
+      const known = selectedPluginId in current;
+      const previous = known ? current[selectedPluginId] : defaultSection;
+      const next = isOpen ? section : previous === section ? null : previous;
+      return known && next === previous
+        ? current
+        : { ...current, [selectedPluginId]: next };
+    });
+  };
 
   return (
     <>
@@ -376,7 +427,9 @@ export function ApplicationsDialog({
         role="dialog"
         aria-label={t("Applications")}
       >
-        <div className="card applications-dialog">
+        <div
+          className={`card applications-dialog${listCollapsed ? " list-collapsed" : ""}`}
+        >
           <header className="applications-header">
             <div className="applications-header-title">
               <img
@@ -398,7 +451,11 @@ export function ApplicationsDialog({
             </button>
           </header>
           <div className="applications-layout">
-            <nav className="applications-list" aria-label={t("Applications")}>
+            <nav
+              id={listId}
+              className="applications-list"
+              aria-label={t("Applications")}
+            >
               {records.map((record) => (
                 <button
                   key={record.plugin_id}
@@ -410,6 +467,17 @@ export function ApplicationsDialog({
                 </button>
               ))}
             </nav>
+            <button
+              type="button"
+              className="applications-list-toggle"
+              aria-controls={listId}
+              aria-expanded={!listCollapsed}
+              aria-label={listToggleLabel}
+              title={listToggleLabel}
+              onClick={() => setListCollapsed(!listCollapsed)}
+            >
+              {listCollapsed ? "\u203a" : "\u2039"}
+            </button>
             <main className="applications-content">
               {!runtime && <p>{t("Runtime is not ready.")}</p>}
               {runtime && records.length === 0 && (
@@ -434,9 +502,8 @@ export function ApplicationsDialog({
                     </div>
                   </div>
 
-                  {selected.recipes.length > 0 && (
-                    <section className="application-section">
-                      <h4>{t("Methods")}</h4>
+                  {(selected.recipes.length > 0 || datasets.length > 0) && (
+                    <div className="application-accordion">
                       {selected.recipes.map((recipe) => (
                         <ApplicationMethodCard
                           key={recipe.id}
@@ -445,6 +512,11 @@ export function ApplicationsDialog({
                             example.recipe_ids.includes(recipe.id),
                           )}
                           assessment={assessments[recipe.id]}
+                          group={accordionName}
+                          open={openSection === recipe.id}
+                          onToggle={(isOpen) =>
+                            toggleSection(recipe.id, isOpen)
+                          }
                           focused={recipe.id === initialTarget?.recipeId}
                           disabled={busy}
                           onRun={() =>
@@ -459,39 +531,54 @@ export function ApplicationsDialog({
                           }
                         />
                       ))}
-                    </section>
-                  )}
-
-                  {datasets.length > 0 && (
-                    <section className="application-section">
-                      <h4>{t("Datasets")}</h4>
-                      {datasets.map((example) => (
-                        <div
-                          className="application-entry"
-                          data-example-id={example.id}
-                          key={example.id}
+                      {datasets.length > 0 && (
+                        <details
+                          className="application-datasets"
+                          name={accordionName}
+                          open={openSection === DATASETS_SECTION}
+                          onToggle={(event) =>
+                            toggleSection(
+                              DATASETS_SECTION,
+                              event.currentTarget.open,
+                            )
+                          }
                         >
-                          <div>
-                            <strong>{example.title}</strong>
-                            {example.description && (
-                              <p>{example.description}</p>
-                            )}
+                          <summary>
+                            {t("Datasets ({count})", {
+                              count: datasets.length,
+                            })}
+                          </summary>
+                          <div className="application-accordion-body">
+                            {datasets.map((example) => (
+                              <div
+                                className="application-entry"
+                                data-example-id={example.id}
+                                key={example.id}
+                              >
+                                <div>
+                                  <strong>{example.title}</strong>
+                                  {example.description && (
+                                    <p>{example.description}</p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() =>
+                                    void openExample(
+                                      selected.plugin_id!,
+                                      example.id,
+                                      null,
+                                    )
+                                  }
+                                  disabled={busy}
+                                >
+                                  {t("Open dataset")}
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                          <button
-                            onClick={() =>
-                              void openExample(
-                                selected.plugin_id!,
-                                example.id,
-                                null,
-                              )
-                            }
-                            disabled={busy}
-                          >
-                            {t("Open dataset")}
-                          </button>
-                        </div>
-                      ))}
-                    </section>
+                        </details>
+                      )}
+                    </div>
                   )}
 
                   {selected.info?.documentation_url && (

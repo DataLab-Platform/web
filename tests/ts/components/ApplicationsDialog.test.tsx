@@ -1,7 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApplicationsDialog } from "../../../src/components/ApplicationsDialog";
+import {
+  APPLICATIONS_LIST_COLLAPSED_KEY,
+  ApplicationsDialog,
+} from "../../../src/components/ApplicationsDialog";
 import type {
   PluginExampleOpenResult,
   PluginRecord,
@@ -501,7 +510,7 @@ describe("ApplicationsDialog", () => {
     ]);
     const { container } = renderDialog();
 
-    expect(await screen.findByText("Datasets")).toBeInTheDocument();
+    expect(await screen.findByText("Datasets (1)")).toBeInTheDocument();
     const dataset = container.querySelector('[data-example-id="raw"]');
     expect(dataset?.closest("[data-recipe-id]")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Open dataset" }));
@@ -570,5 +579,106 @@ describe("ApplicationsDialog", () => {
     ).toHaveClass("focused");
     expect(runtimeMock.preparePluginRecipe).not.toHaveBeenCalled();
     expect(runtimeMock.runPluginRecipe).not.toHaveBeenCalled();
+  });
+
+  describe("methods accordion", () => {
+    const TWO_METHODS: PluginRecord = {
+      ...APPLICATION,
+      recipes: [
+        ...APPLICATION.recipes,
+        {
+          ...APPLICATION.recipes[0],
+          id: SECOND_RECIPE_ID,
+          title: "Dark current",
+        },
+      ],
+    };
+
+    function methods(container: HTMLElement) {
+      return [RECIPE_ID, SECOND_RECIPE_ID].map(
+        (id) =>
+          container.querySelector(
+            `[data-recipe-id="${id}"]`,
+          ) as HTMLDetailsElement,
+      );
+    }
+
+    beforeEach(() => {
+      runtimeMock.listPlugins.mockResolvedValue([TWO_METHODS]);
+      runtimeMock.assessPluginRecipes.mockResolvedValue({
+        [RECIPE_ID]: READY,
+        [SECOND_RECIPE_ID]: READY,
+      });
+    });
+
+    it("opens one method at a time and shows each readiness when closed", async () => {
+      const { container } = renderDialog();
+      await screen.findByText("Dark current");
+      const [first, second] = methods(container);
+
+      expect(first.open).toBe(true);
+      expect(second.open).toBe(false);
+      expect(first.getAttribute("name")).toBeTruthy();
+      expect(second.getAttribute("name")).toBe(first.getAttribute("name"));
+      await waitFor(() =>
+        expect(
+          second.querySelector("summary [data-readiness]"),
+        ).toHaveAttribute("data-readiness", "ready"),
+      );
+      expect(
+        within(second.querySelector("summary")!).getByRole("img", {
+          name: "Ready to run on the current selection",
+        }),
+      ).toBeInTheDocument();
+
+      fireEvent.click(second.querySelector("summary")!);
+      await waitFor(() => expect(first.open).toBe(false));
+      expect(second.open).toBe(true);
+    });
+
+    it("opens the deep-linked method instead of the first one", async () => {
+      const { container } = renderDialog({
+        initialTarget: { pluginId: PLUGIN_ID, recipeId: SECOND_RECIPE_ID },
+      });
+      await screen.findByText("Dark current");
+      const [first, second] = methods(container);
+
+      expect(first.open).toBe(false);
+      expect(second.open).toBe(true);
+      expect(second).toHaveClass("focused");
+    });
+  });
+
+  it("hides the application list from its strip and remembers it", async () => {
+    window.localStorage.removeItem(APPLICATIONS_LIST_COLLAPSED_KEY);
+    try {
+      const { container, unmount } = renderDialog();
+      await screen.findByRole("heading", { name: "Camera Application" });
+      const list = screen.getByRole("navigation", { name: "Applications" });
+      const toggle = screen.getByRole("button", {
+        name: "Hide the application list",
+      });
+      expect(toggle).toHaveAttribute("aria-controls", list.id);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+      fireEvent.click(toggle);
+      expect(container.querySelector(".applications-dialog")).toHaveClass(
+        "list-collapsed",
+      );
+      expect(
+        screen.getByRole("button", { name: "Show the application list" }),
+      ).toHaveAttribute("aria-expanded", "false");
+      expect(window.localStorage.getItem(APPLICATIONS_LIST_COLLAPSED_KEY)).toBe(
+        "true",
+      );
+
+      unmount();
+      const reopened = renderDialog();
+      expect(
+        reopened.container.querySelector(".applications-dialog"),
+      ).toHaveClass("list-collapsed");
+    } finally {
+      window.localStorage.removeItem(APPLICATIONS_LIST_COLLAPSED_KEY);
+    }
   });
 });
