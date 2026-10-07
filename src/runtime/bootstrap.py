@@ -2045,8 +2045,11 @@ def _add_metadata_param(objs: list[Any] | None = None) -> Any:
 
 def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
     """Return the user-visible scalar metadata keys of *objs*, with an example
-    value (mirrors Qt's ``collect_metadata_keys``)."""
+    value, then the keys expected by application methods (mirrors Qt's
+    ``BaseDataPanel.get_known_metadata_keys``)."""
+    import dlw_plugins
     from sigima.config import _
+    from sigima.objects import SignalObj
     from sigima.objects.base import ROI_KEY
 
     examples: dict[str, Any] = {}
@@ -2058,7 +2061,15 @@ def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
                 continue
             if isinstance(value, (str, bool, int, float, np.integer, np.floating)):
                 examples[key] = value
-    return [(key, _("e.g. %s") % repr(examples[key])) for key in sorted(examples)]
+    keys = [(key, _("e.g. %s") % repr(examples[key])) for key in sorted(examples)]
+    kinds = {"signal" if isinstance(obj, SignalObj) else "image" for obj in objs}
+    if len(kinds) == 1:
+        keys.extend(
+            (key, description)
+            for key, description in dlw_plugins.declared_metadata_keys(kinds.pop())
+            if key not in examples
+        )
+    return keys
 
 
 def _build_metadata_values(objs: list[Any], param: Any) -> list[Any]:

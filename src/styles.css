@@ -3879,6 +3879,8 @@ input {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Long choices (e.g. plugin metadata keys) must not widen the form. */
+  min-width: 0;
 }
 
 .dataset-form-control > input,
