@@ -109,6 +109,8 @@ and Pyodide without `PYTHONPATH` or `VITE_SIGIMA_INSTALL_SPEC`, then set
 `developmentRef` to `null`. See [doc/releasing.md](doc/releasing.md) for the
 release checklist.
 
+Use [guidata-dependency.json](guidata-dependency.json) in the same way when Sigima or DataLab-Web needs a merged but unpublished guidata change. Its `publishedRequirement` may be an exact pin or a lower bound (`guidata>=X.Y.Z`); a non-null `developmentRef` blocks releases until a guidata version providing the change is published and required.
+
 ## Branching model
 
 DataLab-Web follows the same two-branch model as the sibling repositories (DataLab, Sigima): day-to-day work lands on **`develop`**, and **`main`** is the release branch — `develop` is merged into `main` only when cutting a real release. CI ([tests.yml](.github/workflows/tests.yml)) runs the cheap regression suite on both branches and on pull requests targeting either. The multi-minute performance benchmarks are **not** part of that run; they are opt-in and driven by a separate on-demand workflow (see the **Performance benchmarks** section of [doc/testing-strategy.md](doc/testing-strategy.md)).

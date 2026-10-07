@@ -35,7 +35,9 @@ the release browser tests never build or export a development wheel.
 `release:pack` uses `build:release`, whose release mode ignores even an
 accidental `VITE_SIGIMA_INSTALL_SPEC` from the developer's ignored `.env`.
 
-> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: Sigima release guard and version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E against the published Sigima pin (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
+The guard applies the same rule to [`guidata-dependency.json`](../guidata-dependency.json): a non-null guidata `developmentRef` blocks the release until a guidata version providing the required changes is published and `publishedRequirement` requires it (for example `guidata>=X.Y.Z`). Release builds also ignore `VITE_GUIDATA_INSTALL_SPEC`.
+
+> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: Sigima and guidata release guard and version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E against the published Sigima pin (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
 
 ## Distribution: app bundle + SDK tarballs
 

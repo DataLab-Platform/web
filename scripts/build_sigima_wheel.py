@@ -1,6 +1,6 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause license, see LICENSE file.
 
-"""Build a Sigima source requirement with compiled gettext catalogs."""
+"""Build a Sigima or guidata source requirement with compiled gettext catalogs."""
 
 from __future__ import annotations
 
@@ -17,16 +17,17 @@ def run(*args: str) -> None:
     subprocess.run([sys.executable, *args], check=True)
 
 
-def build_wheel(requirement: str, wheel_dir: Path) -> Path:
+def build_wheel(requirement: str, wheel_dir: Path, package: str = "sigima") -> Path:
     """Build *requirement* into *wheel_dir* after compiling translations."""
     wheel_dir.mkdir(parents=True, exist_ok=True)
-    existing_wheels = sorted(wheel_dir.glob("sigima-*.whl"))
+    existing_wheels = sorted(wheel_dir.glob(f"{package}-*.whl"))
     if existing_wheels:
         names = ", ".join(wheel.name for wheel in existing_wheels)
         raise RuntimeError(
-            f"Refusing to reuse Sigima wheels already present in {wheel_dir}: {names}"
+            f"Refusing to reuse {package} wheels already present in {wheel_dir}: "
+            f"{names}"
         )
-    with tempfile.TemporaryDirectory(prefix="sigima-wheel-") as tmp:
+    with tempfile.TemporaryDirectory(prefix=f"{package}-wheel-") as tmp:
         workspace = Path(tmp)
         downloads = workspace / "downloads"
         downloads.mkdir()
@@ -43,15 +44,15 @@ def build_wheel(requirement: str, wheel_dir: Path) -> Path:
 
         archives = list(downloads.iterdir())
         if len(archives) != 1:
-            raise RuntimeError(f"Expected one Sigima archive, found {len(archives)}")
+            raise RuntimeError(f"Expected one {package} archive, found {len(archives)}")
         source_tree = workspace / "source"
         shutil.unpack_archive(archives[0], source_tree)
 
         projects = list(source_tree.glob("*/pyproject.toml"))
         if len(projects) != 1:
-            raise RuntimeError(f"Expected one Sigima project, found {len(projects)}")
+            raise RuntimeError(f"Expected one {package} project, found {len(projects)}")
         project = projects[0].parent
-        locale_dir = project / "sigima" / "locale"
+        locale_dir = project / package / "locale"
         run(
             "-m",
             "babel.messages.frontend",
@@ -59,7 +60,7 @@ def build_wheel(requirement: str, wheel_dir: Path) -> Path:
             "--directory",
             str(locale_dir),
             "--domain",
-            "sigima",
+            package,
         )
         run(
             "-m",
@@ -71,19 +72,20 @@ def build_wheel(requirement: str, wheel_dir: Path) -> Path:
             str(project),
         )
 
-    wheels = sorted(wheel_dir.glob("sigima-*.whl"))
+    wheels = sorted(wheel_dir.glob(f"{package}-*.whl"))
     if len(wheels) != 1:
-        raise RuntimeError(f"Expected one Sigima wheel, found {len(wheels)}")
+        raise RuntimeError(f"Expected one {package} wheel, found {len(wheels)}")
     return wheels[0]
 
 
 def main() -> None:
-    """Build a wheel from the requested Sigima source revision."""
+    """Build a wheel from the requested Sigima or guidata source revision."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("requirement", help="PEP 508 Sigima source requirement")
+    parser.add_argument("requirement", help="PEP 508 source requirement")
     parser.add_argument("wheel_dir", type=Path, help="Output wheel directory")
+    parser.add_argument("--package", choices=("sigima", "guidata"), default="sigima")
     args = parser.parse_args()
-    print(build_wheel(args.requirement, args.wheel_dir))
+    print(build_wheel(args.requirement, args.wheel_dir, args.package))
 
 
 if __name__ == "__main__":

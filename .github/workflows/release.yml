@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Require a published Sigima dependency
+      - name: Require published Sigima and guidata dependencies
         run: node scripts/check-sigima-release.mjs
 
       - name: Check tag matches package.json and SDK versions
@@ -61,6 +61,7 @@ jobs:
           cache-dependency-path: |
             requirements-dev.txt
             sigima-dependency.json
+            guidata-dependency.json
 
       - name: Install Python dependencies
         run: |
@@ -91,6 +92,7 @@ jobs:
       - name: Run Playwright tests
         env:
           VITE_SIGIMA_INSTALL_SPEC: ""
+          VITE_GUIDATA_INSTALL_SPEC: ""
         run: npm run test:e2e
 
       - name: Upload Playwright report
