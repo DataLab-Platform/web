@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Welcome page:** the "NEW" badge on the release notes entry has been removed.
 - **Histogram range editors:** generic parameter intervals now respect linked numeric constraints and read-only states. Brightness and contrast retains its specialized controls, including exact float64 window editing outside the source image's observed range.
 - **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
   its native async DataSet backend and JSON Schema exporter. The former
