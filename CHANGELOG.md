@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
+- **Parameter forms:** a checkbox that has only its own text, as in DataLab Desktop, no longer shows its internal field name as a label.
 
 ## [0.9.0] - 2026-08-11
 

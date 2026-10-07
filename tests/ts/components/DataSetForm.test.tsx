@@ -119,6 +119,33 @@ describe("DataSetForm display callbacks", () => {
   });
 });
 
+describe("DataSetForm labels", () => {
+  it("shows only the checkbox text of an unlabeled BoolItem", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: {
+        shutter_open: {
+          type: "boolean",
+          "x-guidata-kind": "bool",
+          "x-guidata-text": "Shutter open",
+        },
+        bare: { type: "boolean", "x-guidata-kind": "bool" },
+      },
+      "x-guidata-property-order": ["shutter_open", "bare"],
+    };
+    const { container } = render(
+      <DataSetForm
+        schema={schema}
+        values={{ shutter_open: true, bare: false }}
+        onChange={() => {}}
+      />,
+    );
+    const labels = [...container.querySelectorAll(".dataset-form-label")];
+    expect(labels.map((label) => label.textContent)).toEqual(["", "bare"]);
+    expect(screen.getByLabelText("Shutter open")).toBeTruthy();
+  });
+});
+
 describe("DataSetForm automatic sliders", () => {
   it("keeps exact numeric input beside an opt-in bounded slider", () => {
     const onChange = vi.fn();
