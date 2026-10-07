@@ -5338,10 +5338,7 @@ export default function App() {
           />
         )}
         {releaseNotesOpen && (
-          <ReleaseNotesDialog
-            appVersion={(import.meta.env.VITE_APP_VERSION as string) ?? "dev"}
-            onClose={() => setReleaseNotesOpen(false)}
-          />
+          <ReleaseNotesDialog onClose={() => setReleaseNotesOpen(false)} />
         )}
         {h5BrowserFiles !== null && (
           <Suspense fallback={null}>

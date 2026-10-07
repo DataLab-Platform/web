@@ -189,7 +189,8 @@ test.describe.serial("Side panel mirrors selection", () => {
       .locator(".object-tree-item")
       .filter({ hasText: `#${resultId}` });
     await expect(resultItem).toBeVisible();
-    await resultItem.click();
+    // The item centre may fall on the title's "Go to source" link.
+    await resultItem.locator(".object-tree-meta").click();
     await page.getByRole("tab", { name: "Processing" }).click();
     await expect(page.locator(".processing-panel-title")).toBeVisible();
 

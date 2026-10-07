@@ -59,7 +59,7 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Prepare configured Sigima dependency
+      - name: Prepare configured Sigima and guidata dependencies
         run: >-
           python scripts/sigima_dependency.py prepare-pyodide
           --wheel-dir .wheels

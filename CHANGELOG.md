@@ -16,18 +16,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   image-profile geometry, and is discarded on Cancel or Escape. For a single
   source, OK reuses a completed current preview once; stale, running and
   multi-selection previews fall back to normal processing.
+- **Add metadata:** _Edit > Metadata > Add metadata…_ can now extract the value from the formatted text with a regular expression, for example an exposure time or a shot number read from object titles. Objects without a match are left unchanged unless you ask for an error, a scale factor converts numeric values (e.g. milliseconds to seconds), and a live preview shows the resulting values. Keys may contain dots and hyphens, as used by plugin keys, and a **Known keys** list copies a key already present on the selected objects. Invalid settings are reported and the dialog reopens with your entries.
 
 ### Changed
 
 - **Applications:** each method now shows the inputs it expects and a live status telling whether the current selection can be analyzed, and why not. _Run on selection…_ runs a ready method directly and asks for the input assignment only when it is ambiguous or invalid; the assignment dialog describes each input, flags objects lacking required metadata, and checks the chosen objects before _Continue_. Examples are listed under the methods they are designed for: _Try with this example_ opens the example and runs the method with prefilled parameters. One example may serve several methods, and examples designed for no method are listed as datasets.
 - **Applications window:** the strip between the application list and the application page hides the list, or shows it again; the window shrinks or grows accordingly and remembers this choice. The application page now scrolls on its own, so the list and the run status stay in view.
 - **Application methods:** the methods and datasets of an application now form an accordion. One section is open at a time (the deep-linked method, or else the first one), and a colored dot shows whether each method can run on the current selection without opening it.
+- **Welcome page:** the "NEW" badge on the release notes entry has been removed.
 - **Histogram range editors:** generic parameter intervals now respect linked numeric constraints and read-only states. Brightness and contrast retains its specialized controls, including exact float64 window editing outside the source image's observed range.
 - **Guidata compatibility:** browser runtimes now require guidata 3.15 and use
   its native async DataSet backend and JSON Schema exporter. The former
   backend backport has been removed; a focused compatibility patch preserves
   the `FloatArrayItem` sizing and numeric-parity hints required by browser
   editors.
+
+### Fixed
+
+- **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
 
 ## [0.9.0] - 2026-08-11
 

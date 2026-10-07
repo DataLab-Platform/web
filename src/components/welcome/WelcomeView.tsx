@@ -22,7 +22,6 @@ import { getRootIconUrl } from "../../assets/rootIcons";
 import { getIoIconUrl } from "../../assets/ioIcons";
 import { getHelpIconUrl } from "../../assets/helpIcons";
 import { getH5IconUrl } from "../../assets/h5Icons";
-import { useUnseenRelease } from "../../utils/releaseNotes";
 import { t } from "../../i18n/translate";
 
 type Kind = "signal" | "image";
@@ -71,10 +70,6 @@ interface QuickAction {
    *  choose between Signal and Image. ``onKindSelect`` receives the
    *  picked kind. */
   onKindSelect?: (kind: Kind) => void;
-  /** Optional short text rendered as a coloured pill at the end of the
-   *  row label (e.g. ``"NEW"`` to highlight the release notes entry on
-   *  the first launch after an upgrade). */
-  badge?: string;
 }
 
 /** Read/write helper for the "show welcome on startup" preference. */
@@ -110,7 +105,6 @@ export function WelcomeView({
   onOpenReleaseNotes,
   onOpenAIAssistant,
 }: WelcomeViewProps) {
-  const releaseNotesUnseen = useUnseenRelease(appVersion);
   const startActions: QuickAction[] = [
     {
       iconUrl: getRootIconUrl("signal.svg"),
@@ -180,7 +174,6 @@ export function WelcomeView({
         "Browse the full release notes and recent changes to DataLab-Web.",
       ),
       onClick: onOpenReleaseNotes,
-      badge: releaseNotesUnseen ? "NEW" : undefined,
     },
   ];
 
@@ -310,14 +303,7 @@ function WelcomeActionRow({
           />
         )}
         <span className="welcome-action-text">
-          <span className="welcome-action-label">
-            {action.label}
-            {action.badge && (
-              <span className="welcome-action-badge" aria-label={t("New")}>
-                {action.badge}
-              </span>
-            )}
-          </span>
+          <span className="welcome-action-label">{action.label}</span>
           {action.description && (
             <span className="welcome-action-description">
               {action.description}
