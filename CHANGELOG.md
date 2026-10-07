@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   image-profile geometry, and is discarded on Cancel or Escape. For a single
   source, OK reuses a completed current preview once; stale, running and
   multi-selection previews fall back to normal processing.
+- **Add metadata:** _Edit > Metadata > Add metadata…_ can now extract the value from the formatted text with a regular expression, for example an exposure time or a shot number read from object titles. Objects without a match are left unchanged unless you ask for an error, a scale factor converts numeric values (e.g. milliseconds to seconds), and a live preview shows the resulting values. Keys may contain dots and hyphens, as used by plugin keys, and a **Known keys** list copies a key already present on the selected objects. Invalid settings are reported and the dialog reopens with your entries.
 
 ### Changed
 
@@ -25,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   backend backport has been removed; a focused compatibility patch preserves
   the `FloatArrayItem` sizing and numeric-parity hints required by browser
   editors.
+
+### Fixed
+
+- **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
 
 ## [0.9.0] - 2026-08-11
 

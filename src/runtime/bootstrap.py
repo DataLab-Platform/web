@@ -924,6 +924,32 @@ def resolve_bridge_active(values: dict[str, Any] | None = None) -> dict[str, boo
     return resolve_dataset_active(probe)
 
 
+def resolve_bridge_callbacks(
+    item_name: str, values: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Run the ``display.callback`` of *item_name* for the dataset currently
+    shown by the JS dialog bridge, and return the refreshed values.
+
+    Counterpart of :func:`resolve_bridge_active`. A shallow copy keeps the
+    constructor state of the live instance (e.g. the objects an "Add
+    metadata" preview is computed from) without mutating it before submit.
+    Returns ``{}`` when no bridge dialog is open.
+    """
+    import copy
+
+    from guidata.dataset import resolve_dataset_callbacks, update_dataset
+
+    instance = _BRIDGE_EDIT_INSTANCE
+    if instance is None:
+        return {}
+    if hasattr(values, "to_py"):
+        values = values.to_py()
+    probe = copy.copy(instance)
+    if values:
+        update_dataset(probe, values)
+    return resolve_dataset_callbacks(probe, item_name)
+
+
 async def _async_show_message(
     kind: str, message: str, title: str | None = None, **_kwargs: Any
 ) -> None:
@@ -1895,10 +1921,39 @@ async def paste_object_metadata(oids: list[str]) -> bool:
     return True
 
 
-def _add_metadata_param() -> Any:
-    """Build the "Add metadata" parameter set (mirrors Qt's class)."""
+def _add_metadata_param(objs: list[Any] | None = None) -> Any:
+    """Build the "Add metadata" parameter set (mirrors Qt's class).
+
+    Args:
+        objs: selected objects, used for the known keys and the preview
+    """
     import guidata.dataset as gds
     from sigima.config import _
+
+    objs = list(objs or [])
+    known_keys = _metadata_key_suggestions(objs)
+
+    def update_preview(instance: Any, _item: Any = None, _value: Any = None) -> None:
+        try:
+            values = _build_metadata_values(objs, instance)
+        except ValueError as exc:
+            instance.preview = f"Invalid conversion:\n{exc}"
+            return
+        except (KeyError, TypeError) as exc:
+            instance.preview = f"Invalid pattern:\n{exc}"
+            return
+        lines = []
+        for obj, value in zip(objs, values):
+            if value is None:
+                lines.append(f"{obj.title}: " + _("unchanged"))
+            else:
+                lines.append(f"{obj.title}: {instance.metadata_key} = {value!r}")
+        instance.preview = "\n".join(lines)
+
+    def on_known_key_changed(instance: Any, _item: Any = None, value: Any = None):
+        if value:
+            instance.metadata_key = value
+        update_preview(instance)
 
     class AddMetadataParam(
         gds.DataSet,
@@ -1914,7 +1969,12 @@ def _add_metadata_param() -> Any:
             "<code>{ylabel}</code>, <code>{yunit}</code>, "
             "<code>{metadata[key]}</code>. Standard format specifiers apply, "
             "plus the <code>upper</code>/<code>lower</code> modifiers "
-            "(e.g. <code>{title:20.20upper}</code>)."
+            "(e.g. <code>{title:20.20upper}</code>).<br><br>"
+            "An optional extraction pattern (regular expression) is searched "
+            "in the formatted value: its first group, or the whole match, "
+            "becomes the value. E.g. pattern <code>{title}</code>, extraction "
+            "<code>([\\d.]+)\\s*ms</code>, float conversion and scale factor "
+            "0.001 read 0.005 from 'Flat 5 ms 01'."
         ),
     ):
         """Add metadata parameters."""
@@ -1923,14 +1983,38 @@ def _add_metadata_param() -> Any:
             _("Metadata key"),
             default="custom_key",
             notempty=True,
-            regexp=r"^[a-zA-Z_][a-zA-Z0-9_]*$",
+            regexp=r"^[a-zA-Z_][a-zA-Z0-9_.\-]*$",
             help=_("The key name for the metadata item"),
-        )
+        ).set_prop("display", callback=update_preview)
+        known_key = gds.ChoiceItem(
+            _("Known keys"),
+            [("", _("Select a key..."))]
+            + [(key, f"{key} — {description}") for key, description in known_keys],
+            default="",
+            help=_("Copy a key found on the selected objects into the metadata key"),
+        ).set_prop("display", callback=on_known_key_changed)
         value_pattern = gds.StringItem(
             _("Value pattern"),
             default="{index}",
             help=_("Python format string. See description for details."),
-        )
+        ).set_prop("display", callback=update_preview)
+        extraction_pattern = gds.StringItem(
+            _("Extraction pattern"),
+            default="",
+            help=_(
+                "Optional regular expression searched in the formatted value: "
+                "its first group, or the whole match, becomes the value"
+            ),
+        ).set_prop("display", callback=update_preview)
+        if_no_match = gds.ChoiceItem(
+            _("If no match"),
+            [
+                ("skip", _("Leave the object unchanged")),
+                ("error", _("Report an error")),
+            ],
+            default="skip",
+        ).set_prop("display", callback=update_preview)
+        _prop_conversion = gds.GetAttrProp("conversion")
         conversion = gds.ChoiceItem(
             _("Conversion"),
             [
@@ -1940,17 +2024,111 @@ def _add_metadata_param() -> Any:
                 ("bool", _("Boolean")),
             ],
             default="string",
+        ).set_prop("display", store=_prop_conversion, callback=update_preview)
+        scale = gds.FloatItem(
+            _("Scale factor"),
+            default=1.0,
+            help=_("Multiplies numeric values, e.g. 0.001 to convert ms to s"),
+        ).set_prop(
+            "display",
+            active=gds.FuncProp(
+                _prop_conversion, lambda value: value in ("float", "int")
+            ),
+            callback=update_preview,
+        )
+        preview = gds.TextItem(_("Preview"), default="").set_prop(
+            "display", readonly=True
         )
 
     return AddMetadataParam()
 
 
-def _convert_metadata_value(value_str: str, conversion: str) -> Any:
+def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
+    """Return the user-visible scalar metadata keys of *objs*, with an example
+    value (mirrors Qt's ``collect_metadata_keys``)."""
+    from sigima.config import _
+    from sigima.objects.base import ROI_KEY
+
+    examples: dict[str, Any] = {}
+    for obj in objs:
+        for key, value in obj.metadata.items():
+            if key in examples or key.startswith("_") or key == ROI_KEY:
+                continue
+            if not _metadata_visible(key):
+                continue
+            if isinstance(value, (str, bool, int, float, np.integer, np.floating)):
+                examples[key] = value
+    return [(key, _("e.g. %s") % repr(examples[key])) for key in sorted(examples)]
+
+
+def _build_metadata_values(objs: list[Any], param: Any) -> list[Any]:
+    """Return one "Add metadata" value per object (mirrors Qt).
+
+    ``None`` marks objects left unchanged because the extraction pattern does
+    not match them.
+
+    Raises:
+        ValueError: invalid or non-matching extraction pattern (when asked to
+         report it), or a value that cannot be converted.
+    """
+    import re
+
+    from sigima.io.common.basename import format_basenames
+
+    raw_values = format_basenames(objs, param.value_pattern)
+    regex = None
+    if param.extraction_pattern:
+        try:
+            regex = re.compile(param.extraction_pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid extraction pattern: {exc}") from exc
+    values: list[Any] = []
+    for index, text in enumerate(raw_values, start=1):
+        if regex is not None:
+            match = regex.search(text)
+            extracted = None
+            if match is not None:
+                extracted = match.group(1) if regex.groups else match.group(0)
+            if extracted is None:
+                if param.if_no_match == "error":
+                    raise ValueError(
+                        f"No match for the value at index {index}: '{text}'"
+                    )
+                values.append(None)
+                continue
+            text = extracted
+        values.append(
+            _convert_metadata_value(text, param.conversion, param.scale, index)
+        )
+    return values
+
+
+def _convert_metadata_value(
+    value_str: str, conversion: str, scale: float = 1.0, index: int = 1
+) -> Any:
     """Convert a formatted string to the requested type (mirrors Qt)."""
     if conversion == "float":
-        return float(value_str)
+        try:
+            return float(value_str) * scale
+        except ValueError as exc:
+            raise ValueError(
+                f"Cannot convert value at index {index} to float: '{value_str}'"
+            ) from exc
     if conversion == "int":
-        return int(value_str)
+        try:
+            value = int(value_str)
+        except ValueError as exc:
+            raise ValueError(
+                f"Cannot convert value at index {index} to integer: '{value_str}'"
+            ) from exc
+        if scale == 1.0:
+            return value
+        scaled = value * scale
+        if not float(scaled).is_integer():
+            raise ValueError(
+                f"Scaled value at index {index} is not an integer: {scaled}"
+            )
+        return int(scaled)
     if conversion == "bool":
         return value_str.strip().lower() in ("true", "1", "yes", "on")
     return value_str
@@ -1961,24 +2139,35 @@ async def add_object_metadata(oids: list[str]) -> bool:
 
     Mirrors DataLab desktop's ``add_metadata``: the value is produced from
     a Python format pattern (``{title}``, ``{index}``, ``{metadata[key]}``,
-    …) evaluated per object, then converted to the requested type.
+    …) evaluated per object, optionally extracted with a regular
+    expression, then converted to the requested type. Invalid settings are
+    reported and the dialog is shown again.
+
+    Returns:
+        True if at least one object was modified
     """
+    from sigima.config import _
+
     if hasattr(oids, "to_py"):
         oids = oids.to_py()
     if not oids:
         return False
-    param = _add_metadata_param()
-    if not await param.edit_async():
-        return False
-    from sigima.io.common.basename import format_basenames
-
     objs = [_MODEL.get(oid) for oid in oids]
-    raw_values = format_basenames(objs, param.value_pattern)
-    for obj, value_str in zip(objs, raw_values):
-        obj.metadata[param.metadata_key] = _convert_metadata_value(
-            value_str, param.conversion
-        )
-    return True
+    param = _add_metadata_param(objs)
+    while True:
+        if not await param.edit_async():
+            return False
+        try:
+            values = _build_metadata_values(objs, param)
+            break
+        except (ValueError, KeyError, TypeError) as exc:
+            await _async_show_message("error", str(exc), _("Add metadata"))
+    modified = False
+    for obj, value in zip(objs, values):
+        if value is not None:
+            obj.metadata[param.metadata_key] = value
+            modified = True
+    return modified
 
 
 def delete_object_metadata(oids: list[str], keep_roi: bool = False) -> bool:
@@ -6786,6 +6975,7 @@ __all__ = [
     "plot_results",
     "set_dialog_bridge",
     "resolve_bridge_active",
+    "resolve_bridge_callbacks",
     "load_plugin_source",
     "load_plugin_file",
     "load_plugin_wheel",

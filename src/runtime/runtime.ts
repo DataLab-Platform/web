@@ -1674,9 +1674,24 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
   async resolveBridgeActive(
     values: Record<string, unknown>,
   ): Promise<Record<string, boolean>> {
-    return (await this.callPy("resolve_bridge_active", {
-      values,
-    })) as Record<string, boolean>;
+    // Not queued: the Python call that opened the dialog is suspended awaiting it.
+    return await this.invokePy<Record<string, boolean>>(
+      "resolve_bridge_active",
+      { values },
+    );
+  }
+
+  /** Run an item's ``display`` callback for the dataset shown by the dialog
+   *  bridge and return the refreshed values (``{}`` when none is open). */
+  async resolveBridgeCallbacks(
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    // Not queued, like resolveBridgeActive; it only computes on a dataset copy.
+    return await this.invokePy<Record<string, unknown>>(
+      "resolve_bridge_callbacks",
+      { item_name: itemName, values },
+    );
   }
 
   /**
