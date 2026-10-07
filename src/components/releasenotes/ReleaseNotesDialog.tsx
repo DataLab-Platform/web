@@ -5,15 +5,10 @@
  * with the application bundle and always matches the running version.
  * Markdown is rendered with the shared :mod:`MarkdownView` (``marked``
  * + ``DOMPurify``).
- *
- * Opening the dialog records the current version as "seen" via
- * :func:`markReleaseSeen`, which clears the "NEW" badge surfaced by
- * the Welcome page.
  */
 
 import { useEffect } from "react";
 import { MarkdownView } from "../AIAssistant/MarkdownView";
-import { markReleaseSeen } from "../../utils/releaseNotes";
 import changelogMd from "../../../CHANGELOG.md?raw";
 
 /**
@@ -44,12 +39,10 @@ function stripEmptyUnreleased(md: string): string {
 const releaseNotesMd = stripEmptyUnreleased(changelogMd);
 
 interface Props {
-  /** Current application version (e.g. ``"0.2.0"``). */
-  appVersion: string;
   onClose: () => void;
 }
 
-export function ReleaseNotesDialog({ appVersion, onClose }: Props) {
+export function ReleaseNotesDialog({ onClose }: Props) {
   // Esc closes the dialog (mirrors HelpDialog).
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -58,11 +51,6 @@ export function ReleaseNotesDialog({ appVersion, onClose }: Props) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
-
-  // Mark this version as seen as soon as the dialog is mounted.
-  useEffect(() => {
-    markReleaseSeen(appVersion);
-  }, [appVersion]);
 
   return (
     <div

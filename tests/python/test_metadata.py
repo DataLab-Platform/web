@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import numpy as np
+import pytest
 from sigima.objects.annotations import PointAnnotation
 
 
@@ -156,6 +159,118 @@ def test_convert_metadata_value(fresh_bootstrap):
     assert bs._convert_metadata_value("true", "bool") is True
     assert bs._convert_metadata_value("off", "bool") is False
     assert bs._convert_metadata_value("text", "string") == "text"
+    assert bs._convert_metadata_value("5", "float", 0.001) == 0.005
+    assert bs._convert_metadata_value("42", "int", 10.0) == 420
+    with pytest.raises(ValueError, match="not an integer"):
+        bs._convert_metadata_value("3", "int", 0.5)
+
+
+def _frames(bs) -> list[str]:
+    return [
+        bs.add_signal_from_arrays(title, [0, 1], [0, 0])
+        for title in ("Flat 5 ms 01", "Dark 01")
+    ]
+
+
+def test_metadata_key_suggestions_skip_internal_keys(fresh_bootstrap):
+    bs = fresh_bootstrap
+    oids = _frames(bs)
+    bs.set_object_metadata_value(oids[0], "plugin.org.example.cam.gain", "number", "2")
+    obj = bs._MODEL.get(oids[1])
+    obj.metadata["Geometry_fwhm_dict"] = {"title": "FWHM"}
+    obj.metadata["array"] = np.arange(3)
+    keys = [
+        key
+        for key, _desc in bs._metadata_key_suggestions(
+            [bs._MODEL.get(oid) for oid in oids]
+        )
+    ]
+    assert "plugin.org.example.cam.gain" in keys
+    assert not {"Geometry_fwhm_dict", "array"} & set(keys)
+    assert not any(key.startswith("_") for key in keys)
+
+
+def test_add_object_metadata_extracts_values(fresh_bootstrap):
+    """Extraction, scale factor and unmatched objects left unchanged."""
+    bs = fresh_bootstrap
+    oids = _frames(bs)
+    key = "plugin.org.example.cam.exposure_time_s"
+    received: list[dict] = []
+
+    async def bridge(kind: str, payload: dict) -> dict:
+        received.append(payload)
+        return {
+            "metadata_key": key,
+            "value_pattern": "{title}",
+            "extraction_pattern": r"([\d.]+)\s*ms",
+            "conversion": "float",
+            "scale": 0.001,
+        }
+
+    bs.set_dialog_bridge(bridge)
+    try:
+        assert asyncio.run(bs.add_object_metadata(oids)) is True
+    finally:
+        bs.set_dialog_bridge(None)
+
+    flat, dark = (bs._MODEL.get(oid) for oid in oids)
+    assert flat.metadata[key] == 0.005
+    assert key not in dark.metadata
+    properties = received[0]["schema"]["properties"]
+    assert properties["known_key"]["x-guidata-has-callback"] is True
+    assert properties["metadata_key"]["pattern"]
+
+
+def test_add_object_metadata_reports_invalid_settings(fresh_bootstrap):
+    """An invalid extraction pattern is reported and the dialog shown again."""
+    bs = fresh_bootstrap
+    oids = _frames(bs)
+    answers = iter(
+        [
+            {"value_pattern": "{title}", "extraction_pattern": "ms("},
+            {"value_pattern": "{title}", "extraction_pattern": r"\d+"},
+        ]
+    )
+    kinds: list[str] = []
+
+    async def bridge(kind: str, payload: dict) -> dict | None:
+        kinds.append(kind)
+        return next(answers) if kind == "edit_dataset" else None
+
+    bs.set_dialog_bridge(bridge)
+    try:
+        assert asyncio.run(bs.add_object_metadata(oids)) is True
+    finally:
+        bs.set_dialog_bridge(None)
+
+    assert kinds == ["edit_dataset", "message", "edit_dataset"]
+    assert [bs._MODEL.get(oid).metadata["custom_key"] for oid in oids] == [
+        "5",
+        "01",
+    ]
+
+
+def test_resolve_bridge_callbacks_fills_key_and_preview(fresh_bootstrap):
+    """Known keys and preview callbacks run on a copy of the live dataset."""
+    bs = fresh_bootstrap
+    oids = _frames(bs)
+    bs.set_object_metadata_value(oids[0], "plugin.org.example.cam.gain", "number", "2")
+    resolved: dict = {}
+
+    async def bridge(kind: str, payload: dict) -> None:
+        values = dict(payload["values"], known_key="plugin.org.example.cam.gain")
+        resolved.update(bs.resolve_bridge_callbacks("known_key", values))
+        return None
+
+    assert bs.resolve_bridge_callbacks("known_key", {}) == {}
+    bs.set_dialog_bridge(bridge)
+    try:
+        assert asyncio.run(bs.add_object_metadata(oids)) is False
+    finally:
+        bs.set_dialog_bridge(None)
+
+    assert resolved["metadata_key"] == "plugin.org.example.cam.gain"
+    assert "Flat 5 ms 01: plugin.org.example.cam.gain = '1'" in resolved["preview"]
 
 
 def test_delete_object_metadata(fresh_bootstrap):

@@ -71,6 +71,12 @@ export function DialogBridge() {
             ? (currentValues) => runtime.resolveBridgeActive(currentValues)
             : undefined
         }
+        resolveCallbacks={
+          runtime
+            ? (itemName, currentValues) =>
+                runtime.resolveBridgeCallbacks(itemName, currentValues)
+            : undefined
+        }
       />
     );
   }
