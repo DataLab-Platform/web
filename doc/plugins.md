@@ -143,6 +143,8 @@ A tool is opened in one of two ways:
 
 `datalab.plugins.tools`, `datalab.plugins.instruments` and `datalab.plugins.resources` are copied from DataLab Desktop into the host shim, like `datalab.plugins.recipe_binding`.
 
+The wheel rules below come from `datalab.plugins.wheels`, also copied verbatim from DataLab Desktop and used by the plugin catalog, so a wheel is judged the same way everywhere; `dlw_wheels.py` only applies them to the `datalab.web_plugins` group. A Python test compares the copy with a sibling DataLab checkout when one is available.
+
 Version 1 of the installer deliberately accepts only local `*-none-any`
 pure-Python wheels compatible with Pyodide's Python version. Native payloads,
 archive traversal, reserved host namespaces, and distribution/package/plugin

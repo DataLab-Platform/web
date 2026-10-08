@@ -388,9 +388,7 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
   unchanged** in the browser, provided they use `await
 param.edit_async(...)` for parameter dialogs.
 
-- **`dlw_wheels.py`** — non-importing wheel inspector. It validates archive
-  structure, pure-Python tags, Python/dependency compatibility, reserved
-  namespaces, and the dedicated `datalab.web_plugins` entry-point group.
+- **`dlw_wheels.py`** — non-importing wheel inspector. It binds the rules of `datalab.plugins.wheels` (a verbatim copy of the DataLab desktop module, also used by the plugin catalog) to the dedicated `datalab.web_plugins` entry-point group: archive structure, pure-Python tags, Python/dependency compatibility and reserved namespaces.
 
 - **`dlw_plugins.py`** — the single managed plugin registry for bundled/user
   wheels and Python sources: discovery, activation, import ownership,
