@@ -18,8 +18,8 @@ export const BUNDLED_PLUGIN_WHEELS: readonly BundledPluginWheel[] =
       version: "0.2.0",
       filename: "datalab_camera_characterization-0.2.0-py3-none-any.whl",
       sha256:
-        "d5e483caf43418c5182ac717ce724ba95b973e4aea835be6cf8b0af20716b81a",
-      sizeBytes: 332_591,
+        "eadf9a309245e806bcea118996f3ed61886841891167ed70f529dcf945fb07d7",
+      sizeBytes: 328_887,
       url: cameraWheelUrl,
     }),
     Object.freeze({
@@ -27,8 +27,8 @@ export const BUNDLED_PLUGIN_WHEELS: readonly BundledPluginWheel[] =
       version: "0.2.0",
       filename: "datalab_pulse_characterization-0.2.0-py3-none-any.whl",
       sha256:
-        "d8797b52a5172a8c426ab72c8772001070760ee71d5a755f4ccdcd9bbc19c83e",
-      sizeBytes: 82_323,
+        "24a45b6cf4bb67cbacab29288d91f943cd54f556f5db61d0554e69ccc723a53f",
+      sizeBytes: 79_669,
       url: pulseWheelUrl,
     }),
   ]);
