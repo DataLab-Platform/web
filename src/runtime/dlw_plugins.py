@@ -10,7 +10,7 @@ shim has been mirrored to ``/home/pyodide``. Owns:
 * the directory discovery loop (``discover_plugins_in_dir(path)``);
 * the hot-reload sequence (``reload_plugins()``).
 
-The Qt counterpart lives in ``datalab/plugins.py``; here we only need
+The Qt counterpart lives in ``datalab/plugins/base.py``; here we only need
 the pieces that DataLab-Web actually uses, in a single self-contained
 module so the bootstrap stays focused on the object model.
 """

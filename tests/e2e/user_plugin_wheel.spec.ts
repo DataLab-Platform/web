@@ -73,7 +73,7 @@ function buildPluginWheel(): Buffer {
 import numpy as np
 
 from datalab.plugins import PluginBase, PluginCapability, PluginInfo
-from datalab.recipes import (
+from datalab.plugins.recipes import (
     RecipeDescriptor,
     RecipeObjectOutput,
     RecipeOutcome,

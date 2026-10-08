@@ -16,8 +16,8 @@ from uuid import uuid4
 import dlw_plugins
 import guidata.dataset as gds
 import sigima
-from datalab.plugin_examples import PluginExampleData
-from datalab.recipe_binding import (
+from datalab.plugins.examples import PluginExampleData
+from datalab.plugins.recipe_binding import (
     RecipeInputIssueCode,
     RecipeReadiness,
     assess_recipe_inputs,
@@ -25,7 +25,7 @@ from datalab.recipe_binding import (
     find_input_issues,
     is_compatible,
 )
-from datalab.recipes import (
+from datalab.plugins.recipes import (
     RECIPE_RUN_RECORD_OPTION,
     RecipeCardinality,
     RecipeDescriptor,

@@ -398,7 +398,7 @@ param.edit_async(...)` for parameter dialogs.
 
 - **`dlw_applications.py`** — generic application host. It prepares typed
   recipe slots, assesses recipe readiness on candidate objects and edited
-  bindings (through the shim's `datalab.recipe_binding`, shared with Desktop),
+  bindings (through the shim's `datalab.plugins.recipe_binding`, shared with Desktop),
   bridges guidata parameter schemas, opens packaged/generated
   examples, and commits recipe objects, results, diagnostics, and provenance
   transactionally. It contains no Camera- or Pulse-specific paths.

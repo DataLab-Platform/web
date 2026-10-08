@@ -1,13 +1,13 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause License
 # See LICENSE file for details
 """
-Portable copy of :mod:`datalab.plugins` for DataLab-Web.
+Portable copy of :mod:`datalab.plugins.base` for DataLab-Web.
 
 This is a Qt-free re-implementation of the Qt plugin core. It keeps the
 public surface (:class:`PluginInfo`, :class:`PluginBase`,
 :class:`PluginRegistry`, :class:`FailedPluginInfo`,
 :func:`discover_plugins`) bit-for-bit compatible with
-``c:/Dev/DataLab/datalab/plugins.py`` so that an unmodified Qt plugin
+``c:/Dev/DataLab/datalab/plugins/base.py`` so that an unmodified Qt plugin
 that imports ``from datalab.plugins import PluginBase, PluginInfo`` and
 that does not pull in :mod:`qtpy` itself loads as-is in the browser.
 
@@ -52,10 +52,10 @@ from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 from datalab.config import MOD_NAME, Conf, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
-from datalab.plugin_examples import PluginExample, PluginExampleData
-from datalab.plugin_instruments import PluginInstrument
-from datalab.plugin_tools import PluginTool, ToolSelection, tool_accepts_selection
-from datalab.recipes import RecipeDescriptor
+from datalab.plugins.examples import PluginExample, PluginExampleData
+from datalab.plugins.instruments import PluginInstrument
+from datalab.plugins.recipes import RecipeDescriptor
+from datalab.plugins.tools import PluginTool, ToolSelection, tool_accepts_selection
 
 if TYPE_CHECKING:
     from sigima.objects import ImageObj, NewImageParam, NewSignalParam, SignalObj
