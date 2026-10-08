@@ -40,9 +40,7 @@ import {
 } from "./ProcessingPreview";
 
 export type ProfileFeatureId =
-  | "line_profile"
-  | "segment_profile"
-  | "average_profile";
+  "line_profile" | "segment_profile" | "average_profile";
 
 interface Props {
   title: string;
@@ -295,8 +293,7 @@ export function ProfileDefinitionDialog(props: Props) {
   }, [cancel, submitting]);
 
   const description = (payload.schema as JsonSchema).description as
-    | string
-    | undefined;
+    string | undefined;
 
   const traces = useMemo(() => {
     const w = imageData.width;

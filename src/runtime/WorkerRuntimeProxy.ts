@@ -65,8 +65,7 @@ export class WorkerRuntimeProxy {
   private mirror: KernelMirror = INITIAL_MIRROR;
   private readonly mutationListeners = new Set<(name: string) => void>();
   private dialogHandler:
-    | ((kind: string, payload: unknown) => Promise<unknown>)
-    | null = null;
+    ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
 
   private readonly readyPromise: Promise<void>;
   private resolveReady!: () => void;

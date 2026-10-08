@@ -27,8 +27,7 @@ class FakeWorker implements WorkerLike {
   terminated = false;
   private listener: ((ev: { data: unknown }) => void) | null = null;
   private errorListener:
-    | ((ev: { message?: string; filename?: string }) => void)
-    | null = null;
+    ((ev: { message?: string; filename?: string }) => void) | null = null;
 
   postMessage(message: unknown, transfer?: Transferable[]): void {
     this.sent.push(message as KernelRequest);
