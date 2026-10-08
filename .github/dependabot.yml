@@ -15,6 +15,15 @@ updates:
     ignore:
       # Pinned with PYODIDE_VERSION (runtime.ts, workerBase.ts) and index.html.
       - dependency-name: pyodide
+      # Vite 8 (Rolldown) and Vitest 5 (Node 22) need a coordinated migration.
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: vitest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
