@@ -10,7 +10,7 @@ from pathlib import Path
 import dlw_applications
 import dlw_plugins
 import pytest
-from datalab.recipes import RECIPE_RUN_RECORD_OPTION
+from datalab.plugins.recipes import RECIPE_RUN_RECORD_OPTION
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CAMERA_WHEEL = (

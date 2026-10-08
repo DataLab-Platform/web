@@ -11,15 +11,14 @@ import dlw_applications
 import dlw_plugins
 import numpy as np
 import pytest
-from datalab.plugin_examples import PluginExampleData
-from datalab.plugin_instruments import (
+from datalab.plugins import PluginBase, PluginCapability, PluginInfo
+from datalab.plugins.examples import PluginExampleData
+from datalab.plugins.instruments import (
     InstrumentAcquisition,
     InstrumentFrame,
     PluginInstrument,
 )
-from datalab.plugin_tools import PluginTool
-from datalab.plugins import PluginBase, PluginCapability, PluginInfo
-from datalab.recipes import (
+from datalab.plugins.recipes import (
     RECIPE_RUN_RECORD_OPTION,
     RecipeCardinality,
     RecipeDescriptor,
@@ -33,6 +32,7 @@ from datalab.recipes import (
     RecipeResultOutput,
     RecipeValidationError,
 )
+from datalab.plugins.tools import PluginTool
 from guidata import dataset as gds
 from sigima.objects import create_image, create_signal
 from sigima.objects.scalar import TableResult

@@ -1695,7 +1695,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
    * Mirror the portable ``datalab.*`` shim into Pyodide's site-packages.
    *
    * Each entry in *sources* is keyed by the workspace-relative path
-   * (``./dlplugins/datalab/plugins.py``); we strip the leading
+   * (``./dlplugins/datalab/plugins/base.py``); we strip the leading
    * ``./dlplugins/`` and write to ``/home/pyodide/<rest>``.
    */
   private static installShim(
