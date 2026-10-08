@@ -94,6 +94,7 @@ const INSPECTION: PluginWheelInspection = {
   filename: "local_plugin-1.0.0-py3-none-any.whl",
   distribution: "local-plugin",
   version: "1.0.0",
+  summary: "Local plugin",
   sha256: "b".repeat(64),
   size_bytes: 4,
   requires_python: ">=3.11",

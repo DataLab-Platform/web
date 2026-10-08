@@ -350,6 +350,7 @@ export interface PluginWheelInspection {
   filename: string;
   distribution: string;
   version: string;
+  summary: string;
   sha256: string;
   size_bytes: number;
   requires_python: string | null;
