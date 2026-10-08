@@ -26,8 +26,7 @@ interface Shape0 {
 async function readShape0(page: Page): Promise<Shape0 | null> {
   return page.evaluate(() => {
     const gd = document.querySelector(".image-plot-host .js-plotly-plot") as
-      | (HTMLElement & { _fullLayout?: { shapes?: Shape0[] } })
-      | null;
+      (HTMLElement & { _fullLayout?: { shapes?: Shape0[] } }) | null;
     const s = gd?._fullLayout?.shapes?.[0];
     return s
       ? { type: s.type, x0: s.x0, x1: s.x1, y0: s.y0, y1: s.y1, path: s.path }

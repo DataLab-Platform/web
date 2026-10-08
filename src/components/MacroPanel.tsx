@@ -362,8 +362,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           // Open and focus the freshly created macro if the event
           // carries an id; otherwise leave the active tab alone.
           const detail = (event as CustomEvent).detail as
-            | { id?: string }
-            | undefined;
+            { id?: string } | undefined;
           const newId = detail?.id;
           if (newId && full.some((m) => m.id === newId)) {
             // Macros created behind our back (AI assistant) carry real

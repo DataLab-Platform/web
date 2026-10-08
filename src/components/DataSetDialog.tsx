@@ -60,8 +60,7 @@ export function DataSetDialog(props: Props) {
   };
 
   const description = (payload.schema as JsonSchema).description as
-    | string
-    | undefined;
+    string | undefined;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">

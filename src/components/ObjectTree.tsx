@@ -52,9 +52,7 @@ export interface ObjectTreeHandle {
 }
 
 type EditTarget =
-  | { kind: "object"; id: string }
-  | { kind: "group"; id: string }
-  | null;
+  { kind: "object"; id: string } | { kind: "group"; id: string } | null;
 
 /** Visual drop indicator while dragging objects in the tree. */
 type DropZone =

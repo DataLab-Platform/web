@@ -99,8 +99,7 @@ export function ProcessingDataSetDialog(props: Props) {
   }, [cancel, submitting]);
 
   const description = (payload.schema as JsonSchema).description as
-    | string
-    | undefined;
+    string | undefined;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">

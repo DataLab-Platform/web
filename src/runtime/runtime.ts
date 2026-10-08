@@ -228,8 +228,7 @@ export interface FeatureDescriptor {
 
 /** Temporary, non-published result returned by ``preview_feature``. */
 export type ProcessingPreviewResult =
-  | { kind: "signal"; data: SignalData }
-  | { kind: "image"; data: ImageData };
+  { kind: "signal"; data: SignalData } | { kind: "image"; data: ImageData };
 
 /** One entry of the "Processing > Fitting > Interactive fitting" submenu. */
 export interface InteractiveFitInfo {
@@ -304,10 +303,7 @@ export interface PluginExampleSummary {
 
 /** Selection a plugin tool needs (names follow menu select conditions). */
 export type PluginToolSelection =
-  | "none"
-  | "exactly_one"
-  | "at_least_one"
-  | "at_least_two";
+  "none" | "exactly_one" | "at_least_one" | "at_least_two";
 
 export interface PluginToolSummary {
   id: string;
@@ -439,11 +435,7 @@ export interface PluginRecipeInputIssue {
 }
 
 export type PluginRecipeReadinessStatus =
-  | "no_input"
-  | "needs_assignment"
-  | "not_ready"
-  | "warnings"
-  | "ready";
+  "no_input" | "needs_assignment" | "not_ready" | "warnings" | "ready";
 
 export interface PluginRecipeReadiness {
   status: PluginRecipeReadinessStatus;
@@ -454,8 +446,7 @@ export interface PluginRecipeReadiness {
 
 /** Readiness of one recipe, or the error raised while assessing it. */
 export type PluginRecipeAssessment =
-  | PluginRecipeReadiness
-  | { status: "error"; error: string };
+  PluginRecipeReadiness | { status: "error"; error: string };
 
 export interface PluginRecipePreparation {
   plugin_id: string;
@@ -1757,8 +1748,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
 
   /** JS-side callback invoked for every async dialog request from Python. */
   private dialogHandler:
-    | ((kind: string, payload: unknown) => Promise<unknown>)
-    | null = null;
+    ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
 
   setDialogHandler(
     handler: ((kind: string, payload: unknown) => Promise<unknown>) | null,
@@ -3005,8 +2995,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
    *  image's intrinsic ``data_min``/``data_max``). */
   async getLutRange(oid: string): Promise<[number, number] | null> {
     const result = (await this.callPy("get_lut_range", { oid })) as
-      | [number, number]
-      | null;
+      [number, number] | null;
     if (!result || result.length !== 2) return null;
     return [Number(result[0]), Number(result[1])];
   }
@@ -3074,9 +3063,7 @@ await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify
    *  round-trip through Qt DataLab's "Open HDF5 workspace" feature. */
   async saveWorkspaceHdf5(): Promise<Uint8Array> {
     const result = (await this.callPy("save_workspace_to_bytes")) as
-      | Uint8Array
-      | ArrayBuffer
-      | number[];
+      Uint8Array | ArrayBuffer | number[];
     if (result instanceof Uint8Array) return result;
     if (result instanceof ArrayBuffer) return new Uint8Array(result);
     return Uint8Array.from(result as number[]);

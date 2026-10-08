@@ -65,8 +65,7 @@ export interface ActionDescriptor {
 /** Toolbar item produced by ``buildToolbarItems``: either an action button
  *  or a separator marker inserted between groups. */
 export type ToolbarItem =
-  | { kind: "action"; action: ActionDescriptor }
-  | { kind: "separator" };
+  { kind: "action"; action: ActionDescriptor } | { kind: "separator" };
 
 /** Toolbar group ordering, mirroring DataLab desktop's toolbar layout:
  *  the HDF5 workspace actions (main toolbar) come first, then the

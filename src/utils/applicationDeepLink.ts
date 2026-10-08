@@ -19,11 +19,7 @@ export interface BundledApplicationManifest {
 }
 
 export type ApplicationDeepLinkMismatchField =
-  | "plugin"
-  | "pluginVersion"
-  | "recipe"
-  | "recipeVersion"
-  | "example";
+  "plugin" | "pluginVersion" | "recipe" | "recipeVersion" | "example";
 
 export interface ApplicationDeepLinkMismatch {
   field: ApplicationDeepLinkMismatchField;
