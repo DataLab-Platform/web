@@ -50,7 +50,7 @@
     "idb": "^8.0.3",
     "marked": "^18.1.0",
     "plotly.js-dist-min": "^4.1.2",
-    "react": "^18.3.1",
+    "react": "^19.3.0",
     "react-dom": "^18.3.1",
     "react-plotly.js": "^4.1.0"
   },
@@ -63,7 +63,7 @@
     "@types/dompurify": "^3.2.0",
     "@types/node": "^26.6.4",
     "@types/plotly.js-dist-min": "^2.3.4",
-    "@types/react": "^18.3.12",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^18.3.1",
     "@types/react-plotly.js": "^2.6.3",
     "@vitejs/plugin-react": "^4.3.3",
