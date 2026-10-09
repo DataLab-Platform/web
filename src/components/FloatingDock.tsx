@@ -8,7 +8,7 @@
  * determined by their JSX order — no manual ``right`` offset math.
  */
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 export interface FloatingDockStackProps {
   children?: ReactNode;
@@ -24,7 +24,7 @@ export interface FloatingDockStackProps {
  */
 export function FloatingDockStack({
   children,
-}: FloatingDockStackProps): JSX.Element {
+}: FloatingDockStackProps): ReactElement {
   return <div className="floating-dock-stack">{children}</div>;
 }
 
@@ -46,7 +46,7 @@ export function FloatingDockSlot({
   width,
   className,
   children,
-}: FloatingDockSlotProps): JSX.Element {
+}: FloatingDockSlotProps): ReactElement {
   const cls = ["floating-dock-host", className].filter(Boolean).join(" ");
   return (
     <div className={cls} style={width ? { width } : undefined}>
