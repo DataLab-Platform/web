@@ -117,6 +117,26 @@ def test_inspection_rejects_unsafe_payloads(
         inspect(make_wheel(top_level=top_level, extra_files=extra_files))
 
 
+def test_inspection_rejects_wheel_built_for_another_python() -> None:
+    """Pyodide's Python must be able to install the wheel's interpreter tag."""
+    filename = FILENAME.replace("py3-none-any", "cp313-none-any")
+    data = make_wheel()
+
+    with pytest.raises(WheelInspectionError, match="built for cp313"):
+        inspect_wheel(
+            data,
+            filename=filename,
+            available_distributions={"sigima": "1.2.0"},
+            python_version="3.12",
+        )
+    assert inspect_wheel(
+        data,
+        filename=filename,
+        available_distributions={"sigima": "1.2.0"},
+        python_version="3.13",
+    )["tags"] == ["cp313-none-any"]
+
+
 def test_inspection_rejects_missing_host_dependency() -> None:
     with pytest.raises(WheelInspectionError, match="not provided by DataLab-Web"):
         inspect_wheel(
