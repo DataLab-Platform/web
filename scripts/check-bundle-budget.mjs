@@ -8,7 +8,8 @@ import { gzipSync } from "node:zlib";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = resolve(ROOT, "dist");
 const ASSETS = resolve(DIST, "assets");
-const INITIAL_JS_GZIP_BUDGET = 375 * 1024;
+// React 19's react-dom adds ~23 KiB gzip over React 18.
+const INITIAL_JS_GZIP_BUDGET = 400 * 1024;
 const PYTHON_RUNTIME_SENTINEL = "Sigima bootstrap script for DataLab-Web";
 
 function fail(message) {

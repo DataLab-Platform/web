@@ -16,7 +16,14 @@
  *     ``Check all`` / ``Uncheck all`` buttons, OK / Cancel buttons.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import Plot from "react-plotly.js";
 import { getH5IconUrl } from "../assets/h5Icons";
 import { t } from "../i18n/translate";
@@ -646,7 +653,7 @@ function shouldRender(
   return false;
 }
 
-function TreeRows(props: TreeRowsProps): JSX.Element | null {
+function TreeRows(props: TreeRowsProps): ReactElement | null {
   const {
     node,
     depth,

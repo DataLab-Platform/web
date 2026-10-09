@@ -17,6 +17,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ReactElement,
   type ReactNode,
 } from "react";
 
@@ -78,7 +79,7 @@ export function DraggableFloating({
   dragHandleSelector = ".panel-header",
   className,
   children,
-}: DraggableFloatingProps): JSX.Element {
+}: DraggableFloatingProps): ReactElement {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [rect, setRect] = useState<PersistedRect>(() => {
     const stored = loadRect(storageKey);
