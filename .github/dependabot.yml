@@ -6,9 +6,11 @@ updates:
     schedule:
       interval: weekly
     groups:
-      # Listed first so ESLint majors bump eslint and @eslint/* together.
+      # Listed first so their majors land in one PR (peer dependencies).
       eslint:
         patterns: ["eslint", "@eslint/*"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
       production:
         dependency-type: production
         update-types: [minor, patch]
