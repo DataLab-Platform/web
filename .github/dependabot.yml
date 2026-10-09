@@ -6,6 +6,9 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Listed first so ESLint majors bump eslint and @eslint/* together.
+      eslint:
+        patterns: ["eslint", "@eslint/*"]
       production:
         dependency-type: production
         update-types: [minor, patch]
@@ -23,6 +26,9 @@ updates:
       - dependency-name: "@vitest/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint caps its TypeScript peer range (<6.1.0 as of 8.71).
+      - dependency-name: typescript
         update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
