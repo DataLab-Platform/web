@@ -12,18 +12,17 @@ updates:
       production:
         dependency-type: production
         update-types: [minor, patch]
+      # Before `development` so Vitest majors bump vitest and @vitest/* together.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
       development:
         dependency-type: development
         update-types: [minor, patch]
     ignore:
       # Pinned with PYODIDE_VERSION (runtime.ts, workerBase.ts) and index.html.
       - dependency-name: pyodide
-      # Vite 8 (Rolldown) and Vitest 5 (Node 22) need a coordinated migration.
+      # Vite 8 needs the Rolldown migration and @vitejs/plugin-react 6.
       - dependency-name: vite
-        update-types: ["version-update:semver-major"]
-      - dependency-name: vitest
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "@vitest/*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@vitejs/plugin-react"
         update-types: ["version-update:semver-major"]
