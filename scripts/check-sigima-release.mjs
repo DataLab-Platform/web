@@ -94,7 +94,7 @@ export function loadDependencyManifest(
     manifest = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Unable to read ${path}: ${detail}`);
+    throw new Error(`Unable to read ${path}: ${detail}`, { cause: error });
   }
   return validateDependencyManifest(manifest, packageName);
 }

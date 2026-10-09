@@ -55,7 +55,7 @@
     "react-plotly.js": "^4.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.13.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -68,7 +68,7 @@
     "@types/react-plotly.js": "^2.6.3",
     "@vitejs/plugin-react": "^4.3.3",
     "@vitest/coverage-v8": "^4.1.11",
-    "eslint": "^9.13.0",
+    "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.13.0",
