@@ -4798,23 +4798,39 @@ def _begin_provenance(
     source_ids: list[str],
     origin: str = "ordinary",
     command_id: str | None = None,
+    operand: Any = None,
 ) -> dict[str, Any]:
-    """Record the input states of a 1-to-1 execution, keyed by source id."""
-    if spec.pattern != "1_to_1":
+    """Record the input states of 1-to-1 or 2-to-1 executions, keyed by source id.
+
+    2-to-1 executions are recorded only with their *operand*; the original
+    source and operand are recorded, before any alignment.
+    """
+    if spec.pattern == "2_to_1":
+        if operand is None:
+            return {}
+    elif spec.pattern != "1_to_1":
         return {}
     command_id = command_id or str(uuid.uuid4())
     pendings: dict[str, Any] = {}
     for oid, src in zip(source_ids, sources):
-        pending = _PROVENANCE.begin(spec.func, param, src, command_id, origin)
+        inputs = [src, operand] if spec.pattern == "2_to_1" else src
+        pending = _PROVENANCE.begin(spec.func, param, inputs, command_id, origin)
         if pending is not None:
             pendings[oid] = pending
     return pendings
 
 
+def _complete_provenance(pending: Any, dst: Any, context: dict | None) -> None:
+    """Record a completed execution with the alignment actually applied."""
+    if pending is not None and context:
+        pending.x_alignment = context.get("x_alignment")
+    _PROVENANCE.complete(pending, dst)
+
+
 def _feature_spec_of(function: Any) -> Any:
     """Return the catalogue feature whose function is *function* (identity)."""
     for spec in _full_catalog_with_plugins().values():
-        if spec.func is function and spec.pattern == "1_to_1":
+        if spec.func is function and spec.pattern in ("1_to_1", "2_to_1"):
             return spec
     return None
 
@@ -4827,11 +4843,19 @@ def replay_activity(activity_id: str) -> dict[str, Any]:
     result.
     """
 
-    def execute_candidate(function: Any, source: Any, param: Any) -> Any:
+    def execute_candidate(
+        function: Any, inputs: list[Any], param: Any, context: dict
+    ) -> Any:
         spec = _feature_spec_of(function)
         if spec is None:
             raise ValueError("The operation is not available in this catalogue")
-        ctx = _proc.ApplyContext(feature=spec, sources=[source], param_instance=param)
+        ctx = _proc.ApplyContext(
+            feature=spec,
+            sources=inputs[:1],
+            operand=inputs[1] if len(inputs) > 1 else None,
+            param_instance=param,
+            recorded_context=context,
+        )
         result = _proc.BaseProcessor(spec.object_kind).apply(ctx, ["candidate"])
         return result.items[0][1] if result.items else None
 
@@ -4898,7 +4922,9 @@ def apply_feature(
     )
     if result is None:
         param = _PROCESSOR.build_param_instance(spec, params)
-        pendings = _begin_provenance(spec, param, sources, src_ids_snapshot)
+        pendings = _begin_provenance(
+            spec, param, sources, src_ids_snapshot, operand=operand
+        )
         ctx = _proc.ApplyContext(
             feature=spec,
             sources=sources,
@@ -4933,7 +4959,9 @@ def apply_feature(
             group = src_panel.find_group_of(anchor)
         new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=group.gid)
         new_ids.append(new_oid)
-        _PROVENANCE.complete(pendings.get(source_oid), dst)
+        _complete_provenance(
+            pendings.get(source_oid), dst, result.contexts.get(source_oid)
+        )
         # Record the originating processing so the "Processing" side panel
         # tab can re-edit its parameters and re-apply it on the same source(s).
         _LAST_PROCESSING[new_oid] = {
@@ -5042,7 +5070,11 @@ def _apply_feature_grouped(
         return [oid for oid in group.object_ids if oid in selected]
 
     def _place(
-        source_oid: str | None, dst: Any, n_src_ids: list[str], gid: str
+        source_oid: str | None,
+        dst: Any,
+        n_src_ids: list[str],
+        gid: str,
+        contexts: dict[str, dict] | None = None,
     ) -> None:
         """Patch the result title, add it to group *gid*, and record it."""
         if source_oid is None:
@@ -5054,7 +5086,9 @@ def _apply_feature_grouped(
         patch_title_with_ids(dst, patch_oids)
         new_oid = _MODEL.add_object(spec.output_kind, dst, group_id=gid)
         new_ids.append(new_oid)
-        _PROVENANCE.complete(pendings.pop(source_oid, None), dst)
+        _complete_provenance(
+            pendings.pop(source_oid, None), dst, (contexts or {}).get(source_oid)
+        )
         _LAST_PROCESSING[new_oid] = {
             "feature_id": feature_id,
             "source_ids": [source_oid] if source_oid is not None else list(n_src_ids),
@@ -5088,7 +5122,12 @@ def _apply_feature_grouped(
             param = _PROCESSOR.build_param_instance(spec, params)
             pendings.update(
                 _begin_provenance(
-                    spec, param, member_objs, member_ids, command_id=command_id
+                    spec,
+                    param,
+                    member_objs,
+                    member_ids,
+                    command_id=command_id,
+                    operand=operand,
                 )
             )
             ctx = _proc.ApplyContext(
@@ -5101,7 +5140,7 @@ def _apply_feature_grouped(
             result = _PROCESSOR.apply(ctx, member_ids)
             dst_gid = _MODEL.create_group(spec.object_kind, name=f"{func_name}({gid})")
             for source_oid, dst in result.items:
-                _place(source_oid, dst, member_ids, dst_gid)
+                _place(source_oid, dst, member_ids, dst_gid, result.contexts)
     return new_ids
 
 
@@ -6642,21 +6681,24 @@ def _rebuild_last_processing() -> None:
         if spec is None:
             continue
         output = ledger.states[activity["outputs"][0]["state_id"]]
-        source = ledger.states[activity["call"]["inputs"][0]["binding"]["state_id"]]
+        inputs = [
+            ledger.states[item["binding"]["state_id"]]
+            for item in activity["call"]["inputs"]
+        ]
         latest = ledger.latest_state(output["object_uuid"])
         out_oid = oid_of.get(output["object_uuid"])
-        src_oid = oid_of.get(source["object_uuid"])
+        input_oids = [oid_of.get(state["object_uuid"]) for state in inputs]
         if (
             out_oid is None
-            or src_oid is None
+            or None in input_oids
             or latest["state_id"] != output["state_id"]
             or output["state_id"] in _PROVENANCE.state_status
         ):
             continue
         _LAST_PROCESSING[out_oid] = {
             "feature_id": spec.feature_id,
-            "source_ids": [src_oid],
-            "operand_id": None,
+            "source_ids": input_oids[:1],
+            "operand_id": input_oids[1] if len(input_oids) > 1 else None,
             "params": dict(activity["call"]["parameters"] or {}),
         }
 

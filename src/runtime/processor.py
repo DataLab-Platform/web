@@ -1110,6 +1110,25 @@ def _interpolate_to(target: SignalObj, other: SignalObj) -> SignalObj:
     return dst
 
 
+def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
+    """Return the contract of *spec* if it declares its own X-alignment rule.
+
+    Such operations (e.g. the signal difference) align the operand on the
+    source grid with a versioned Sigima rule instead of :func:`_interpolate_to`.
+    """
+    if spec.object_kind != "signal":
+        return None
+    try:
+        # pylint: disable-next=import-outside-toplevel
+        from sigima.proc.contracts import contract_for_function
+    except ImportError:  # released Sigima without contracts
+        return None
+    contract = contract_for_function(spec.func)
+    if getattr(contract, "x_alignment", None) is None:
+        return None
+    return contract
+
+
 def _align_signals(signals: list[SignalObj]) -> list[SignalObj]:
     """Return a list where every signal shares the smallest X grid.
 
@@ -1138,6 +1157,8 @@ class ApplyContext:
         params: Optional dict of user-edited parameter values.
         param_instance: Optional parameter instance, used as is (no second
             instantiation) when given.
+        recorded_context: Execution context recorded with a replayed activity;
+            its rules (e.g. X alignment) must be supported.
     """
 
     # Pure data container.
@@ -1148,6 +1169,7 @@ class ApplyContext:
     operand: Any | None = None
     params: dict[str, Any] | None = None
     param_instance: Any | None = None
+    recorded_context: dict[str, Any] | None = None
 
 
 @dataclass
@@ -1158,7 +1180,9 @@ class ApplyResult:
     ``source_oid`` is used by the caller to decide which group hosts the
     result (for ``n_to_1`` it is ``None`` — the caller picks the first
     source's group). ``param`` is the parameter instance actually passed to
-    the function (``None`` for parameterless features).
+    the function (``None`` for parameterless features). ``contexts`` holds,
+    by source oid, the execution context of operations whose contract aligns
+    their inputs (e.g. ``{"x_alignment": {...}}``).
     """
 
     # Pure data container (a frozen-style dataclass with one field).
@@ -1166,6 +1190,7 @@ class ApplyResult:
 
     items: list[tuple[str | None, Any]] = field(default_factory=list)
     param: Any | None = None
+    contexts: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class BaseProcessor:
@@ -1209,7 +1234,12 @@ class BaseProcessor:
             if ctx.operand is None:
                 raise ValueError(f"Feature {spec.feature_id!r} requires an operand")
             return self._compute_2_to_1(
-                spec, ctx.sources, source_ids, ctx.operand, instance
+                spec,
+                ctx.sources,
+                source_ids,
+                ctx.operand,
+                instance,
+                ctx.recorded_context,
             )
         if spec.pattern == "n_to_1":
             return self._compute_n_to_1(spec, ctx.sources, instance)
@@ -1237,11 +1267,20 @@ class BaseProcessor:
         source_ids: list[str],
         operand: Any,
         instance: gds.DataSet | None,
+        recorded_context: dict[str, Any] | None = None,
     ) -> ApplyResult:
         result = ApplyResult()
+        contract = _x_alignment_contract(spec)
         for src, oid in zip(sources, source_ids):
             op = operand
-            if spec.object_kind == "signal" and not spec.skip_xarray_compat:
+            if contract is not None:
+                # The contract's rule replaces the legacy interpolation; the
+                # originals are never modified.
+                (src, op), context = contract.prepare_inputs(
+                    [src, operand], recorded_context
+                )
+                result.contexts[oid] = context
+            elif spec.object_kind == "signal" and not spec.skip_xarray_compat:
                 op = _interpolate_to(src, operand)
             args: tuple[Any, ...] = (
                 (src, op) if instance is None else (src, op, instance)

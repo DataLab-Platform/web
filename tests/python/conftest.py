@@ -106,3 +106,20 @@ def bootstrap_module():
     Use for read-only tests that don't mutate the in-memory model.
     """
     return importlib.import_module("bootstrap")
+
+
+@pytest.fixture
+def counted_apply(monkeypatch, fresh_bootstrap):
+    """Count (and optionally alter) every computation run by the processor."""
+    calls = {"count": 0, "alter": False}
+    original = fresh_bootstrap._proc.BaseProcessor.apply
+
+    def apply(self, ctx, source_ids):
+        calls["count"] += 1
+        result = original(self, ctx, source_ids)
+        if calls["alter"]:
+            result.items[0][1].y[2] += 0.5
+        return result
+
+    monkeypatch.setattr(fresh_bootstrap._proc.BaseProcessor, "apply", apply)
+    return calls

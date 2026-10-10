@@ -170,23 +170,6 @@ def test_replay_activity_verifies_without_changing_the_workspace(fresh_bootstrap
     assert report["verdict"] == "not_verified"
 
 
-@pytest.fixture
-def counted_apply(monkeypatch, fresh_bootstrap):
-    """Count (and optionally alter) every computation run by the processor."""
-    calls = {"count": 0, "alter": False}
-    original = fresh_bootstrap._proc.BaseProcessor.apply
-
-    def apply(self, ctx, source_ids):
-        calls["count"] += 1
-        result = original(self, ctx, source_ids)
-        if calls["alter"]:
-            result.items[0][1].y[2] += 0.5
-        return result
-
-    monkeypatch.setattr(fresh_bootstrap._proc.BaseProcessor, "apply", apply)
-    return calls
-
-
 def test_replay_really_computes_and_detects_divergence(fresh_bootstrap, counted_apply):
     bs = fresh_bootstrap
     src = add_signal(bs)

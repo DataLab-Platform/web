@@ -3,7 +3,8 @@
 """
 Workspace provenance for DataLab-Web.
 
-Records every signal 1-to-1 processing in a workspace-level ledger, prepares
+Records every signal 1-to-1 and 2-to-1 processing in a workspace-level ledger,
+prepares
 recorded activities for replay and verifies them against their stored result.
 The ledger model, fingerprints, preparation and reports come from DataLab-Capsule;
 operation contracts come from Sigima.
@@ -19,7 +20,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from importlib import metadata
 from typing import Any
 
@@ -51,6 +52,8 @@ from sigima.objects import SignalObj
 _logger = logging.getLogger(__name__)
 
 EDITION = "web"
+#: Roles of opaque (unqualified) calls, by number of inputs.
+OPAQUE_ROLES = {1: ("source",), 2: ("source", "operand")}
 
 #: Largest capsule (archive and workspace, bytes) opened in the browser. Opening
 #: one grows the WebAssembly heap by about 3.5 times its size (Pyodide 0.26.4 in
@@ -68,7 +71,7 @@ class ProvenanceResidencyError(RuntimeError):
 
 @dataclasses.dataclass
 class PendingActivity:
-    """An execution whose input state was recorded, awaiting its output."""
+    """An execution whose input states were recorded, awaiting its output."""
 
     call: dict[str, Any]
     implementation: dict[str, Any]
@@ -76,6 +79,8 @@ class PendingActivity:
     command_id: str | None
     origin: str
     started_at: str
+    #: X-alignment record applied to the inputs, or None.
+    x_alignment: dict[str, Any] | None = None
 
 
 def implementation_of(func: Callable) -> dict[str, Any]:
@@ -272,7 +277,7 @@ class WebProvenance:
 
     @staticmethod
     def _build_call(
-        func: Callable, param: Any, state_id: str, obj: SignalObj
+        func: Callable, param: Any, state_ids: list[str], objs: list[SignalObj]
     ) -> tuple[dict[str, Any], list[str]]:
         contract = (
             None if _contracts is None else _contracts.contract_for_function(func)
@@ -280,31 +285,30 @@ class WebProvenance:
         if (
             contract is not None
             and contract.qualified
-            and contract.check_preconditions([obj]) is None
+            and len(contract.inputs) == len(objs)
+            and contract.check_preconditions(objs) is None
         ):
             values = _contracts.parameters_to_values(param)
+            roles = [role.name for role in contract.inputs]
             return (
                 make_call(
                     contract.operation_id,
                     contract.contract_version,
                     values,
-                    [("source", state_id)],
+                    list(zip(roles, state_ids)),
                 ),
                 [],
             )
+        bindings = list(zip(OPAQUE_ROLES[len(objs)], state_ids))
         if param is None:
-            return make_call(None, None, {}, [("source", state_id)]), []
+            return make_call(None, None, {}, bindings), []
         if _contracts is None:
-            return make_call(None, None, None, [("source", state_id)]), [
-                "parameters_not_encoded"
-            ]
+            return make_call(None, None, None, bindings), ["parameters_not_encoded"]
         try:
             values = _contracts.parameters_to_values(param)
         except _contracts.ParameterEncodingError:
-            return make_call(None, None, None, [("source", state_id)]), [
-                "parameters_not_encoded"
-            ]
-        return make_call(None, None, values, [("source", state_id)]), []
+            return make_call(None, None, None, bindings), ["parameters_not_encoded"]
+        return make_call(None, None, values, bindings), []
 
     def begin(
         self,
@@ -313,13 +317,29 @@ class WebProvenance:
         source: Any,
         command_id: str | None = None,
         origin: str = "ordinary",
+        x_alignment: dict[str, Any] | None = None,
     ) -> PendingActivity | None:
-        """Record the input state of a signal 1-to-1 execution, before it runs."""
-        if not self.available or not isinstance(source, SignalObj):
+        """Record the input states of a signal execution, before it runs.
+
+        Args:
+            func: Computation function.
+            param: Effective parameters, or None.
+            source: Source signal, or the original ``[source, operand]`` signals
+             of a 2-to-1 execution (before any alignment).
+            command_id: Identifier shared by the executions of one command.
+            origin: Activity origin.
+            x_alignment: X-alignment record applied to the inputs, or None.
+        """
+        objs = list(source) if isinstance(source, Sequence) else [source]
+        if (
+            not self.available
+            or len(objs) not in OPAQUE_ROLES
+            or not all(isinstance(obj, SignalObj) for obj in objs)
+        ):
             return None
         try:
-            state_id = self.observe(source)
-            call, limits = self._build_call(func, param, state_id, source)
+            state_ids = [self.observe(obj) for obj in objs]
+            call, limits = self._build_call(func, param, state_ids, objs)
             return PendingActivity(
                 call=call,
                 implementation=implementation_of(func),
@@ -327,6 +347,7 @@ class WebProvenance:
                 command_id=command_id,
                 origin=origin,
                 started_at=utc_timestamp(),
+                x_alignment=x_alignment,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self._capture_failed(exc)
@@ -351,6 +372,11 @@ class WebProvenance:
                 implementation=pending.implementation,
                 command_id=pending.command_id,
                 limits=pending.limits,
+                context={
+                    "roi": None,
+                    "mask": None,
+                    "x_alignment": pending.x_alignment,
+                },
                 started_at=pending.started_at,
             )
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -380,6 +406,13 @@ class WebProvenance:
         except _contracts.InvalidParametersError as exc:
             raise IneligibleError("invalid_parameters", str(exc)) from exc
 
+    @staticmethod
+    def _apply_context(contract: Any, objs: list[Any], context: dict) -> list[Any]:
+        try:
+            return contract.prepare_inputs(objs, context)[0]
+        except _contracts.XAlignmentError as exc:
+            raise IneligibleError("unsupported_context", str(exc)) from exc
+
     def prepare(self, activity_id: str) -> Any:
         """Prepare a recorded activity for replay."""
         return prepare_activity(
@@ -393,6 +426,7 @@ class WebProvenance:
             ),
             decode_parameters=self._decode,
             state_status=self.state_status,
+            apply_context=self._apply_context,
         )
 
     def _reference(self, activity: dict[str, Any]) -> tuple[dict | None, Any]:
@@ -420,12 +454,19 @@ class WebProvenance:
     def verify(
         self,
         activity_id: str,
-        execute_candidate: Callable[[Callable, Any, Any], Any],
+        execute_candidate: Callable[[Callable, list[Any], Any, dict], Any],
     ) -> dict[str, Any]:
         """Recompute a recorded activity as a separate candidate and compare it.
 
         The workspace and the ledger never change; the verification run only
         appears in the returned report.
+
+        Args:
+            activity_id: Activity to verify.
+            execute_candidate: ``(function, inputs, parameters, context) ->
+             result``; *inputs* are the live objects in role order and
+             *context* the recorded execution context, which the candidate
+             computation applies again (e.g. X alignment).
         """
         if not self.available:
             raise RuntimeError(UNAVAILABLE_REASON)
@@ -448,13 +489,17 @@ class WebProvenance:
                 reference=reference,
                 environment=environment,
                 reason=prepared.reason,
+                context=activity["context"],
             )
         inputs = [
             {"role": role, "state_id": state_id, "status": "available"}
             for role, state_id, _obj in prepared.inputs
         ]
         candidate = execute_candidate(
-            prepared.contract.function, prepared.inputs[0][2], prepared.parameters
+            prepared.contract.function,
+            [obj for _role, _state_id, obj in prepared.inputs],
+            prepared.parameters,
+            activity["context"],
         )
         if candidate is None:
             return build_report(
@@ -465,6 +510,7 @@ class WebProvenance:
                 reference=reference,
                 environment=environment,
                 reason="The candidate computation failed",
+                context=activity["context"],
             )
         comparison = None
         if ref_obj is not None:
@@ -480,4 +526,5 @@ class WebProvenance:
             environment=environment,
             comparison=comparison,
             candidate_state_ids=[("result", str(uuid.uuid4()))],
+            context=activity["context"],
         )
