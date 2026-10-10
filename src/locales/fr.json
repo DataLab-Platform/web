@@ -193,6 +193,7 @@
   "Canny filter": "Filtre de Canny",
   "Canny filter…": "Filtre de Canny…",
   "Cap the number of past messages (user + assistant + tool) sent to the provider on each request. Useful with local models that have a small context window (e.g. n_ctx=4096 on llama.cpp): if the conversation grows beyond the model's context, the server returns HTTP 400. Set to 0 to disable the cap. The system prompt and the current user turn are always preserved.": "Limitez le nombre de messages passés (utilisateur + assistant + outil) envoyés au fournisseur à chaque requête. Utile avec les modèles locaux disposant d'une petite fenêtre de contexte (par ex. n_ctx=4096 sur llama.cpp) : si la conversation dépasse le contexte du modèle, le serveur renvoie une erreur HTTP 400. Mettez 0 pour désactiver la limite. Le prompt système et le tour utilisateur actuel sont toujours conservés.",
+  "Capsule too large: {size} MiB (limit: {limit} MiB)": "Capsule trop volumineuse : {size} Mio (limite : {limit} Mio)",
   "Captured view": "Vue capturée",
   "CDF fit": "Ajustement CDF",
   "cell output": "sortie de cellule",

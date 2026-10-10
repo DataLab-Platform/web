@@ -6618,6 +6618,11 @@ def open_workspace_capsule(
     return open_workspace_from_bytes(filename, workspace, replace=replace)
 
 
+def get_capsule_size_limit() -> int | None:
+    """Return the largest capsule opened (bytes), or None without DataLab-Capsule."""
+    return _PROVENANCE.capsule_max_bytes
+
+
 def _rebuild_last_processing() -> None:
     """Rebuild the Processing-tab records of replayable activities from the ledger.
 
@@ -7163,6 +7168,7 @@ __all__ = [
     "set_provenance_edition_version",
     "export_workspace_capsule",
     "open_workspace_capsule",
+    "get_capsule_size_limit",
     "get_image_grid_param_schema",
     "distribute_images_on_grid",
     "reset_image_positions",

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import io
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,10 @@ import h5py
 import numpy as np
 import pytest
 
-pytest.importorskip("datalab_capsule")
+if os.environ.get("DLW_REQUIRE_PROVENANCE") == "1":
+    import datalab_capsule  # noqa: F401  # CI must not skip these tests
+else:
+    pytest.importorskip("datalab_capsule")
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "provenance"
 X = np.array([0.0, 0.25, 0.5, 0.75])
@@ -134,6 +138,26 @@ def test_capsule_export_and_open():
     check_chain(reader, "web")
     with pytest.raises(ValueError):
         reader.open_workspace_capsule("bad.dlcapsule", b"not a zip", replace=True)
+    check_chain(reader, "web")
+
+
+def test_capsule_size_limit(monkeypatch):
+    """The browser policy refuses a capsule over its limit, workspace unchanged."""
+    from datalab_capsule.archive import CapsuleError
+
+    writer = fresh_runtime()
+    build_chain(writer)
+    data = writer.export_workspace_capsule()
+    reader = fresh_runtime()
+    provenance = reader._prov
+    assert reader.get_capsule_size_limit() == provenance.CAPSULE_MAX_BYTES
+    monkeypatch.setattr(provenance, "CAPSULE_MAX_BYTES", len(data) - 1)
+    tree = reader.get_panel_tree("signal")
+    with pytest.raises(CapsuleError, match="Archive too large"):
+        reader.open_workspace_capsule("big.dlcapsule", data, replace=True)
+    assert reader.get_panel_tree("signal") == tree
+    monkeypatch.setattr(provenance, "CAPSULE_MAX_BYTES", len(data))
+    reader.open_workspace_capsule("chain.dlcapsule", data, replace=True)
     check_chain(reader, "web")
 
 

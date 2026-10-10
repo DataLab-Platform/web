@@ -24,7 +24,7 @@ from importlib import metadata
 from typing import Any
 
 try:
-    from datalab_capsule.archive import create_from_hdf5, read_capsule
+    from datalab_capsule.archive import SizePolicy, create_from_hdf5, read_capsule
     from datalab_capsule.calls import make_call
     from datalab_capsule.compare import (
         build_report,
@@ -51,6 +51,15 @@ from sigima.objects import SignalObj
 _logger = logging.getLogger(__name__)
 
 EDITION = "web"
+
+#: Largest capsule (archive and workspace, bytes) opened in the browser. Opening
+#: one grows the WebAssembly heap by about 3.5 times its size (Pyodide 0.26.4 in
+#: Chromium: +841 MiB for a 240 MiB capsule, heap then 1.1 GiB), and this 32-bit
+#: heap cannot exceed 4 GiB. The TypeScript runtime checks the file size before
+#: reading it.
+CAPSULE_MAX_BYTES = 256 * 1024 * 1024
+#: Largest manifest opened in the browser (bytes).
+CAPSULE_MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 
 
 class ProvenanceResidencyError(RuntimeError):
@@ -192,7 +201,17 @@ class WebProvenance:
         """Validate a capsule and return its workspace bytes."""
         if not self.available:
             raise RuntimeError(UNAVAILABLE_REASON)
-        return read_capsule(data).workspace
+        policy = SizePolicy(
+            max_archive_bytes=CAPSULE_MAX_BYTES,
+            max_manifest_bytes=CAPSULE_MAX_MANIFEST_BYTES,
+            max_workspace_bytes=CAPSULE_MAX_BYTES,
+        )
+        return read_capsule(data, policy).workspace
+
+    @property
+    def capsule_max_bytes(self) -> int | None:
+        """Largest capsule opened (bytes), or None without DataLab-Capsule."""
+        return CAPSULE_MAX_BYTES if self.available else None
 
     def replayable_function(self, activity: dict[str, Any]) -> Callable | None:
         """Return the local function of a replayable activity, or None."""

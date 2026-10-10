@@ -1883,6 +1883,8 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   /** JS mirror of bootstrap's ``_SPILLED`` set — object ids whose heavy
    *  array currently lives on disk rather than in the WASM heap. */
   private readonly spilledOids = new Set<string>();
+  /** Cache of {@link getCapsuleSizeLimit} (undefined until read). */
+  private capsuleSizeLimit: number | null | undefined;
 
   /** kwarg keys carrying a single object id referenced by a call. */
   private static readonly OID_KEYS: readonly string[] = [
@@ -3185,13 +3187,41 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     return Uint8Array.from(result as number[]);
   }
 
+  /** Largest capsule size (bytes) the runtime opens, or null without
+   *  DataLab-Capsule.  Fixed for a runtime, so read once. */
+  async getCapsuleSizeLimit(): Promise<number | null> {
+    if (this.capsuleSizeLimit === undefined) {
+      this.capsuleSizeLimit = (await this.callPy("get_capsule_size_limit")) as
+        number | null;
+    }
+    return this.capsuleSizeLimit;
+  }
+
   /** Validate a workspace capsule, then open its workspace (replacing the
-   *  current one by default). */
+   *  current one by default).  Pass the selected ``File`` (a ``Blob``): its
+   *  size is checked before its contents are read or transferred. */
   async openWorkspaceCapsule(
     filename: string,
-    bytes: Uint8Array,
+    data: Blob | Uint8Array,
     replace: boolean = true,
   ): Promise<WorkspaceLoadResult> {
+    const size = data instanceof Uint8Array ? data.byteLength : data.size;
+    const limit = await this.getCapsuleSizeLimit();
+    if (limit !== null && size > limit) {
+      // Round the size up and the limit down so they never look equal.
+      const mib = (bytes: number, round: (x: number) => number) =>
+        (round((bytes / 1024 ** 2) * 10) / 10).toFixed(1);
+      throw new Error(
+        t("Capsule too large: {size} MiB (limit: {limit} MiB)", {
+          size: mib(size, Math.ceil),
+          limit: mib(limit, Math.floor),
+        }),
+      );
+    }
+    const bytes =
+      data instanceof Uint8Array
+        ? data
+        : new Uint8Array(await data.arrayBuffer());
     return (await this.callPy("open_workspace_capsule", {
       filename,
       data: bytes,
