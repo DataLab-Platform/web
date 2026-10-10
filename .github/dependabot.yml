@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      # Listed first so their majors land in one PR (peer dependencies).
+      eslint:
+        patterns: ["eslint", "@eslint/*"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+      # Before `development` so Vitest majors bump vitest and @vitest/* together.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # Pinned with PYODIDE_VERSION (runtime.ts, workerBase.ts) and index.html.
+      - dependency-name: pyodide
+      # Vite 8 needs the Rolldown migration and @vitejs/plugin-react 6.
+      - dependency-name: vite
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitejs/plugin-react"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint caps its TypeScript peer range (<6.1.0 as of 8.71).
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

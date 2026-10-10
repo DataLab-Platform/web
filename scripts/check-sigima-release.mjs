@@ -1,24 +1,51 @@
-/** Ensure a DataLab-Web release uses an exact published Sigima version. */
+/** Ensure a DataLab-Web release uses published Sigima and guidata versions. */
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const DEFAULT_MANIFEST = resolve(ROOT, "sigima-dependency.json");
+
+const PACKAGES = {
+  sigima: {
+    label: "Sigima",
+    manifest: resolve(ROOT, "sigima-dependency.json"),
+    publishedRequirementRe: /^sigima==[0-9]+\.[0-9]+\.[0-9]+$/,
+    publishedRequirementRule: 'an exact stable pin such as "sigima==1.3.0"',
+    remedy: "Publish and qualify that exact Sigima version",
+  },
+  guidata: {
+    label: "guidata",
+    manifest: resolve(ROOT, "guidata-dependency.json"),
+    publishedRequirementRe: /^guidata(==|>=)[0-9]+\.[0-9]+\.[0-9]+$/,
+    publishedRequirementRule:
+      'an exact pin or a lower bound such as "guidata>=3.15.0"',
+    remedy:
+      "Publish and qualify a guidata version providing the required " +
+      "changes, make publishedRequirement require it",
+  },
+};
 
 const EXPECTED_KEYS = new Set(["publishedRequirement", "developmentRef"]);
-const PUBLISHED_REQUIREMENT_RE = /^sigima==[0-9]+\.[0-9]+\.[0-9]+$/;
 const DEVELOPMENT_REF_RE = /^[0-9a-f]{40}$/;
 
+function packageRules(packageName) {
+  const rules = PACKAGES[packageName];
+  if (!rules) throw new Error(`Unknown dependency package: ${packageName}`);
+  return rules;
+}
+
 /** Validate and normalize a parsed dependency manifest. */
-export function validateSigimaDependencyManifest(manifest) {
+export function validateDependencyManifest(manifest, packageName = "sigima") {
+  const rules = packageRules(packageName);
   if (
     manifest === null ||
     typeof manifest !== "object" ||
     Array.isArray(manifest)
   ) {
-    throw new Error("Sigima dependency manifest must be a JSON object.");
+    throw new Error(
+      `${rules.label} dependency manifest must be a JSON object.`,
+    );
   }
 
   const keys = Object.keys(manifest);
@@ -31,17 +58,17 @@ export function validateSigimaDependencyManifest(manifest) {
       details.push(`unexpected keys: ${unexpected.join(", ")}`);
     }
     throw new Error(
-      `Invalid Sigima dependency manifest: ${details.join("; ")}.`,
+      `Invalid ${rules.label} dependency manifest: ${details.join("; ")}.`,
     );
   }
 
   const { publishedRequirement, developmentRef } = manifest;
   if (
     typeof publishedRequirement !== "string" ||
-    !PUBLISHED_REQUIREMENT_RE.test(publishedRequirement)
+    !rules.publishedRequirementRe.test(publishedRequirement)
   ) {
     throw new Error(
-      'publishedRequirement must be an exact stable pin such as "sigima==1.3.0".',
+      `publishedRequirement must be ${rules.publishedRequirementRule}.`,
     );
   }
   if (
@@ -57,47 +84,57 @@ export function validateSigimaDependencyManifest(manifest) {
   return { publishedRequirement, developmentRef };
 }
 
-/** Load and validate the versioned dependency manifest. */
-export function loadSigimaDependencyManifest(path = DEFAULT_MANIFEST) {
+/** Load and validate a versioned dependency manifest. */
+export function loadDependencyManifest(
+  packageName = "sigima",
+  path = packageRules(packageName).manifest,
+) {
   let manifest;
   try {
     manifest = JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Unable to read ${path}: ${detail}`);
+    throw new Error(`Unable to read ${path}: ${detail}`, { cause: error });
   }
-  return validateSigimaDependencyManifest(manifest);
+  return validateDependencyManifest(manifest, packageName);
 }
 
 /** Throw when a development snapshot would leak into a release. */
-export function assertSigimaReleaseReady(manifest) {
-  const config = validateSigimaDependencyManifest(manifest);
+export function assertReleaseReady(manifest, packageName = "sigima") {
+  const rules = packageRules(packageName);
+  const config = validateDependencyManifest(manifest, packageName);
   if (config.developmentRef !== null) {
     throw new Error(
-      "Release blocked: a Sigima development snapshot is still active.\n" +
+      `Release blocked: a ${rules.label} development snapshot is still active.\n` +
         `Configured SHA: ${config.developmentRef}\n` +
         `Published target: ${config.publishedRequirement}\n` +
-        "Publish and qualify that exact Sigima version, then set " +
-        "developmentRef to null in sigima-dependency.json.",
+        `${rules.remedy}, then set developmentRef to null in ` +
+        `${packageName}-dependency.json.`,
     );
   }
   return config;
 }
 
-/** Check the repository manifest and return its release-safe configuration. */
-export function checkSigimaRelease(path = DEFAULT_MANIFEST) {
-  return assertSigimaReleaseReady(loadSigimaDependencyManifest(path));
+/** Check every repository manifest and return the release-safe configs. */
+export function checkReleaseDependencies() {
+  return Object.fromEntries(
+    Object.keys(PACKAGES).map((packageName) => [
+      packageName,
+      assertReleaseReady(loadDependencyManifest(packageName), packageName),
+    ]),
+  );
 }
 
 function main() {
   try {
-    const config = checkSigimaRelease();
-    console.log(
-      `Sigima release guard passed: ${config.publishedRequirement} (published).`,
-    );
+    const configs = checkReleaseDependencies();
+    const pins = Object.values(configs)
+      .map((config) => config.publishedRequirement)
+      .join(", ");
+    console.log(`Dependency release guard passed: ${pins} (published).`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[sigima-release] ${message}`);
+    console.error(`[dependency-release] ${message}`);
     process.exitCode = 1;
   }
 }

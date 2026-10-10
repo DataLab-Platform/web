@@ -46,8 +46,7 @@ async function waitForGraphHook(page: Page): Promise<void> {
       Boolean(
         (
           document.querySelector(".js-plotly-plot") as
-            | (Element & { __dlwMetricsHooked?: boolean })
-            | null
+            (Element & { __dlwMetricsHooked?: boolean }) | null
         )?.__dlwMetricsHooked,
       ),
     undefined,
@@ -112,8 +111,7 @@ async function waitForSignalRender(
         }
       ).__dlwPlotlyMetrics;
       const graph = document.querySelector(".js-plotly-plot") as
-        | (Element & { data?: Array<{ name?: string }> })
-        | null;
+        (Element & { data?: Array<{ name?: string }> }) | null;
       return Boolean(
         graph?.data?.some((trace) => trace.name === traceTitle) &&
         metrics?.plotRenders.some(

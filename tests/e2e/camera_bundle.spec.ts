@@ -135,7 +135,7 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
 
   expect(result.plugin).toMatchObject({
     plugin_id: CAMERA_PLUGIN_ID,
-    version: "0.1.0",
+    version: "0.2.0",
     source: "bundled-wheel",
     trust: "verified",
     enabled: true,
@@ -145,7 +145,7 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
     id: CAMERA_RECIPE_ID,
     version: "1.1.0",
   });
-  expect(result.example.recipe_id).toBe(CAMERA_RECIPE_ID);
+  expect(result.example.recipe_ids).toContain(CAMERA_RECIPE_ID);
   expect(result.opened.images).toBeGreaterThan(0);
   expect(result.opened.images).toBe(result.opened.selected_ids.length);
   expect(result.opened.groups).toBeGreaterThan(0);

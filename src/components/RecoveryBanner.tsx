@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, type ReactElement } from "react";
 import { t } from "../i18n/translate";
 
 /**
@@ -46,7 +46,7 @@ export function RecoveryBanner({
   macroCount,
   notebookCount,
   onDismiss,
-}: RecoveryBannerProps): JSX.Element {
+}: RecoveryBannerProps): ReactElement {
   const handleDismiss = useCallback(() => {
     onDismiss();
   }, [onDismiss]);

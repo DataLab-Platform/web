@@ -58,6 +58,8 @@ the sibling checkout, and its `PYTHONPATH` may prioritize sibling Python
 sources, but neither alters the versioned CI selection. Remove those local
 overrides when qualifying the exact manifest-selected dependency.
 
+The resolver applies the same rules to [guidata-dependency.json](../guidata-dependency.json), installing its `developmentRef` in CPython and exporting the matching browser wheel through `VITE_GUIDATA_INSTALL_SPEC`.
+
 When qualifying a published Sigima version for release, use a clean environment
 without `..\Sigima` in `PYTHONPATH` and without `VITE_SIGIMA_INSTALL_SPEC`.
 This ensures both pytest and Playwright exercise the exact PyPI version rather

@@ -4,7 +4,7 @@ import { disableQuickstartTemplate, waitForRuntimeReady } from "./fixtures";
 
 const CAMERA_LINK = new URLSearchParams({
   plugin: "org.datalab.camera-characterization",
-  pluginVersion: "0.1.0",
+  pluginVersion: "0.2.0",
   recipe: "org.datalab.camera-characterization:relative-dn-characterization",
   recipeVersion: "1.1.0",
   example: "quickstart",
@@ -20,7 +20,15 @@ test("Camera recipe reveals its primary signal output", async ({ page }) => {
   await waitForRuntimeReady(page);
 
   const applications = page.getByRole("dialog", { name: "Applications" });
-  await applications.getByRole("button", { name: "Start analysis…" }).click();
+  const card = applications.locator(
+    `[data-recipe-id="${CAMERA_LINK.get("recipe")}"]`,
+  );
+  await expect(card.locator("[data-readiness]")).toHaveAttribute(
+    "data-readiness",
+    "ready",
+    { timeout: 120_000 },
+  );
+  await card.getByRole("button", { name: "Run on selection…" }).click();
   const parameters = page.getByRole("dialog").filter({
     has: page.getByRole("heading", {
       name: "Relative Camera characterization",

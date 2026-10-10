@@ -134,10 +134,7 @@ export function compareVersions(a: string, b: string): -1 | 0 | 1 {
 
 /** Audit verdict for a single backport shim. */
 export type ShimAuditStatus =
-  | "ready-to-remove"
-  | "pending"
-  | "unknown"
-  | "skipped";
+  "ready-to-remove" | "pending" | "unknown" | "skipped";
 
 export interface ShimAuditResult {
   id: string;

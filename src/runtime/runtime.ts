@@ -28,6 +28,7 @@ import dlwTitleFormatSource from "./dlw_title_format.py?raw";
 import guidataJsonSchemaShim from "./_guidata_jsonschema_shim.py?raw";
 import {
   DATALAB_CAPSULE_INSTALL_SPEC,
+  GUIDATA_INSTALL_SPEC,
   SIGIMA_INSTALL_SPEC,
 } from "./dependencyConfig";
 // Resolve the Pyodide ``LANG`` from the active UI locale so that
@@ -112,8 +113,6 @@ export interface PyProxy {
 
 const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
-const GUIDATA_INSTALL_SPEC =
-  import.meta.env.VITE_GUIDATA_INSTALL_SPEC || "guidata>=3.15.0";
 
 export interface PythonDistributionInfo {
   name: string;
@@ -274,8 +273,7 @@ export interface FeatureDescriptor {
 
 /** Temporary, non-published result returned by ``preview_feature``. */
 export type ProcessingPreviewResult =
-  | { kind: "signal"; data: SignalData }
-  | { kind: "image"; data: ImageData };
+  { kind: "signal"; data: SignalData } | { kind: "image"; data: ImageData };
 
 /** One entry of the "Processing > Fitting > Interactive fitting" submenu. */
 export interface InteractiveFitInfo {
@@ -335,12 +333,7 @@ export interface PluginRecipeSummary {
   version: string;
   title: string;
   description: string;
-  inputs: Array<{
-    id: string;
-    object_type: PanelKind;
-    cardinality: "one" | "many";
-    required: boolean;
-  }>;
+  inputs: PluginRecipeSlot[];
   has_params: boolean;
 }
 
@@ -348,14 +341,57 @@ export interface PluginExampleSummary {
   id: string;
   title: string;
   description: string;
-  recipe_id: string | null;
+  /** Recipes the example is designed for; empty for a plain dataset. */
+  recipe_ids: string[];
   expected_checks: string[];
+}
+
+/** Selection a plugin tool needs (names follow menu select conditions). */
+export type PluginToolSelection =
+  "none" | "exactly_one" | "at_least_one" | "at_least_two";
+
+export interface PluginToolSummary {
+  id: string;
+  title: string;
+  description: string;
+  /** ``launcher``: plugin code; ``instrument``: window drawn by DataLab. */
+  kind: "launcher" | "instrument";
+  /** Panel of the objects the tool works on; ``null`` for both panels. */
+  object_type: PanelKind | null;
+  selection: PluginToolSelection;
+}
+
+/** What an instrument window shows when it opens. */
+export interface PluginInstrumentSession {
+  plugin_id: string;
+  tool_id: string;
+  title: string;
+  settings: SchemaWithValues;
+  live_interval_ms: number;
+}
+
+/** Live frame of an instrument: signals drawn together, or one image. */
+export type PluginInstrumentFrame = (
+  | { kind: "signals"; items: SignalData[] }
+  | { kind: "image"; items: ImageData[] }
+) & {
+  summary: string;
+  /** Fixed Y range of signals, or color range of the image. */
+  value_range: [number, number] | null;
+};
+
+export interface PluginInstrumentAcquisition {
+  panel: PanelKind;
+  group_id: string;
+  group_title: string;
+  object_ids: string[];
 }
 
 export interface PluginWheelInspection {
   filename: string;
   distribution: string;
   version: string;
+  summary: string;
   sha256: string;
   size_bytes: number;
   requires_python: string | null;
@@ -394,6 +430,7 @@ export interface PluginRecord {
   info: PluginInfoMeta | null;
   recipes: PluginRecipeSummary[];
   examples: PluginExampleSummary[];
+  tools: PluginToolSummary[];
   operations: {
     can_enable: boolean;
     can_disable: boolean;
@@ -404,9 +441,13 @@ export interface PluginRecord {
 
 export interface PluginRecipeSlot {
   id: string;
+  title: string;
+  description: string;
   object_type: "signal" | "image";
   cardinality: "one" | "many";
   required: boolean;
+  min_count: number;
+  metadata: Array<{ key: string; description: string; required: boolean }>;
 }
 
 export interface PluginRecipeCandidate {
@@ -414,7 +455,43 @@ export interface PluginRecipeCandidate {
   kind: "signal" | "image";
   title: string;
   compatible_slots: string[];
+  /** Required metadata keys the candidate lacks, per compatible slot. */
+  missing_metadata: Record<string, string[]>;
 }
+
+export type PluginRecipeIssueCode =
+  | "missing"
+  | "ambiguous"
+  | "too_few"
+  | "too_many"
+  | "wrong_type"
+  | "missing_metadata"
+  | "duplicate";
+
+export interface PluginRecipeInputIssue {
+  code: PluginRecipeIssueCode;
+  slot_id: string;
+  details: {
+    count?: number;
+    min_count?: number;
+    key?: string;
+    titles?: string[];
+  };
+}
+
+export type PluginRecipeReadinessStatus =
+  "no_input" | "needs_assignment" | "not_ready" | "warnings" | "ready";
+
+export interface PluginRecipeReadiness {
+  status: PluginRecipeReadinessStatus;
+  bindings: Record<string, string[]>;
+  issues: PluginRecipeInputIssue[];
+  diagnostics: PluginRecipeDiagnostic[];
+}
+
+/** Readiness of one recipe, or the error raised while assessing it. */
+export type PluginRecipeAssessment =
+  PluginRecipeReadiness | { status: "error"; error: string };
 
 export interface PluginRecipePreparation {
   plugin_id: string;
@@ -426,6 +503,7 @@ export interface PluginRecipePreparation {
   bindings: Record<string, string[]>;
   ambiguous_slots: string[];
   missing_slots: string[];
+  readiness: PluginRecipeReadiness;
   parameters: SchemaWithValues | null;
 }
 
@@ -462,13 +540,16 @@ export interface PluginRecipeCommit {
 export interface PluginExampleOpenResult extends WorkspaceLoadResult {
   plugin_id: string;
   example_id: string;
+  /** Recipe the example was opened for (requested, or its first one). */
   recipe_id: string | null;
+  recipe_ids: string[];
   filename: string | null;
   panel: "signal" | "image" | null;
   selected_ids: string[];
   current_id: string | null;
   dirty: boolean;
-  parameter_values: Record<string, unknown>;
+  /** Parameter values suited to the example, per recipe ID. */
+  parameter_values: Record<string, Record<string, unknown>>;
 }
 
 export interface PluginMenuAction {
@@ -1384,6 +1465,8 @@ export class DataLabRuntime {
       "run_signal_analysis",
       "run_image_analysis",
       "run_plugin_recipe",
+      "launch_plugin_tool",
+      "acquire_plugin_instrument",
       "open_signal_from_bytes",
       "open_image_from_bytes",
       "open_from_directory_chunk",
@@ -1623,11 +1706,20 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     open_workspace_from_bytes,
     ${JSON.stringify(import.meta.env.VITE_APP_VERSION)},
     reset_all,
+    signal_payload=_signal_data_payload,
+    image_payload=_image_data_payload,
   )
   from dlw_applications import (
+    acquire_plugin_instrument,
+    assess_plugin_recipes,
+    check_plugin_recipe_bindings,
     get_plugin_recipe_schema,
+    launch_plugin_tool,
     open_plugin_example,
+    open_plugin_instrument,
     prepare_plugin_recipe,
+    preview_plugin_instrument,
+    resolve_plugin_instrument_active,
     resolve_plugin_recipe_active,
     resolve_plugin_recipe_callbacks,
     resolve_plugin_recipe_choices,
@@ -1666,7 +1758,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    * Mirror the portable ``datalab.*`` shim into Pyodide's site-packages.
    *
    * Each entry in *sources* is keyed by the workspace-relative path
-   * (``./dlplugins/datalab/plugins.py``); we strip the leading
+   * (``./dlplugins/datalab/plugins/base.py``); we strip the leading
    * ``./dlplugins/`` and write to ``/home/pyodide/<rest>``.
    */
   private static installShim(
@@ -1727,8 +1819,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
 
   /** JS-side callback invoked for every async dialog request from Python. */
   private dialogHandler:
-    | ((kind: string, payload: unknown) => Promise<unknown>)
-    | null = null;
+    ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
 
   setDialogHandler(
     handler: ((kind: string, payload: unknown) => Promise<unknown>) | null,
@@ -1744,9 +1835,24 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   async resolveBridgeActive(
     values: Record<string, unknown>,
   ): Promise<Record<string, boolean>> {
-    return (await this.callPy("resolve_bridge_active", {
-      values,
-    })) as Record<string, boolean>;
+    // Not queued: the Python call that opened the dialog is suspended awaiting it.
+    return await this.invokePy<Record<string, boolean>>(
+      "resolve_bridge_active",
+      { values },
+    );
+  }
+
+  /** Run an item's ``display`` callback for the dataset shown by the dialog
+   *  bridge and return the refreshed values (``{}`` when none is open). */
+  async resolveBridgeCallbacks(
+    itemName: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    // Not queued, like resolveBridgeActive; it only computes on a dataset copy.
+    return await this.invokePy<Record<string, unknown>>(
+      "resolve_bridge_callbacks",
+      { item_name: itemName, values },
+    );
   }
 
   /**
@@ -2969,8 +3075,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  image's intrinsic ``data_min``/``data_max``). */
   async getLutRange(oid: string): Promise<[number, number] | null> {
     const result = (await this.callPy("get_lut_range", { oid })) as
-      | [number, number]
-      | null;
+      [number, number] | null;
     if (!result || result.length !== 2) return null;
     return [Number(result[0]), Number(result[1])];
   }
@@ -3038,9 +3143,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  round-trip through Qt DataLab's "Open HDF5 workspace" feature. */
   async saveWorkspaceHdf5(): Promise<Uint8Array> {
     const result = (await this.callPy("save_workspace_to_bytes")) as
-      | Uint8Array
-      | ArrayBuffer
-      | number[];
+      Uint8Array | ArrayBuffer | number[];
     if (result instanceof Uint8Array) return result;
     if (result instanceof ArrayBuffer) return new Uint8Array(result);
     return Uint8Array.from(result as number[]);
@@ -3076,9 +3179,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     name: string | null = null,
   ): Promise<Uint8Array> {
     const result = (await this.callPy("export_workspace_capsule", { name })) as
-      | Uint8Array
-      | ArrayBuffer
-      | number[];
+      Uint8Array | ArrayBuffer | number[];
     if (result instanceof Uint8Array) return result;
     if (result instanceof ArrayBuffer) return new Uint8Array(result);
     return Uint8Array.from(result as number[]);
@@ -3103,12 +3204,42 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     pluginId: string,
     recipeId: string,
     candidateIds: string[],
+    parameterValues: Record<string, unknown> = {},
   ): Promise<PluginRecipePreparation> {
     return (await this.callPy("prepare_plugin_recipe", {
       plugin_id: pluginId,
       recipe_id: recipeId,
       candidate_ids: candidateIds,
+      parameter_values: parameterValues,
     })) as PluginRecipePreparation;
+  }
+
+  /** Assess whether each recipe of a plugin can run on candidate objects. */
+  async assessPluginRecipes(
+    pluginId: string,
+    candidateIds: string[],
+    parameterValues: Record<string, Record<string, unknown>> = {},
+  ): Promise<Record<string, PluginRecipeAssessment>> {
+    return (await this.callPy("assess_plugin_recipes", {
+      plugin_id: pluginId,
+      candidate_ids: candidateIds,
+      parameter_values: parameterValues,
+    })) as Record<string, PluginRecipeAssessment>;
+  }
+
+  /** Assess bindings edited by the user, without running the recipe. */
+  async checkPluginRecipeBindings(
+    pluginId: string,
+    recipeId: string,
+    bindings: Record<string, string[]>,
+    parameterValues: Record<string, unknown> = {},
+  ): Promise<PluginRecipeReadiness> {
+    return (await this.callPy("check_plugin_recipe_bindings", {
+      plugin_id: pluginId,
+      recipe_id: recipeId,
+      bindings,
+      parameter_values: parameterValues,
+    })) as PluginRecipeReadiness;
   }
 
   /** Return the live guidata parameter schema for one plugin recipe. */
@@ -3180,17 +3311,111 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     })) as PluginRecipeCommit;
   }
 
-  /** Open one packaged HDF5 example from an active plugin. */
+  /** Open one packaged or generated example from an active plugin. */
   async openPluginExample(
     pluginId: string,
     exampleId: string,
     replace: boolean = true,
+    recipeId: string | null = null,
   ): Promise<PluginExampleOpenResult> {
     return (await this.callPy("open_plugin_example", {
       plugin_id: pluginId,
       example_id: exampleId,
       replace,
+      recipe_id: recipeId,
     })) as PluginExampleOpenResult;
+  }
+
+  /** Run the launcher of a plugin tool on the selected objects.
+   *
+   *  Returns the IDs of the objects the tool added, per panel. */
+  async launchPluginTool(
+    pluginId: string,
+    toolId: string,
+    selectedIds: string[],
+  ): Promise<{ signal: string[]; image: string[] }> {
+    return (await this.callPy("launch_plugin_tool", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      selected_ids: selectedIds,
+    })) as { signal: string[]; image: string[] };
+  }
+
+  /** Return the title, settings and live period of a plugin instrument. */
+  async openPluginInstrument(
+    pluginId: string,
+    toolId: string,
+  ): Promise<PluginInstrumentSession> {
+    return (await this.callPy("open_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+    })) as PluginInstrumentSession;
+  }
+
+  /** Return a live frame of a plugin instrument for edited settings. */
+  async previewPluginInstrument(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<PluginInstrumentFrame> {
+    const raw = (await this.callPy("preview_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as {
+      kind: "signals" | "image";
+      items: Array<Record<string, unknown>>;
+      summary: string;
+      value_range: [number, number] | null;
+    };
+    const common = { summary: raw.summary, value_range: raw.value_range };
+    if (raw.kind === "image") {
+      return {
+        ...common,
+        kind: "image",
+        items: raw.items.map(
+          (item) =>
+            decodeImagePayload(
+              item as unknown as ImageData & { encoding?: string },
+            ) as ImageData,
+        ),
+      };
+    }
+    return {
+      ...common,
+      kind: "signals",
+      items: raw.items.map((item) =>
+        decodeSignalPayload(
+          item as unknown as SignalData & { encoding?: string },
+        ),
+      ),
+    };
+  }
+
+  /** Add an acquisition of a plugin instrument to the workspace. */
+  async acquirePluginInstrument(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<PluginInstrumentAcquisition> {
+    return (await this.callPy("acquire_plugin_instrument", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as PluginInstrumentAcquisition;
+  }
+
+  /** Resolve which instrument settings are active for edited values. */
+  async resolvePluginInstrumentActive(
+    pluginId: string,
+    toolId: string,
+    values: Record<string, unknown>,
+  ): Promise<Record<string, boolean>> {
+    return (await this.callPy("resolve_plugin_instrument_active", {
+      plugin_id: pluginId,
+      tool_id: toolId,
+      values,
+    })) as Record<string, boolean>;
   }
 
   // ------------------------------------------------------------------

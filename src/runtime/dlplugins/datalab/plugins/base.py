@@ -1,13 +1,13 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause License
 # See LICENSE file for details
 """
-Portable copy of :mod:`datalab.plugins` for DataLab-Web.
+Portable copy of :mod:`datalab.plugins.base` for DataLab-Web.
 
 This is a Qt-free re-implementation of the Qt plugin core. It keeps the
 public surface (:class:`PluginInfo`, :class:`PluginBase`,
 :class:`PluginRegistry`, :class:`FailedPluginInfo`,
 :func:`discover_plugins`) bit-for-bit compatible with
-``c:/Dev/DataLab/datalab/plugins.py`` so that an unmodified Qt plugin
+``c:/Dev/DataLab/datalab/plugins/base.py`` so that an unmodified Qt plugin
 that imports ``from datalab.plugins import PluginBase, PluginInfo`` and
 that does not pull in :mod:`qtpy` itself loads as-is in the browser.
 
@@ -37,8 +37,8 @@ import os
 import os.path as osp
 import sys
 import traceback
-from collections.abc import Collection, Mapping
-from typing import TYPE_CHECKING, Any
+from collections.abc import Collection, Sequence
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 # Re-export Sigima I/O bases so plugins can subclass them without ever
@@ -52,11 +52,13 @@ from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 from datalab.config import MOD_NAME, Conf, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
-from datalab.plugin_examples import PluginExample, PluginExampleData
-from datalab.recipes import RecipeDescriptor
+from datalab.plugins.examples import PluginExample, PluginExampleData
+from datalab.plugins.instruments import PluginInstrument
+from datalab.plugins.recipes import RecipeDescriptor
+from datalab.plugins.tools import PluginTool, ToolSelection, tool_accepts_selection
 
 if TYPE_CHECKING:
-    from sigima.objects import NewImageParam, NewSignalParam
+    from sigima.objects import ImageObj, NewImageParam, NewSignalParam, SignalObj
 
     from datalab.gui import main
     from datalab.gui.panel.image import ImagePanel
@@ -249,6 +251,23 @@ class PluginInfo:
                 raise ValueError("Plugin documentation URL must use HTTP or HTTPS")
 
 
+def format_tool_requirement(tool: PluginTool) -> str:
+    """Return the message telling which objects to select to open a tool."""
+    object_type = None if tool.object_type is None else tool.object_type.value
+    messages = {
+        (ToolSelection.EXACTLY_ONE, "signal"): _("Select one signal"),
+        (ToolSelection.EXACTLY_ONE, "image"): _("Select one image"),
+        (ToolSelection.EXACTLY_ONE, None): _("Select one object"),
+        (ToolSelection.AT_LEAST_ONE, "signal"): _("Select at least one signal"),
+        (ToolSelection.AT_LEAST_ONE, "image"): _("Select at least one image"),
+        (ToolSelection.AT_LEAST_ONE, None): _("Select at least one object"),
+        (ToolSelection.AT_LEAST_TWO, "signal"): _("Select at least two signals"),
+        (ToolSelection.AT_LEAST_TWO, "image"): _("Select at least two images"),
+        (ToolSelection.AT_LEAST_TWO, None): _("Select at least two objects"),
+    }
+    return messages.get((tool.selection, object_type), "")
+
+
 class PluginBaseMeta(PluginRegistry, abc.ABCMeta):
     """Mixed metaclass to avoid metaclass conflicts."""
 
@@ -259,11 +278,15 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     PLUGIN_INFO: PluginInfo = None
     RECIPES: tuple[RecipeDescriptor, ...] = ()
     EXAMPLES: tuple[PluginExample, ...] = ()
+    TOOLS: tuple[PluginTool, ...] = ()
 
     def __init__(self):
         self.main: main.DLMainWindow = None
         self.proxy: LocalProxy = None
         self._is_registered = False
+        self._instruments: dict[str, PluginInstrument] = {}
+        #: Objects selected when the running tool was launched
+        self.selected_objects: tuple[SignalObj | ImageObj, ...] = ()
         self.info = self.PLUGIN_INFO
         if self.info is None:
             raise ValueError(f"Plugin info not set for {self.__class__.__name__}")
@@ -309,6 +332,14 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         return recipes
 
     @classmethod
+    def get_recipe(cls, recipe_id: str) -> RecipeDescriptor:
+        """Return one recipe descriptor by its namespaced ID."""
+        for recipe in cls.get_recipes():
+            if recipe.recipe_id == recipe_id:
+                return recipe
+        raise KeyError(f"Plugin recipe {recipe_id!r} not found")
+
+    @classmethod
     def get_examples(cls) -> tuple[PluginExample, ...]:
         """Return validated packaged examples exposed by this plugin."""
         examples = tuple(cls.EXAMPLES)
@@ -319,11 +350,12 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         for example in examples:
             if example.id in example_ids:
                 raise ValueError(f"Duplicate plugin example ID: {example.id!r}")
-            if example.recipe_id is not None and example.recipe_id not in recipe_ids:
-                raise ValueError(
-                    f"Plugin example {example.id!r} references unknown recipe "
-                    f"{example.recipe_id!r}"
-                )
+            for recipe_id in example.recipe_ids:
+                if recipe_id not in recipe_ids:
+                    raise ValueError(
+                        f"Plugin example {example.id!r} references unknown recipe "
+                        f"{recipe_id!r}"
+                    )
             example_ids.add(example.id)
         return examples
 
@@ -341,15 +373,90 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         cls.get_example(example_id)
         return None
 
+    # -- Tools ---------------------------------------------------------
+
     @classmethod
-    def suggest_recipe_bindings(
-        cls,
-        recipe: RecipeDescriptor,
-        candidates: Collection[Any],
-    ) -> Mapping[str, Collection[Any]]:
-        """Suggest scientific objects for recipe slots, when unambiguous."""
-        del recipe, candidates
-        return {}
+    def get_tools(cls) -> tuple[PluginTool, ...]:
+        """Return validated tools listed in the Applications catalog."""
+        tools = tuple(cls.TOOLS)
+        if not tools:
+            return ()
+        info = cls.PLUGIN_INFO
+        if PluginCapability.APPLICATION not in info.capabilities:
+            raise ValueError("Plugin tools require the APPLICATION capability")
+        if not all(isinstance(tool, PluginTool) for tool in tools):
+            raise TypeError("Plugin tools must be PluginTool values")
+        tool_ids: set[str] = set()
+        for tool in tools:
+            if tool.id in tool_ids:
+                raise ValueError(f"Duplicate plugin tool ID: {tool.id!r}")
+            method_name = tool.launcher or tool.instrument
+            if not callable(getattr(cls, method_name, None)):
+                kind = "launcher" if tool.launcher else "instrument"
+                raise ValueError(
+                    f"Plugin tool {kind} method {method_name!r} is not callable"
+                )
+            tool_ids.add(tool.id)
+        return tools
+
+    @classmethod
+    def get_tool(cls, tool_id: str) -> PluginTool:
+        """Return one tool by its plugin-local ID."""
+        for tool in cls.get_tools():
+            if tool.id == tool_id:
+                return tool
+        raise KeyError(f"Plugin tool {tool_id!r} not found")
+
+    def get_selected_objects(self) -> list[SignalObj | ImageObj]:
+        """Return the objects selected when the running tool was launched."""
+        return list(self.selected_objects)
+
+    def assess_tool(
+        self,
+        tool_id: str,
+        objects: Sequence[SignalObj | ImageObj] | None = None,
+    ) -> str | None:
+        """Return why a tool cannot be opened on objects (default: selection)."""
+        tool = self.get_tool(tool_id)
+        if tool.selection is ToolSelection.NONE:
+            return None
+        if objects is None:
+            objects = self.get_selected_objects()
+        if tool_accepts_selection(tool, objects):
+            return None
+        return format_tool_requirement(tool)
+
+    def launch_tool(self, tool_id: str) -> object:
+        """Call the launcher of a plugin tool; the host awaits a coroutine.
+
+        Raises:
+            ValueError: if the selection does not allow opening the tool, or
+             if the tool is an instrument (opened by the host)
+        """
+        if self.main is None:
+            raise RuntimeError("Plugin must be registered before launching a tool")
+        tool = self.get_tool(tool_id)
+        issue = self.assess_tool(tool_id)
+        if issue is not None:
+            raise ValueError(issue)
+        if tool.launcher is None:
+            raise ValueError(f"Plugin tool {tool_id!r} is an instrument")
+        return getattr(self, tool.launcher)()
+
+    def get_instrument(self, tool_id: str) -> PluginInstrument:
+        """Return the instrument of a tool, created once per registration."""
+        tool = self.get_tool(tool_id)
+        if tool.instrument is None:
+            raise ValueError(f"Plugin tool {tool_id!r} has no instrument")
+        if tool_id not in self._instruments:
+            instrument = getattr(self, tool.instrument)()
+            if not isinstance(instrument, PluginInstrument):
+                raise TypeError(
+                    f"Plugin tool instrument method {tool.instrument!r} must "
+                    "return a PluginInstrument"
+                )
+            self._instruments[tool_id] = instrument
+        return self._instruments[tool_id]
 
     # -- Convenience accessors -----------------------------------------
 
@@ -541,6 +648,7 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         registries.clear_origin(self.plugin_id)
         self.main = None
         self.proxy = None
+        self._instruments.clear()
 
     def register_hooks(self) -> None:
         """Override to register additional hooks at plugin load time."""

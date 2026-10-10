@@ -10,7 +10,7 @@ shim has been mirrored to ``/home/pyodide``. Owns:
 * the directory discovery loop (``discover_plugins_in_dir(path)``);
 * the hot-reload sequence (``reload_plugins()``).
 
-The Qt counterpart lives in ``datalab/plugins.py``; here we only need
+The Qt counterpart lives in ``datalab/plugins/base.py``; here we only need
 the pieces that DataLab-Web actually uses, in a single self-contained
 module so the bootstrap stays focused on the object model.
 """
@@ -34,7 +34,7 @@ from typing import Any, Callable
 # pattern that lets ``install_main`` swap the live bridge after HMR.
 # pylint: disable=import-error,global-statement,broad-exception-caught
 from datalab import registries  # noqa: F401  # used elsewhere in module
-from datalab.plugins import PluginBase, PluginRegistry  # noqa: F401
+from datalab.plugins import PluginBase, PluginCapability, PluginRegistry  # noqa: F401
 from dlw_wheels import inspect_wheel
 
 PLUGINS_ROOT = "/home/pyodide/dlw_plugins"
@@ -173,6 +173,7 @@ def _activate_plugin_class(record: PluginRecord, plugin_cls: type[PluginBase]) -
         raise ValueError(f"Plugin ID {plugin_id!r} already registered")
     plugin_cls.get_recipes()
     plugin_cls.get_examples()
+    plugin_cls.get_tools()
     instance = plugin_cls()
     try:
         if _MAIN is not None:
@@ -630,6 +631,70 @@ def get_plugin_class(
     return record.classes[0]
 
 
+def get_plugin_instance(plugin_id: str) -> PluginBase:
+    """Return the registered instance of an enabled plugin.
+
+    Raises:
+        KeyError: If no managed plugin has this identifier.
+        RuntimeError: If the plugin is disabled or failed to load.
+    """
+    record = _RECORDS.get(plugin_id)
+    if record is None or record.plugin_id != plugin_id:
+        raise KeyError(f"Unknown plugin {plugin_id!r}")
+    if not record.enabled or record.instance is None:
+        raise RuntimeError(f"Plugin {plugin_id!r} is disabled")
+    return record.instance
+
+
+def declared_metadata_keys(object_type: str) -> list[tuple[str, str]]:
+    """Return the metadata keys expected by the methods of active applications.
+
+    Args:
+        object_type: type of the objects carrying the metadata ("signal" or
+         "image")
+
+    Returns:
+        ``(key, description)`` pairs, in declaration order, without duplicates
+    """
+    keys: dict[str, str] = {}
+    for record in _RECORDS.values():
+        instance = record.instance
+        if not record.enabled or instance is None or not record.classes:
+            continue
+        if instance.info is None or (
+            PluginCapability.APPLICATION not in instance.info.capabilities
+        ):
+            continue
+        for recipe in record.classes[0].get_recipes():
+            for slot in recipe.inputs:
+                if slot.object_type.value != object_type:
+                    continue
+                for requirement in slot.metadata:
+                    keys.setdefault(requirement.key, requirement.description)
+    return list(keys.items())
+
+
+def slot_payload(slot: Any) -> dict[str, Any]:
+    """Return the JSON description of one recipe input slot."""
+    return {
+        "id": slot.id,
+        "title": slot.display_title,
+        "description": slot.description,
+        "object_type": slot.object_type.value,
+        "cardinality": slot.cardinality.value,
+        "required": slot.required,
+        "min_count": slot.min_count,
+        "metadata": [
+            {
+                "key": item.key,
+                "description": item.description,
+                "required": item.required,
+            }
+            for item in slot.metadata
+        ],
+    }
+
+
 def _record_payload(record: PluginRecord) -> dict[str, Any]:
     info = None
     if record.instance is not None and record.instance.info is not None:
@@ -662,6 +727,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         plugin_cls = record.classes[0]
     recipes = []
     examples = []
+    tools = []
     if plugin_cls is not None:
         recipes = [
             {
@@ -669,15 +735,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
                 "version": recipe.version,
                 "title": recipe.title,
                 "description": recipe.description,
-                "inputs": [
-                    {
-                        "id": slot.id,
-                        "object_type": slot.object_type.value,
-                        "cardinality": slot.cardinality.value,
-                        "required": slot.required,
-                    }
-                    for slot in recipe.inputs
-                ],
+                "inputs": [slot_payload(slot) for slot in recipe.inputs],
                 "has_params": recipe.parameter_class is not None,
             }
             for recipe in plugin_cls.get_recipes()
@@ -687,10 +745,23 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
                 "id": example.id,
                 "title": example.title,
                 "description": example.description,
-                "recipe_id": example.recipe_id,
+                "recipe_ids": list(example.recipe_ids),
                 "expected_checks": list(example.expected_checks),
             }
             for example in plugin_cls.get_examples()
+        ]
+        tools = [
+            {
+                "id": tool.id,
+                "title": tool.title,
+                "description": tool.description,
+                "kind": "launcher" if tool.launcher is not None else "instrument",
+                "object_type": (
+                    None if tool.object_type is None else tool.object_type.value
+                ),
+                "selection": tool.selection.value,
+            }
+            for tool in plugin_cls.get_tools()
         ]
     return {
         "name": record.name,
@@ -712,6 +783,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         "info": info,
         "recipes": recipes,
         "examples": examples,
+        "tools": tools,
         "operations": {
             "can_enable": bool(record.classes),
             "can_disable": record.instance is not None,
@@ -725,8 +797,10 @@ __all__ = [
     "PLUGINS_ROOT",
     "PluginRecord",
     "add_change_listener",
+    "declared_metadata_keys",
     "discover_plugins_in_dir",
     "get_plugin_class",
+    "get_plugin_instance",
     "inspect_plugin_wheel",
     "install_main",
     "list_plugins",

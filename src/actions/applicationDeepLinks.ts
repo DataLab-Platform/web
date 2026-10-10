@@ -68,14 +68,15 @@ export async function openBundledApplicationDeepLink(
   if (!example) {
     return mismatch("example", request.exampleId, record.examples[0]?.id ?? "");
   }
-  if (example.recipe_id !== recipe.id) {
-    return mismatch("recipe", request.recipeId, example.recipe_id ?? "");
+  if (!example.recipe_ids.includes(recipe.id)) {
+    return mismatch("recipe", request.recipeId, example.recipe_ids[0] ?? "");
   }
 
   const opened = await runtime.openPluginExample(
     request.pluginId,
     request.exampleId,
     true,
+    recipe.id,
   );
   return {
     kind: "opened",

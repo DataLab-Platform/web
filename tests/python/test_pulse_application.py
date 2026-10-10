@@ -11,7 +11,7 @@ from pathlib import Path
 import dlw_applications
 import dlw_plugins
 import pytest
-from datalab.recipes import RECIPE_RUN_RECORD_OPTION
+from datalab.plugins.recipes import RECIPE_RUN_RECORD_OPTION
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PULSE_WHEEL = (
@@ -19,7 +19,7 @@ PULSE_WHEEL = (
     / "src"
     / "runtime"
     / "builtin_wheels"
-    / "datalab_pulse_characterization-0.1.0-py3-none-any.whl"
+    / "datalab_pulse_characterization-0.2.0-py3-none-any.whl"
 )
 PLUGIN_ID = "org.datalab.pulse-characterization"
 RECIPE_ID = f"{PLUGIN_ID}:single-channel-campaign"
@@ -93,12 +93,30 @@ def test_pulse_registry_contract_and_generated_campaign(pulse_application) -> No
 
     assert record["source"] == "bundled-wheel"
     assert record["trust"] == "verified"
-    assert record["version"] == "0.1.0"
+    assert record["version"] == "0.2.0"
     assert record["info"]["capabilities"] == ["application", "processing"]
+    assert [recipe["id"].split(":")[1] for recipe in record["recipes"]] == [
+        "single-channel-campaign",
+        "shot-stability",
+        "step-response",
+        "two-channel-delay",
+        "pulse-height-spectrum",
+    ]
+    assert [example["id"] for example in record["examples"]] == [
+        "demo",
+        "stability-demo",
+        "step-response-demo",
+        "two-channel-demo",
+        "spectrum-demo",
+    ]
     assert record["recipes"][0]["id"] == RECIPE_ID
     assert record["recipes"][0]["version"] == "1.1.0"
     assert record["examples"][0]["id"] == "demo"
-    assert record["examples"][0]["recipe_id"] == RECIPE_ID
+    assert record["examples"][0]["recipe_ids"] == [RECIPE_ID]
+    assert record["examples"][1]["recipe_ids"] == [
+        f"{PLUGIN_ID}:shot-stability",
+        RECIPE_ID,
+    ]
 
     opened, prepared = _open_and_prepare(bootstrap)
 
@@ -112,7 +130,7 @@ def test_pulse_registry_contract_and_generated_campaign(pulse_application) -> No
     assert prepared["ambiguous_slots"] == []
     assert prepared["missing_slots"] == []
     assert prepared["parameters"] is not None
-    assert opened["parameter_values"]
+    assert opened["parameter_values"][RECIPE_ID]
 
 
 def test_pulse_recipe_commits_outputs_results_and_provenance(
@@ -126,7 +144,7 @@ def test_pulse_recipe_commits_outputs_results_and_provenance(
         PLUGIN_ID,
         RECIPE_ID,
         prepared["bindings"],
-        opened["parameter_values"],
+        opened["parameter_values"][RECIPE_ID],
     )
 
     assert len(bootstrap.list_signals()) == 503
@@ -198,6 +216,93 @@ def test_pulse_generated_example_rolls_back_partial_commit(
     assert all(group["name"] != "Synthetic pulse campaign" for group in tree["groups"])
 
 
+@pytest.mark.parametrize(
+    ("example_id", "local_recipe_id", "signal_count", "slots", "anchor", "tables"),
+    [
+        (
+            "stability-demo",
+            "shot-stability",
+            600,
+            {"signals"},
+            "arrival_time_vs_shot",
+            ["Pulse stability metrics"],
+        ),
+        (
+            "stability-demo",
+            "single-channel-campaign",
+            600,
+            {"signals"},
+            "amplitude_vs_shot",
+            ["Pulse campaign shot metrics"],
+        ),
+        (
+            "step-response-demo",
+            "step-response",
+            64,
+            {"signals"},
+            "mean_step",
+            ["Step-response metrics"],
+        ),
+        (
+            "two-channel-demo",
+            "two-channel-delay",
+            597,
+            {"reference", "measured"},
+            "delay_vs_shot",
+            ["Two-channel delay summary", "Two-channel pair metrics"],
+        ),
+        (
+            "spectrum-demo",
+            "pulse-height-spectrum",
+            2_500,
+            {"signals"},
+            "raw_spectrum",
+            ["Pulse-height spectrum summary", "Calibration photopeaks"],
+        ),
+    ],
+)
+def test_pulse_generated_examples_bind_and_run(
+    pulse_application,
+    example_id: str,
+    local_recipe_id: str,
+    signal_count: int,
+    slots: set[str],
+    anchor: str,
+    tables: list[str],
+) -> None:
+    """Each generated example binds unambiguously and runs each of its recipes."""
+    bootstrap = pulse_application
+    recipe_id = f"{PLUGIN_ID}:{local_recipe_id}"
+    opened = dlw_applications.open_plugin_example(
+        PLUGIN_ID, example_id, recipe_id=recipe_id
+    )
+    prepared = dlw_applications.prepare_plugin_recipe(
+        PLUGIN_ID,
+        recipe_id,
+        opened["selected_ids"],
+        opened["parameter_values"].get(recipe_id),
+    )
+
+    assert opened["recipe_id"] == recipe_id
+    assert len(opened["selected_ids"]) == signal_count
+    assert prepared["readiness"]["status"] == "ready"
+    assert set(prepared["bindings"]) == slots
+
+    committed = dlw_applications.run_plugin_recipe(
+        PLUGIN_ID,
+        recipe_id,
+        prepared["bindings"],
+        {
+            **prepared["parameters"]["values"],
+            **opened["parameter_values"].get(recipe_id, {}),
+        },
+    )
+
+    outputs = {output["output_id"]: output for output in committed["objects"]}
+    results = bootstrap.list_signal_results(outputs[anchor]["id"])
+    assert [result["title"] for result in results] == tables
+
+
 def test_pulse_recipe_rolls_back_partial_output_commit(
     pulse_application, monkeypatch
 ) -> None:
@@ -225,7 +330,47 @@ def test_pulse_recipe_rolls_back_partial_output_commit(
             PLUGIN_ID,
             RECIPE_ID,
             prepared["bindings"],
-            opened["parameter_values"],
+            opened["parameter_values"][RECIPE_ID],
         )
 
     assert bootstrap._MODEL.panel_tree("signal") == before
+
+
+def test_oscilloscope_simulator_acquires_pairs_for_the_delay_method(
+    pulse_application,
+) -> None:
+    """The oscilloscope tool shows both channels and acquires paired shots."""
+    bootstrap = pulse_application
+    dlw_applications.install_host(
+        bootstrap._MODEL,
+        bootstrap._object_uuid,
+        bootstrap.open_workspace_from_bytes,
+        "0.9.0",
+        bootstrap.reset_all,
+        signal_payload=bootstrap._signal_data_payload,
+        image_payload=bootstrap._image_data_payload,
+    )
+    record = next(
+        item for item in dlw_plugins.list_plugins() if item["plugin_id"] == PLUGIN_ID
+    )
+    (tool,) = record["tools"]
+    assert tool["id"] == "oscilloscope-simulator"
+    assert tool["kind"] == "instrument"
+    assert tool["object_type"] == "signal"
+
+    values = {"source": "pulse-pair", "trigger_count": 20}
+    frame = dlw_applications.preview_plugin_instrument(
+        PLUGIN_ID, "oscilloscope-simulator", values
+    )
+    assert frame["kind"] == "signals"
+    assert [item["title"] for item in frame["items"]] == ["CH1", "CH2"]
+
+    acquired = dlw_applications.acquire_plugin_instrument(
+        PLUGIN_ID, "oscilloscope-simulator", values
+    )
+    assert acquired["group_title"] == "Oscilloscope - Pulse pair - acquisition 001"
+    assert len(acquired["object_ids"]) == 40
+    assessments = dlw_applications.assess_plugin_recipes(
+        PLUGIN_ID, acquired["object_ids"]
+    )
+    assert assessments[f"{PLUGIN_ID}:two-channel-delay"]["status"] == "ready"

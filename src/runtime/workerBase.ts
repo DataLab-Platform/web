@@ -13,12 +13,10 @@
  * Vite can resolve ``new Worker(new URL("./xxxWorker.ts", import.meta.url))``.
  */
 
-import { SIGIMA_INSTALL_SPEC } from "./dependencyConfig";
+import { GUIDATA_INSTALL_SPEC, SIGIMA_INSTALL_SPEC } from "./dependencyConfig";
 
 export const PYODIDE_VERSION = "v0.26.4";
 export const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
-const GUIDATA_INSTALL_SPEC =
-  import.meta.env.VITE_GUIDATA_INSTALL_SPEC || "guidata>=3.15.0";
 
 /** Minimal slice of the Pyodide API surface used by the workers. */
 export interface PyodideAPI {

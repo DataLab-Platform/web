@@ -237,9 +237,7 @@ describe("DataLabWebClient", () => {
   async function driveReady(
     versionResult: string,
     onProtocolRequest: () =>
-      | { result: string }
-      | { error: { code: string; message: string } }
-      | null,
+      { result: string } | { error: { code: string; message: string } } | null,
   ): Promise<void> {
     await pump();
     // First request is always ``get_version``.

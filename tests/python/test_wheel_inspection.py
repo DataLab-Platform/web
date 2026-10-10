@@ -3,12 +3,13 @@ from __future__ import annotations
 import io
 import sys
 import zipfile
+from pathlib import Path
 
 import pytest
 
 from dlw_wheels import WheelInspectionError, inspect_wheel
 
-
+ROOT = Path(__file__).resolve().parents[2]
 FILENAME = "example_datalab_plugin-1.2.0-py3-none-any.whl"
 DIST_INFO = "example_datalab_plugin-1.2.0.dist-info"
 
@@ -116,8 +117,28 @@ def test_inspection_rejects_unsafe_payloads(
         inspect(make_wheel(top_level=top_level, extra_files=extra_files))
 
 
+def test_inspection_rejects_wheel_built_for_another_python() -> None:
+    """Pyodide's Python must be able to install the wheel's interpreter tag."""
+    filename = FILENAME.replace("py3-none-any", "cp313-none-any")
+    data = make_wheel()
+
+    with pytest.raises(WheelInspectionError, match="built for cp313"):
+        inspect_wheel(
+            data,
+            filename=filename,
+            available_distributions={"sigima": "1.2.0"},
+            python_version="3.12",
+        )
+    assert inspect_wheel(
+        data,
+        filename=filename,
+        available_distributions={"sigima": "1.2.0"},
+        python_version="3.13",
+    )["tags"] == ["cp313-none-any"]
+
+
 def test_inspection_rejects_missing_host_dependency() -> None:
-    with pytest.raises(WheelInspectionError, match="not provided"):
+    with pytest.raises(WheelInspectionError, match="not provided by DataLab-Web"):
         inspect_wheel(
             make_wheel(requires_dist=("unknown-science-package>=1",)),
             filename=FILENAME,
@@ -152,10 +173,10 @@ def test_inspection_rejects_duplicate_dist_info_directories() -> None:
 def test_inspection_rejects_oversized_wheel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import dlw_wheels
+    from datalab.plugins import wheels
 
     data = make_wheel()
-    monkeypatch.setattr(dlw_wheels, "MAX_WHEEL_BYTES", len(data) - 1)
+    monkeypatch.setattr(wheels, "MAX_WHEEL_BYTES", len(data) - 1)
 
     with pytest.raises(WheelInspectionError, match="size limit"):
         inspect(data)
@@ -205,3 +226,18 @@ def test_inspection_treats_invalid_host_version_as_unavailable() -> None:
             available_distributions={"sigima": "not-a-version"},
             python_version="3.12",
         )
+
+
+def test_shared_rules_are_a_verbatim_copy_of_datalab_desktop() -> None:
+    """Desktop, Web and the plugin catalog must judge a wheel the same way."""
+    upstream = ROOT.parent / "DataLab" / "datalab" / "plugins" / "wheels.py"
+    if not upstream.is_file():
+        pytest.skip("no sibling DataLab checkout")
+    copy = ROOT / "src" / "runtime" / "dlplugins" / "datalab" / "plugins" / "wheels.py"
+
+    def read(path: Path) -> str:
+        return path.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+    assert read(copy) == read(upstream), (
+        f"Copy {upstream} to {copy} (or update DataLab first)"
+    )
