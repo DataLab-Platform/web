@@ -10,7 +10,8 @@
  * are fingerprinted, so a disk run must record no capture failure.
  *
  * The suite skips itself when the runtime reports provenance as unavailable
- * (no DataLab-Capsule install spec configured for the build).
+ * (no DataLab-Capsule install spec configured for the build), unless
+ * ``DLW_REQUIRE_PROVENANCE=1`` makes it fail instead (CI).
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -19,6 +20,15 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type Browser, type Page } from "@playwright/test";
 
 import { waitForRuntimeReady } from "./fixtures";
+
+/** Skip without DataLab-Capsule, or fail when CI requires provenance. */
+function requireProvenance(available: boolean): void {
+  if (process.env.DLW_REQUIRE_PROVENANCE === "1") {
+    expect(available, "DataLab-Capsule must be installed").toBe(true);
+  } else {
+    test.skip(!available, "DataLab-Capsule is not installed");
+  }
+}
 
 interface ScenarioResult {
   available: boolean;
@@ -357,7 +367,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
     for (const storageMode of ["ram", "disk"] as const) {
       test(`records, re-applies and verifies (${storageMode})`, async () => {
         const result = await runScenario(page, storageMode);
-        test.skip(!result.available, "DataLab-Capsule is not installed");
+        requireProvenance(result.available);
         expect(result.resultY).toEqual([-0.5, 0, 0.25, 1]);
         expect(result.reappliedY[0]).toBe(0);
         expect(result.reappliedY[3]).toBe(1);
@@ -380,7 +390,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
 
       test(`saves, reopens elsewhere and replays a chain (${storageMode})`, async () => {
         const saved = await saveChain(page, storageMode);
-        test.skip(!saved.available, "DataLab-Capsule is not installed");
+        requireProvenance(saved.available);
         if (
           process.env.DLW_WRITE_PROVENANCE_FIXTURE &&
           runtimeMode === "main" &&
@@ -408,7 +418,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
           readFileSync(path.join(FIXTURES, "desktop_chain.h5")),
         );
         const result = await reopenChain(reader, storageMode, bytes);
-        test.skip(!result.available, "DataLab-Capsule is not installed");
+        requireProvenance(result.available);
         expectChain(result, "desktop");
         expect(result.environmentMatch.slice(1)).toEqual([
           "different",

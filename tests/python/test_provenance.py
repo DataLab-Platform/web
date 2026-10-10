@@ -4,10 +4,15 @@
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pytest
 
-pytest.importorskip("datalab_capsule")
+if os.environ.get("DLW_REQUIRE_PROVENANCE") == "1":
+    import datalab_capsule  # noqa: F401  # CI must not skip these tests
+else:
+    pytest.importorskip("datalab_capsule")
 
 X = np.array([0.0, 1.0, 2.0, 3.0])
 Y = np.array([-2.0, 0.0, 1.0, 4.0])
@@ -44,6 +49,16 @@ def input_state(bs, activity) -> dict:
 def output_state(bs, activity) -> dict:
     """Return the result state of an activity."""
     return state(bs, activity["outputs"][0]["state_id"])
+
+
+def test_sigima_declares_the_operation_contracts():
+    """Recording and replay need the operation contracts of the installed Sigima."""
+    import sigima.proc.signal as sips
+    from sigima.proc import contracts
+
+    contract = contracts.contract_for_function(sips.normalize)
+    assert contract is not None
+    assert contracts.get_operation_contract(NORMALIZE["id"], 1) == contract
 
 
 def test_apply_feature_records_a_qualified_activity(fresh_bootstrap):

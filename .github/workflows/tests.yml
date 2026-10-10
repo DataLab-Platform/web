@@ -15,6 +15,9 @@ jobs:
   python:
     name: Python ${{ matrix.python-version }} (pytest)
     runs-on: ubuntu-latest
+    env:
+      # Fail rather than skip if DataLab-Capsule or the contracts are missing.
+      DLW_REQUIRE_PROVENANCE: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +92,8 @@ jobs:
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
+    env:
+      DLW_REQUIRE_PROVENANCE: "1"
     steps:
       - uses: actions/checkout@v7
 
