@@ -1129,6 +1129,21 @@ def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
     return contract
 
 
+def legacy_interpolation_applies(spec: FeatureSpec, objs: list[Any]) -> bool:
+    """Return True if :meth:`BaseProcessor.apply` interpolates some of *objs* on X.
+
+    This is the legacy path of multi-input signal operations without an
+    X-alignment contract (see :func:`_interpolate_to` and :func:`_align_signals`).
+    """
+    if (
+        spec.object_kind != "signal"
+        or spec.skip_xarray_compat
+        or _x_alignment_contract(spec) is not None
+    ):
+        return False
+    return any(not _x_arrays_match(objs[0], obj) for obj in objs[1:])
+
+
 def _align_signals(signals: list[SignalObj]) -> list[SignalObj]:
     """Return a list where every signal shares the smallest X grid.
 

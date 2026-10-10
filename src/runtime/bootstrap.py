@@ -4799,25 +4799,49 @@ def _begin_provenance(
     origin: str = "ordinary",
     command_id: str | None = None,
     operand: Any = None,
-) -> dict[str, Any]:
-    """Record the input states of 1-to-1 or 2-to-1 executions, keyed by source id.
+) -> dict[str | None, Any]:
+    """Record the input states of an execution before it runs.
 
-    2-to-1 executions are recorded only with their *operand*; the original
-    source and operand are recorded, before any alignment.
+    1-to-1 and 2-to-1 executions are keyed by source id; the single n-to-1
+    execution is keyed by ``None``, with every source in order. 2-to-1
+    executions are recorded only with their *operand*. Inputs are recorded
+    before any alignment or interpolation.
     """
-    if spec.pattern == "2_to_1":
-        if operand is None:
-            return {}
-    elif spec.pattern != "1_to_1":
-        return {}
     command_id = command_id or str(uuid.uuid4())
-    pendings: dict[str, Any] = {}
+    pendings: dict[str | None, Any] = {}
+    if spec.pattern == "n_to_1":
+        limits = _x_interpolation_limits(spec, sources)
+        roles = ["sources"] * len(sources)
+        pending = _PROVENANCE.begin(
+            spec.func, param, sources, command_id, origin, roles=roles, limits=limits
+        )
+        if pending is not None:
+            pendings[None] = pending
+        return pendings
+    if spec.pattern not in ("1_to_1", "2_to_1") or (
+        spec.pattern == "2_to_1" and operand is None
+    ):
+        return {}
     for oid, src in zip(source_ids, sources):
-        inputs = [src, operand] if spec.pattern == "2_to_1" else src
-        pending = _PROVENANCE.begin(spec.func, param, inputs, command_id, origin)
+        inputs = [src, operand] if spec.pattern == "2_to_1" else [src]
+        pending = _PROVENANCE.begin(
+            spec.func,
+            param,
+            inputs,
+            command_id,
+            origin,
+            limits=_x_interpolation_limits(spec, inputs),
+        )
         if pending is not None:
             pendings[oid] = pending
     return pendings
+
+
+def _x_interpolation_limits(spec: Any, inputs: list[Any]) -> list[str]:
+    """Return the provenance limit of inputs interpolated by the legacy X path."""
+    if len(inputs) > 1 and _proc.legacy_interpolation_applies(spec, inputs):
+        return ["x_interpolated"]
+    return []
 
 
 def _complete_provenance(pending: Any, dst: Any, context: dict | None) -> None:
@@ -5106,12 +5130,22 @@ def _apply_feature_grouped(
             if not member_ids:
                 continue
             member_objs = [_MODEL.get(oid) for oid in member_ids]
+            param = _PROCESSOR.build_param_instance(spec, params)
+            pendings.update(
+                _begin_provenance(
+                    spec, param, member_objs, member_ids, command_id=command_id
+                )
+            )
             ctx = _proc.ApplyContext(
-                feature=spec, sources=member_objs, operand=operand, params=params
+                feature=spec,
+                sources=member_objs,
+                operand=operand,
+                params=params,
+                param_instance=param,
             )
             result = _PROCESSOR.apply(ctx, member_ids)
             for source_oid, dst in result.items:
-                _place(source_oid, dst, member_ids, dst_gid)
+                _place(source_oid, dst, member_ids, dst_gid, result.contexts)
     else:
         # 1_to_1 / 2_to_1: one result group per source group.
         for gid in group_ids:
@@ -6110,6 +6144,7 @@ async def _run_analysis(
 
         update_dataset(param, params)
 
+    pending = _PROVENANCE.begin(entry["func"], param, obj, str(uuid.uuid4()))
     if param is None:
         result = entry["func"](obj)
     else:
@@ -6125,6 +6160,9 @@ async def _run_analysis(
             pass
     key = _result_metadata_key(result)
     obj.metadata[key] = result.to_dict()
+    _PROVENANCE.complete_analysis(
+        pending, obj, "geometry" if key.startswith("Geometry_") else "table", key
+    )
     payload = _serialize_result(result, key, obj)
     # For image analyses returning a GeometryResult, apply ROI creation
     # metadata if the parameter requested it (mirrors DataLab desktop's

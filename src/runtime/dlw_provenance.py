@@ -3,11 +3,11 @@
 """
 Workspace provenance for DataLab-Web.
 
-Records every signal 1-to-1 and 2-to-1 processing in a workspace-level ledger,
-prepares
+Records the signal and image processing (1-to-1, 2-to-1, n-to-1 and analyses) in
+a workspace-level ledger, prepares
 recorded activities for replay and verifies them against their stored result.
 The ledger model, fingerprints, preparation and reports come from DataLab-Capsule;
-operation contracts come from Sigima.
+operation contracts come from Sigima. Only qualified operations can be replayed.
 
 DataLab-Capsule is optional in the browser: without it, processing is unchanged
 and provenance reports itself as unavailable. Capture never breaks processing: a
@@ -34,7 +34,7 @@ try:
     )
     from datalab_capsule.environment import collect_environment, environment_id
     from datalab_capsule.hdf5 import load_ledger, save_ledger
-    from datalab_capsule.integrity import signal_state_facts
+    from datalab_capsule.integrity import state_facts
     from datalab_capsule.ledger import Ledger, utc_timestamp
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
 
@@ -47,12 +47,12 @@ try:
 except ImportError:  # pragma: no cover - released Sigima without contracts
     _contracts = None
 
-from sigima.objects import SignalObj
+from sigima.objects import ImageObj, SignalObj
 
 _logger = logging.getLogger(__name__)
 
 EDITION = "web"
-#: Roles of opaque (unqualified) calls, by number of inputs.
+#: Default roles of unqualified calls, by number of inputs.
 OPAQUE_ROLES = {1: ("source",), 2: ("source", "operand")}
 
 #: Largest capsule (archive and workspace, bytes) opened in the browser. Opening
@@ -262,22 +262,26 @@ class WebProvenance:
         _logger.warning("Provenance capture failed: %s", exc, exc_info=True)
 
     def facts(self, obj: Any) -> dict[str, Any]:
-        """Return the state facts of a resident signal.
+        """Return the state facts of a resident signal or image.
 
         Raises:
             ProvenanceResidencyError: If the object is spilled to disk.
         """
         if self._is_spilled(obj):
             raise ProvenanceResidencyError("Object arrays are not resident")
-        return signal_state_facts(obj)
+        return state_facts(obj)
 
-    def observe(self, obj: SignalObj) -> str:
+    def observe(self, obj: SignalObj | ImageObj) -> str:
         """Return the state of *obj*, reusing its latest state if unchanged."""
         return self.ledger.observe(self._uuid_of(obj), self.facts(obj))
 
     @staticmethod
     def _build_call(
-        func: Callable, param: Any, state_ids: list[str], objs: list[SignalObj]
+        func: Callable,
+        param: Any,
+        state_ids: list[str],
+        objs: list[Any],
+        roles: Sequence[str],
     ) -> tuple[dict[str, Any], list[str]]:
         contract = (
             None if _contracts is None else _contracts.contract_for_function(func)
@@ -299,7 +303,7 @@ class WebProvenance:
                 ),
                 [],
             )
-        bindings = list(zip(OPAQUE_ROLES[len(objs)], state_ids))
+        bindings = list(zip(roles, state_ids))
         if param is None:
             return make_call(None, None, {}, bindings), []
         if _contracts is None:
@@ -318,32 +322,41 @@ class WebProvenance:
         command_id: str | None = None,
         origin: str = "ordinary",
         x_alignment: dict[str, Any] | None = None,
+        roles: Sequence[str] | None = None,
+        limits: Sequence[str] = (),
     ) -> PendingActivity | None:
-        """Record the input states of a signal execution, before it runs.
+        """Record the input states of an execution, before it runs.
 
         Args:
             func: Computation function.
             param: Effective parameters, or None.
-            source: Source signal, or the original ``[source, operand]`` signals
-             of a 2-to-1 execution (before any alignment).
+            source: Source signal or image, or the original input objects of a
+             multi-input execution (before any alignment or interpolation).
             command_id: Identifier shared by the executions of one command.
             origin: Activity origin.
             x_alignment: X-alignment record applied to the inputs, or None.
+            roles: Input roles of an unqualified call; by default ``source``, or
+             ``source`` and ``operand`` for two inputs.
+            limits: Extra reasons why the activity is not replayable.
         """
         objs = list(source) if isinstance(source, Sequence) else [source]
+        if roles is None:
+            roles = OPAQUE_ROLES.get(len(objs))
         if (
             not self.available
-            or len(objs) not in OPAQUE_ROLES
-            or not all(isinstance(obj, SignalObj) for obj in objs)
+            or not objs
+            or roles is None
+            or len(roles) != len(objs)
+            or not all(isinstance(obj, (SignalObj, ImageObj)) for obj in objs)
         ):
             return None
         try:
             state_ids = [self.observe(obj) for obj in objs]
-            call, limits = self._build_call(func, param, state_ids, objs)
+            call, call_limits = self._build_call(func, param, state_ids, objs, roles)
             return PendingActivity(
                 call=call,
                 implementation=implementation_of(func),
-                limits=limits,
+                limits=call_limits + list(limits),
                 command_id=command_id,
                 origin=origin,
                 started_at=utc_timestamp(),
@@ -353,32 +366,57 @@ class WebProvenance:
             self._capture_failed(exc)
             return None
 
+    def _record(
+        self,
+        pending: PendingActivity,
+        outputs: list[tuple[str, str, dict[str, Any]]],
+        artifacts: Sequence[tuple[str, str, str, str]] = (),
+    ) -> dict[str, Any]:
+        return self.ledger.record_activity(
+            call=pending.call,
+            outputs=outputs,
+            artifacts=artifacts,
+            environment=self.environment,
+            edition=EDITION,
+            origin=pending.origin,
+            implementation=pending.implementation,
+            command_id=pending.command_id,
+            limits=pending.limits,
+            context={"roi": None, "mask": None, "x_alignment": pending.x_alignment},
+            started_at=pending.started_at,
+        )
+
     def complete(
         self, pending: PendingActivity | None, output: Any
     ) -> dict[str, Any] | None:
         """Record a completed execution once its output was inserted."""
-        if pending is None or not isinstance(output, SignalObj):
+        if pending is None or not isinstance(output, (SignalObj, ImageObj)):
             return None
         try:
             output_uuid = self._uuid_of(output)
             if output_uuid is None or self._find_by_uuid(output_uuid) is not output:
                 return None
-            return self.ledger.record_activity(
-                call=pending.call,
-                outputs=[("result", output_uuid, self.facts(output))],
-                environment=self.environment,
-                edition=EDITION,
-                origin=pending.origin,
-                implementation=pending.implementation,
-                command_id=pending.command_id,
-                limits=pending.limits,
-                context={
-                    "roi": None,
-                    "mask": None,
-                    "x_alignment": pending.x_alignment,
-                },
-                started_at=pending.started_at,
-            )
+            return self._record(pending, [("result", output_uuid, self.facts(output))])
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self._capture_failed(exc)
+            return None
+
+    def complete_analysis(
+        self, pending: PendingActivity | None, obj: Any, kind: str, key: str
+    ) -> dict[str, Any] | None:
+        """Record an analysis whose result was stored in *obj*'s metadata.
+
+        Args:
+            pending: Pending activity of the analysis.
+            obj: Analysed object, which holds the result.
+            kind: Result kind (``geometry`` or ``table``).
+            key: Metadata key of the result.
+        """
+        if pending is None:
+            return None
+        try:
+            artifact = ("result", kind, self._uuid_of(obj), key)
+            return self._record(pending, [], artifacts=[artifact])
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self._capture_failed(exc)
             return None
