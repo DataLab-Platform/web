@@ -264,7 +264,13 @@ export interface ProvenanceLedgerInfo {
   file_status: "loaded" | "absent" | null;
   /** Capsule the workspace was opened from (the parent of a revision
    *  exported later), else null. */
-  capsule_origin: { fingerprint: string; name: string } | null;
+  capsule_origin: {
+    fingerprint: string;
+    name: string;
+    /** Attachment names of that capsule: a child revision does not copy
+     *  them. */
+    attachments?: string[];
+  } | null;
 }
 
 /** Light file attached to a capsule export (declared in the manifest,
@@ -401,8 +407,14 @@ export interface CapsuleDiff {
   new: string;
   revision_of_old: boolean;
   identical: boolean;
+  /** ``none_detected``: the recorded activities and states agree but the
+   *  workspace files differ, so equality is not established. */
+  scientific_conclusion: "differences" | "none" | "none_detected";
   scientific: CapsuleChange[];
   presentation: CapsuleChange[];
+  /** Workspace file (SHA-256, size, included or referenced) and locators:
+   *  different bytes do not show a scientific change. */
+  storage: CapsuleChange[];
   environment: CapsuleChange[];
   /** Attachments added, removed or changed; their content is not
    *  interpreted (it may matter scientifically). */

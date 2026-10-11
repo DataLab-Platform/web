@@ -290,6 +290,9 @@ function ExportTab(
     { name: string; file: File }[]
   >([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const parentOnly = (origin?.attachments ?? []).filter(
+    (name) => !attachments.some((a) => a.name === name),
+  );
 
   const addAttachments = async () => {
     const files = await pickFiles();
@@ -415,6 +418,14 @@ function ExportTab(
             fingerprint: shortId(origin.fingerprint),
           })}
         </label>
+      )}
+      {origin && asRevision && parentOnly.length > 0 && (
+        <p className="capsule-note" data-testid="capsule-parent-attachments">
+          {t(
+            "The parent revision has attachments that are not copied: {names}. Select them again below if they still apply.",
+            { names: parentOnly.join(", ") },
+          )}
+        </p>
       )}
       <label className="row">
         <input
@@ -1243,14 +1254,28 @@ function DiffView(props: { diff: CapsuleDiff }) {
   const { diff } = props;
   const groups: [
     keyof CapsuleDiff &
-      ("scientific" | "presentation" | "environment" | "attachments"),
+      (
+        | "scientific"
+        | "presentation"
+        | "storage"
+        | "environment"
+        | "attachments"
+      ),
     string,
   ][] = [
     ["scientific", t("Scientific changes")],
     ["presentation", t("Presentation changes")],
+    ["storage", t("Storage and integrity")],
     ["environment", t("Environment changes")],
     ["attachments", t("Attachments")],
   ];
+  const conclusions: Record<CapsuleDiff["scientific_conclusion"], string> = {
+    differences: t("Scientific changes were found."),
+    none: t("No scientific change, and the same workspace file."),
+    none_detected: t(
+      "No change in the recorded activities and states. The workspace files differ: content outside the recorded provenance is not compared, so equality is not established.",
+    ),
+  };
   return (
     <section data-testid="capsule-diff">
       {diff.revision_of_old && (
@@ -1259,26 +1284,31 @@ function DiffView(props: { diff: CapsuleDiff }) {
       {diff.identical ? (
         <p>{t("The two revisions are identical.")}</p>
       ) : (
-        groups.map(([key, title]) => (
-          <div key={key} data-testid={`capsule-diff-${key}`}>
-            <h4>
-              {title} ({diff[key].length})
-            </h4>
-            <ul>
-              {diff[key].map((change, index) => (
-                <li key={index}>
-                  {change.change} {change.item}{" "}
-                  <code>
-                    {change.item === "attachment"
-                      ? change.id
-                      : shortId(change.id)}
-                  </code>
-                  {change.field ? ` ${change.field}` : ""}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))
+        <>
+          <p data-testid="capsule-diff-conclusion">
+            {conclusions[diff.scientific_conclusion]}
+          </p>
+          {groups.map(([key, title]) => (
+            <div key={key} data-testid={`capsule-diff-${key}`}>
+              <h4>
+                {title} ({diff[key].length})
+              </h4>
+              <ul>
+                {diff[key].map((change, index) => (
+                  <li key={index}>
+                    {change.change} {change.item}{" "}
+                    <code>
+                      {change.item === "attachment"
+                        ? change.id
+                        : shortId(change.id)}
+                    </code>
+                    {change.field ? ` ${change.field}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </>
       )}
     </section>
   );

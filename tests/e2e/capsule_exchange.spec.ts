@@ -278,6 +278,20 @@ test.describe("capsule exchange between two browsers", () => {
     await expect(author.getByTestId("capsule-diff-attachments")).toContainText(
       "added attachment points.csv",
     );
+    // The two exports save the same workspace again. Its bytes may differ (a
+    // storage change): equality is then not concluded, and nothing is
+    // scientific either way.
+    await expect(author.getByTestId("capsule-diff-scientific")).toContainText(
+      "(0)",
+    );
+    const storage = await author
+      .getByTestId("capsule-diff-storage")
+      .textContent();
+    await expect(author.getByTestId("capsule-diff-conclusion")).toContainText(
+      storage?.includes("(0)")
+        ? "No scientific change, and the same workspace file."
+        : "equality is not established",
+    );
 
     const recipient = await openPage(browser);
     await openDialog(recipient);
@@ -309,6 +323,13 @@ test.describe("capsule exchange between two browsers", () => {
         ),
       )
       .toBe(3);
+    // A child revision does not copy the parent's attachments: the export says
+    // so until they are selected again.
+    await recipient.getByRole("tab", { name: "Export" }).click();
+    await expect(recipient.getByTestId("capsule-as-revision")).toBeChecked();
+    await expect(
+      recipient.getByTestId("capsule-parent-attachments"),
+    ).toContainText("protocol_notes.txt, points.csv");
     await author.context().close();
     await recipient.context().close();
   });

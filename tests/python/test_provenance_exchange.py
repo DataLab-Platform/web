@@ -98,6 +98,7 @@ def test_revision_review_and_comparison_across_runtimes():
     assert origin == {
         "fingerprint": parent_info["integrity"]["fingerprint"],
         "name": "chain",
+        "attachments": [],
     }
     # A new processing, then a child revision naming its parent.
     oid = _objects(reader)[0]
@@ -200,6 +201,13 @@ def test_attachments_are_declared_listed_and_returned_as_data(counted_apply):
     # Attachments do not change how the workspace opens and replays.
     reader.open_workspace_capsule("chain.dlcapsule", data)
     check_chain(reader, "web")
+    # A child revision does not copy them: the origin names them for the UI.
+    origin = reader.get_provenance_ledger()["capsule_origin"]
+    assert origin["attachments"] == ["protocol.txt"]
+    child = reader.inspect_workspace_capsule(
+        reader.export_workspace_capsule(name="child", revision_of=origin["fingerprint"])
+    )
+    assert child["summary"]["attachments"] == []
 
 
 def test_registry_revision_is_checked_not_trusted():

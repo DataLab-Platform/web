@@ -165,9 +165,9 @@ class WebProvenance:
         self.notices: list[str] = []
         #: ``"loaded"`` or ``"absent"`` after opening a workspace file, else None.
         self.file_status: str | None = None
-        #: ``{"fingerprint", "name"}`` of the capsule the workspace was opened
-        #: from (the parent of a revision exported later), else None.
-        self.capsule_origin: dict[str, str] | None = None
+        #: ``{"fingerprint", "name", "attachments"}`` of the capsule the
+        #: workspace was opened from (the parent of a revision exported later).
+        self.capsule_origin: dict[str, Any] | None = None
 
     @property
     def available(self) -> bool:
@@ -342,7 +342,7 @@ class WebProvenance:
 
     def open_capsule(
         self, data: bytes, workspace: bytes | None = None
-    ) -> tuple[bytes, dict[str, str]]:
+    ) -> tuple[bytes, dict[str, Any]]:
         """Validate a capsule and return its workspace bytes and its origin.
 
         Args:
@@ -351,9 +351,9 @@ class WebProvenance:
              it must match the SHA-256 and size of the manifest.
 
         Returns:
-            ``(workspace, origin)``; *origin* is ``{"fingerprint", "name"}`` of
-            the capsule, to adopt with :meth:`set_capsule_origin` once the
-            workspace is open.
+            ``(workspace, origin)``; *origin* is ``{"fingerprint", "name",
+            "attachments"}`` of the capsule, to adopt with
+            :meth:`set_capsule_origin` once the workspace is open.
 
         Raises:
             CapsuleError: If the capsule is invalid, or references a workspace
@@ -365,13 +365,15 @@ class WebProvenance:
             raise CapsuleError(
                 "This capsule references its workspace: select the workspace file"
             )
+        summary = inspect_manifest(capsule.manifest)
         origin = {
             "fingerprint": manifest_fingerprint(capsule.manifest),
-            "name": inspect_manifest(capsule.manifest)["name"],
+            "name": summary["name"],
+            "attachments": [a["name"] for a in summary["attachments"]],
         }
         return capsule.workspace, origin
 
-    def set_capsule_origin(self, origin: dict[str, str]) -> None:
+    def set_capsule_origin(self, origin: dict[str, Any]) -> None:
         """Remember the capsule the current workspace was opened from."""
         self.capsule_origin = dict(origin)
 
