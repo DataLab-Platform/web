@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertReleaseReady,
+  checkReleaseDependencies,
   loadDependencyManifest,
   validateDependencyManifest,
 } from "../../../scripts/check-sigima-release.mjs";
@@ -113,8 +114,97 @@ describe("guidata release guard", () => {
   );
 });
 
-describe("repository dependency manifests", () => {
-  it.each(["sigima", "guidata"])("has a valid %s manifest", (packageName) => {
-    expect(() => loadDependencyManifest(packageName)).not.toThrow();
+describe("DataLab-Capsule release guard", () => {
+  const CAPSULE = "datalab-capsule==0.1.0";
+
+  it("keeps development configurations valid", () => {
+    for (const manifest of [
+      { publishedRequirement: null, developmentRef: SHA },
+      { publishedRequirement: null, developmentRef: null },
+      { publishedRequirement: CAPSULE, developmentRef: SHA },
+    ]) {
+      expect(validateDependencyManifest(manifest, "capsule")).toEqual(manifest);
+    }
   });
+
+  it("accepts an exact published pin when no snapshot is active", () => {
+    expect(
+      assertReleaseReady(
+        { publishedRequirement: CAPSULE, developmentRef: null },
+        "capsule",
+      ),
+    ).toEqual({ publishedRequirement: CAPSULE, developmentRef: null });
+  });
+
+  it.each(["datalab-capsule>=0.1.0", "datalab-capsule==0.1", PUBLISHED])(
+    "rejects a non-exact published requirement: %s",
+    (publishedRequirement) => {
+      expect(() =>
+        validateDependencyManifest(
+          { publishedRequirement, developmentRef: null },
+          "capsule",
+        ),
+      ).toThrow(/exact stable pin/);
+    },
+  );
+
+  describe("when Sigima and guidata are release-ready", () => {
+    const ready = {
+      sigima: { publishedRequirement: PUBLISHED, developmentRef: null },
+      guidata: {
+        publishedRequirement: "guidata>=3.16.0",
+        developmentRef: null,
+      },
+    };
+
+    it("passes with a published DataLab-Capsule pin", () => {
+      expect(
+        checkReleaseDependencies({
+          ...ready,
+          capsule: { publishedRequirement: CAPSULE, developmentRef: null },
+        }).capsule,
+      ).toEqual({ publishedRequirement: CAPSULE, developmentRef: null });
+    });
+
+    it("blocks a missing DataLab-Capsule manifest", () => {
+      expect(() => checkReleaseDependencies(ready)).toThrow(
+        /DataLab-Capsule dependency manifest is missing/,
+      );
+    });
+
+    it.each([null, SHA])(
+      "blocks an unpinned DataLab-Capsule (developmentRef %s)",
+      (developmentRef) => {
+        expect(() =>
+          checkReleaseDependencies({
+            ...ready,
+            capsule: { publishedRequirement: null, developmentRef },
+          }),
+        ).toThrow(/Release blocked: .*DataLab-Capsule/);
+      },
+    );
+
+    it("blocks a DataLab-Capsule development commit despite a pin", () => {
+      expect(() =>
+        checkReleaseDependencies({
+          ...ready,
+          capsule: { publishedRequirement: CAPSULE, developmentRef: SHA },
+        }),
+      ).toThrow(
+        new RegExp(
+          `DataLab-Capsule development snapshot.*${SHA}.*datalab-capsule-dependency\\.json`,
+          "s",
+        ),
+      );
+    });
+  });
+});
+
+describe("repository dependency manifests", () => {
+  it.each(["sigima", "guidata", "capsule"])(
+    "has a valid %s manifest",
+    (packageName) => {
+      expect(() => loadDependencyManifest(packageName)).not.toThrow();
+    },
+  );
 });

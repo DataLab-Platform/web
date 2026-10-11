@@ -1,7 +1,10 @@
-/** Ensure a DataLab-Web release uses published Sigima and guidata versions. */
+/**
+ * Ensure a DataLab-Web release uses published Sigima, guidata and
+ * DataLab-Capsule versions.
+ */
 
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,6 +26,18 @@ const PACKAGES = {
     remedy:
       "Publish and qualify a guidata version providing the required " +
       "changes, make publishedRequirement require it",
+  },
+  capsule: {
+    label: "DataLab-Capsule",
+    manifest: resolve(ROOT, "datalab-capsule-dependency.json"),
+    // Optional while unpublished: development builds then run without it.
+    allowNullPublishedRequirement: true,
+    publishedRequirementRe: /^datalab-capsule==[0-9]+\.[0-9]+\.[0-9]+$/,
+    publishedRequirementRule:
+      'null or an exact stable pin such as "datalab-capsule==0.1.0"',
+    remedy:
+      "Publish and qualify that exact DataLab-Capsule version, make " +
+      "publishedRequirement pin it",
   },
 };
 
@@ -64,8 +79,9 @@ export function validateDependencyManifest(manifest, packageName = "sigima") {
 
   const { publishedRequirement, developmentRef } = manifest;
   if (
-    typeof publishedRequirement !== "string" ||
-    !rules.publishedRequirementRe.test(publishedRequirement)
+    !(publishedRequirement === null && rules.allowNullPublishedRequirement) &&
+    (typeof publishedRequirement !== "string" ||
+      !rules.publishedRequirementRe.test(publishedRequirement))
   ) {
     throw new Error(
       `publishedRequirement must be ${rules.publishedRequirementRule}.`,
@@ -109,19 +125,38 @@ export function assertReleaseReady(manifest, packageName = "sigima") {
         `Configured SHA: ${config.developmentRef}\n` +
         `Published target: ${config.publishedRequirement}\n` +
         `${rules.remedy}, then set developmentRef to null in ` +
-        `${packageName}-dependency.json.`,
+        `${basename(rules.manifest)}.`,
+    );
+  }
+  if (config.publishedRequirement === null) {
+    throw new Error(
+      `Release blocked: no published ${rules.label} version is pinned.\n` +
+        `${rules.remedy} in ${basename(rules.manifest)}.`,
     );
   }
   return config;
 }
 
-/** Check every repository manifest and return the release-safe configs. */
-export function checkReleaseDependencies() {
+/**
+ * Check every dependency manifest and return the release-safe configs.
+ * ``manifests`` replaces the repository files (parsed JSON, by package).
+ */
+export function checkReleaseDependencies(manifests) {
   return Object.fromEntries(
-    Object.keys(PACKAGES).map((packageName) => [
-      packageName,
-      assertReleaseReady(loadDependencyManifest(packageName), packageName),
-    ]),
+    Object.keys(PACKAGES).map((packageName) => {
+      let manifest;
+      if (manifests === undefined) {
+        manifest = loadDependencyManifest(packageName);
+      } else if (Object.hasOwn(manifests, packageName)) {
+        manifest = manifests[packageName];
+      } else {
+        throw new Error(
+          `Release blocked: the ${packageRules(packageName).label} ` +
+            "dependency manifest is missing.",
+        );
+      }
+      return [packageName, assertReleaseReady(manifest, packageName)];
+    }),
   );
 }
 

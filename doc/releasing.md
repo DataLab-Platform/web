@@ -37,7 +37,9 @@ accidental `VITE_SIGIMA_INSTALL_SPEC` from the developer's ignored `.env`.
 
 The guard applies the same rule to [`guidata-dependency.json`](../guidata-dependency.json): a non-null guidata `developmentRef` blocks the release until a guidata version providing the required changes is published and `publishedRequirement` requires it (for example `guidata>=X.Y.Z`). Release builds also ignore `VITE_GUIDATA_INSTALL_SPEC`.
 
-> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: Sigima and guidata release guard and version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E against the published Sigima pin (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
+It also covers [`datalab-capsule-dependency.json`](../datalab-capsule-dependency.json). During development, DataLab-Capsule may stay unpublished (`publishedRequirement: null`, provenance then follows `developmentRef` or stays off). A release requires an exact published pin such as `datalab-capsule==0.1.0` and `developmentRef: null`; the release workflow then runs pytest and Playwright with that published version and provenance required, and release builds ignore `VITE_DATALAB_CAPSULE_INSTALL_SPEC`.
+
+> **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: Sigima, guidata and DataLab-Capsule release guard and version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E against the published pins, provenance required (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
 
 ## Distribution: app bundle + SDK tarballs
 
