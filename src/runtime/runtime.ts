@@ -2089,6 +2089,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     "save_workspace_to_bytes",
     "replay_activity",
     "export_workspace_capsule",
+    "export_referenced_capsule",
   ]);
   /** Calls that replace the whole model with freshly-loaded objects, so
    *  the on-disk store must be reset and every new object re-spilled. */

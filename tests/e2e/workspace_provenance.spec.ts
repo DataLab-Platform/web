@@ -145,11 +145,17 @@ const FIXTURES = path.join(
 );
 
 /** Run the chain scenario (S0 -> S1 opaque -> S2 -> S3, S0 -> S4), then save
- *  it as an HDF5 workspace and as a capsule. */
+ *  it as an HDF5 workspace, as a capsule and as a referenced capsule (whose
+ *  workspace is returned). */
 async function saveChain(
   page: Page,
   mode: "ram" | "disk",
-): Promise<{ available: boolean; bytes: number[]; capsule: number[] }> {
+): Promise<{
+  available: boolean;
+  bytes: number[];
+  capsule: number[];
+  referenced: number[];
+}> {
   return page.evaluate(async (storageMode) => {
     interface Runtime {
       resetAll(): Promise<void>;
@@ -168,6 +174,10 @@ async function saveChain(
       ): Promise<string[]>;
       saveWorkspaceHdf5(): Promise<Uint8Array>;
       exportWorkspaceCapsule(name: string): Promise<Uint8Array>;
+      exportReferencedCapsule(
+        workspaceRef: string,
+        name: string,
+      ): Promise<{ capsule: Uint8Array; workspace: Uint8Array }>;
       getProvenanceLedger(): Promise<{ available: boolean }>;
     }
     const runtime = (window as unknown as { runtime: Runtime }).runtime;
@@ -192,6 +202,16 @@ async function saveChain(
         bytes: Array.from(await runtime.saveWorkspaceHdf5()),
         capsule: available
           ? Array.from(await runtime.exportWorkspaceCapsule("chain"))
+          : [],
+        referenced: available
+          ? Array.from(
+              (
+                await runtime.exportReferencedCapsule(
+                  "https://example.org/chain.h5",
+                  "chain",
+                )
+              ).workspace,
+            )
           : [],
       };
     } finally {
@@ -411,6 +431,12 @@ for (const runtimeMode of ["main", "worker"] as const) {
           "capsule",
         );
         expectChain(fromCapsule, "web");
+        // The workspace of a referenced capsule holds the data, not the
+        // placeholders of arrays stored on disk.
+        expectChain(
+          await reopenChain(reader, storageMode, saved.referenced),
+          "web",
+        );
       });
 
       test(`reopens and replays the Desktop reference file (${storageMode})`, async () => {
