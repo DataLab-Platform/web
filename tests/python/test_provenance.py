@@ -170,6 +170,32 @@ def test_replay_activity_verifies_without_changing_the_workspace(fresh_bootstrap
     assert report["verdict"] == "not_verified"
 
 
+# Exact literal oracles of every normalisation method (perfect-square energy and
+# mean square for the second input).
+Y2 = np.array([-3.0, 0.0, 4.0, 0.0])
+NORMALIZE_ORACLES = [
+    ("maximum", Y, [-0.5, 0.0, 0.25, 1.0]),
+    ("amplitude", Y, [0.0, 1 / 3, 0.5, 1.0]),
+    ("area", Y, [-2 / 3, 0.0, 1 / 3, 4 / 3]),
+    ("energy", Y2, [-0.6, 0.0, 0.8, 0.0]),
+    ("rms", Y2, [-1.2, 0.0, 1.6, 0.0]),
+]
+
+
+@pytest.mark.parametrize("method, y, expected", NORMALIZE_ORACLES)
+def test_every_normalize_method_replays_exactly(fresh_bootstrap, method, y, expected):
+    """Each qualified method gives its literal oracle and replays exactly."""
+    bs = fresh_bootstrap
+    src = add_signal(bs, y)
+    (result,) = bs.apply_feature("normalize", [src], params={"method": method})
+    assert np.array_equal(bs._MODEL.get(result).y, np.array(expected))
+    (activity,) = ledger(bs).activities
+    assert activity["call"]["parameters"] == {"method": method}
+    report = bs.replay_activity(activity["activity_id"])
+    assert report["verdict"] == "exact", report
+    assert report["observed"]["mismatches"] == 0
+
+
 def test_replay_really_computes_and_detects_divergence(fresh_bootstrap, counted_apply):
     bs = fresh_bootstrap
     src = add_signal(bs)

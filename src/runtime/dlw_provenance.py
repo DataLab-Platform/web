@@ -20,7 +20,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from importlib import metadata
 from typing import Any
 
@@ -35,6 +35,12 @@ try:
     from datalab_capsule.environment import collect_environment, environment_id
     from datalab_capsule.hdf5 import load_ledger, save_ledger
     from datalab_capsule.integrity import state_facts
+    from datalab_capsule.legacy import (
+        PROCESSING_KEY,
+        LegacyObject,
+        import_legacy,
+        legacy_summary,
+    )
     from datalab_capsule.ledger import Ledger, artifact_status, utc_timestamp
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
 
@@ -119,6 +125,9 @@ class WebProvenance:
         find_by_uuid: Object lookup by persistent UUID (None when absent).
         uuid_of: Persistent UUID of an object.
         is_spilled: True when an object's arrays live on disk.
+        iter_objects: Signals and images of the workspace, in model order.
+        is_known_operation: ``(kind, name, plugin origin) -> bool``: whether an
+         operation named in old metadata is in the catalogue.
     """
 
     def __init__(
@@ -126,10 +135,14 @@ class WebProvenance:
         find_by_uuid: Callable[[str], Any],
         uuid_of: Callable[[Any], str | None],
         is_spilled: Callable[[Any], bool],
+        iter_objects: Callable[[], Iterable[Any]],
+        is_known_operation: Callable[[str, str, Any], bool],
     ) -> None:
         self._find_by_uuid = find_by_uuid
         self._uuid_of = uuid_of
         self._is_spilled = is_spilled
+        self._iter_objects = iter_objects
+        self._is_known_operation = is_known_operation
         self.edition_version = "dev"
         self._environment: dict[str, Any] | None = None
         self.capture_failures = 0
@@ -171,13 +184,25 @@ class WebProvenance:
         """
         return load_ledger(h5file) if self.available else None
 
-    def load(self, block: tuple[Any, dict[str, str]] | None, replaced: bool) -> None:
+    def load(
+        self,
+        block: tuple[Any, dict[str, str]] | None,
+        replaced: bool,
+        saved_version: str | None = None,
+    ) -> None:
         """Adopt the ledger read from a workspace file, after its objects.
+
+        Processing records of objects unknown to the ledger (workspaces saved
+        without provenance, by DataLab Desktop) are then imported as
+        ``legacy_metadata`` activities.
 
         Args:
             block: Result of :meth:`read`.
             replaced: False when the file was appended to the current workspace:
              ledgers are not merged and the file's block is ignored.
+            saved_version: ``DataLab_Version`` of the file, as stored. It is
+             never compared: Desktop stores its own version there, DataLab-Web
+             the Sigima version.
         """
         if not self.available:
             return
@@ -192,9 +217,45 @@ class WebProvenance:
         self.reset()
         if block is None:
             self.file_status = "absent"
+        else:
+            self.ledger, self.state_status = block
+            self.file_status = "loaded"
+        self._import_legacy(saved_version)
+
+    def _import_legacy(self, saved_version: str | None) -> None:
+        """Import the processing records of objects unknown to the ledger."""
+        try:
+            known = set(self.ledger.object_uuids())
+            objects = []
+            for obj in self._iter_objects():
+                uid = self._uuid_of(obj)
+                if uid is None:
+                    continue
+                facts = None
+                if uid not in known and PROCESSING_KEY in obj.metadata:
+                    try:
+                        facts = self.facts(obj)
+                    except ProvenanceResidencyError:
+                        facts = None
+                kind = "image" if isinstance(obj, ImageObj) else "signal"
+                objects.append(LegacyObject(uid, kind, obj.metadata, facts))
+            activities = import_legacy(
+                self.ledger,
+                objects,
+                is_known=self._is_known_operation,
+                saved_version=saved_version,
+                current_version=None,
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self._capture_failed(exc)
             return
-        self.ledger, self.state_status = block
-        self.file_status = "loaded"
+        if activities:
+            message = (
+                f"{len(activities)} processing records saved without provenance "
+                "were imported as legacy activities (never replayed)"
+            )
+            _logger.info(message)
+            self.notices.append(message)
 
     def export_capsule(self, workspace: bytes, name: str | None = None) -> bytes:
         """Return the capsule of a saved workspace (``.dlcapsule`` bytes)."""
@@ -247,7 +308,8 @@ class WebProvenance:
         """Return a JSON-compatible snapshot for the TypeScript runtime.
 
         ``artifact_status`` maps each activity that recorded analysis results
-        to their statuses (see :meth:`artifact_statuses`).
+        to their statuses (see :meth:`artifact_statuses`); ``legacy`` summarises
+        the activities imported from old processing records.
         """
         artifacts: dict[str, list[dict[str, str]]] = {}
         if self.available:
@@ -262,6 +324,7 @@ class WebProvenance:
             "ledger": self.ledger.to_dict() if self.available else None,
             "state_status": dict(self.state_status),
             "artifact_status": artifacts,
+            "legacy": legacy_summary(self.ledger) if self.available else None,
             "capture_failures": self.capture_failures,
             "notices": list(self.notices),
             "file_status": self.file_status,

@@ -4776,9 +4776,31 @@ def _is_spilled_object(obj: Any) -> bool:
     )
 
 
+def _iter_data_objects() -> list[Any]:
+    """Return every signal and image of the workspace, in model order."""
+    return [obj for kind in ("signal", "image") for _oid, obj in _MODEL.iter_all(kind)]
+
+
+def _is_known_operation(_kind: str, name: str, _plugin_origin: Any) -> bool:
+    """Return True if a processing or analysis of the catalogue has this name."""
+    if any(name in catalog for catalog in _ANALYSIS_CATALOG.values()):
+        return True
+    return any(
+        name in (feature_id, feature_id.split(":")[-1])
+        or getattr(spec.func, "__name__", None) == name
+        for feature_id, spec in _full_catalog_with_plugins().items()
+    )
+
+
 _PROVENANCE: _prov.WebProvenance = globals().get(  # type: ignore[assignment]
     "_PROVENANCE"
-) or _prov.WebProvenance(_find_object_by_uuid, _object_uuid, _is_spilled_object)
+) or _prov.WebProvenance(
+    _find_object_by_uuid,
+    _object_uuid,
+    _is_spilled_object,
+    _iter_data_objects,
+    _is_known_operation,
+)
 
 
 def set_provenance_edition_version(version: str) -> None:
@@ -6579,6 +6601,11 @@ def open_workspace_from_bytes(
                     f"(missing {_H5_DATALAB_VERSION_KEY!r} root attribute)"
                 )
             block = _PROVENANCE.read(reader.h5)
+            saved_version = reader.h5[_H5_DATALAB_VERSION_KEY][()]
+            if isinstance(saved_version, bytes):
+                saved_version = saved_version.decode("utf-8", "replace")
+            if not isinstance(saved_version, str):
+                saved_version = None
             klass_for_kind = {"signal": SignalObj, "image": _ImageObj}
             for kind, prefix in _H5_PANEL_PREFIXES.items():
                 if prefix not in reader.h5:
@@ -6674,7 +6701,7 @@ def open_workspace_from_bytes(
             counts["signals" if kind == "signal" else "images"] += 1
     _MACROS.extend(macros)
     _NOTEBOOKS.extend(notebooks)
-    _PROVENANCE.load(block, replace)
+    _PROVENANCE.load(block, replace, saved_version)
     if replace:
         _rebuild_last_processing()
     return counts

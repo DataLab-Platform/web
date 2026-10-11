@@ -239,6 +239,21 @@ export interface ProvenanceLedgerInfo {
       status: "available" | "replaced" | "missing";
     }[]
   >;
+  /** Activities imported from processing records of a workspace saved
+   *  without provenance (never replayed), with the issues found at import. */
+  legacy: {
+    activities: number;
+    issues: Record<string, number>;
+    items: {
+      activity_id: string;
+      object_uuid: string;
+      key: string;
+      operation: string | null;
+      pattern: string | null;
+      inputs: string[];
+      issues: string[];
+    }[];
+  } | null;
   capture_failures: number;
   notices: string[];
   /** ``"loaded"`` or ``"absent"`` after opening a workspace file, else null. */
