@@ -10,9 +10,11 @@ S1; image I with a ROI -> Gaussian filter -> J; centroid on I.
 
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 
+import h5py
 import pytest
 
 if os.environ.get("DLW_REQUIRE_PROVENANCE") == "1":
@@ -68,11 +70,47 @@ def check_legacy(bs) -> None:
         "class": "sigima.proc.base.NormalizeParam",
         "values": {"method": "MAXIMUM"},
     }
+    observed = 0
     for activity in activities:
-        for output in activity["outputs"]:
-            state = bs._PROVENANCE.ledger.states[output["state_id"]]
+        assert activity["outputs"] == []
+        state_id = activity["legacy"].get("observed_state_id")
+        if state_id is not None:
+            observed += 1
+            state = bs._PROVENANCE.ledger.states[state_id]
+            assert state["produced_by"] is None
             obj = bs._find_object_by_uuid(state["object_uuid"])
-            assert bs._PROVENANCE.observe(obj) == state["state_id"]
+            assert bs._PROVENANCE.observe(obj) == state_id
+    assert observed == 4
+
+
+def _observed_fingerprint(bs, operation: str) -> str:
+    activity = next(
+        a
+        for a in bs._PROVENANCE.ledger.activities
+        if a["legacy"]["record"]["func_name"] == operation
+    )
+    assert activity["outputs"] == []
+    state = bs._PROVENANCE.ledger.states[activity["legacy"]["observed_state_id"]]
+    assert state["produced_by"] is None
+    return state["fingerprint"]["value"]
+
+
+def test_modified_old_result_is_not_attested():
+    """Data changed after the processing, record unchanged: nothing is attested."""
+    buffer = io.BytesIO(LEGACY.read_bytes())
+    with h5py.File(buffer, "r+") as h5file:
+        for group in h5file["DataLab_Sig"].values():
+            for name, node in group.items():
+                if name.startswith("s002"):
+                    node["xydata"][1, 0] += 1.0
+    original = fresh_runtime()
+    _open(original, LEGACY.read_bytes())
+    modified = fresh_runtime()
+    _open(modified, buffer.getvalue())
+    assert _observed_fingerprint(modified, "normalize") != _observed_fingerprint(
+        original, "normalize"
+    )
+    assert modified.get_provenance_ledger()["legacy"]["items"][0]["issues"] == []
 
 
 def _open(bs, data: bytes, replace: bool = True) -> None:
