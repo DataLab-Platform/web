@@ -2428,6 +2428,64 @@ input {
   font-size: 12px;
 }
 
+/* Workspace capsule dialog */
+.capsule-card {
+  width: 860px;
+  max-width: 94vw;
+  max-height: 90vh;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.capsule-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.capsule-tabs button.active {
+  border-bottom: 2px solid var(--accent, #3794ff);
+}
+
+.capsule-tab section {
+  margin-top: 12px;
+}
+
+.capsule-tab h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.capsule-note {
+  opacity: 0.75;
+  margin: 2px 0 6px;
+}
+
+.capsule-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.capsule-table th,
+.capsule-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 3px 6px;
+  text-align: left;
+}
+
+.capsule-facts {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 8px;
+}
+
+.capsule-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Processing error dialog (desktop WarningErrorMessageBox parity) */
 .processing-error-card {
   width: 760px;

@@ -262,6 +262,141 @@ export interface ProvenanceLedgerInfo {
   notices: string[];
   /** ``"loaded"`` or ``"absent"`` after opening a workspace file, else null. */
   file_status: "loaded" | "absent" | null;
+  /** Capsule the workspace was opened from (the parent of a revision
+   *  exported later), else null. */
+  capsule_origin: { fingerprint: string; name: string } | null;
+}
+
+/** Options of a capsule export. */
+export interface CapsuleExportOptions {
+  description?: string | null;
+  /** Manifest fingerprint of the parent revision. */
+  revisionOf?: string | null;
+}
+
+/** One input or output of an activity, in a capsule summary. */
+export interface CapsuleBinding {
+  role: string;
+  position: number;
+  /** State or artifact entity (``#state-<id>``), or null. */
+  target: string | null;
+  /** Object bound by a legacy activity (state unknown). */
+  object_uuid?: string;
+  /** Digest of an analysis result. */
+  result_digest?: string | null;
+}
+
+/** Summary of a capsule manifest (``inspect_manifest``). */
+export interface CapsuleSummary {
+  name: string;
+  description: string;
+  license: string;
+  date_published: string;
+  profiles: string[];
+  fingerprint: string;
+  revision_of: string | null;
+  workspace: {
+    id: string;
+    referenced: boolean;
+    sha256: string;
+    size: string;
+  };
+  activities: {
+    id: string;
+    type: string;
+    name: string;
+    replayable: boolean;
+    instrument: string[];
+    origin: string;
+    inputs: CapsuleBinding[];
+    outputs: CapsuleBinding[];
+    parameters: Record<string, unknown>;
+    limits: string[];
+    x_alignment: Record<string, unknown> | null;
+    legacy: Record<string, unknown> | null;
+    observed_state: string | null;
+  }[];
+  states: {
+    id: string;
+    kind: string;
+    object_uuid: string;
+    fingerprint: string | null;
+    locator: string | null;
+    roi: unknown;
+    produced_by: string | null;
+    consumed_by: string[];
+  }[];
+  fan_out: string[];
+}
+
+/** Status of one supplied report or review. */
+export interface CapsuleDocumentStatus {
+  /** ``"valid"``, or the problem found. */
+  status: string;
+  activity_id?: string | null;
+  verdict?: string | null;
+  fingerprint?: string | null;
+}
+
+/** Result of {@link DataLabRuntime.inspectWorkspaceCapsule}. */
+export interface CapsuleInspection {
+  summary: CapsuleSummary | null;
+  /** The manifest itself (kept for comparison and reviews), or null. */
+  manifest: Record<string, unknown> | null;
+  /** Integrity of the capsule: computed from the files, never a replay. */
+  integrity: {
+    valid: boolean;
+    fingerprint: string | null;
+    /** ``verified``, ``integrity_only`` or ``not_available`` (referenced
+     *  workspace not supplied). */
+    workspace: string | null;
+    states_located: number | null;
+    states_altered: string[];
+    problems: string[];
+  };
+  /** Checks of the supplied reports and reviews: their verdicts are what
+   *  their authors claim, not recomputed.  Null when the capsule is invalid. */
+  documents: {
+    reports: CapsuleDocumentStatus[];
+    reviews: CapsuleDocumentStatus[];
+    unreadable: { kind: "report" | "review"; index: number; status: string }[];
+  } | null;
+}
+
+/** One change between two capsule manifests. */
+export interface CapsuleChange {
+  change: "added" | "removed" | "changed";
+  item: string;
+  id: string;
+  field?: string;
+  old?: unknown;
+  new?: unknown;
+}
+
+/** Result of {@link DataLabRuntime.diffCapsuleManifests}. */
+export interface CapsuleDiff {
+  old: string;
+  new: string;
+  revision_of_old: boolean;
+  identical: boolean;
+  scientific: CapsuleChange[];
+  presentation: CapsuleChange[];
+  environment: CapsuleChange[];
+}
+
+export type CapsuleReviewVerdict = "endorsed" | "disputed" | "comment";
+
+/** Review of one capsule revision (DataLab-Capsule ``review-1`` document). */
+export interface CapsuleReview {
+  review: string;
+  review_version: number;
+  target: string;
+  reviewer: { name: string; identifier: string | null };
+  date: string;
+  statement: string;
+  verdict: CapsuleReviewVerdict | null;
+  reports: { activity_id: string; verdict: string }[];
+  review_fingerprint: string;
 }
 
 /** Verification report (DataLab-Capsule ``report-1`` document). */
@@ -1300,6 +1435,20 @@ function restoreJsonNulls(value: unknown): unknown {
     );
   }
   return value;
+}
+
+/** Normalise bytes returned by Python into a ``Uint8Array``. */
+function asBytes(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  return Uint8Array.from(value as number[]);
+}
+
+/** Read a selected file (or pass bytes through). */
+async function readBytes(data: Blob | Uint8Array): Promise<Uint8Array> {
+  return data instanceof Uint8Array
+    ? data
+    : new Uint8Array(await data.arrayBuffer());
 }
 
 /**
@@ -3220,15 +3369,55 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   }
 
   /** Return a workspace capsule (``.dlcapsule``): the HDF5 workspace and an
-   *  RO-Crate manifest of its provenance.  Requires DataLab-Capsule. */
+   *  RO-Crate manifest of its provenance.  Requires DataLab-Capsule.
+   *  ``revisionOf`` names the parent revision (its manifest fingerprint). */
   async exportWorkspaceCapsule(
     name: string | null = null,
+    options: CapsuleExportOptions = {},
   ): Promise<Uint8Array> {
-    const result = (await this.callPy("export_workspace_capsule", { name })) as
-      Uint8Array | ArrayBuffer | number[];
-    if (result instanceof Uint8Array) return result;
-    if (result instanceof ArrayBuffer) return new Uint8Array(result);
-    return Uint8Array.from(result as number[]);
+    return asBytes(
+      await this.callPy("export_workspace_capsule", {
+        name,
+        description: options.description ?? null,
+        revision_of: options.revisionOf ?? null,
+      }),
+    );
+  }
+
+  /** Return a capsule that references its workspace at ``workspaceRef`` (an
+   *  absolute IRI), and that workspace: the user publishes it there.  The
+   *  capsule records its SHA-256 and size. */
+  async exportReferencedCapsule(
+    workspaceRef: string,
+    name: string | null = null,
+    options: CapsuleExportOptions = {},
+  ): Promise<{ capsule: Uint8Array; workspace: Uint8Array }> {
+    const result = (await this.callPy("export_referenced_capsule", {
+      workspace_ref: workspaceRef,
+      name,
+      description: options.description ?? null,
+      revision_of: options.revisionOf ?? null,
+    })) as { capsule: unknown; workspace: unknown };
+    return {
+      capsule: asBytes(result.capsule),
+      workspace: asBytes(result.workspace),
+    };
+  }
+
+  /** Refuse a capsule over the runtime's size limit, before reading it. */
+  private async checkCapsuleSize(size: number): Promise<void> {
+    const limit = await this.getCapsuleSizeLimit();
+    if (limit !== null && size > limit) {
+      // Round the size up and the limit down so they never look equal.
+      const mib = (bytes: number, round: (x: number) => number) =>
+        (round((bytes / 1024 ** 2) * 10) / 10).toFixed(1);
+      throw new Error(
+        t("Capsule too large: {size} MiB (limit: {limit} MiB)", {
+          size: mib(size, Math.ceil),
+          limit: mib(limit, Math.floor),
+        }),
+      );
+    }
   }
 
   /** Largest capsule size (bytes) the runtime opens, or null without
@@ -3243,34 +3432,82 @@ await micropip.install(${JSON.stringify(bootRequirements)})
 
   /** Validate a workspace capsule, then open its workspace (replacing the
    *  current one by default).  Pass the selected ``File`` (a ``Blob``): its
-   *  size is checked before its contents are read or transferred. */
+   *  size is checked before its contents are read or transferred.  When the
+   *  capsule references its workspace, pass the file the user selected as
+   *  ``workspace``: it must match the manifest. */
   async openWorkspaceCapsule(
     filename: string,
     data: Blob | Uint8Array,
     replace: boolean = true,
+    workspace: Blob | Uint8Array | null = null,
   ): Promise<WorkspaceLoadResult> {
-    const size = data instanceof Uint8Array ? data.byteLength : data.size;
-    const limit = await this.getCapsuleSizeLimit();
-    if (limit !== null && size > limit) {
-      // Round the size up and the limit down so they never look equal.
-      const mib = (bytes: number, round: (x: number) => number) =>
-        (round((bytes / 1024 ** 2) * 10) / 10).toFixed(1);
-      throw new Error(
-        t("Capsule too large: {size} MiB (limit: {limit} MiB)", {
-          size: mib(size, Math.ceil),
-          limit: mib(limit, Math.floor),
-        }),
-      );
-    }
-    const bytes =
-      data instanceof Uint8Array
-        ? data
-        : new Uint8Array(await data.arrayBuffer());
+    await this.checkCapsuleSize(
+      data instanceof Uint8Array ? data.byteLength : data.size,
+    );
     return (await this.callPy("open_workspace_capsule", {
       filename,
-      data: bytes,
+      data: await readBytes(data),
       replace,
+      workspace: workspace === null ? null : await readBytes(workspace),
     })) as WorkspaceLoadResult;
+  }
+
+  /** Inspect a capsule without opening it; nothing is computed.  The result
+   *  keeps apart the integrity of the capsule and the checks of the reports
+   *  and reviews supplied with it (JSON texts); neither is a replay. */
+  async inspectWorkspaceCapsule(
+    data: Blob | Uint8Array,
+    options: {
+      workspace?: Blob | Uint8Array | null;
+      reports?: string[];
+      reviews?: string[];
+    } = {},
+  ): Promise<CapsuleInspection> {
+    await this.checkCapsuleSize(
+      data instanceof Uint8Array ? data.byteLength : data.size,
+    );
+    const workspace = options.workspace ?? null;
+    return restoreJsonNulls(
+      await this.callPy("inspect_workspace_capsule", {
+        data: await readBytes(data),
+        workspace: workspace === null ? null : await readBytes(workspace),
+        reports: options.reports ?? [],
+        reviews: options.reviews ?? [],
+      }),
+    ) as CapsuleInspection;
+  }
+
+  /** Compare two capsule manifests (scientific, presentation, environment). */
+  async diffCapsuleManifests(
+    oldManifest: Record<string, unknown>,
+    newManifest: Record<string, unknown>,
+  ): Promise<CapsuleDiff> {
+    return restoreJsonNulls(
+      await this.callPy("diff_capsule_manifests", {
+        old: oldManifest,
+        new: newManifest,
+      }),
+    ) as CapsuleDiff;
+  }
+
+  /** Write a review of one capsule revision: a separate JSON document that
+   *  never changes the capsule. */
+  async createCapsuleReview(
+    manifest: Record<string, unknown>,
+    reviewer: string,
+    statement: string,
+    verdict: CapsuleReviewVerdict | null,
+    reports: ProvenanceReport[] = [],
+  ): Promise<CapsuleReview> {
+    return restoreJsonNulls(
+      await this.callPy("create_capsule_review", {
+        manifest,
+        reviewer,
+        statement,
+        verdict,
+        reports,
+      }),
+    ) as CapsuleReview;
   }
 
   /** Prepare typed bindings and parameters for one active plugin recipe. */

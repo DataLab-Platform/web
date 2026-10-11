@@ -17,6 +17,7 @@ failure keeps the result, records nothing and is logged and counted. Spilled
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import logging
 import uuid
@@ -25,16 +26,22 @@ from importlib import metadata
 from typing import Any
 
 try:
-    from datalab_capsule.archive import SizePolicy, create_from_hdf5, read_capsule
+    from datalab_capsule.archive import (
+        CapsuleError,
+        SizePolicy,
+        create_from_hdf5,
+        read_capsule,
+    )
     from datalab_capsule.calls import make_call
     from datalab_capsule.compare import (
         build_report,
         compare_environments,
         compare_exact,
     )
+    from datalab_capsule.diff import diff_manifests
     from datalab_capsule.environment import collect_environment, environment_id
     from datalab_capsule.hdf5 import load_ledger, save_ledger
-    from datalab_capsule.integrity import state_facts
+    from datalab_capsule.integrity import ProvenanceError, load_json, state_facts
     from datalab_capsule.legacy import (
         PROCESSING_KEY,
         LegacyObject,
@@ -42,7 +49,14 @@ try:
         legacy_summary,
     )
     from datalab_capsule.ledger import Ledger, artifact_status, utc_timestamp
+    from datalab_capsule.manifest import (
+        inspect_manifest,
+        manifest_fingerprint,
+        validate_manifest,
+    )
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
+    from datalab_capsule.review import create_review
+    from datalab_capsule.verify import verify_capsule
 
     UNAVAILABLE_REASON: str | None = None
 except ImportError as _exc:  # pragma: no cover - depends on the boot install
@@ -151,6 +165,9 @@ class WebProvenance:
         self.notices: list[str] = []
         #: ``"loaded"`` or ``"absent"`` after opening a workspace file, else None.
         self.file_status: str | None = None
+        #: ``{"fingerprint", "name"}`` of the capsule the workspace was opened
+        #: from (the parent of a revision exported later), else None.
+        self.capsule_origin: dict[str, str] | None = None
 
     @property
     def available(self) -> bool:
@@ -166,6 +183,7 @@ class WebProvenance:
         self.state_status = {}
         self.notices = []
         self.file_status = None
+        self.capsule_origin = None
 
     def save(self, h5file: Any) -> None:
         """Write the ledger block into a workspace file, after its panels."""
@@ -257,22 +275,202 @@ class WebProvenance:
             _logger.info(message)
             self.notices.append(message)
 
-    def export_capsule(self, workspace: bytes, name: str | None = None) -> bytes:
-        """Return the capsule of a saved workspace (``.dlcapsule`` bytes)."""
+    def _require(self) -> None:
         if not self.available:
             raise RuntimeError(UNAVAILABLE_REASON)
-        return create_from_hdf5(workspace, name=name)
 
-    def open_capsule(self, data: bytes) -> bytes:
-        """Validate a capsule and return its workspace bytes."""
-        if not self.available:
-            raise RuntimeError(UNAVAILABLE_REASON)
-        policy = SizePolicy(
+    @staticmethod
+    def _policy() -> Any:
+        return SizePolicy(
             max_archive_bytes=CAPSULE_MAX_BYTES,
             max_manifest_bytes=CAPSULE_MAX_MANIFEST_BYTES,
             max_workspace_bytes=CAPSULE_MAX_BYTES,
         )
-        return read_capsule(data, policy).workspace
+
+    @staticmethod
+    def _resolver(workspace: bytes | None) -> Callable[[str], bytes] | None:
+        """Resolver of a referenced workspace: the file the user selected."""
+        return None if workspace is None else (lambda _iri: workspace)
+
+    def export_capsule(
+        self,
+        workspace: bytes,
+        name: str | None = None,
+        *,
+        description: str | None = None,
+        revision_of: str | None = None,
+        workspace_ref: str | None = None,
+    ) -> bytes:
+        """Return the capsule of a saved workspace (``.dlcapsule`` bytes).
+
+        Args:
+            workspace: Saved workspace (HDF5 bytes).
+            name: Capsule name.
+            description: Capsule description.
+            revision_of: Manifest fingerprint of the parent revision.
+            workspace_ref: Absolute IRI where the workspace will be published;
+             the capsule then references it instead of including it.
+        """
+        self._require()
+        return create_from_hdf5(
+            workspace,
+            name=name,
+            description=description,
+            revision_of=revision_of,
+            workspace_ref=workspace_ref,
+        )
+
+    def open_capsule(
+        self, data: bytes, workspace: bytes | None = None
+    ) -> tuple[bytes, dict[str, str]]:
+        """Validate a capsule and return its workspace bytes and its origin.
+
+        Args:
+            data: Capsule bytes.
+            workspace: File selected by the user for a referenced workspace;
+             it must match the SHA-256 and size of the manifest.
+
+        Returns:
+            ``(workspace, origin)``; *origin* is ``{"fingerprint", "name"}`` of
+            the capsule, to adopt with :meth:`set_capsule_origin` once the
+            workspace is open.
+
+        Raises:
+            CapsuleError: If the capsule is invalid, or references a workspace
+             that was not supplied or does not match.
+        """
+        self._require()
+        capsule = read_capsule(data, self._policy(), self._resolver(workspace))
+        if capsule.workspace is None:
+            raise CapsuleError(
+                "This capsule references its workspace: select the workspace file"
+            )
+        origin = {
+            "fingerprint": manifest_fingerprint(capsule.manifest),
+            "name": inspect_manifest(capsule.manifest)["name"],
+        }
+        return capsule.workspace, origin
+
+    def set_capsule_origin(self, origin: dict[str, str]) -> None:
+        """Remember the capsule the current workspace was opened from."""
+        self.capsule_origin = dict(origin)
+
+    def inspect_capsule(
+        self,
+        data: bytes,
+        *,
+        workspace: bytes | None = None,
+        reports: Sequence[str] = (),
+        reviews: Sequence[str] = (),
+    ) -> dict[str, Any]:
+        """Inspect a capsule without opening it; compute nothing.
+
+        Two results are kept apart, and neither is a replay:
+
+        - ``integrity``: the archive, the manifest, the workspace (when
+          included or supplied) and every stored state, checked by
+          :func:`datalab_capsule.verify.verify_capsule`;
+        - ``documents``: the verification reports and reviews supplied by the
+          user (JSON texts), checked against the capsule. Their verdicts are
+          what their authors claim; nothing is recomputed here.
+
+        Returns:
+            ``{"summary", "manifest", "integrity", "documents"}``; ``summary``
+            and ``manifest`` are None when the capsule cannot be read.
+        """
+        self._require()
+        parsed: dict[str, list[Any]] = {"reports": [], "reviews": []}
+        unreadable: list[dict[str, Any]] = []
+        for kind, texts in (("reports", reports), ("reviews", reviews)):
+            for index, text in enumerate(texts):
+                try:
+                    parsed[kind].append(load_json(text))
+                except ValueError as exc:
+                    unreadable.append(
+                        {"kind": kind[:-1], "index": index, "status": str(exc)}
+                    )
+        resolver = self._resolver(workspace)
+        try:
+            capsule = read_capsule(data, self._policy(), resolver)
+        except (OSError, ProvenanceError) as exc:
+            return {
+                "summary": None,
+                "manifest": None,
+                "integrity": {
+                    "valid": False,
+                    "fingerprint": None,
+                    "workspace": None,
+                    "states_located": None,
+                    "states_altered": [],
+                    "problems": [f"Invalid capsule: {exc}"],
+                },
+                "documents": None,
+            }
+        manifest = capsule.manifest
+        # Free the workspace copy before verify_capsule reads the archive again.
+        del capsule
+        result = verify_capsule(
+            data,
+            resolve_workspace=resolver,
+            reports=parsed["reports"],
+            reviews=parsed["reviews"],
+            policy=self._policy(),
+        )
+        rejected = collections.Counter(
+            e["status"]
+            for e in result["reports"] + result["reviews"]
+            if e["status"] != "valid"
+        )
+        integrity_problems = []
+        for problem in result["problems"]:
+            if rejected[problem]:
+                rejected[problem] -= 1
+            else:
+                integrity_problems.append(problem)
+        return {
+            "summary": inspect_manifest(manifest),
+            "manifest": manifest,
+            "integrity": {
+                "valid": not integrity_problems,
+                "fingerprint": result["fingerprint"],
+                "workspace": result["workspace"],
+                "states_located": result["states_located"],
+                "states_altered": result["states_altered"],
+                "problems": integrity_problems,
+            },
+            "documents": {
+                "reports": result["reports"],
+                "reviews": result["reviews"],
+                "unreadable": unreadable,
+            },
+        }
+
+    def diff_manifests(self, old: Any, new: Any) -> dict[str, Any]:
+        """Compare two capsule manifests (e.g. kept in the revision list)."""
+        self._require()
+        for manifest in (old, new):
+            validate_manifest(manifest)
+        return diff_manifests(old, new)
+
+    def create_review(
+        self,
+        manifest: Any,
+        *,
+        reviewer: str,
+        statement: str,
+        verdict: str | None = None,
+        reports: Sequence[Any] = (),
+    ) -> dict[str, Any]:
+        """Write a review of one capsule revision (a separate JSON document)."""
+        self._require()
+        validate_manifest(manifest)
+        return create_review(
+            manifest,
+            reviewer=reviewer,
+            statement=statement,
+            verdict=verdict,
+            reports=reports,
+        )
 
     @property
     def capsule_max_bytes(self) -> int | None:
@@ -328,6 +526,7 @@ class WebProvenance:
             "capture_failures": self.capture_failures,
             "notices": list(self.notices),
             "file_status": self.file_status,
+            "capsule_origin": self.capsule_origin,
         }
 
     # -- Capture ------------------------------------------------------------

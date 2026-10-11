@@ -38,6 +38,8 @@ export interface StaticActionCallbacks {
   onSaveToDirectory: () => void;
   onOpenWorkspaceHdf5: () => void;
   onSaveWorkspaceHdf5: () => void;
+  /** Open the capsule dialog (export, inspect, replay, revisions). */
+  onCapsule: () => void;
   onImportHdf5: () => void;
   onImportTextWizard: () => void;
   /** Trigger inline rename on the current object in the object tree. */
@@ -177,6 +179,13 @@ export function buildStaticActions(
       toolbarOrder: 2,
       enabled: ready,
       run: cb.onImportHdf5,
+    },
+    {
+      id: "file.capsule",
+      label: t("Workspace capsule…"),
+      menuPath: "File/Workspace capsule…",
+      enabled: ready,
+      run: cb.onCapsule,
     },
     // Edit menu — order mirrors DataLab Qt's Edit menu (New group first,
     // then per-object actions).

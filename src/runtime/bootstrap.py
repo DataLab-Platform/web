@@ -6751,19 +6751,123 @@ def open_workspace_from_bytes(
     return counts
 
 
-def export_workspace_capsule(name: str | None = None) -> bytes:
-    """Return a capsule (``.dlcapsule`` bytes) of the workspace and its provenance."""
-    return _PROVENANCE.export_capsule(save_workspace_to_bytes(), name=name)
+def export_workspace_capsule(
+    name: str | None = None,
+    description: str | None = None,
+    revision_of: str | None = None,
+) -> bytes:
+    """Return a capsule (``.dlcapsule`` bytes) of the workspace and its provenance.
+
+    *revision_of* names the parent revision (its manifest fingerprint).
+    """
+    return _PROVENANCE.export_capsule(
+        save_workspace_to_bytes(),
+        name=name,
+        description=description,
+        revision_of=revision_of,
+    )
+
+
+def export_referenced_capsule(
+    workspace_ref: str,
+    name: str | None = None,
+    description: str | None = None,
+    revision_of: str | None = None,
+) -> dict[str, bytes]:
+    """Return a capsule referencing its workspace, and that workspace.
+
+    The capsule records the SHA-256 and size of the returned workspace bytes,
+    which the user publishes at *workspace_ref* (an absolute IRI).
+    """
+    workspace = save_workspace_to_bytes()
+    capsule = _PROVENANCE.export_capsule(
+        workspace,
+        name=name,
+        description=description,
+        revision_of=revision_of,
+        workspace_ref=workspace_ref,
+    )
+    return {"capsule": capsule, "workspace": workspace}
+
+
+def _as_bytes(data: Any) -> bytes | None:
+    if data is None:
+        return None
+    if hasattr(data, "to_py"):
+        data = data.to_py()
+    return bytes(data)
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if hasattr(value, "to_py"):
+        value = value.to_py()
+    return list(value)
 
 
 def open_workspace_capsule(
-    filename: str, data: Any, *, replace: bool = True
+    filename: str, data: Any, *, replace: bool = True, workspace: Any = None
 ) -> dict[str, int]:
-    """Validate a capsule, then open its workspace like an HDF5 workspace file."""
-    if hasattr(data, "to_py"):
-        data = data.to_py()
-    workspace = _PROVENANCE.open_capsule(bytes(data))
-    return open_workspace_from_bytes(filename, workspace, replace=replace)
+    """Validate a capsule, then open its workspace like an HDF5 workspace file.
+
+    *workspace* is the file selected by the user when the capsule references its
+    workspace; it must match the manifest.
+    """
+    data = _as_bytes(data)
+    workspace, origin = _PROVENANCE.open_capsule(data, _as_bytes(workspace))
+    # Free the archive copy before the workspace is loaded.
+    del data
+    counts = open_workspace_from_bytes(filename, workspace, replace=replace)
+    if replace:
+        _PROVENANCE.set_capsule_origin(origin)
+    return counts
+
+
+def inspect_workspace_capsule(
+    data: Any,
+    workspace: Any = None,
+    reports: Any = None,
+    reviews: Any = None,
+) -> dict[str, Any]:
+    """Inspect a capsule without opening it (see ``WebProvenance.inspect_capsule``).
+
+    *reports* and *reviews* are JSON texts supplied by the user.
+    """
+    return _PROVENANCE.inspect_capsule(
+        _as_bytes(data),
+        workspace=_as_bytes(workspace),
+        reports=[str(text) for text in _as_list(reports)],
+        reviews=[str(text) for text in _as_list(reviews)],
+    )
+
+
+def diff_capsule_manifests(old: Any, new: Any) -> dict[str, Any]:
+    """Compare two capsule manifests: scientific, presentation, environment."""
+    if hasattr(old, "to_py"):
+        old = old.to_py()
+    if hasattr(new, "to_py"):
+        new = new.to_py()
+    return _PROVENANCE.diff_manifests(old, new)
+
+
+def create_capsule_review(
+    manifest: Any,
+    reviewer: str,
+    statement: str,
+    verdict: str | None = None,
+    reports: Any = None,
+) -> dict[str, Any]:
+    """Write a review of one capsule revision (a separate JSON document)."""
+    if hasattr(manifest, "to_py"):
+        manifest = manifest.to_py()
+    return _PROVENANCE.create_review(
+        manifest,
+        reviewer=reviewer,
+        statement=statement,
+        verdict=verdict,
+        reports=[r.to_py() if hasattr(r, "to_py") else r for r in _as_list(reports)],
+    )
 
 
 def get_capsule_size_limit() -> int | None:
@@ -7322,7 +7426,11 @@ __all__ = [
     "replay_activity",
     "set_provenance_edition_version",
     "export_workspace_capsule",
+    "export_referenced_capsule",
     "open_workspace_capsule",
+    "inspect_workspace_capsule",
+    "diff_capsule_manifests",
+    "create_capsule_review",
     "get_capsule_size_limit",
     "get_image_grid_param_schema",
     "distribute_images_on_grid",

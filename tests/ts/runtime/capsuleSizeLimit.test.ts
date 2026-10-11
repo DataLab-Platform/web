@@ -55,6 +55,7 @@ describe("DataLabRuntime.openWorkspaceCapsule size check", () => {
       filename: "small.dlcapsule",
       data: new Uint8Array([1, 2, 3]),
       replace: false,
+      workspace: null,
     });
   });
 });

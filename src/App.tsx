@@ -95,6 +95,7 @@ import { ProcessingDataSetDialog } from "./components/ProcessingDataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
+import { CapsuleDialog } from "./components/CapsuleDialog";
 import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
 import {
   markConsoleErrorsSeen,
@@ -789,6 +790,7 @@ export default function App() {
   } | null>(null);
   const [editingMeta, setEditingMeta] = useState<ObjectMeta | null>(null);
   const [helpView, setHelpView] = useState<HelpView | null>(null);
+  const [capsuleOpen, setCapsuleOpen] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   // Persistent error indicator: prefix the tab title with "(!) " when
   // any browser-console ``warn``/``error`` entry is still unseen.
@@ -3692,6 +3694,20 @@ export default function App() {
     setH5BrowserFiles([]);
   }, []);
 
+  /** A capsule's workspace replaced the current one (same transition as
+   *  opening an HDF5 workspace file). */
+  const handleCapsuleOpened = useCallback(
+    async (filename: string) => {
+      setSelectedIds([]);
+      setCurrentId(null);
+      setWorkspaceVersion((v) => v + 1);
+      setWorkspaceFilename(filename.replace(/\.dlcapsule$/i, ".h5"));
+      markClean();
+      await refresh(null);
+    },
+    [refresh, setWorkspaceFilename, markClean, setSelectedIds],
+  );
+
   // Startup Applications deep-link: validate the exact plugin and recipe
   // versions against a manifest loaded from the bundle before opening its
   // packaged example. Unknown plugins are never installed implicitly.
@@ -4421,6 +4437,7 @@ export default function App() {
         onSaveToDirectory: handleSaveToDirectory,
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
+        onCapsule: () => setCapsuleOpen(true),
         onImportHdf5: handleImportHdf5,
         onImportTextWizard: handleImportTextWizard,
         onRenameCurrent: handleRenameCurrent,
@@ -5427,6 +5444,18 @@ export default function App() {
             appVersion={import.meta.env.VITE_APP_VERSION}
             runtime={runtime}
             runtimeStatus={status}
+          />
+        )}
+        {capsuleOpen && runtime && (
+          <CapsuleDialog
+            runtime={runtime}
+            onClose={() => setCapsuleOpen(false)}
+            onOpened={handleCapsuleOpened}
+            onSaved={(result) => {
+              if (result.outcome === "downloaded") {
+                toastDownloaded(result.filename);
+              }
+            }}
           />
         )}
         {releaseNotesOpen && (
