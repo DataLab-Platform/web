@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   multi-selection previews fall back to normal processing.
 - **Add metadata:** _Edit > Metadata > Add metadata…_ can now extract the value from the formatted text with a regular expression, for example an exposure time or a shot number read from object titles. Objects without a match are left unchanged unless you ask for an error, a scale factor converts numeric values (e.g. milliseconds to seconds), and a live preview shows the resulting values. Keys may contain dots and hyphens, as used by plugin keys, and a **Known keys** list copies a key already present on the selected objects. Invalid settings are reported and the dialog reopens with your entries.
 - **Application tools:** applications can now offer tools, listed in a **Tools** section of the Applications window and in their _Plugins_ submenu, and enabled only when the selection suits them. Instrument tools open a window with a live view next to their settings, and add each acquisition to a new group. The bundled Camera and Pulse applications use it for a scientific camera simulator and an oscilloscope simulator, whose acquisitions are ready for their methods.
+- **Workspace provenance:** DataLab-Web records how each result was obtained (processing, parameters, the exact content of the objects used, regions of interest, X alignment of two-signal differences, software versions), in RAM and on-disk storage modes alike. The record is saved with the HDF5 workspace and read back by DataLab-Web and DataLab Desktop. Workspaces saved by earlier versions keep their processing history as stored, without inventing anything.
+- **Workspace capsules:** _File > Workspace capsule…_ exports the workspace with a description of its provenance (a `.dlcapsule` file), optionally as a revision of the capsule it was opened from, with the workspace included or referenced by an address. A received capsule can be inspected without being opened: its integrity is checked from its files, apart from the verification reports and reviews supplied with it, whose verdicts remain their authors' claims. Once opened, each recorded normalization or signal difference can be recomputed in the browser and compared with the stored result; reviews of a revision can be written and revisions compared, with scientific, presentation, storage, environment and attachment changes listed apart.
+- **Capsule attachments:** light files (a protocol, notes, a small table) can be attached to a capsule, are listed with their size and fingerprint, and are saved only on request, never opened. A child revision does not copy its parent's attachments; the export says so.
+- **Capsule registry (optional):** a _Registry_ tab connects to a DataLab-Capsule registry to publish a capsule's description, attachments and reviews, list revisions and retrieve one. Everything it returns is checked in the browser; without a registry address nothing changes.
 
 ### Changed
 
@@ -35,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Refusals across the worker:** when a two-signal operation is refused (for example an operand that does not cover the source grid), the reason and its code are now always shown, including in worker mode, and nothing is computed.
 - **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
 - **Parameter forms:** a checkbox that has only its own text, as in DataLab Desktop, no longer shows its internal field name as a label.
 
