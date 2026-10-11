@@ -11,130 +11,24 @@
  * Integrity, supplied documents and local replay are separate sections of the
  * dialog: each assertion reads its own section.
  */
-import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { createServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { readFileSync } from "node:fs";
+
+import { test, expect, type Download } from "@playwright/test";
 
 import {
-  test,
-  expect,
-  type Browser,
-  type Download,
-  type Page,
-} from "@playwright/test";
+  buildChain,
+  choose,
+  closeDialog,
+  download,
+  exportCapsule,
+  inspect,
+  openDialog,
+  openPage,
+  requireProvenance,
+  startRegistry,
+} from "./capsuleHelpers";
 
-import { forceSaveDownloadFallback, waitForRuntimeReady } from "./fixtures";
-
-const X = [0, 0.25, 0.5, 0.75];
-const Y = [-2, 0, 1, 4];
 const REF = "https://data.example.org/chain.h5";
-
-/** Skip without DataLab-Capsule, or fail when CI requires provenance. */
-function requireProvenance(available: boolean): void {
-  if (process.env.DLW_REQUIRE_PROVENANCE === "1") {
-    expect(available, "DataLab-Capsule must be installed").toBe(true);
-  } else {
-    test.skip(!available, "DataLab-Capsule is not installed");
-  }
-}
-
-async function openPage(browser: Browser): Promise<Page> {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto("/?runtime=worker");
-  await waitForRuntimeReady(page);
-  await forceSaveDownloadFallback(page);
-  return page;
-}
-
-/** S0 -> S1 = S0 + 1 (opaque) -> S2 = normalize(S1, maximum) (replayable). */
-async function buildChain(page: Page): Promise<boolean> {
-  return page.evaluate(
-    async ({ x, y }) => {
-      const runtime = window.runtime;
-      const info = await runtime.getProvenanceLedger();
-      if (!info.available) return false;
-      const s0 = await runtime.addSignalFromArrays({
-        title: "S0",
-        xdata: x,
-        ydata: y,
-        xunit: "s",
-        yunit: "",
-      });
-      const [s1] = await runtime.applyFeature("addition_constant", [s0], null, {
-        value: 1,
-      });
-      await runtime.applyFeature("normalize", [s1], null, {
-        method: "maximum",
-      });
-      return true;
-    },
-    { x: X, y: Y },
-  );
-}
-
-async function openDialog(page: Page): Promise<void> {
-  await page.getByRole("menuitem", { name: "File" }).first().click();
-  await page.getByRole("menuitem", { name: /Workspace capsule/ }).click();
-  await expect(page.getByTestId("capsule-dialog")).toBeVisible();
-}
-
-async function closeDialog(page: Page): Promise<void> {
-  await page
-    .getByTestId("capsule-dialog")
-    .getByRole("button", { name: "Close" })
-    .click();
-}
-
-/** Click *trigger* and save the download it starts; return its path. */
-async function download(
-  page: Page,
-  trigger: () => Promise<void>,
-  name: string,
-): Promise<string> {
-  const pending = page.waitForEvent("download");
-  await trigger();
-  const file = await pending;
-  const target = test.info().outputPath(name);
-  await file.saveAs(target);
-  return target;
-}
-
-/** Click *trigger* and give *path* to the file chooser it opens. */
-async function choose(
-  page: Page,
-  trigger: () => Promise<void>,
-  path: string,
-): Promise<void> {
-  const pending = page.waitForEvent("filechooser");
-  await trigger();
-  await (await pending).setFiles(path);
-}
-
-async function exportCapsule(
-  page: Page,
-  name: string,
-  options: { revision?: boolean } = {},
-): Promise<string> {
-  await page.getByRole("tab", { name: "Export" }).click();
-  await page.getByTestId("capsule-name").fill(name);
-  if (options.revision !== undefined) {
-    await page.getByTestId("capsule-as-revision").setChecked(options.revision);
-  }
-  return download(
-    page,
-    () => page.getByTestId("capsule-export-button").click(),
-    `${name}.dlcapsule`,
-  );
-}
-
-async function inspect(page: Page, path: string): Promise<void> {
-  await page.getByRole("tab", { name: "Inspect" }).click();
-  await choose(page, () => page.getByTestId("capsule-choose").click(), path);
-  await expect(page.getByTestId("capsule-integrity-status")).toBeVisible();
-}
 
 test.describe("capsule exchange between two browsers", () => {
   test.describe.configure({ timeout: 600_000 });
@@ -419,57 +313,6 @@ test.describe("capsule exchange between two browsers", () => {
     await recipient.context().close();
   });
 });
-
-/** Start a DataLab-Capsule registry (``registry`` extra) on a free port. */
-async function startRegistry(
-  token: string,
-): Promise<{ url: string; stop: () => void } | null> {
-  const port = await new Promise<number>((resolve) => {
-    const probe = createServer();
-    probe.listen(0, "127.0.0.1", () => {
-      const address = probe.address() as AddressInfo;
-      probe.close(() => resolve(address.port));
-    });
-  });
-  const root = mkdtempSync(path.join(tmpdir(), "dlw-registry-"));
-  const child = spawn(
-    process.env.DLW_REGISTRY_PYTHON ?? "python",
-    [
-      "-m",
-      "datalab_capsule.registry_app",
-      root,
-      "--port",
-      String(port),
-      "--token-env",
-      "DLW_REGISTRY_TOKEN",
-      "--origin",
-      "http://localhost:5173",
-    ],
-    { env: { ...process.env, DLW_REGISTRY_TOKEN: token }, stdio: "ignore" },
-  );
-  child.on("error", () => undefined);
-  const url = `http://127.0.0.1:${port}`;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (child.exitCode !== null) break;
-    try {
-      if ((await fetch(`${url}/api/v1/status`)).ok) {
-        return {
-          url,
-          stop: () => {
-            child.kill();
-            rmSync(root, { recursive: true, force: true });
-          },
-        };
-      }
-    } catch {
-      // Not listening yet.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  child.kill();
-  rmSync(root, { recursive: true, force: true });
-  return null;
-}
 
 test.describe("capsule registry (optional)", () => {
   test.describe.configure({ timeout: 600_000 });
