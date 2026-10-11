@@ -231,6 +231,36 @@ test.describe("Notebook UI", () => {
     await expect(rendered.locator("li")).toHaveCount(2);
   });
 
+  test("show_signal renders an inline Plotly figure", async ({
+    warmPage: page,
+  }) => {
+    const editor = page.locator(".nb-cell-editor .cm-content").first();
+    await editor.click();
+    await page.keyboard.type(
+      [
+        "x = np.linspace(0, 1, 50)",
+        'await proxy.add_signal("nb_plotly", x, x ** 2)',
+        'await show_signal("nb_plotly")',
+      ].join("\n"),
+    );
+    await page.keyboard.press("Control+Enter");
+
+    const figure = page.locator(".nb-output-plotly .js-plotly-plot").first();
+    await expect(figure).toBeAttached({ timeout: 60_000 });
+    // Adding the signal brings the Plot view forward: return to the notebook.
+    await page.getByRole("tab", { name: "Notebooks" }).click();
+    await expect(figure).toBeVisible();
+    await expect(figure.locator(".xtick").first()).toBeVisible();
+    const trace = await figure.evaluate((el) => {
+      const gd = el as HTMLElement & {
+        _fullData?: { type?: string; x?: ArrayLike<number> }[];
+      };
+      const first = gd._fullData?.[0];
+      return { type: first?.type, points: first?.x?.length ?? 0 };
+    });
+    expect(trace).toEqual({ type: "scattergl", points: 50 });
+  });
+
   test("Rename tab title updates the active tab title", async ({
     warmPage: page,
   }) => {
