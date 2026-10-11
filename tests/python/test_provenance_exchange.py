@@ -168,3 +168,64 @@ def test_referenced_workspace_variant():
         "chain.dlcapsule", capsule, replace=True, workspace=workspace
     )
     check_chain(reader, "web")
+
+
+def test_attachments_are_declared_listed_and_returned_as_data(counted_apply):
+    """Light attachments travel with the capsule; nothing is computed or opened."""
+    writer = fresh_runtime()
+    build_chain(writer)
+    note = b"Acquired on bench 2.\n"
+    data = writer.export_workspace_capsule(
+        name="chain",
+        attachments=[
+            {
+                "name": "protocol.txt",
+                "data": note,
+                "media_type": "text/plain",
+                "description": "Protocol",
+            }
+        ],
+    )
+    reader = fresh_runtime()
+    before = counted_apply["count"]
+    result = reader.inspect_workspace_capsule(data)
+    assert counted_apply["count"] == before
+    assert result["integrity"]["valid"]
+    [listed] = result["summary"]["attachments"]
+    assert listed["name"] == "protocol.txt" and listed["size"] == str(len(note))
+    assert listed["description"] == "Protocol"
+    assert reader.get_capsule_attachment(data, "protocol.txt") == note
+    with pytest.raises(Exception, match="No such attachment"):
+        reader.get_capsule_attachment(data, "other.txt")
+    # Attachments do not change how the workspace opens and replays.
+    reader.open_workspace_capsule("chain.dlcapsule", data)
+    check_chain(reader, "web")
+
+
+def test_registry_revision_is_checked_not_trusted():
+    """A manifest and reviews from a registry are checked like files."""
+    writer, data = _exported()
+    info = writer.inspect_workspace_capsule(data)
+    manifest = json.dumps(info["manifest"])
+    fingerprint = info["summary"]["fingerprint"]
+    review = writer.create_capsule_review(
+        info["manifest"], reviewer="B", statement="Replayed."
+    )
+    from datalab_capsule.review import create_review
+
+    other = create_review("sha256:" + "0" * 64, reviewer="C", statement="Elsewhere.")
+    reader = fresh_runtime()
+    checked = reader.check_registry_revision(
+        manifest, fingerprint, [json.dumps(review), json.dumps(other), "{bad"]
+    )
+    assert checked["summary"]["fingerprint"] == fingerprint
+    statuses = [r["status"] for r in checked["reviews"]]
+    assert statuses[0] == "valid"
+    assert "another capsule revision" in statuses[1]
+    assert checked["reviews"][2]["review"] is None
+    with pytest.raises(Exception, match="another revision"):
+        reader.check_registry_revision(manifest, "sha256:" + "1" * 64)
+    tampered = json.loads(manifest)
+    next(e for e in tampered["@graph"] if e["@id"] == "./")["name"] = "edited"
+    with pytest.raises(Exception, match="fingerprint"):
+        reader.check_registry_revision(json.dumps(tampered), fingerprint)

@@ -160,6 +160,7 @@ Presentational React. Notable components:
   files, nothing recomputed), the checks of **supplied documents** (reports
   and reviews: their verdicts are their authors' claims) and the **local
   replay** of an activity of the open workspace.
+  Light attachments selected at export are declared in the manifest (size, SHA-256) and listed on inspection; one is saved only on request and never opened. The optional _Registry_ tab connects to a DataLab-Capsule registry (address kept in `localStorage`, publishing token in `sessionStorage` only) to publish a manifest with its attachments and reviews, list revisions and retrieve one; everything it returns is checked by DataLab-Capsule in the runtime (`check_registry_revision`) and attachments against the checked manifest's SHA-256. Without an address, nothing changes.
 - Macros / notebooks: `MacroPanel.tsx`, `MacroEditorTabs.tsx`,
   `MacroConsole.tsx`, `notebook/`.
 - AI assistant: `AIAssistant/`.
@@ -451,6 +452,7 @@ above. Its `package.json` version must stay aligned with the app's.
   exported or inspected in this browser (manifest fingerprint, parent, and the
   manifest itself, so that two revisions can be compared without their
   files). A local convenience, never a source of truth.
+- `capsuleRegistry.ts` — optional HTTP client of a DataLab-Capsule registry (`fetch`, no Pyodide) and its settings. The registry is never trusted: manifests and reviews go through the runtime checks, attachments through a SHA-256 check.
 
 ---
 

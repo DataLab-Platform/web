@@ -6751,20 +6751,40 @@ def open_workspace_from_bytes(
     return counts
 
 
+def _capsule_attachments(attachments: Any) -> list[dict[str, Any]]:
+    """Convert attachments selected in the browser to library items."""
+    items = []
+    for item in _as_list(attachments):
+        if hasattr(item, "to_py"):
+            item = item.to_py()
+        items.append(
+            {
+                "name": str(item["name"]),
+                "data": _as_bytes(item["data"]),
+                "media_type": str(item["media_type"]),
+                "description": item.get("description") or None,
+            }
+        )
+    return items
+
+
 def export_workspace_capsule(
     name: str | None = None,
     description: str | None = None,
     revision_of: str | None = None,
+    attachments: Any = None,
 ) -> bytes:
     """Return a capsule (``.dlcapsule`` bytes) of the workspace and its provenance.
 
-    *revision_of* names the parent revision (its manifest fingerprint).
+    *revision_of* names the parent revision (its manifest fingerprint);
+    *attachments* lists light files ``{name, data, media_type, description}``.
     """
     return _PROVENANCE.export_capsule(
         save_workspace_to_bytes(),
         name=name,
         description=description,
         revision_of=revision_of,
+        attachments=_capsule_attachments(attachments),
     )
 
 
@@ -6773,6 +6793,7 @@ def export_referenced_capsule(
     name: str | None = None,
     description: str | None = None,
     revision_of: str | None = None,
+    attachments: Any = None,
 ) -> dict[str, bytes]:
     """Return a capsule referencing its workspace, and that workspace.
 
@@ -6786,8 +6807,23 @@ def export_referenced_capsule(
         description=description,
         revision_of=revision_of,
         workspace_ref=workspace_ref,
+        attachments=_capsule_attachments(attachments),
     )
     return {"capsule": capsule, "workspace": workspace}
+
+
+def get_capsule_attachment(data: Any, name: str) -> bytes:
+    """Return the checked bytes of one capsule attachment (never opened)."""
+    return _PROVENANCE.capsule_attachment(_as_bytes(data), str(name))
+
+
+def check_registry_revision(
+    manifest: str, fingerprint: str, reviews: Any = None
+) -> dict[str, Any]:
+    """Check a manifest and reviews retrieved from a registry (JSON texts)."""
+    return _PROVENANCE.check_registry_revision(
+        str(manifest), str(fingerprint), [str(text) for text in _as_list(reviews)]
+    )
 
 
 def _as_bytes(data: Any) -> bytes | None:
@@ -7429,6 +7465,8 @@ __all__ = [
     "export_referenced_capsule",
     "open_workspace_capsule",
     "inspect_workspace_capsule",
+    "get_capsule_attachment",
+    "check_registry_revision",
     "diff_capsule_manifests",
     "create_capsule_review",
     "get_capsule_size_limit",

@@ -123,6 +123,12 @@ jobs:
           --wheel-dir .wheels
           --github-env "$GITHUB_ENV"
 
+      - name: Install the DataLab-Capsule registry (optional feature, tested)
+        run: |
+          python -m pip install "$(ls .wheels/datalab_capsule-*.whl)[registry]"
+          echo "DLW_REGISTRY_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+          echo "DLW_REQUIRE_REGISTRY=1" >> "$GITHUB_ENV"
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 

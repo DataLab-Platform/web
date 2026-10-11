@@ -18,7 +18,7 @@ export interface CapsuleRevision {
   revisionOf: string | null;
   datePublished: string;
   /** How the revision reached this browser. */
-  source: "exported" | "inspected";
+  source: "exported" | "inspected" | "registry";
   /** When it was recorded here (ms since epoch). */
   recordedAt: number;
   manifest: Record<string, unknown>;

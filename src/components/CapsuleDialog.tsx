@@ -31,12 +31,19 @@ import {
   type CapsuleRevision,
 } from "../storage/capsuleRevisions";
 import {
+  loadRegistrySettings,
+  RegistryClient,
+  saveRegistrySettings,
+  type RegistryRevision,
+  type RegistrySettings,
+} from "../storage/capsuleRegistry";
+import {
   acceptFromExtensions,
   saveBytesToFile,
   type SaveFileResult,
 } from "../utils/saveFile";
 
-type Tab = "export" | "inspect" | "replay" | "revisions";
+type Tab = "export" | "inspect" | "replay" | "revisions" | "registry";
 
 interface CapsuleDialogProps {
   runtime: RuntimeApi;
@@ -80,6 +87,36 @@ function pickFile(accept: string): Promise<File | null> {
   });
 }
 
+function pickFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.click();
+  });
+}
+
+/** Largest attachment accepted by DataLab-Capsule (checked before reading). */
+const MAX_ATTACHMENT_BYTES = 16 * 1024 ** 2;
+
+/** Attachment name allowed by the capsule profile, unique among ``taken``. */
+function attachmentName(filename: string, taken: Set<string>): string {
+  const safe = filename.replace(/[^A-Za-z0-9._-]+/g, "_");
+  const base = (/^[A-Za-z0-9]/.test(safe) ? safe : `file${safe}`).slice(0, 96);
+  let name = base;
+  for (let index = 2; taken.has(name); index += 1) {
+    name = `${index}-${base}`;
+  }
+  return name;
+}
+
+function formatSize(bytes: number): string {
+  return bytes < 1024
+    ? t("{size} B", { size: bytes })
+    : t("{size} KiB", { size: (bytes / 1024).toFixed(1) });
+}
+
 async function revisionOf(inspection: CapsuleInspection) {
   const summary = inspection.summary;
   if (!summary || !inspection.manifest) return;
@@ -100,6 +137,8 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<ProvenanceLedgerInfo | null>(null);
   const [revisions, setRevisions] = useState<CapsuleRevision[]>([]);
+  const [registry, setRegistry] =
+    useState<RegistrySettings>(loadRegistrySettings);
 
   const refreshInfo = useCallback(async () => {
     setInfo(await runtime.getProvenanceLedger());
@@ -135,6 +174,7 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
     ["inspect", t("Inspect")],
     ["replay", t("Local replay")],
     ["revisions", t("Revisions")],
+    ["registry", t("Registry")],
   ];
 
   return (
@@ -181,6 +221,7 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
                 runtime={runtime}
                 busy={busy}
                 run={run}
+                registry={registry}
                 onInspected={refreshInfo}
                 onOpened={async (filename) => {
                   await onOpened(filename);
@@ -198,6 +239,20 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
                 revisions={revisions}
                 busy={busy}
                 run={run}
+              />
+            )}
+            {tab === "registry" && (
+              <RegistryTab
+                runtime={runtime}
+                busy={busy}
+                run={run}
+                settings={registry}
+                onSettings={(settings) => {
+                  saveRegistrySettings(settings);
+                  setRegistry(loadRegistrySettings());
+                }}
+                onRetrieved={refreshInfo}
+                onSaved={onSaved}
               />
             )}
           </>
@@ -231,12 +286,48 @@ function ExportTab(
   const [asRevision, setAsRevision] = useState(true);
   const [referenced, setReferenced] = useState(false);
   const [workspaceRef, setWorkspaceRef] = useState("");
+  const [attachments, setAttachments] = useState<
+    { name: string; file: File }[]
+  >([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+
+  const addAttachments = async () => {
+    const files = await pickFiles();
+    const taken = new Set(attachments.map((a) => a.name));
+    const added: { name: string; file: File }[] = [];
+    const tooLarge: string[] = [];
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        tooLarge.push(file.name);
+        continue;
+      }
+      const name = attachmentName(file.name, taken);
+      taken.add(name);
+      added.push({ name, file });
+    }
+    setAttachments([...attachments, ...added]);
+    setAttachmentError(
+      tooLarge.length
+        ? t("Attachments are limited to 16 MiB: {files}", {
+            files: tooLarge.join(", "),
+          })
+        : null,
+    );
+  };
 
   const exportCapsule = () =>
     run(async () => {
       const options = {
         description: description || null,
         revisionOf: origin && asRevision ? origin.fingerprint : null,
+        // Read on each export: worker mode moves (detaches) the bytes.
+        attachments: await Promise.all(
+          attachments.map(async ({ name: attachment, file }) => ({
+            name: attachment,
+            data: new Uint8Array(await file.arrayBuffer()),
+            media_type: file.type || "application/octet-stream",
+          })),
+        ),
       };
       const filename = `${(name || "workspace").replace(/[^\w.-]+/g, "_")}.dlcapsule`;
       let capsule: Uint8Array;
@@ -345,6 +436,47 @@ function ExportTab(
           />
         </label>
       )}
+      <section data-testid="capsule-attachments-export">
+        <h3>{t("Attachments")}</h3>
+        <p>
+          {t(
+            "Light files (protocol, notes, small tables) declared in the capsule with their size and fingerprint. They are never opened or executed.",
+          )}
+        </p>
+        {attachments.length > 0 && (
+          <ul>
+            {attachments.map(({ name: attachment, file }) => (
+              <li key={attachment} data-testid="capsule-attachment-selected">
+                <code>{attachment}</code> ({formatSize(file.size)}){" "}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachments(
+                      attachments.filter((a) => a.name !== attachment),
+                    )
+                  }
+                  disabled={busy}
+                >
+                  {t("Remove")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {attachmentError && (
+          <p className="error" role="alert">
+            {attachmentError}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={addAttachments}
+          disabled={busy}
+          data-testid="capsule-add-attachment"
+        >
+          {t("Add attachments…")}
+        </button>
+      </section>
       <div className="actions">
         <button
           type="button"
@@ -361,12 +493,15 @@ function ExportTab(
 
 function InspectTab(
   props: TabProps & {
+    registry: RegistrySettings;
     onInspected: () => Promise<void>;
     onOpened: (filename: string) => Promise<void>;
     onSaved: (result: SaveFileResult) => void;
   },
 ) {
-  const { runtime, busy, run, onInspected, onOpened, onSaved } = props;
+  const { runtime, busy, run, registry, onInspected, onOpened, onSaved } =
+    props;
+  const [published, setPublished] = useState<string | null>(null);
   const [capsule, setCapsule] = useState<File | null>(null);
   const [workspace, setWorkspace] = useState<File | null>(null);
   const [reports, setReports] = useState<{ name: string; text: string }[]>([]);
@@ -439,8 +574,61 @@ function InspectTab(
       await onOpened(capsule.name);
     });
 
+  const download = (attachment: { name: string; media_type: string }) =>
+    run(async () => {
+      if (!capsule) return;
+      const bytes = await runtime.getCapsuleAttachment(
+        capsule,
+        attachment.name,
+      );
+      onSaved(
+        await saveBytesToFile(
+          bytes,
+          attachment.name,
+          undefined,
+          attachment.media_type,
+        ),
+      );
+    });
+
   const summary = inspection?.summary ?? null;
   const referenced = summary?.workspace.referenced ?? false;
+
+  // Publish the manifest, its attachments and the valid supplied reviews.
+  const publish = () =>
+    run(async () => {
+      if (!capsule || !inspection?.manifest || !summary) return;
+      setPublished(null);
+      const client = new RegistryClient(registry.address, registry.token);
+      const { fingerprint } = await client.publishManifest(
+        JSON.stringify(inspection.manifest),
+      );
+      for (const attachment of summary.attachments) {
+        await client.uploadAttachment(
+          fingerprint,
+          attachment.name,
+          await runtime.getCapsuleAttachment(capsule, attachment.name),
+        );
+      }
+      const valid = inspection.documents?.reviews ?? [];
+      let count = 0;
+      for (const [index, review] of reviews.entries()) {
+        if (valid[index]?.status === "valid") {
+          await client.publishReview(review.text);
+          count += 1;
+        }
+      }
+      setPublished(
+        t(
+          "Published {fingerprint} with {attachments} attachments and {reviews} reviews",
+          {
+            fingerprint: shortId(fingerprint),
+            attachments: summary.attachments.length,
+            reviews: count,
+          },
+        ),
+      );
+    });
 
   return (
     <div className="capsule-tab" data-testid="capsule-inspect">
@@ -487,6 +675,13 @@ function InspectTab(
       {inspection && (
         <>
           {summary && <CapsuleSummaryView summary={summary} />}
+          {summary && summary.attachments.length > 0 && (
+            <AttachmentsSection
+              attachments={summary.attachments}
+              busy={busy || !inspection.integrity.valid}
+              onDownload={download}
+            />
+          )}
           <IntegritySection inspection={inspection} />
           <DocumentsSection
             inspection={inspection}
@@ -497,12 +692,24 @@ function InspectTab(
             <ReviewWriter
               runtime={runtime}
               manifest={inspection.manifest}
+              registry={registry}
               busy={busy}
               run={run}
               onSaved={onSaved}
             />
           )}
+          {published && <p data-testid="capsule-published">{published}</p>}
           <div className="actions">
+            {registry.address && (
+              <button
+                type="button"
+                onClick={publish}
+                disabled={busy || !inspection.integrity.valid}
+                data-testid="capsule-publish"
+              >
+                {t("Publish to the registry")}
+              </button>
+            )}
             <button
               type="button"
               onClick={open}
@@ -567,6 +774,63 @@ function CapsuleSummaryView(props: {
               <td>{activity.origin}</td>
               <td>
                 {activity.replayable ? t("replayable") : t("not replayable")}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function AttachmentsSection(props: {
+  attachments: NonNullable<CapsuleInspection["summary"]>["attachments"];
+  busy: boolean;
+  onDownload: (attachment: { name: string; media_type: string }) => void;
+}) {
+  const { attachments, busy, onDownload } = props;
+  return (
+    <section data-testid="capsule-attachments">
+      <h3>{t("Attachments")}</h3>
+      <p>
+        {t(
+          "Files added by the author, outside the processing. They are checked against the manifest and saved only when you ask; they are never opened.",
+        )}
+      </p>
+      <table className="capsule-table">
+        <thead>
+          <tr>
+            <th>{t("Name")}</th>
+            <th>{t("Type")}</th>
+            <th>{t("Size")}</th>
+            <th>{t("SHA-256")}</th>
+            <th>{t("Description")}</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {attachments.map((attachment) => (
+            <tr key={attachment.name} data-testid="capsule-attachment-row">
+              <td>
+                <code>{attachment.name}</code>
+              </td>
+              <td>{attachment.media_type}</td>
+              <td>{formatSize(Number(attachment.size))}</td>
+              <td>
+                <code title={attachment.sha256}>
+                  {attachment.sha256.slice(0, 12)}
+                </code>
+              </td>
+              <td>{attachment.description ?? ""}</td>
+              <td>
+                <button
+                  type="button"
+                  onClick={() => onDownload(attachment)}
+                  disabled={busy}
+                  data-testid="capsule-attachment-save"
+                >
+                  {t("Save…")}
+                </button>
               </td>
             </tr>
           ))}
@@ -672,14 +936,16 @@ function DocumentsSection(props: {
 function ReviewWriter(
   props: TabProps & {
     manifest: Record<string, unknown>;
+    registry: RegistrySettings;
     onSaved: (result: SaveFileResult) => void;
   },
 ) {
-  const { runtime, manifest, busy, run, onSaved } = props;
+  const { runtime, manifest, registry, busy, run, onSaved } = props;
   const [reviewer, setReviewer] = useState("");
   const [statement, setStatement] = useState("");
   const [verdict, setVerdict] = useState<CapsuleReviewVerdict | "">("");
   const [cited, setCited] = useState<ProvenanceReport[]>([]);
+  const [published, setPublished] = useState<string | null>(null);
 
   const addReport = async () => {
     const file = await pickFile(".json");
@@ -705,6 +971,27 @@ function ReviewWriter(
           review,
           `review-${shortId(review.review_fingerprint)}.json`,
         ),
+      );
+    });
+
+  const publishReview = () =>
+    run(async () => {
+      setPublished(null);
+      const review: CapsuleReview = await runtime.createCapsuleReview(
+        manifest,
+        reviewer,
+        statement,
+        verdict || null,
+        cited,
+      );
+      const result = await new RegistryClient(
+        registry.address,
+        registry.token,
+      ).publishReview(JSON.stringify(review));
+      setPublished(
+        t("Review {fingerprint} published", {
+          fingerprint: shortId(result.fingerprint),
+        }),
       );
     });
 
@@ -765,7 +1052,18 @@ function ReviewWriter(
         >
           {t("Save the review…")}
         </button>
+        {registry.address && (
+          <button
+            type="button"
+            onClick={publishReview}
+            disabled={busy || !reviewer || !statement}
+            data-testid="capsule-publish-review"
+          >
+            {t("Publish the review")}
+          </button>
+        )}
       </div>
+      {published && <p data-testid="capsule-review-published">{published}</p>}
     </section>
   );
 }
@@ -892,7 +1190,11 @@ function RevisionsTab(props: TabProps & { revisions: CapsuleRevision[] }) {
                 <code>{shortId(r.revisionOf)}</code>
               </td>
               <td>
-                {r.source === "exported" ? t("exported") : t("inspected")}
+                {r.source === "exported"
+                  ? t("exported")
+                  : r.source === "registry"
+                    ? t("from the registry")
+                    : t("inspected")}
               </td>
             </tr>
           ))}
@@ -940,12 +1242,14 @@ function RevisionsTab(props: TabProps & { revisions: CapsuleRevision[] }) {
 function DiffView(props: { diff: CapsuleDiff }) {
   const { diff } = props;
   const groups: [
-    keyof CapsuleDiff & ("scientific" | "presentation" | "environment"),
+    keyof CapsuleDiff &
+      ("scientific" | "presentation" | "environment" | "attachments"),
     string,
   ][] = [
     ["scientific", t("Scientific changes")],
     ["presentation", t("Presentation changes")],
     ["environment", t("Environment changes")],
+    ["attachments", t("Attachments")],
   ];
   return (
     <section data-testid="capsule-diff">
@@ -964,7 +1268,11 @@ function DiffView(props: { diff: CapsuleDiff }) {
               {diff[key].map((change, index) => (
                 <li key={index}>
                   {change.change} {change.item}{" "}
-                  <code>{shortId(change.id)}</code>
+                  <code>
+                    {change.item === "attachment"
+                      ? change.id
+                      : shortId(change.id)}
+                  </code>
                   {change.field ? ` ${change.field}` : ""}
                 </li>
               ))}
@@ -973,5 +1281,223 @@ function DiffView(props: { diff: CapsuleDiff }) {
         ))
       )}
     </section>
+  );
+}
+
+interface RetrievedRevision {
+  fingerprint: string;
+  summary: NonNullable<CapsuleInspection["summary"]>;
+  reviews: { review: CapsuleReview | null; status: string }[];
+  stored: Set<string>;
+}
+
+function RegistryTab(
+  props: TabProps & {
+    settings: RegistrySettings;
+    onSettings: (settings: RegistrySettings) => void;
+    onRetrieved: () => Promise<void>;
+    onSaved: (result: SaveFileResult) => void;
+  },
+) {
+  const { runtime, busy, run, settings, onSettings, onRetrieved, onSaved } =
+    props;
+  const [address, setAddress] = useState(settings.address);
+  const [token, setToken] = useState(settings.token);
+  const [status, setStatus] = useState<string | null>(null);
+  const [list, setList] = useState<RegistryRevision[] | null>(null);
+  const [retrieved, setRetrieved] = useState<RetrievedRevision | null>(null);
+
+  const client = () => new RegistryClient(settings.address, settings.token);
+
+  const save = () =>
+    run(async () => {
+      onSettings({ address, token });
+      setStatus(null);
+      setList(null);
+      setRetrieved(null);
+    });
+
+  const refresh = () =>
+    run(async () => {
+      const registry = client();
+      const info = await registry.status();
+      setStatus(
+        t("Connected to {registry} {version}", {
+          registry: info.registry,
+          version: info.version,
+        }),
+      );
+      setList(await registry.listRevisions());
+    });
+
+  const retrieve = (revision: RegistryRevision) =>
+    run(async () => {
+      const registry = client();
+      const checked = await runtime.checkRegistryRevision(
+        await registry.getManifestText(revision.fingerprint),
+        revision.fingerprint,
+        await registry.listReviewTexts(revision.fingerprint),
+      );
+      await recordRevision({
+        fingerprint: checked.summary.fingerprint,
+        name: checked.summary.name,
+        revisionOf: checked.summary.revision_of,
+        datePublished: checked.summary.date_published,
+        source: "registry",
+        manifest: checked.manifest,
+      });
+      setRetrieved({
+        fingerprint: revision.fingerprint,
+        summary: checked.summary,
+        reviews: checked.reviews,
+        stored: new Set(
+          revision.attachments.filter((a) => a.stored).map((a) => a.name),
+        ),
+      });
+      await onRetrieved();
+    });
+
+  const saveAttachment = (attachment: { name: string; media_type: string }) =>
+    run(async () => {
+      if (!retrieved) return;
+      const declared = retrieved.summary.attachments.find(
+        (a) => a.name === attachment.name,
+      );
+      if (!declared) return;
+      const bytes = await client().getAttachment(
+        retrieved.fingerprint,
+        declared.name,
+        declared.sha256,
+      );
+      onSaved(
+        await saveBytesToFile(
+          bytes,
+          declared.name,
+          undefined,
+          declared.media_type,
+        ),
+      );
+    });
+
+  return (
+    <div className="capsule-tab" data-testid="capsule-registry">
+      <p className="capsule-note">
+        {t(
+          "Optional: a registry publishes manifests, their attachments and reviews, never workspaces. Everything it returns is checked here.",
+        )}
+      </p>
+      <label className="row">
+        {t("Registry address")}
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="https://"
+          data-testid="capsule-registry-address"
+        />
+      </label>
+      <label className="row">
+        {t("Publishing token (kept for this session only)")}
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          data-testid="capsule-registry-token"
+        />
+      </label>
+      <div className="actions">
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          data-testid="capsule-registry-save"
+        >
+          {t("Use these settings")}
+        </button>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={busy || !settings.address}
+          data-testid="capsule-registry-refresh"
+        >
+          {t("List revisions")}
+        </button>
+      </div>
+      {status && <p data-testid="capsule-registry-status">{status}</p>}
+      {list && (
+        <table className="capsule-table" data-testid="capsule-registry-list">
+          <thead>
+            <tr>
+              <th>{t("Name")}</th>
+              <th>{t("Fingerprint")}</th>
+              <th>{t("Parent")}</th>
+              <th>{t("Attachments")}</th>
+              <th>{t("Reviews")}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((revision) => (
+              <tr key={revision.fingerprint} data-testid="capsule-registry-row">
+                <td>{revision.name}</td>
+                <td>
+                  <code>{shortId(revision.fingerprint)}</code>
+                </td>
+                <td>
+                  <code>{shortId(revision.revision_of)}</code>
+                </td>
+                <td>{revision.attachments.length}</td>
+                <td>{revision.reviews}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={() => retrieve(revision)}
+                    disabled={busy}
+                    data-testid="capsule-registry-retrieve"
+                  >
+                    {t("Retrieve")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {retrieved && (
+        <section data-testid="capsule-registry-retrieved">
+          <h3>{retrieved.summary.name}</h3>
+          <p>
+            {t(
+              "Manifest checked: valid, fingerprint {fingerprint}. Added to the revisions of this browser.",
+              { fingerprint: shortId(retrieved.fingerprint) },
+            )}
+          </p>
+          <h4>{t("Reviews")}</h4>
+          {retrieved.reviews.length === 0 ? (
+            <p>{t("none")}</p>
+          ) : (
+            <ul>
+              {retrieved.reviews.map((entry, index) => (
+                <li key={index} data-testid="capsule-registry-review">
+                  {entry.review
+                    ? `${entry.review.reviewer.name}: ${entry.review.statement}`
+                    : ""}{" "}
+                  ({entry.status === "valid" ? t("valid") : entry.status})
+                </li>
+              ))}
+            </ul>
+          )}
+          {retrieved.summary.attachments.length > 0 && (
+            <AttachmentsSection
+              attachments={retrieved.summary.attachments.filter((a) =>
+                retrieved.stored.has(a.name),
+              )}
+              busy={busy}
+              onDownload={saveAttachment}
+            />
+          )}
+        </section>
+      )}
+    </div>
   );
 }

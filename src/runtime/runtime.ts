@@ -267,11 +267,24 @@ export interface ProvenanceLedgerInfo {
   capsule_origin: { fingerprint: string; name: string } | null;
 }
 
+/** Light file attached to a capsule export (declared in the manifest,
+ *  never executed). */
+export interface CapsuleAttachmentInput {
+  name: string;
+  data: Uint8Array;
+  /** Media type, e.g. ``text/plain``. */
+  media_type: string;
+  description?: string | null;
+}
+
 /** Options of a capsule export. */
 export interface CapsuleExportOptions {
   description?: string | null;
   /** Manifest fingerprint of the parent revision. */
   revisionOf?: string | null;
+  /** Light files selected by the user.  Their bytes are moved to the
+   *  runtime (detached in worker mode). */
+  attachments?: CapsuleAttachmentInput[];
 }
 
 /** One input or output of an activity, in a capsule summary. */
@@ -301,6 +314,15 @@ export interface CapsuleSummary {
     sha256: string;
     size: string;
   };
+  /** Attachments declared in the manifest (size in bytes as a string,
+   *  SHA-256 without prefix). */
+  attachments: {
+    name: string;
+    media_type: string;
+    size: string;
+    sha256: string;
+    description: string | null;
+  }[];
   activities: {
     id: string;
     type: string;
@@ -382,6 +404,9 @@ export interface CapsuleDiff {
   scientific: CapsuleChange[];
   presentation: CapsuleChange[];
   environment: CapsuleChange[];
+  /** Attachments added, removed or changed; their content is not
+   *  interpreted (it may matter scientifically). */
+  attachments: CapsuleChange[];
 }
 
 export type CapsuleReviewVerdict = "endorsed" | "disputed" | "comment";
@@ -3381,6 +3406,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
         name,
         description: options.description ?? null,
         revision_of: options.revisionOf ?? null,
+        attachments: options.attachments ?? [],
       }),
     );
   }
@@ -3398,6 +3424,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       name,
       description: options.description ?? null,
       revision_of: options.revisionOf ?? null,
+      attachments: options.attachments ?? [],
     })) as { capsule: unknown; workspace: unknown };
     return {
       capsule: asBytes(result.capsule),
@@ -3476,6 +3503,49 @@ await micropip.install(${JSON.stringify(bootRequirements)})
         reviews: options.reviews ?? [],
       }),
     ) as CapsuleInspection;
+  }
+
+  /** Check a manifest and reviews retrieved from a registry (JSON texts):
+   *  the manifest must be valid and have the requested fingerprint; each
+   *  review is reported ``valid`` or with the reason it is not. */
+  async checkRegistryRevision(
+    manifest: string,
+    fingerprint: string,
+    reviews: string[] = [],
+  ): Promise<{
+    summary: CapsuleSummary;
+    manifest: Record<string, unknown>;
+    reviews: { review: CapsuleReview | null; status: string }[];
+  }> {
+    return restoreJsonNulls(
+      await this.callPy("check_registry_revision", {
+        manifest,
+        fingerprint,
+        reviews,
+      }),
+    ) as {
+      summary: CapsuleSummary;
+      manifest: Record<string, unknown>;
+      reviews: { review: CapsuleReview | null; status: string }[];
+    };
+  }
+
+  /** Return the bytes of one capsule attachment, checked against the
+   *  manifest, for an explicit download.  The attachment is never opened.
+   *  The capsule bytes are moved to the runtime (pass a copy to keep them). */
+  async getCapsuleAttachment(
+    data: Blob | Uint8Array,
+    name: string,
+  ): Promise<Uint8Array> {
+    await this.checkCapsuleSize(
+      data instanceof Uint8Array ? data.byteLength : data.size,
+    );
+    return asBytes(
+      await this.callPy("get_capsule_attachment", {
+        data: await readBytes(data),
+        name,
+      }),
+    );
   }
 
   /** Compare two capsule manifests (scientific, presentation, environment). */

@@ -21,7 +21,7 @@ import collections
 import dataclasses
 import logging
 import uuid
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from importlib import metadata
 from typing import Any
 
@@ -55,7 +55,7 @@ try:
         validate_manifest,
     )
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
-    from datalab_capsule.review import create_review
+    from datalab_capsule.review import create_review, validate_review
     from datalab_capsule.verify import verify_capsule
 
     UNAVAILABLE_REASON: str | None = None
@@ -300,6 +300,7 @@ class WebProvenance:
         description: str | None = None,
         revision_of: str | None = None,
         workspace_ref: str | None = None,
+        attachments: Sequence[Mapping[str, Any]] = (),
     ) -> bytes:
         """Return the capsule of a saved workspace (``.dlcapsule`` bytes).
 
@@ -310,6 +311,9 @@ class WebProvenance:
             revision_of: Manifest fingerprint of the parent revision.
             workspace_ref: Absolute IRI where the workspace will be published;
              the capsule then references it instead of including it.
+            attachments: Light files selected by the user, as
+             ``{name, data, media_type, description}``; declared in the
+             manifest and never executed.
         """
         self._require()
         return create_from_hdf5(
@@ -318,7 +322,23 @@ class WebProvenance:
             description=description,
             revision_of=revision_of,
             workspace_ref=workspace_ref,
+            attachments=attachments,
         )
+
+    def capsule_attachment(self, data: bytes, name: str) -> bytes:
+        """Return the checked bytes of one attachment, for an explicit download.
+
+        The capsule is read like any other (archive, manifest, SHA-256 and size
+        of every attachment); the attachment is returned as data, never opened.
+
+        Raises:
+            CapsuleError: If the capsule is invalid or has no such attachment.
+        """
+        self._require()
+        capsule = read_capsule(data, self._policy())
+        if name not in capsule.attachments:
+            raise CapsuleError(f"No such attachment: {name}")
+        return capsule.attachments[name]
 
     def open_capsule(
         self, data: bytes, workspace: bytes | None = None
@@ -354,6 +374,47 @@ class WebProvenance:
     def set_capsule_origin(self, origin: dict[str, str]) -> None:
         """Remember the capsule the current workspace was opened from."""
         self.capsule_origin = dict(origin)
+
+    def check_registry_revision(
+        self, manifest: str, fingerprint: str, reviews: Sequence[str] = ()
+    ) -> dict[str, Any]:
+        """Check a revision retrieved from a registry; trust nothing it says.
+
+        Args:
+            manifest: Manifest JSON text returned by the registry.
+            fingerprint: Fingerprint that was requested.
+            reviews: Review JSON texts returned by the registry.
+
+        Returns:
+            ``{"summary", "manifest", "reviews"}``; each review is
+            ``{"review", "status"}``, ``status`` being ``"valid"`` or the
+            reason it is not.
+
+        Raises:
+            ProvenanceError: If the manifest is invalid or is another revision.
+        """
+        self._require()
+        parsed = load_json(manifest)
+        validate_manifest(parsed)
+        actual = manifest_fingerprint(parsed)
+        if actual != fingerprint:
+            raise CapsuleError(
+                f"The registry returned another revision: {actual}, not {fingerprint}"
+            )
+        checked = []
+        for text in reviews:
+            try:
+                review = load_json(text)
+                validate_review(review, parsed)
+                status = "valid"
+            except (ValueError, ProvenanceError) as exc:
+                review, status = None, str(exc)
+            checked.append({"review": review, "status": status})
+        return {
+            "summary": inspect_manifest(parsed),
+            "manifest": parsed,
+            "reviews": checked,
+        }
 
     def inspect_capsule(
         self,

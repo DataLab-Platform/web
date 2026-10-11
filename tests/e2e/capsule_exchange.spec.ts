@@ -11,6 +11,12 @@
  * Integrity, supplied documents and local replay are separate sections of the
  * dialog: each assertion reads its own section.
  */
+import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer, type AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import {
   test,
   expect,
@@ -333,5 +339,227 @@ test.describe("capsule exchange between two browsers", () => {
       .toBe(3);
     await author.context().close();
     await recipient.context().close();
+  });
+
+  test("attachments: declared, listed and saved only on request", async ({
+    browser,
+  }) => {
+    const protocol = Buffer.from("Acquired on bench 2.\n");
+    const author = await openPage(browser);
+    requireProvenance(await buildChain(author));
+    await openDialog(author);
+    await exportCapsule(author, "chain-plain");
+    const picker = author.waitForEvent("filechooser");
+    await author.getByTestId("capsule-add-attachment").click();
+    await (
+      await picker
+    ).setFiles([
+      { name: "protocol notes.txt", mimeType: "text/plain", buffer: protocol },
+      {
+        name: "points.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from("x\n1\n"),
+      },
+    ]);
+    await expect(author.getByTestId("capsule-attachment-selected")).toHaveText([
+      /protocol_notes\.txt/,
+      /points\.csv/,
+    ]);
+    const capsulePath = await exportCapsule(author, "chain-attached");
+    await expect(author.getByTestId("capsule-error")).toHaveCount(0);
+
+    // Attachment changes have their own group; nothing is inferred from them.
+    await author.getByRole("tab", { name: "Revisions" }).click();
+    const labels = await author
+      .getByTestId("capsule-diff-old")
+      .locator("option")
+      .allTextContents();
+    await author.getByTestId("capsule-diff-old").selectOption({
+      label: labels.find((l) => l.startsWith("chain-plain ("))!,
+    });
+    await author.getByTestId("capsule-diff-new").selectOption({
+      label: labels.find((l) => l.startsWith("chain-attached ("))!,
+    });
+    await author.getByTestId("capsule-compare").click();
+    await expect(author.getByTestId("capsule-diff-attachments")).toContainText(
+      "added attachment points.csv",
+    );
+
+    const recipient = await openPage(browser);
+    await openDialog(recipient);
+    await inspect(recipient, capsulePath);
+    await expect(recipient.getByTestId("capsule-integrity-status")).toHaveText(
+      "Intact",
+    );
+    const rows = recipient.getByTestId("capsule-attachment-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText("protocol_notes.txt");
+    await expect(rows.nth(0)).toContainText("text/plain");
+    const saved = await download(
+      recipient,
+      () => rows.nth(0).getByTestId("capsule-attachment-save").click(),
+      "protocol_notes.txt",
+    );
+    expect(readFileSync(saved)).toEqual(protocol);
+    // Saving an attachment opened nothing.
+    expect(
+      await recipient.evaluate(
+        async () => (await window.runtime.listSignals()).length,
+      ),
+    ).toBe(0);
+    await recipient.getByTestId("capsule-open").click();
+    await expect
+      .poll(() =>
+        recipient.evaluate(
+          async () => (await window.runtime.listSignals()).length,
+        ),
+      )
+      .toBe(3);
+    await author.context().close();
+    await recipient.context().close();
+  });
+});
+
+/** Start a DataLab-Capsule registry (``registry`` extra) on a free port. */
+async function startRegistry(
+  token: string,
+): Promise<{ url: string; stop: () => void } | null> {
+  const port = await new Promise<number>((resolve) => {
+    const probe = createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address() as AddressInfo;
+      probe.close(() => resolve(address.port));
+    });
+  });
+  const root = mkdtempSync(path.join(tmpdir(), "dlw-registry-"));
+  const child = spawn(
+    process.env.DLW_REGISTRY_PYTHON ?? "python",
+    [
+      "-m",
+      "datalab_capsule.registry_app",
+      root,
+      "--port",
+      String(port),
+      "--token-env",
+      "DLW_REGISTRY_TOKEN",
+      "--origin",
+      "http://localhost:5173",
+    ],
+    { env: { ...process.env, DLW_REGISTRY_TOKEN: token }, stdio: "ignore" },
+  );
+  child.on("error", () => undefined);
+  const url = `http://127.0.0.1:${port}`;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (child.exitCode !== null) break;
+    try {
+      if ((await fetch(`${url}/api/v1/status`)).ok) {
+        return {
+          url,
+          stop: () => {
+            child.kill();
+            rmSync(root, { recursive: true, force: true });
+          },
+        };
+      }
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  child.kill();
+  rmSync(root, { recursive: true, force: true });
+  return null;
+}
+
+test.describe("capsule registry (optional)", () => {
+  test.describe.configure({ timeout: 600_000 });
+
+  test("publish, list, retrieve and check through a registry", async ({
+    browser,
+  }) => {
+    const registry = await startRegistry("e2e-token");
+    if (process.env.DLW_REQUIRE_REGISTRY === "1") {
+      expect(registry, "the registry must start").not.toBeNull();
+    } else {
+      test.skip(!registry, "No DataLab-Capsule registry available");
+    }
+    const { url, stop } = registry!;
+    try {
+      const protocol = Buffer.from("Acquired on bench 2.\n");
+      // -- Author: export with an attachment, then publish with the token.
+      const author = await openPage(browser);
+      requireProvenance(await buildChain(author));
+      await openDialog(author);
+      await expect(author.getByTestId("capsule-publish")).toHaveCount(0);
+      await author.getByRole("tab", { name: "Registry" }).click();
+      await author.getByTestId("capsule-registry-address").fill(url);
+      await author.getByTestId("capsule-registry-token").fill("e2e-token");
+      await author.getByTestId("capsule-registry-save").click();
+      await author.getByRole("tab", { name: "Export" }).click();
+      const picker = author.waitForEvent("filechooser");
+      await author.getByTestId("capsule-add-attachment").click();
+      await (
+        await picker
+      ).setFiles({
+        name: "protocol.txt",
+        mimeType: "text/plain",
+        buffer: protocol,
+      });
+      const capsulePath = await exportCapsule(author, "chain-published");
+      await inspect(author, capsulePath);
+      await author.getByTestId("capsule-publish").click();
+      await expect(author.getByTestId("capsule-published")).toContainText(
+        "with 1 attachments and 0 reviews",
+      );
+      await author.getByTestId("capsule-reviewer").fill("Author");
+      await author.getByTestId("capsule-statement").fill("Published as is.");
+      await author.getByTestId("capsule-publish-review").click();
+      await expect(
+        author.getByTestId("capsule-review-published"),
+      ).toBeVisible();
+
+      // -- Recipient: no token; list, retrieve, check and save the attachment.
+      const recipient = await openPage(browser);
+      await openDialog(recipient);
+      await recipient.getByRole("tab", { name: "Registry" }).click();
+      await recipient.getByTestId("capsule-registry-address").fill(url);
+      await recipient.getByTestId("capsule-registry-save").click();
+      await recipient.getByTestId("capsule-registry-refresh").click();
+      await expect(
+        recipient.getByTestId("capsule-registry-status"),
+      ).toContainText("Connected to datalab-capsule");
+      const rows = recipient.getByTestId("capsule-registry-row");
+      await expect(rows).toHaveCount(1);
+      await expect(rows.first()).toContainText("chain-published");
+      await rows.first().getByTestId("capsule-registry-retrieve").click();
+      const retrieved = recipient.getByTestId("capsule-registry-retrieved");
+      await expect(retrieved).toContainText("Manifest checked: valid");
+      await expect(
+        recipient.getByTestId("capsule-registry-review"),
+      ).toContainText("Author: Published as is. (valid)");
+      const saved = await download(
+        recipient,
+        () => retrieved.getByTestId("capsule-attachment-save").first().click(),
+        "protocol.txt",
+      );
+      expect(readFileSync(saved)).toEqual(protocol);
+      // A recipient without token cannot publish.
+      expect(
+        await recipient.evaluate(
+          async (base) =>
+            (await fetch(`${base}/api/v1/revisions`, { method: "POST" }))
+              .status,
+          url,
+        ),
+      ).toBe(401);
+      await recipient.getByRole("tab", { name: "Revisions" }).click();
+      await expect(
+        recipient.getByTestId("capsule-revision-list").locator("tbody tr"),
+      ).toContainText(["from the registry"]);
+      await author.context().close();
+      await recipient.context().close();
+    } finally {
+      stop();
+    }
   });
 });
