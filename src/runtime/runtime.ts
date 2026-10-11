@@ -228,6 +228,17 @@ export interface ProvenanceLedgerInfo {
   reason: string | null;
   ledger: ProvenanceLedger | null;
   state_status: Record<string, string>;
+  /** Per activity recording analysis results: whether each result is still
+   *  the one it produced (``available``), was overwritten by a later result
+   *  (``replaced``) or is gone (``missing``). */
+  artifact_status: Record<
+    string,
+    {
+      object_uuid: string;
+      key: string;
+      status: "available" | "replaced" | "missing";
+    }[]
+  >;
   capture_failures: number;
   notices: string[];
   /** ``"loaded"`` or ``"absent"`` after opening a workspace file, else null. */

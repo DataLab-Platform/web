@@ -35,7 +35,7 @@ try:
     from datalab_capsule.environment import collect_environment, environment_id
     from datalab_capsule.hdf5 import load_ledger, save_ledger
     from datalab_capsule.integrity import state_facts
-    from datalab_capsule.ledger import Ledger, utc_timestamp
+    from datalab_capsule.ledger import Ledger, artifact_status, utc_timestamp
     from datalab_capsule.replay import IneligibleError, Plan, prepare_activity
 
     UNAVAILABLE_REASON: str | None = None
@@ -244,12 +244,24 @@ class WebProvenance:
         return self._environment
 
     def info(self) -> dict[str, Any]:
-        """Return a JSON-compatible snapshot for the TypeScript runtime."""
+        """Return a JSON-compatible snapshot for the TypeScript runtime.
+
+        ``artifact_status`` maps each activity that recorded analysis results
+        to their statuses (see :meth:`artifact_statuses`).
+        """
+        artifacts: dict[str, list[dict[str, str]]] = {}
+        if self.available:
+            for activity in self.ledger.activities:
+                if any("artifact" in output for output in activity["outputs"]):
+                    artifacts[activity["activity_id"]] = self.artifact_statuses(
+                        activity["activity_id"]
+                    )
         return {
             "available": self.available,
             "reason": UNAVAILABLE_REASON,
             "ledger": self.ledger.to_dict() if self.available else None,
             "state_status": dict(self.state_status),
+            "artifact_status": artifacts,
             "capture_failures": self.capture_failures,
             "notices": list(self.notices),
             "file_status": self.file_status,
@@ -370,7 +382,7 @@ class WebProvenance:
         self,
         pending: PendingActivity,
         outputs: list[tuple[str, str, dict[str, Any]]],
-        artifacts: Sequence[tuple[str, str, str, str]] = (),
+        artifacts: Sequence[tuple[str, str, str, str, Any]] = (),
     ) -> dict[str, Any]:
         return self.ledger.record_activity(
             call=pending.call,
@@ -406,6 +418,10 @@ class WebProvenance:
     ) -> dict[str, Any] | None:
         """Record an analysis whose result was stored in *obj*'s metadata.
 
+        The digest of the stored result is recorded, so that a later analysis
+        writing the same key is never taken for this one (see
+        :meth:`artifact_statuses`).
+
         Args:
             pending: Pending activity of the analysis.
             obj: Analysed object, which holds the result.
@@ -415,11 +431,35 @@ class WebProvenance:
         if pending is None:
             return None
         try:
-            artifact = ("result", kind, self._uuid_of(obj), key)
+            artifact = ("result", kind, self._uuid_of(obj), key, obj.metadata[key])
             return self._record(pending, [], artifacts=[artifact])
         except Exception as exc:  # pylint: disable=broad-exception-caught
             self._capture_failed(exc)
             return None
+
+    def artifact_statuses(self, activity_id: str) -> list[dict[str, str]]:
+        """Return the status of each analysis result recorded by an activity.
+
+        Returns:
+            One ``{"object_uuid", "key", "status"}`` per artifact output;
+            ``status`` is ``available`` (the object still holds this result),
+            ``replaced`` (another result now holds the key) or ``missing``.
+        """
+        statuses = []
+        for output in self.ledger.activity(activity_id)["outputs"]:
+            artifact = output.get("artifact")
+            if artifact is None:
+                continue
+            obj = self._find_by_uuid(artifact["object_uuid"])
+            value = None if obj is None else obj.metadata.get(artifact["key"])
+            statuses.append(
+                {
+                    "object_uuid": artifact["object_uuid"],
+                    "key": artifact["key"],
+                    "status": artifact_status(artifact, value),
+                }
+            )
+        return statuses
 
     # -- Verification -------------------------------------------------------
 

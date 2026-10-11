@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
+from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 
@@ -138,6 +141,186 @@ def test_roi_and_uncertainty_are_recorded(fresh_bootstrap):
     image.roi = sigima.objects.create_image_roi("rectangle", [0, 0, 2, 2])
     state = ledger(bs).states[bs._PROVENANCE.observe(image)]
     assert state["roi"]["definition"]["single_rois"][0]["coords"] == [0, 0, 2, 2]
+
+
+def _reopen(bs, edit=None):
+    """Save the workspace, optionally edit the file, reopen it in a new runtime."""
+    data = bs.save_workspace_to_bytes()
+    if edit is not None:
+        buffer = io.BytesIO(data)
+        with h5py.File(buffer, "r+") as h5file:
+            edit(h5file)
+        data = buffer.getvalue()
+    reader = fresh_runtime()
+    reader.open_workspace_from_bytes("w.h5", data, replace=True)
+    return reader
+
+
+def _node_of(h5file, object_uuid: str):
+    """Return the HDF5 group of the object with *object_uuid*."""
+    for panel in ("DataLab_Sig", "DataLab_Ima"):
+        for group in h5file.get(panel, {}).values():
+            for obj in group.values():
+                if obj["metadata"].attrs["__uuid"] == object_uuid:
+                    return obj
+    raise KeyError(object_uuid)
+
+
+def _image_with_roi(bs) -> tuple[str, dict]:
+    """Filter an image holding a ROI; return its id and the recorded activity."""
+    oid = add_image(bs)
+    bs._MODEL.get(oid).roi = sigima.objects.create_image_roi("rectangle", [0, 0, 2, 2])
+    bs.apply_feature("image:gaussian_filter", [oid], params={"sigma": 1.0})
+    return oid, ledger(bs).activities[-1]
+
+
+def test_roi_only_change_is_a_new_state(fresh_bootstrap):
+    """Same pixels, different ROI: a new state is recorded, not reused."""
+    bs = fresh_bootstrap
+    oid, first = _image_with_roi(bs)
+    bs._MODEL.get(oid).roi = sigima.objects.create_image_roi("rectangle", [0, 0, 3, 2])
+    bs.apply_feature("image:gaussian_filter", [oid], params={"sigma": 1.0})
+    second = ledger(bs).activities[-1]
+    before, after = inputs_of(bs, first)[0], inputs_of(bs, second)[0]
+    assert before["state_id"] != after["state_id"]
+    assert before["fingerprint"] == after["fingerprint"]
+    assert before["roi"]["digest"] != after["roi"]["digest"]
+
+
+@pytest.mark.parametrize(
+    "path, edit",
+    [
+        (
+            "roi",
+            lambda n: n["metadata/_roi_/single_rois/__seq0/coords"].__setitem__(2, 3.0),
+        ),
+        ("roi_removed", lambda n: n["metadata"].__delitem__("_roi_")),
+        ("x0", lambda n: n.attrs.__setitem__("x0", 0.5)),
+        ("dy", lambda n: n.attrs.__setitem__("dy", 2.0)),
+        ("zunit", lambda n: n.attrs.__setitem__("zunit", "V")),
+    ],
+)
+def test_roi_calibration_or_unit_change_in_file_is_altered(fresh_bootstrap, path, edit):
+    """Unchanged pixels with another ROI, calibration or unit are not intact."""
+    bs = fresh_bootstrap
+    oid, activity = _image_with_roi(bs)
+    object_uuid = uuid_of(bs, oid)
+    reader = _reopen(bs)
+    assert reader._PROVENANCE.state_status == {}
+    source = activity["call"]["inputs"][0]["binding"]["state_id"]
+    assert (
+        reader._PROVENANCE.observe(reader._find_object_by_uuid(object_uuid)) == source
+    )
+    reader = _reopen(bs, lambda f: edit(_node_of(f, object_uuid)))
+    assert reader._PROVENANCE.state_status[source] == "altered"
+    # The reopened object is not taken for the recorded state either.
+    assert (
+        reader._PROVENANCE.observe(reader._find_object_by_uuid(object_uuid)) != source
+    )
+
+
+def test_replaced_analysis_result_is_not_attributed(fresh_bootstrap):
+    """Two analyses replacing the same result: the first is reported replaced."""
+    bs = fresh_bootstrap
+    oid = add_signal(bs)
+    asyncio.run(bs.run_signal_analysis(oid, "stats"))
+    bs._MODEL.get(oid).set_xydata(X, Y * 2.0)
+    asyncio.run(bs.run_signal_analysis(oid, "stats"))
+    first, second = ledger(bs).activities
+    key = first["outputs"][0]["artifact"]["key"]
+    assert second["outputs"][0]["artifact"]["key"] == key
+    assert (
+        first["outputs"][0]["artifact"]["digest"]
+        != second["outputs"][0]["artifact"]["digest"]
+    )
+    expected = {first["activity_id"]: "replaced", second["activity_id"]: "available"}
+    for runtime in (bs, _reopen(bs)):
+        statuses = runtime.get_provenance_ledger()["artifact_status"]
+        assert {k: v[0]["status"] for k, v in statuses.items()} == expected
+    reader = _reopen(
+        bs, lambda f: _node_of(f, uuid_of(bs, oid))["metadata"].__delitem__(key)
+    )
+    statuses = reader.get_provenance_ledger()["artifact_status"]
+    assert {v[0]["status"] for v in statuses.values()} == {"missing"}
+
+
+# -- Cross-edition reference files ----------------------------------------
+#
+# The same scenario is written by each edition: an image with a rectangular ROI
+# (x0=0, y0=0, dx=2, dy=2) analysed (centroid) then filtered (Gaussian, sigma=1),
+# and a signal analysed (statistics). DataLab-Web writes ``web_capture.h5`` from
+# Pyodide (``provenance_capture.spec.ts``, ``DLW_WRITE_PROVENANCE_FIXTURE=1``);
+# DataLab Desktop writes ``desktop_capture.h5``
+# (``datalab/tests/features/common/provenance_capture_unit_test.py``).
+
+FIXTURES = Path(__file__).parents[1] / "fixtures" / "provenance"
+CAPTURE_SHAPE = [
+    ("image", None, "geometry"),
+    ("image", "image", None),
+    ("signal", None, "table"),
+]
+
+
+def build_capture(bs) -> None:
+    """Run the cross-edition capture scenario."""
+    image = add_image(bs)
+    bs.set_image_roi(
+        image, [{"geometry": "rectangle", "x0": 0, "y0": 0, "dx": 2, "dy": 2}]
+    )
+    asyncio.run(bs.run_image_analysis(image, "centroid"))
+    bs.apply_feature("image:gaussian_filter", [image], params={"sigma": 1.0})
+    asyncio.run(bs.run_signal_analysis(add_signal(bs), "stats"))
+
+
+def check_capture(bs, edition: str) -> None:
+    """Check a reopened capture workspace written by *edition*."""
+    provenance = bs._PROVENANCE
+    ledger(bs).validate()
+    assert provenance.state_status == {}
+    statuses = bs.get_provenance_ledger()["artifact_status"]
+    shape = []
+    for activity in ledger(bs).activities:
+        assert activity["edition"] == edition
+        (source,) = inputs_of(bs, activity)
+        (output,) = activity["outputs"]
+        result = ledger(bs).states[output["state_id"]] if "state_id" in output else None
+        artifact = output.get("artifact")
+        shape.append(
+            (source["kind"], result and result["kind"], artifact and artifact["kind"])
+        )
+        if source["kind"] == "image":
+            (roi,) = source["roi"]["definition"]["single_rois"]
+            assert roi["coords"] == [0, 0, 2, 2]
+        if artifact is not None:
+            assert [s["status"] for s in statuses[activity["activity_id"]]] == [
+                "available"
+            ]
+    assert shape == CAPTURE_SHAPE
+    centroid, gaussian, _stats = ledger(bs).activities
+    assert centroid["call"]["inputs"] == gaussian["call"]["inputs"]
+    # Every reopened object is recognised as its latest recorded state, ROI
+    # included, by this edition's own reading of the other edition's file.
+    for object_uuid in ledger(bs).object_uuids():
+        obj = bs._find_object_by_uuid(object_uuid)
+        latest = ledger(bs).latest_state(object_uuid)["state_id"]
+        assert provenance.observe(obj) == latest
+
+
+def test_capture_round_trip(fresh_bootstrap):
+    """The capture scenario reopens intact in a fresh runtime."""
+    bs = fresh_bootstrap
+    build_capture(bs)
+    check_capture(_reopen(bs), "web")
+
+
+@pytest.mark.parametrize(
+    "name, edition", [("web_capture.h5", "web"), ("desktop_capture.h5", "desktop")]
+)
+def test_capture_reference_files(name: str, edition: str):
+    """Reference capture files of both editions reopen intact in this runtime."""
+    bs = fresh_runtime()
+    bs.open_workspace_from_bytes(name, (FIXTURES / name).read_bytes(), replace=True)
+    check_capture(bs, edition)
 
 
 def test_round_trip_with_images_and_analyses():
