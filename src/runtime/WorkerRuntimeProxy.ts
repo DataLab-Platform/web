@@ -23,6 +23,7 @@
 import type { RuntimeApi } from "./runtime";
 import {
   INITIAL_MIRROR,
+  ScientificRefusalError,
   SYNC_MIRROR_METHODS,
   collectTransferables,
   type KernelEvent,
@@ -238,7 +239,9 @@ export class WorkerRuntimeProxy {
         if (!pending) break;
         this.pending.delete(event.id);
         if (event.ok) pending.resolve(event.value);
-        else pending.reject(new Error(event.error));
+        else if (event.refusal) {
+          pending.reject(new ScientificRefusalError(event.refusal));
+        } else pending.reject(new Error(event.error));
         break;
       }
       case "mutation":

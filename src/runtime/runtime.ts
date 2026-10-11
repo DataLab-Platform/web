@@ -56,6 +56,10 @@ import { hashBytes } from "../plugins/trustStore";
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 import { fetchBundledPluginWheels } from "./bundledPlugins";
+import {
+  ScientificRefusalError,
+  type ScientificRefusal,
+} from "./workerProtocol";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -1971,6 +1975,14 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     "add_object_pickled",
     "plot_results",
   ]);
+  /** Calls whose scientific refusals come back as data (``bridge_<name>``
+   *  in bootstrap.py), not as a Python traceback to format. */
+  private static readonly REFUSABLE: ReadonlySet<string> = new Set([
+    "apply_feature",
+    "preview_feature",
+    "apply_processing",
+    "reapply_last_processing",
+  ]);
 
   /** Collect the object ids referenced by *kwargs* (single + list keys). */
   private static referencedOids(kwargs: Record<string, unknown>): string[] {
@@ -2010,7 +2022,8 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     kwargs: Record<string, unknown> = {},
     options: { silent?: boolean } = {},
   ): Promise<T> {
-    const fn = this.py.globals.get(name);
+    const refusable = DataLabRuntime.REFUSABLE.has(name);
+    const fn = this.py.globals.get(refusable ? `bridge_${name}` : name);
     if (!fn) {
       throw new Error(`Python function not found: ${name}`);
     }
@@ -2038,7 +2051,12 @@ await micropip.install(${JSON.stringify(bootRequirements)})
         (result instanceof Promise ||
           typeof (result as { then?: unknown }).then === "function");
       const awaited = isThenable ? await result : result;
-      const value = toJs(awaited) as T;
+      let value = toJs(awaited) as T;
+      if (refusable) {
+        const reply = value as { value?: T; refused?: ScientificRefusal };
+        if (reply.refused) throw new ScientificRefusalError(reply.refused);
+        value = reply.value as T;
+      }
       // Notify workspace-mutation listeners *after* the Python side
       // returns successfully — failed mutations don't dirty the
       // workspace. ``silent`` lets panel bootstrap code seed default

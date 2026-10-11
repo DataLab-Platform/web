@@ -126,20 +126,23 @@ describe("DataLabRuntime latest-read queue", () => {
     const runtime = makeRuntime((name) => {
       calls.push(name);
       if (name === "release_object_array") return true;
-      if (name === "preview_feature") {
+      // Refusable calls go through ``bridge_<name>``, which wraps the value.
+      if (name === "bridge_preview_feature") {
         return {
-          kind: "signal",
-          data: {
-            id: "preview",
-            uuid: null,
-            title: "Preview",
-            size: 2,
-            xlabel: "x",
-            ylabel: "y",
-            xunit: "",
-            yunit: "",
-            x: [0, 1],
-            y: [2, 3],
+          value: {
+            kind: "signal",
+            data: {
+              id: "preview",
+              uuid: null,
+              title: "Preview",
+              size: 2,
+              xlabel: "x",
+              ylabel: "y",
+              xunit: "",
+              yunit: "",
+              x: [0, 1],
+              y: [2, 3],
+            },
           },
         };
       }
@@ -155,10 +158,10 @@ describe("DataLabRuntime latest-read queue", () => {
     expect(result.kind).toBe("signal");
     expect(get).toHaveBeenCalledWith("signal-1");
     expect(calls.indexOf("attach_object_array")).toBeLessThan(
-      calls.indexOf("preview_feature"),
+      calls.indexOf("bridge_preview_feature"),
     );
     expect(calls.indexOf("release_object_array")).toBeGreaterThan(
-      calls.indexOf("preview_feature"),
+      calls.indexOf("bridge_preview_feature"),
     );
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
   });

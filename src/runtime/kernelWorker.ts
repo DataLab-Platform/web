@@ -21,7 +21,7 @@
  */
 import { DataLabRuntime, type PyodideLoader } from "./runtime";
 import { PYODIDE_INDEX } from "./workerBase";
-import { collectTransferables } from "./workerProtocol";
+import { collectTransferables, ScientificRefusalError } from "./workerProtocol";
 import type {
   KernelEvent,
   KernelMirror,
@@ -135,7 +135,9 @@ async function handleCall(
     post({ type: "result", id, ok: true, value }, collectTransferables(value));
   } catch (err) {
     post({ type: "mirror", mirror: snapshot(runtime) });
-    post({ type: "result", id, ok: false, error: errMessage(err) });
+    const refusal =
+      err instanceof ScientificRefusalError ? err.refusal : undefined;
+    post({ type: "result", id, ok: false, error: errMessage(err), refusal });
   }
 }
 

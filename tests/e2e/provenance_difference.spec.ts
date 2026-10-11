@@ -253,5 +253,75 @@ for (const runtimeMode of ["main", "worker"] as const) {
       requireProvenance(run.available);
       expectDifferences(run, "desktop");
     });
+
+    test("keeps the refusal code and reason when tracebacks cannot be formatted", async () => {
+      // Pyodide builds an exception message by printing its traceback; with
+      // stderr broken, that fails and the reason was lost ("Error occurred
+      // while formatting traceback"). Refusals must not depend on it.
+      const out = await page.evaluate(async () => {
+        interface Runtime {
+          resetAll(): Promise<void>;
+          runPython(code: string): Promise<unknown>;
+          addSignalFromArrays(p: {
+            title: string;
+            xdata: number[];
+            ydata: number[];
+            xunit: string;
+            yunit: string;
+          }): Promise<string>;
+          applyFeature(
+            f: string,
+            s: string[],
+            o: string | null,
+            p: null,
+          ): Promise<string[]>;
+          listSignals(): Promise<unknown[]>;
+        }
+        const runtime = (window as unknown as { runtime: Runtime }).runtime;
+        await runtime.resetAll();
+        const add = (title: string, x: number[]) =>
+          runtime.addSignalFromArrays({
+            title,
+            xdata: x,
+            ydata: [0, 1, 2],
+            xunit: "s",
+            yunit: "V",
+          });
+        const a = await add("A", [0, 1, 2]);
+        const short = await add("short", [0.5, 1, 2]);
+        await runtime.runPython(
+          [
+            "import sys",
+            "class _Broken:",
+            "    def write(self, s): raise MemoryError",
+            "    def flush(self): pass",
+            "_dlw_saved_stderr = sys.stderr",
+            "sys.stderr = _Broken()",
+          ].join("\n"),
+        );
+        let message = "";
+        let refusal: unknown = null;
+        try {
+          await runtime.applyFeature("difference", [a], short, null);
+        } catch (err) {
+          message = err instanceof Error ? err.message : String(err);
+          refusal = (err as { refusal?: unknown }).refusal ?? null;
+        } finally {
+          await runtime.runPython("import sys\nsys.stderr = _dlw_saved_stderr");
+        }
+        const count = (await runtime.listSignals()).length;
+        await runtime.resetAll();
+        return { message, refusal, count };
+      });
+      expect(out.message).toBe(
+        "The operand grid [0.5, 2.0] does not cover the source grid [0.0, 2.0]",
+      );
+      expect(out.refusal).toEqual({
+        kind: "x_alignment",
+        code: "insufficient_coverage",
+        reason: out.message,
+      });
+      expect(out.count).toBe(2);
+    });
   });
 }

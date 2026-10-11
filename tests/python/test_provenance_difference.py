@@ -186,6 +186,61 @@ def test_refused_alignment_creates_nothing(fresh_bootstrap):
     assert bs._PROVENANCE.ledger.activities == ()
 
 
+def test_refusal_comes_before_any_computation(fresh_bootstrap, monkeypatch):
+    """With several sources, a refused pair stops the call before any difference."""
+    from sigima.proc.alignment import XAlignmentError
+
+    bs = fresh_bootstrap
+    operand = add(bs, [0, 1, 2], [0, 1, 2], "operand")
+    covered = add(bs, [0.5, 1, 1.5], [0, 1, 2], "covered")
+    uncovered = add(bs, [0, 1, 3], [0, 1, 2], "uncovered")
+    spec = bs._CATALOG["difference"]
+    calls = []
+    original = spec.func
+    # Sigima finds the contract by function identity: keep it for the wrapper.
+    contract = bs._proc._x_alignment_contract(spec)
+    lookup = bs._proc._x_alignment_contract
+    monkeypatch.setattr(
+        bs._proc,
+        "_x_alignment_contract",
+        lambda s: contract if s is spec else lookup(s),
+    )
+
+    def counted(*args):
+        calls.append(args)
+        return original(*args)
+
+    monkeypatch.setattr(spec, "func", counted)
+    with pytest.raises(XAlignmentError):
+        bs.apply_feature("difference", [covered, uncovered], operand_id=operand)
+    assert calls == []
+    bs.apply_feature("difference", [covered], operand_id=operand)
+    assert len(calls) == 1
+
+
+def test_bridge_returns_refusals_as_data(fresh_bootstrap):
+    """The JS bridge gets the refusal code and reason, not a traceback to format."""
+    bs = fresh_bootstrap
+    source = add(bs, [0, 1, 2], [0, 1, 2], "source")
+    short = add(bs, [0.5, 1, 2], [0, 1, 2], "short")
+    result = bs.bridge_apply_feature("difference", [source], operand_id=short)
+    assert result == {
+        "refused": {
+            "kind": "x_alignment",
+            "code": "insufficient_coverage",
+            "reason": "The operand grid [0.5, 2.0] does not cover "
+            "the source grid [0.0, 2.0]",
+        }
+    }
+    other = add(bs, [0, 1, 2], [1, 1, 1], "other")
+    (new_id,) = bs.bridge_apply_feature("difference", [source], operand_id=other)[
+        "value"
+    ]
+    assert bs._MODEL.get(new_id) is not None
+    with pytest.raises(ValueError, match="Unknown feature"):
+        bs.bridge_apply_feature("does_not_exist", [source])
+
+
 def test_other_two_input_operations_are_opaque(fresh_bootstrap):
     """Other 2-to-1 operations keep their behaviour and are captured opaque."""
     bs = fresh_bootstrap

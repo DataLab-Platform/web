@@ -14,10 +14,11 @@ import {
   WorkerRuntimeProxy,
   type WorkerLike,
 } from "../../../src/runtime/WorkerRuntimeProxy";
-import type {
-  KernelEvent,
-  KernelRequest,
-  KernelMirror,
+import {
+  ScientificRefusalError,
+  type KernelEvent,
+  type KernelRequest,
+  type KernelMirror,
 } from "../../../src/runtime/workerProtocol";
 
 /** A controllable in-memory stand-in for a ``Worker``. */
@@ -201,6 +202,30 @@ describe("WorkerRuntimeProxy", () => {
     const id = (worker.last() as { id: number }).id;
     worker.emit({ type: "result", id, ok: false, error: "no such object" });
     await expect(promise).rejects.toThrow("no such object");
+  });
+
+  it("rejects with the refusal code and reason of a refused computation", async () => {
+    const { worker, runtime } = setup();
+    const promise = (
+      runtime.applyFeature as (f: string, s: string[]) => Promise<string[]>
+    )("difference", ["a"]);
+    const id = (worker.last() as { id: number }).id;
+    const refusal = {
+      kind: "x_alignment",
+      code: "insufficient_coverage",
+      reason: "The operand grid [0.5, 2.0] does not cover the source grid",
+    };
+    worker.emit({
+      type: "result",
+      id,
+      ok: false,
+      error: refusal.reason,
+      refusal,
+    });
+    const error = await promise.catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(ScientificRefusalError);
+    expect((error as ScientificRefusalError).refusal).toEqual(refusal);
+    expect((error as Error).message).toBe(refusal.reason);
   });
 
   it("reflects a mirror pushed before the result when the call resolves", async () => {

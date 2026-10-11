@@ -28,6 +28,32 @@
  * WASM heap, so cloning them across the boundary is bounded by the payload
  * size — not the whole heap.
  */
+
+/** A computation refused by a scientific rule (e.g. an X alignment). */
+export interface ScientificRefusal {
+  /** Rule family, e.g. ``x_alignment``. */
+  kind: string;
+  /** Reason code of the rule, e.g. ``insufficient_coverage``. */
+  code: string;
+  /** Human-readable reason. */
+  reason: string;
+}
+
+/**
+ * Error thrown when a scientific rule refuses a computation before running it.
+ *
+ * It carries the rule's code and reason as data, so they survive the worker
+ * boundary and never depend on Python traceback formatting.
+ */
+export class ScientificRefusalError extends Error {
+  readonly refusal: ScientificRefusal;
+
+  constructor(refusal: ScientificRefusal) {
+    super(refusal.reason);
+    this.name = "ScientificRefusalError";
+    this.refusal = refusal;
+  }
+}
 import type { MemoryUsage } from "../utils/memory";
 import type { StorageMode } from "./runtime";
 
@@ -104,7 +130,14 @@ export interface BootErrorEvent {
 /** Reply to a {@link CallRequest}. */
 export type ResultEvent =
   | { type: "result"; id: number; ok: true; value: unknown }
-  | { type: "result"; id: number; ok: false; error: string };
+  | {
+      type: "result";
+      id: number;
+      ok: false;
+      error: string;
+      /** Set when the call was refused by a scientific rule. */
+      refusal?: ScientificRefusal;
+    };
 
 /** A durable-workspace mutation fired by the runtime (drives the dirty
  *  flag). Mirrors ``DataLabRuntime.onWorkspaceMutation``. */

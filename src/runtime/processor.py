@@ -1286,17 +1286,25 @@ class BaseProcessor:
     ) -> ApplyResult:
         result = ApplyResult()
         contract = _x_alignment_contract(spec)
-        for src, oid in zip(sources, source_ids):
-            op = operand
-            if contract is not None:
-                # The contract's rule replaces the legacy interpolation; the
-                # originals are never modified.
+        pairs = [(oid, src, operand) for src, oid in zip(sources, source_ids)]
+        if contract is not None:
+            # Every pair is aligned before any computation, so that a refused
+            # pair computes nothing. The originals are never modified.
+            aligned = []
+            for oid, src, op in pairs:
                 (src, op), context = contract.prepare_inputs(
-                    [src, operand], recorded_context
+                    [src, op], recorded_context
                 )
                 result.contexts[oid] = context
-            elif spec.object_kind == "signal" and not spec.skip_xarray_compat:
-                op = _interpolate_to(src, operand)
+                aligned.append((oid, src, op))
+            pairs = aligned
+        for oid, src, op in pairs:
+            if (
+                contract is None
+                and spec.object_kind == "signal"
+                and not spec.skip_xarray_compat
+            ):
+                op = _interpolate_to(src, op)
             args: tuple[Any, ...] = (
                 (src, op) if instance is None else (src, op, instance)
             )

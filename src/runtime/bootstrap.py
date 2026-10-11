@@ -5364,6 +5364,50 @@ def apply_processing(
     return apply_feature(processing_id, [oid], params=params)[0]
 
 
+def _scientific_refusals() -> tuple[type[BaseException], ...]:
+    """Return the exception types that carry a scientific refusal code."""
+    try:
+        # pylint: disable-next=import-outside-toplevel
+        from sigima.proc.alignment import XAlignmentError
+    except ImportError:  # released Sigima without alignment rules
+        return ()
+    return (XAlignmentError,)
+
+
+def _refusable(func):
+    """Wrap a JS-called helper so that scientific refusals come back as data.
+
+    Pyodide builds the message of a Python exception by printing its traceback
+    to a captured stderr; when that fails, the JS error only says "Error occurred
+    while formatting traceback" and the reason is lost. A refusal decided by a
+    Sigima rule (e.g. an operand that does not cover the source grid) is part of
+    the result, so it is returned as ``{"refused": {"kind", "code", "reason"}}``
+    before any traceback is formatted; other errors still raise.
+    """
+
+    def wrapper(*args, **kwargs):
+        try:
+            return {"value": func(*args, **kwargs)}
+        except _scientific_refusals() as exc:
+            return {
+                "refused": {
+                    "kind": "x_alignment",
+                    "code": exc.code,
+                    "reason": str(exc),
+                }
+            }
+
+    wrapper.__name__ = f"bridge_{func.__name__}"
+    wrapper.__doc__ = func.__doc__
+    return wrapper
+
+
+bridge_apply_feature = _refusable(apply_feature)
+bridge_preview_feature = _refusable(preview_feature)
+bridge_apply_processing = _refusable(apply_processing)
+bridge_reapply_last_processing = _refusable(reapply_last_processing)
+
+
 # ---------------------------------------------------------------------------
 # Image-only panel operations (modify selected images in place).
 # Mirrors DataLab desktop's "Processing > Geometry > Distribute on a grid"
@@ -7270,6 +7314,10 @@ __all__ = [
     "apply_processing",
     "get_last_processing",
     "reapply_last_processing",
+    "bridge_apply_feature",
+    "bridge_preview_feature",
+    "bridge_apply_processing",
+    "bridge_reapply_last_processing",
     "get_provenance_ledger",
     "replay_activity",
     "set_provenance_edition_version",
