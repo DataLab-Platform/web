@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from pathlib import Path
 
 import pytest
 
@@ -237,3 +239,22 @@ def test_registry_revision_is_checked_not_trusted():
     next(e for e in tampered["@graph"] if e["@id"] == "./")["name"] = "edited"
     with pytest.raises(Exception, match="fingerprint"):
         reader.check_registry_revision(json.dumps(tampered), fingerprint)
+
+
+def test_browser_registry_limits_are_those_of_the_capsule_client():
+    """The browser reads registry responses with DataLab-Capsule's limits."""
+    from datalab_capsule import registry, registry_client
+
+    source = (
+        Path(__file__).parents[2] / "src" / "storage" / "capsuleRegistry.ts"
+    ).read_text(encoding="utf-8")
+    block = re.search(r"REGISTRY_LIMITS = \{(.*?)\} as const", source, re.S)
+    limits = {
+        key: int(value)
+        for key, value in re.findall(r"^\s*(\w+): ([\d_]+),", block.group(1), re.M)
+    }
+    assert limits == {
+        "listing": registry_client.MAX_LISTING_BYTES,
+        "manifest": registry.MAX_REGISTRY_MANIFEST_BYTES,
+        "reply": registry_client.MAX_REPLY_BYTES,
+    }

@@ -1173,6 +1173,7 @@
   "The Python runtime is unavailable.": "L'environnement d'exécution Python est indisponible.",
   "The registry address must be an http or https URL": "L'adresse du registre doit être une URL http ou https",
   "The registry cannot be reached": "Le registre est injoignable",
+  "The registry response exceeds {limit} bytes": "La réponse du registre dépasse {limit} octets",
   "The two revisions are identical.": "Les deux révisions sont identiques.",
   "Thinking…": "Réflexion…",
   "Third-party features live under the Plugins menu. They are Python modules loaded into Pyodide at startup, with full access to the in-browser Python runtime.": "Les fonctionnalités tierces se trouvent dans le menu Extensions. Ce sont des modules Python chargés dans Pyodide au démarrage, avec un accès complet à l'environnement Python du navigateur.",

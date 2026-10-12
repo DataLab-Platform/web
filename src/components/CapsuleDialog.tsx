@@ -1398,6 +1398,7 @@ function RegistryTab(
         retrieved.fingerprint,
         declared.name,
         declared.sha256,
+        Number(declared.size),
       );
       onSaved(
         await saveBytesToFile(

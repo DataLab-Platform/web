@@ -4,8 +4,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  REGISTRY_LIMITS,
   RegistryClient,
   loadRegistrySettings,
+  readLimited,
   registryBase,
   saveRegistrySettings,
   sha256Hex,
@@ -83,11 +85,98 @@ describe("RegistryClient", () => {
     vi.stubGlobal("fetch", respond(data.slice()));
     const client = new RegistryClient("https://reg.example");
     expect(
-      Array.from(await client.getAttachment(FP, "p.txt", expected)),
+      Array.from(
+        await client.getAttachment(FP, "p.txt", expected, data.length),
+      ),
     ).toEqual(Array.from(data));
     vi.stubGlobal("fetch", respond(new TextEncoder().encode("other")));
-    await expect(client.getAttachment(FP, "p.txt", expected)).rejects.toThrow(
-      "does not match the manifest",
+    await expect(
+      client.getAttachment(FP, "p.txt", expected, data.length),
+    ).rejects.toThrow("does not match the manifest");
+    vi.stubGlobal("fetch", respond(data.slice(0, 4)));
+    await expect(
+      client.getAttachment(FP, "p.txt", expected, data.length),
+    ).rejects.toThrow("does not match the manifest");
+  });
+});
+
+/** A body streamed in chunks, recording whether the reader cancelled it. */
+function streamed(chunks: number, chunkSize: number) {
+  const state = { sent: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (state.sent === chunks) return controller.close();
+      state.sent += 1;
+      controller.enqueue(new Uint8Array(chunkSize).fill(32));
+    },
+    cancel() {
+      state.cancelled = true;
+    },
+  });
+  return { body, state };
+}
+
+describe("registry response limits", () => {
+  it("reads a body up to its limit", async () => {
+    const data = await readLimited(new Response("x".repeat(10)), 10);
+    expect(data.byteLength).toBe(10);
+  });
+
+  it("refuses an announced size over the limit without reading", async () => {
+    const { body, state } = streamed(4, 8);
+    const response = new Response(body, {
+      headers: { "Content-Length": "32" },
+    });
+    await expect(readLimited(response, 31)).rejects.toThrow(
+      "The registry response exceeds 31 bytes",
     );
+    expect(state.sent).toBeLessThanOrEqual(1);
+    expect(state.cancelled).toBe(true);
+  });
+
+  it("stops reading a stream as soon as it exceeds the limit", async () => {
+    const { body, state } = streamed(1000, 1024);
+    await expect(readLimited(new Response(body), 4096)).rejects.toThrow(
+      "exceeds 4096 bytes",
+    );
+    expect(state.sent).toBeLessThan(10);
+    expect(state.cancelled).toBe(true);
+  });
+
+  it("refuses an invalid limit", async () => {
+    await expect(readLimited(new Response("x"), Number.NaN)).rejects.toThrow(
+      RangeError,
+    );
+  });
+
+  it("bounds listings, manifests and attachments", async () => {
+    const client = new RegistryClient("https://reg.example");
+    const huge = (size: number) =>
+      vi.fn(async () => new Response(streamed(size / 65_536 + 1, 65_536).body));
+    vi.stubGlobal("fetch", huge(REGISTRY_LIMITS.listing));
+    await expect(client.listRevisions()).rejects.toThrow("exceeds");
+    await expect(client.listReviewTexts(FP)).rejects.toThrow("exceeds");
+    vi.stubGlobal("fetch", huge(REGISTRY_LIMITS.manifest));
+    await expect(client.getManifestText(FP)).rejects.toThrow("exceeds");
+    vi.stubGlobal("fetch", respond("y".repeat(101)));
+    await expect(
+      client.getAttachment(FP, "p.txt", "0".repeat(64), 100),
+    ).rejects.toThrow("exceeds 100 bytes");
+  });
+
+  it("keeps the status text when an error body is too large", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(streamed(2, REGISTRY_LIMITS.reply).body, {
+            status: 500,
+            statusText: "Server Error",
+          }),
+      ),
+    );
+    await expect(
+      new RegistryClient("https://reg.example").listRevisions(),
+    ).rejects.toThrow("Registry error 500: Server Error");
   });
 });

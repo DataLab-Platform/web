@@ -452,7 +452,7 @@ above. Its `package.json` version must stay aligned with the app's.
   exported or inspected in this browser (manifest fingerprint, parent, and the
   manifest itself, so that two revisions can be compared without their
   files). A local convenience, never a source of truth.
-- `capsuleRegistry.ts` — optional HTTP client of a DataLab-Capsule registry (`fetch`, no Pyodide) and its settings. The registry is never trusted: manifests and reviews go through the runtime checks, attachments through a SHA-256 check.
+- `capsuleRegistry.ts` — optional HTTP client of a DataLab-Capsule registry (`fetch`, no Pyodide) and its settings. The registry is never trusted: each response is read up to the limits of DataLab-Capsule's client (`REGISTRY_LIMITS`; an attachment up to its declared size), manifests and reviews go through the runtime checks, attachments through a size and SHA-256 check.
 
 ---
 
