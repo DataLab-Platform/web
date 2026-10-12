@@ -278,19 +278,14 @@ test.describe("capsule exchange between two browsers", () => {
     await expect(author.getByTestId("capsule-diff-attachments")).toContainText(
       "added attachment points.csv",
     );
-    // The two exports save the same workspace again. Its bytes may differ (a
-    // storage change): equality is then not concluded, and nothing is
-    // scientific either way.
+    // An added attachment is not interpreted: whatever the workspace bytes
+    // (saved again, they may differ), equality is not concluded and nothing
+    // is scientific.
     await expect(author.getByTestId("capsule-diff-scientific")).toContainText(
       "(0)",
     );
-    const storage = await author
-      .getByTestId("capsule-diff-storage")
-      .textContent();
     await expect(author.getByTestId("capsule-diff-conclusion")).toContainText(
-      storage?.includes("(0)")
-        ? "No scientific change, and the same workspace file."
-        : "equality is not established",
+      "equality is not established",
     );
 
     const recipient = await openPage(browser);

@@ -408,7 +408,8 @@ export interface CapsuleDiff {
   revision_of_old: boolean;
   identical: boolean;
   /** ``none_detected``: the recorded activities and states agree but the
-   *  workspace files differ, so equality is not established. */
+   *  workspace files or the attachment contents differ, so equality is not
+   *  established. */
   scientific_conclusion: "differences" | "none" | "none_detected";
   scientific: CapsuleChange[];
   presentation: CapsuleChange[];

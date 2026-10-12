@@ -1271,9 +1271,9 @@ function DiffView(props: { diff: CapsuleDiff }) {
   ];
   const conclusions: Record<CapsuleDiff["scientific_conclusion"], string> = {
     differences: t("Scientific changes were found."),
-    none: t("No scientific change, and the same workspace file."),
+    none: t("No scientific change, the same workspace file and attachments."),
     none_detected: t(
-      "No change in the recorded activities and states. The workspace files differ: content outside the recorded provenance is not compared, so equality is not established.",
+      "No change in the recorded activities and states. The workspace files or the attachments differ: content outside the recorded provenance is not compared, so equality is not established.",
     ),
   };
   return (
