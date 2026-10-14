@@ -241,21 +241,25 @@ def test_bridge_returns_refusals_as_data(fresh_bootstrap):
         bs.bridge_apply_feature("does_not_exist", [source])
 
 
-def test_other_two_input_operations_are_opaque(fresh_bootstrap):
-    """Other 2-to-1 operations record their declared alignment, captured opaque."""
+def test_other_two_input_operations_keep_their_identity(fresh_bootstrap):
+    """Other 2-to-1 operations record their identity and declared alignment."""
     bs = fresh_bootstrap
     a = add(bs, [0, 1, 2], [2, 4, 6], "A")
     b = add(bs, [0, 1, 2], [1, 2, 3], "B")
     bs.apply_feature("division", [a], operand_id=b)
     (activity,) = bs._PROVENANCE.ledger.activities
-    assert activity["call"]["operation"] is None
+    assert activity["call"]["operation"] == {
+        "id": "sigima.signal.division",
+        "contract_version": 1,
+    }
     assert [role for role, _uid in roles(bs, activity)] == ["source", "operand"]
     assert activity["context"]["x_alignment"] == {
         "rule": "sigima.signal.x_alignment.source_grid_linear_hold",
         "version": 1,
         "interpolated": False,
     }
-    assert bs.replay_activity(activity["activity_id"])["restoration"] == "opaque"
+    report = bs.replay_activity(activity["activity_id"])
+    assert report["eligibility"] == "unsupported_contract"
 
 
 def test_round_trip_in_a_fresh_runtime():

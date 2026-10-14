@@ -108,13 +108,22 @@ def test_adopted_preview_records_its_parameters(fresh_bootstrap):
     assert output_state(bs, activity)["object_uuid"] == uuid_of(bs, result)
 
 
-def test_unqualified_operation_is_recorded_as_opaque(fresh_bootstrap):
+def test_unqualified_operation_keeps_its_identity(fresh_bootstrap):
     bs = fresh_bootstrap
     src = add_signal(bs)
     bs.apply_feature("moving_average", [src], params={"n": 3})
     (activity,) = ledger(bs).activities
-    assert activity["call"]["operation"] is None
+    assert activity["call"]["operation"] == {
+        "id": "sigima.signal.moving_average",
+        "contract_version": 1,
+    }
     assert activity["call"]["parameters"]["n"] == 3
+    report = bs.replay_activity(activity["activity_id"])
+    assert (report["restoration"], report["eligibility"]) == (
+        "replayable",
+        "unsupported_contract",
+    )
+    assert "not qualified" in report["reason"]
 
 
 def test_reapply_keeps_uuid_and_records_recompute(fresh_bootstrap):
@@ -228,7 +237,7 @@ def test_refusals_happen_before_any_computation(fresh_bootstrap, counted_apply):
     operation["contract_version"] = 1
 
     bs.set_signal_roi(src, [{"xmin": 0.5, "xmax": 2.5, "title": "range"}])
-    assert bs.replay_activity(act_id)["eligibility"] == "unsupported_context"
+    assert bs.replay_activity(act_id)["eligibility"] == "input_changed"
     bs._MODEL.get(src).roi = None
 
     obj = bs._MODEL.get(src)

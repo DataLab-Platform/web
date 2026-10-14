@@ -59,13 +59,22 @@ def output_object(bs, activity):
     return bs._find_object_by_uuid(state["object_uuid"])
 
 
-def check_chain(bs, edition: str) -> None:
-    """Check a reopened chain workspace: facts, data and real replays."""
+def check_chain(bs, edition: str, historical: bool = False) -> None:
+    """Check a reopened chain workspace: facts, data and real replays.
+
+    *historical* reference files were recorded when unqualified operations were
+    recorded without identity (opaque): they stay readable as such.
+    """
     ledger = bs._PROVENANCE.ledger
     ledger.validate()
     a1, a2, a3, a4 = ledger.activities
     assert {a["edition"] for a in ledger.activities} == {edition}
-    assert a1["call"]["operation"] is None
+    # Not qualified yet, the constant addition keeps its identity.
+    assert a1["call"]["operation"] == (
+        None
+        if historical
+        else {"id": "sigima.signal.addition_constant", "contract_version": 1}
+    )
     assert a1["call"]["parameters"] == {"value": 1.0}
     assert [a["call"]["operation"] for a in (a2, a3, a4)] == [NORMALIZE] * 3
     assert [a["call"]["parameters"]["method"] for a in (a2, a3, a4)] == [
@@ -88,11 +97,18 @@ def check_chain(bs, edition: str) -> None:
         assert np.array_equal(obj.x, X)
     references = {a["activity_id"]: output_object(bs, a).y.copy() for a in (a2, a4)}
     tree = bs.get_panel_tree("signal")
-    opaque = bs.replay_activity(a1["activity_id"])
-    assert (opaque["restoration"], opaque["eligibility"]) == (
-        "opaque",
-        "unsupported_operation",
-    )
+    unqualified = bs.replay_activity(a1["activity_id"])
+    if historical:
+        assert (unqualified["restoration"], unqualified["eligibility"]) == (
+            "opaque",
+            "unsupported_operation",
+        )
+    else:
+        assert (unqualified["restoration"], unqualified["eligibility"]) == (
+            "replayable",
+            "unsupported_contract",
+        )
+        assert "not qualified" in unqualified["reason"]
     for activity in (a4, a2):
         report = bs.replay_activity(activity["activity_id"])
         assert report["verdict"] == "exact"
@@ -127,12 +143,7 @@ def test_capsule_export_and_open():
     data = writer.export_workspace_capsule(name="chain")
     summary = inspect_manifest(read_capsule(data).manifest)
     assert summary["name"] == "chain"
-    assert [a["replayable"] for a in summary["activities"]] == [
-        False,
-        True,
-        True,
-        True,
-    ]
+    assert [a["replayable"] for a in summary["activities"]] == [True] * 4
     reader = fresh_runtime()
     reader.open_workspace_capsule("chain.dlcapsule", data, replace=True)
     check_chain(reader, "web")
@@ -193,7 +204,7 @@ def test_reference_files(name: str, edition: str):
     """Reference files of both editions reopen and replay here."""
     bs = fresh_runtime()
     bs.open_workspace_from_bytes(name, (FIXTURES / name).read_bytes(), replace=True)
-    check_chain(bs, edition)
+    check_chain(bs, edition, historical=True)
 
 
 def _edit(data: bytes, edit) -> bytes:
