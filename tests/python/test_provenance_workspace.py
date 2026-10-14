@@ -62,14 +62,14 @@ def output_object(bs, activity):
 def check_chain(bs, edition: str, historical: bool = False) -> None:
     """Check a reopened chain workspace: facts, data and real replays.
 
-    *historical* reference files were recorded when unqualified operations were
-    recorded without identity (opaque): they stay readable as such.
+    *historical* reference files were recorded when operations not qualified
+    at that time were recorded without identity (opaque): they stay readable
+    as such, and their replay is refused.
     """
     ledger = bs._PROVENANCE.ledger
     ledger.validate()
     a1, a2, a3, a4 = ledger.activities
     assert {a["edition"] for a in ledger.activities} == {edition}
-    # Not qualified yet, the constant addition keeps its identity.
     assert a1["call"]["operation"] == (
         None
         if historical
@@ -97,19 +97,15 @@ def check_chain(bs, edition: str, historical: bool = False) -> None:
         assert np.array_equal(obj.x, X)
     references = {a["activity_id"]: output_object(bs, a).y.copy() for a in (a2, a4)}
     tree = bs.get_panel_tree("signal")
-    unqualified = bs.replay_activity(a1["activity_id"])
     if historical:
-        assert (unqualified["restoration"], unqualified["eligibility"]) == (
+        opaque = bs.replay_activity(a1["activity_id"])
+        assert (opaque["restoration"], opaque["eligibility"]) == (
             "opaque",
             "unsupported_operation",
         )
-    else:
-        assert (unqualified["restoration"], unqualified["eligibility"]) == (
-            "replayable",
-            "unsupported_contract",
-        )
-        assert "not qualified" in unqualified["reason"]
-    for activity in (a4, a2):
+    replayed = (a4, a2) if historical else (a1, a4, a2)
+    references[a1["activity_id"]] = output_object(bs, a1).y.copy()
+    for activity in replayed:
         report = bs.replay_activity(activity["activity_id"])
         assert report["verdict"] == "exact"
         assert report["restoration"] == "replayable"
@@ -182,19 +178,18 @@ def test_processing_tab_records_are_rebuilt():
     oid_of = {
         reader._object_uuid(e.obj): oid for oid, e in reader._MODEL._objects.items()
     }
-    s0, s2, s4 = (
+    s0, s1, s2, s4 = (
         oid_of[writer._object_uuid(writer._MODEL.get(ids[name]))]
-        for name in ("S0", "S2", "S4")
+        for name in ("S0", "S1", "S2", "S4")
     )
     record = reader.get_last_processing(s4)
     assert record["feature_id"] == "normalize"
     assert record["source_ids"] == [s0]
-    for name, oid in (("S4", s4), ("S2", s2)):
+    assert reader.get_last_processing(s1)["feature_id"] == "addition_constant"
+    for name, oid in (("S4", s4), ("S2", s2), ("S1", s1)):
         expected = writer.get_last_processing(ids[name])["values"]
         assert reader.get_last_processing(oid)["values"] == expected
     assert reader.get_last_processing(s0) is None
-    s1 = oid_of[writer._object_uuid(writer._MODEL.get(ids["S1"]))]
-    assert reader.get_last_processing(s1) is None  # opaque step
 
 
 @pytest.mark.parametrize(
