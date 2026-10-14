@@ -89,14 +89,21 @@ def test_n_to_1_records_every_source_in_order(fresh_bootstrap):
     ]
 
 
-def test_legacy_interpolation_is_flagged(fresh_bootstrap):
-    """Inputs interpolated before an n-to-1 call are flagged; originals recorded."""
+def test_list_alignment_is_recorded(fresh_bootstrap):
+    """Inputs aligned before an n-to-1 call are recorded as originals, with the
+    alignment policy declared by the operation and its outcome."""
     bs = fresh_bootstrap
     first = add_signal(bs, title="first")
     second = add_signal(bs, x=[0.0, 0.5, 0.6, 0.75], title="second")
     bs.apply_feature("average", [first, second])
     (activity,) = ledger(bs).activities
-    assert activity["limits"] == ["x_interpolated"]
+    assert activity["limits"] == []
+    assert activity["context"]["x_alignment"] == {
+        "rule": "sigima.signal.x_alignment.smallest_grid_linear_hold",
+        "version": 1,
+        "interpolated": [1],
+        "target": 0,
+    }
     recorded = inputs_of(bs, activity)[1]
     assert recorded["state_id"] == bs._PROVENANCE.observe(bs._MODEL.get(second))
 

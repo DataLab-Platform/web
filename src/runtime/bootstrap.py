@@ -4867,9 +4867,9 @@ def _x_interpolation_limits(spec: Any, inputs: list[Any]) -> list[str]:
 
 
 def _complete_provenance(pending: Any, dst: Any, context: dict | None) -> None:
-    """Record a completed execution with the alignment actually applied."""
+    """Record a completed execution with the context Sigima actually applied."""
     if pending is not None and context:
-        pending.x_alignment = context.get("x_alignment")
+        pending.context.update(context)
     _PROVENANCE.complete(pending, dst)
 
 
@@ -4886,23 +4886,13 @@ def replay_activity(activity_id: str) -> dict[str, Any]:
 
     The candidate is never inserted in the workspace and the ledger is not
     changed; the returned report describes the comparison with the recorded
-    result.
+    result. Sigima prepares the candidate (recorded parameters and context
+    applied to the live inputs); the processor runs it, in the worker.
     """
 
-    def execute_candidate(
-        function: Any, inputs: list[Any], param: Any, context: dict
-    ) -> Any:
-        spec = _feature_spec_of(function)
-        if spec is None:
-            raise ValueError("The operation is not available in this catalogue")
-        ctx = _proc.ApplyContext(
-            feature=spec,
-            sources=inputs[:1],
-            operand=inputs[1] if len(inputs) > 1 else None,
-            param_instance=param,
-            recorded_context=context,
-        )
-        result = _proc.BaseProcessor(spec.object_kind).apply(ctx, ["candidate"])
+    def execute_candidate(prepared: Any) -> Any:
+        ctx = _proc.ApplyContext(feature=None, sources=[], prepared=prepared)
+        result = _proc.BaseProcessor().apply(ctx, ["candidate"])
         return result.items[0][1] if result.items else None
 
     return _PROVENANCE.verify(activity_id, execute_candidate)
@@ -5319,7 +5309,9 @@ def reapply_last_processing(
     _MODEL._objects[oid].obj = new_obj  # noqa: SLF001
     _mark_object_data_changed(oid)
     if pendings:
-        _PROVENANCE.complete(pendings.get(source_ids[0]), new_obj)
+        _complete_provenance(
+            pendings.get(source_ids[0]), new_obj, result.contexts.get(source_ids[0])
+        )
     # Update the recorded params so subsequent edits start from the new
     # baseline (mirrors how DataLab desktop persists the edited DataSet).
     _LAST_PROCESSING[oid] = {
