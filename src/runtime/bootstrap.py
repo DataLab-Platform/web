@@ -4892,8 +4892,11 @@ def replay_activity(activity_id: str) -> dict[str, Any]:
 
     def execute_candidate(prepared: Any) -> Any:
         ctx = _proc.ApplyContext(feature=None, sources=[], prepared=prepared)
-        result = _proc.BaseProcessor().apply(ctx, ["candidate"])
-        return result.items[0][1] if result.items else None
+        try:
+            result = _proc.BaseProcessor().apply(ctx, ["candidate"])
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            raise _prov.CandidateError(str(exc) or type(exc).__name__) from exc
+        return result.items[0][1]
 
     return _PROVENANCE.verify(activity_id, execute_candidate)
 
@@ -6209,6 +6212,8 @@ async def _run_analysis(
         result = entry["func"](obj, param)
 
     if result is None:
+        # A normal absence of result (e.g. nothing detected), not an error.
+        _PROVENANCE.complete_without_result(pending)
         return None
     # Make sure func_name is set for metadata-key consistency with DataLab.
     if not getattr(result, "func_name", None):
