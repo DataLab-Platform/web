@@ -82,9 +82,8 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
 
 try:
     from sigima.proc import contracts as _contracts
-    from sigima.proc import execution as _execution
 except ImportError:  # pragma: no cover - released Sigima without contracts
-    _contracts = _execution = None
+    _contracts = None
 
 _logger = logging.getLogger(__name__)
 
@@ -147,7 +146,7 @@ class WebProvenance(Recorder):
                 is_known_operation=is_known_operation,
                 state_facts=self._resident_facts,
             )
-            computation = computation_from_sigima(_execution, _contracts)
+            computation = computation_from_sigima(_contracts)
         super().__init__(host, computation)
         if host is None:
             self.ledger = None

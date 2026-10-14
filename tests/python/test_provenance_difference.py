@@ -168,7 +168,7 @@ def test_verification_refusals(fresh_bootstrap, counted_apply):
 
 def test_refused_alignment_creates_nothing(fresh_bootstrap):
     """An uncovered or unit-mismatched operand raises; nothing is created."""
-    from sigima.proc.alignment import XAlignmentError
+    from sigima.proc.contracts import XAlignmentError
 
     bs = fresh_bootstrap
     source = add(bs, [0, 1, 2], [0, 1, 2], "source")
@@ -188,7 +188,7 @@ def test_refused_alignment_creates_nothing(fresh_bootstrap):
 
 def test_refusal_comes_before_any_computation(fresh_bootstrap, monkeypatch):
     """With several sources, a refused pair stops the call before any difference."""
-    from sigima.proc.alignment import XAlignmentError
+    from sigima.proc.contracts import XAlignmentError
 
     bs = fresh_bootstrap
     operand = add(bs, [0, 1, 2], [0, 1, 2], "operand")
