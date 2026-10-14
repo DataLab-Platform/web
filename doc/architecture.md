@@ -385,15 +385,7 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
   - **Dialog bridge**: `set_dialog_bridge(bridge)` registers the JS
     callable used by Python helpers that need to ask the user something.
 
-- **`processor.py`** (loaded as `dlw_processor.py`) — introspects
-  Sigima's catalog and exposes `build_signal_catalog()`,
-  `build_image_catalog()` and the `apply_*` dispatchers. Equivalent of
-  desktop DataLab's `register_1_to_1` / `register_n_to_1` /
-  `register_2_to_1`. The pattern of a feature and the kind of its result
-  come from the Sigima operation contract of its function (the only source
-  of patterns, shared with DataLab desktop); override hooks hold interface
-  choices only (labels, menus, icons, operand labels, preview) and allow
-  renaming / hiding / regrouping entries or wiring custom result renderers.
+- **`processor.py`** (loaded as `dlw_processor.py`) — introspects Sigima's catalog and exposes `build_signal_catalog()`, `build_image_catalog()` and the `apply_*` dispatchers. Equivalent of desktop DataLab's `register_1_to_1` / `register_n_to_1` / `register_2_to_1`. The pattern of a feature and the kind of its result come from the Sigima operation contract of its function (the only source of patterns, shared with DataLab desktop); override hooks hold interface choices only (labels, menus, icons, operand labels, preview) and allow renaming / hiding / regrouping entries or wiring custom result renderers.
 
 - **`dlw_main.py`** — exposes a `datalab.*` namespace inside Pyodide
   (panels, current panel, etc.) so that **DataLab desktop plugins run
