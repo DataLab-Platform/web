@@ -242,7 +242,7 @@ def test_bridge_returns_refusals_as_data(fresh_bootstrap):
 
 
 def test_other_two_input_operations_keep_their_identity(fresh_bootstrap):
-    """Other 2-to-1 operations record their identity and declared alignment."""
+    """Other 2-to-1 operations record their identity and alignment, and replay."""
     bs = fresh_bootstrap
     a = add(bs, [0, 1, 2], [2, 4, 6], "A")
     b = add(bs, [0, 1, 2], [1, 2, 3], "B")
@@ -259,7 +259,7 @@ def test_other_two_input_operations_keep_their_identity(fresh_bootstrap):
         "interpolated": False,
     }
     report = bs.replay_activity(activity["activity_id"])
-    assert report["eligibility"] == "unsupported_contract"
+    assert report["verdict"] == "exact"
 
 
 def test_round_trip_in_a_fresh_runtime():

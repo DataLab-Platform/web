@@ -108,7 +108,7 @@ def test_adopted_preview_records_its_parameters(fresh_bootstrap):
     assert output_state(bs, activity)["object_uuid"] == uuid_of(bs, result)
 
 
-def test_unqualified_operation_keeps_its_identity(fresh_bootstrap):
+def test_qualified_operation_is_replayed(fresh_bootstrap):
     bs = fresh_bootstrap
     src = add_signal(bs)
     bs.apply_feature("moving_average", [src], params={"n": 3})
@@ -118,6 +118,19 @@ def test_unqualified_operation_keeps_its_identity(fresh_bootstrap):
         "contract_version": 1,
     }
     assert activity["call"]["parameters"]["n"] == 3
+    report = bs.replay_activity(activity["activity_id"])
+    assert (report["restoration"], report["verdict"]) == ("replayable", "exact")
+
+
+def test_unqualified_operation_keeps_its_identity(fresh_bootstrap):
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    bs.apply_feature("phase_spectrum", [src])
+    (activity,) = ledger(bs).activities
+    assert activity["call"]["operation"] == {
+        "id": "sigima.signal.phase_spectrum",
+        "contract_version": 1,
+    }
     report = bs.replay_activity(activity["activity_id"])
     assert (report["restoration"], report["eligibility"]) == (
         "replayable",
