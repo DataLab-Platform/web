@@ -77,7 +77,7 @@ test.describe("capsule exchange between two browsers", () => {
     await expect(rows).toHaveCount(2);
     await rows.nth(0).getByTestId("capsule-replay-button").click();
     await expect(rows.nth(0).getByTestId("capsule-replay-verdict")).toHaveText(
-      "not_verified (unsupported_operation)",
+      "exact (ready)",
     );
     await rows.nth(1).getByTestId("capsule-replay-button").click();
     await expect(rows.nth(1).getByTestId("capsule-replay-verdict")).toHaveText(

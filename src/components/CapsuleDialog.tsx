@@ -1079,6 +1079,17 @@ function ReviewWriter(
   );
 }
 
+/** Reason of a refusal and details of the outputs that were not found equal. */
+function reportDetails(report: ProvenanceReport): string[] {
+  const details = report.reason ? [report.reason] : [];
+  for (const output of report.outputs ?? []) {
+    if (output.detail) {
+      details.push(`${output.role}: ${output.detail}`);
+    }
+  }
+  return details;
+}
+
 function ReplayTab(props: TabProps & { info: ProvenanceLedgerInfo | null }) {
   const { runtime, info, busy, run } = props;
   const [reports, setReports] = useState<Record<string, ProvenanceReport>>({});
@@ -1124,9 +1135,23 @@ function ReplayTab(props: TabProps & { info: ProvenanceLedgerInfo | null }) {
                   <td>
                     <code>{shortId(activity.activity_id)}</code>
                   </td>
-                  <td>{activity.call.operation?.id ?? t("not qualified")}</td>
-                  <td data-testid="capsule-replay-verdict">
-                    {report ? `${report.verdict} (${report.eligibility})` : ""}
+                  <td>{activity.call.operation?.id ?? t("opaque")}</td>
+                  <td>
+                    <span data-testid="capsule-replay-verdict">
+                      {report
+                        ? `${report.verdict} (${report.eligibility})`
+                        : ""}
+                    </span>
+                    {report && reportDetails(report).length > 0 && (
+                      <ul
+                        className="capsule-note"
+                        data-testid="capsule-replay-details"
+                      >
+                        {reportDetails(report).map((detail) => (
+                          <li key={detail}>{detail}</li>
+                        ))}
+                      </ul>
+                    )}
                   </td>
                   <td>
                     <button

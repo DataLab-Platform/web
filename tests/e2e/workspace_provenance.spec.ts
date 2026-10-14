@@ -137,6 +137,10 @@ async function runScenario(
 }
 
 const NORMALIZE = { id: "sigima.signal.normalize", contract_version: 1 };
+const ADD_CONSTANT = {
+  id: "sigima.signal.addition_constant",
+  contract_version: 1,
+};
 const FIXTURES = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -144,7 +148,7 @@ const FIXTURES = path.join(
   "provenance",
 );
 
-/** Run the chain scenario (S0 -> S1 opaque -> S2 -> S3, S0 -> S4), then save
+/** Run the chain scenario (S0 -> S1 -> S2 -> S3, S0 -> S4), then save
  *  it as an HDF5 workspace, as a capsule and as a referenced capsule (whose
  *  workspace is returned). */
 async function saveChain(
@@ -327,11 +331,22 @@ async function reopenChain(
   );
 }
 
-function expectChain(result: ReopenResult, edition: string): void {
+/** Check a reopened chain. *historical* reference files were recorded when the
+ *  constant addition was recorded without identity (opaque): it stays so. */
+function expectChain(
+  result: ReopenResult,
+  edition: string,
+  historical = false,
+): void {
   expect(result.fileStatus).toBe("loaded");
   expect(result.stateStatus).toEqual({});
   expect(result.editions).toEqual([edition, edition, edition, edition]);
-  expect(result.operations).toEqual([null, NORMALIZE, NORMALIZE, NORMALIZE]);
+  expect(result.operations).toEqual([
+    historical ? null : ADD_CONSTANT,
+    NORMALIZE,
+    NORMALIZE,
+    NORMALIZE,
+  ]);
   expect(result.parameters).toEqual([
     { value: 1 },
     { method: "maximum" },
@@ -341,14 +356,21 @@ function expectChain(result: ReopenResult, edition: string): void {
   expect(result.outputY[0]).toEqual([-1, 1, 2, 5]);
   expect(result.outputY[1]).toEqual([-1 / 5, 1 / 5, 2 / 5, 1]);
   expect(result.outputY[3]).toEqual([0, 1 / 3, 0.5, 1]);
+  const replayed = {
+    restoration: "replayable",
+    eligibility: "ready",
+    verdict: "exact",
+  };
   expect(result.verdicts).toEqual([
-    {
-      restoration: "opaque",
-      eligibility: "unsupported_operation",
-      verdict: "not_verified",
-    },
-    { restoration: "replayable", eligibility: "ready", verdict: "exact" },
-    { restoration: "replayable", eligibility: "ready", verdict: "exact" },
+    historical
+      ? {
+          restoration: "opaque",
+          eligibility: "unsupported_operation",
+          verdict: "not_verified",
+        }
+      : replayed,
+    replayed,
+    replayed,
   ]);
 }
 
@@ -445,7 +467,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
         );
         const result = await reopenChain(reader, storageMode, bytes);
         requireProvenance(result.available);
-        expectChain(result, "desktop");
+        expectChain(result, "desktop", true);
         expect(result.environmentMatch.slice(1)).toEqual([
           "different",
           "different",

@@ -33,7 +33,7 @@ export async function openPage(browser: Browser): Promise<Page> {
   return page;
 }
 
-/** S0 -> S1 = S0 + 1 (opaque) -> S2 = normalize(S1, maximum) (replayable). */
+/** S0 -> S1 = S0 + 1 -> S2 = normalize(S1, maximum), both replayable. */
 export async function buildChain(page: Page): Promise<boolean> {
   return page.evaluate(
     async ({ x, y }) => {
