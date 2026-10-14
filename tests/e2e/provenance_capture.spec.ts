@@ -3,10 +3,12 @@
  *
  * Drives the real browser runtime (UI thread and kernel worker, arrays in RAM
  * and on disk) through an image processing, an n-to-1 average and two
- * analyses, then checks the recorded facts: image states, ordered ``sources``
- * inputs, analysis artifacts, and no capture failure (on-disk objects must be
- * paged in before they are fingerprinted). The workspace is then reopened in
- * another context, where every recorded state must be found unchanged.
+ * analyses, then checks the recorded facts: operation identities, image
+ * states, ordered ``sources`` inputs, analysis artifacts, and no capture
+ * failure (on-disk objects must be paged in before they are fingerprinted).
+ * Every activity is replayed exactly, analyses included. The workspace is then
+ * reopened in another context, where every recorded state must be found
+ * unchanged and every activity is replayed exactly again.
  *
  * The cross-edition part writes and reopens the shared capture scenario
  * (image with ROI, analyses) and reopens the Desktop reference file in Pyodide.
@@ -38,6 +40,7 @@ interface CaptureRun {
     outputs: { kind: string | null; artifact: string | null }[];
   }[];
   stateStatus: Record<string, string>;
+  verdicts: string[];
   bytes: number[];
 }
 
@@ -52,6 +55,7 @@ async function runCapture(
       interface Ledger {
         states: Record<string, { kind: string }>;
         activities: {
+          activity_id: string;
           call: {
             operation: unknown;
             inputs: { role: string; binding: { state_id: string } }[];
@@ -89,6 +93,7 @@ async function runCapture(
           state_status: Record<string, string>;
           ledger: Ledger | null;
         }>;
+        replayActivity(id: string): Promise<{ verdict: string }>;
       }
       const runtime = (window as unknown as { runtime: Runtime }).runtime;
       await runtime.resetAll();
@@ -134,6 +139,12 @@ async function runCapture(
           return { available: false } as CaptureRun;
         }
         const kindOf = (id: string) => ledger.states[id].kind;
+        const verdicts: string[] = [];
+        for (const activity of ledger.activities) {
+          verdicts.push(
+            (await runtime.replayActivity(activity.activity_id)).verdict,
+          );
+        }
         return {
           available: info.available,
           captureFailures: info.capture_failures - before,
@@ -147,6 +158,7 @@ async function runCapture(
             })),
           })),
           stateStatus: info.state_status,
+          verdicts,
           bytes:
             workspace === null
               ? Array.from(await runtime.saveWorkspaceHdf5())
@@ -163,25 +175,25 @@ async function runCapture(
 
 const EXPECTED = [
   {
-    operation: null,
+    operation: { id: "sigima.image.gaussian_filter", contract_version: 1 },
     roles: ["source"],
     inputKinds: ["image"],
     outputs: [{ kind: "image", artifact: null }],
   },
   {
-    operation: null,
+    operation: { id: "sigima.signal.average", contract_version: 1 },
     roles: ["sources", "sources", "sources"],
     inputKinds: ["signal", "signal", "signal"],
     outputs: [{ kind: "signal", artifact: null }],
   },
   {
-    operation: null,
+    operation: { id: "sigima.signal.stats", contract_version: 1 },
     roles: ["source"],
     inputKinds: ["signal"],
     outputs: [{ kind: null, artifact: "table" }],
   },
   {
-    operation: null,
+    operation: { id: "sigima.image.centroid", contract_version: 1 },
     roles: ["source"],
     inputKinds: ["image"],
     outputs: [{ kind: null, artifact: "geometry" }],
@@ -221,9 +233,11 @@ for (const runtimeMode of ["main", "worker"] as const) {
         requireProvenance(run.available);
         expect(run.captureFailures).toBe(0);
         expect(run.activities).toEqual(EXPECTED);
+        expect(run.verdicts).toEqual(EXPECTED.map(() => "exact"));
         const reopened = await runCapture(reader, storageMode, run.bytes);
         expect(reopened.activities).toEqual(EXPECTED);
         expect(reopened.stateStatus).toEqual({});
+        expect(reopened.verdicts).toEqual(EXPECTED.map(() => "exact"));
       });
     }
   });

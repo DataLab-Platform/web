@@ -439,3 +439,38 @@ def test_round_trip_with_images_and_analyses():
     assert reader._PROVENANCE.ledger.to_dict() == saved
     assert reader._PROVENANCE.state_status == {}
     reader._PROVENANCE.ledger.validate()
+
+
+FAMILIES_REFERENCE = [
+    "sigima.signal.average",
+    "sigima.signal.signals_to_image",
+    "sigima.signal.fft",
+    "sigima.signal.add_gaussian_noise",
+    "sigima.signal.moving_average",
+    "sigima.signal.stats",
+    "sigima.image.line_profile",
+    "sigima.image.centroid",
+    "sigima.image.convolution",
+    "sigima.image.peak_detection",
+]
+
+
+@pytest.mark.parametrize("edition", ["web", "desktop"])
+def test_families_reference_files(edition: str):
+    """Families files written by each edition are replayed here.
+
+    The same scenario is written by DataLab Desktop (``desktop_families.h5``)
+    and from Pyodide (``web_families.h5``, see ``provenance_families.spec.ts``):
+    every activity is identified and replayed under the declared rule.
+    """
+    name = f"{edition}_families.h5"
+    bs = fresh_runtime()
+    bs.open_workspace_from_bytes(name, (FIXTURES / name).read_bytes(), replace=True)
+    activities = ledger(bs).activities
+    assert [a["edition"] for a in activities] == [edition] * len(FAMILIES_REFERENCE)
+    assert [a["call"]["operation"]["id"] for a in activities] == FAMILIES_REFERENCE
+    assert activities[-1]["outputs"] == []  # nothing detected on the ramp
+    for activity in activities:
+        report = bs.replay_activity(activity["activity_id"])
+        assert report["eligibility"] == "ready", report
+        assert report["verdict"] in ("exact", "within_tolerance"), report
