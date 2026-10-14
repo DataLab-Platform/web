@@ -242,7 +242,7 @@ def test_bridge_returns_refusals_as_data(fresh_bootstrap):
 
 
 def test_other_two_input_operations_are_opaque(fresh_bootstrap):
-    """Other 2-to-1 operations keep their behaviour and are captured opaque."""
+    """Other 2-to-1 operations record their declared alignment, captured opaque."""
     bs = fresh_bootstrap
     a = add(bs, [0, 1, 2], [2, 4, 6], "A")
     b = add(bs, [0, 1, 2], [1, 2, 3], "B")
@@ -250,7 +250,11 @@ def test_other_two_input_operations_are_opaque(fresh_bootstrap):
     (activity,) = bs._PROVENANCE.ledger.activities
     assert activity["call"]["operation"] is None
     assert [role for role, _uid in roles(bs, activity)] == ["source", "operand"]
-    assert activity["context"]["x_alignment"] is None
+    assert activity["context"]["x_alignment"] == {
+        "rule": "sigima.signal.x_alignment.source_grid_linear_hold",
+        "version": 1,
+        "interpolated": False,
+    }
     assert bs.replay_activity(activity["activity_id"])["restoration"] == "opaque"
 
 

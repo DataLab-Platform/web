@@ -1110,35 +1110,49 @@ def _interpolate_to(target: SignalObj, other: SignalObj) -> SignalObj:
     return dst
 
 
-def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
-    """Return the contract of *spec* if it declares its own X-alignment rule.
-
-    Such operations (e.g. the signal difference) align the operand on the
-    source grid with a versioned Sigima rule instead of :func:`_interpolate_to`.
-    """
-    if spec.object_kind != "signal":
-        return None
+def _contract_of(spec: FeatureSpec) -> Any | None:
+    """Return the Sigima operation contract of *spec*, or None (e.g. plugins)."""
     try:
         # pylint: disable-next=import-outside-toplevel
         from sigima.proc.contracts import contract_for_function
     except ImportError:  # released Sigima without contracts
         return None
-    contract = contract_for_function(spec.func)
+    return contract_for_function(spec.func)
+
+
+def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
+    """Return the contract of *spec* if it declares an X-alignment policy.
+
+    Sigima prepares such operations (:func:`sigima.proc.execution.prepare_execution`):
+    the policy declared next to the function is applied once and recorded.
+    """
+    if spec.object_kind != "signal":
+        return None
+    contract = _contract_of(spec)
     if getattr(contract, "x_alignment", None) is None:
         return None
     return contract
 
 
+def _prepare(contract: Any, inputs: list[Any], instance: Any) -> Any:
+    """Return the execution of *contract* prepared by Sigima."""
+    # pylint: disable-next=import-outside-toplevel
+    from sigima.proc.execution import prepare_execution
+
+    return prepare_execution(contract, inputs, param=instance)
+
+
 def legacy_interpolation_applies(spec: FeatureSpec, objs: list[Any]) -> bool:
     """Return True if :meth:`BaseProcessor.apply` interpolates some of *objs* on X.
 
-    This is the legacy path of multi-input signal operations without an
-    X-alignment contract (see :func:`_interpolate_to` and :func:`_align_signals`).
+    This is the legacy path of multi-input signal operations without a Sigima
+    contract, such as plugin features (see :func:`_interpolate_to` and
+    :func:`_align_signals`). Sigima operations follow their contract.
     """
     if (
         spec.object_kind != "signal"
         or spec.skip_xarray_compat
-        or _x_alignment_contract(spec) is not None
+        or _contract_of(spec) is not None
     ):
         return False
     return any(not _x_arrays_match(objs[0], obj) for obj in objs[1:])
@@ -1172,19 +1186,20 @@ class ApplyContext:
         params: Optional dict of user-edited parameter values.
         param_instance: Optional parameter instance, used as is (no second
             instantiation) when given.
-        recorded_context: Execution context recorded with a replayed activity;
-            its rules (e.g. X alignment) must be supported.
+        prepared: Computation prepared by Sigima for a verification candidate
+            (recorded parameters and context applied); run as is, without
+            *feature*, *sources* nor parameters.
     """
 
     # Pure data container.
     # pylint: disable=too-few-public-methods
 
-    feature: FeatureSpec
+    feature: FeatureSpec | None
     sources: list[Any]
     operand: Any | None = None
     params: dict[str, Any] | None = None
     param_instance: Any | None = None
-    recorded_context: dict[str, Any] | None = None
+    prepared: Any | None = None
 
 
 @dataclass
@@ -1222,6 +1237,9 @@ class BaseProcessor:
 
     def apply(self, ctx: ApplyContext, source_ids: list[str]) -> ApplyResult:
         """Apply the feature described by *ctx* to *source_ids* and return the result."""
+        if ctx.prepared is not None:
+            key = source_ids[0] if source_ids else None
+            return ApplyResult(items=[(key, ctx.prepared.run())])
         spec = ctx.feature
         instance = ctx.param_instance
         if instance is None:
@@ -1254,7 +1272,6 @@ class BaseProcessor:
                 source_ids,
                 ctx.operand,
                 instance,
-                ctx.recorded_context,
             )
         if spec.pattern == "n_to_1":
             return self._compute_n_to_1(spec, ctx.sources, instance)
@@ -1282,28 +1299,24 @@ class BaseProcessor:
         source_ids: list[str],
         operand: Any,
         instance: gds.DataSet | None,
-        recorded_context: dict[str, Any] | None = None,
     ) -> ApplyResult:
         result = ApplyResult()
         contract = _x_alignment_contract(spec)
         pairs = [(oid, src, operand) for src, oid in zip(sources, source_ids)]
         if contract is not None:
-            # Every pair is aligned before any computation, so that a refused
+            # Every pair is prepared before any computation, so that a refused
             # pair computes nothing. The originals are never modified.
-            aligned = []
+            prepared = []
             for oid, src, op in pairs:
-                (src, op), context = contract.prepare_inputs(
-                    [src, op], recorded_context
-                )
-                result.contexts[oid] = context
-                aligned.append((oid, src, op))
-            pairs = aligned
+                execution = _prepare(contract, [src, op], instance)
+                result.contexts[oid] = execution.context
+                prepared.append((oid, execution))
+            for oid, execution in prepared:
+                with execution.applied_options():
+                    result.items.append((oid, spec.func(*execution.args)))
+            return result
         for oid, src, op in pairs:
-            if (
-                contract is None
-                and spec.object_kind == "signal"
-                and not spec.skip_xarray_compat
-            ):
+            if legacy_interpolation_applies(spec, [src, op]):
                 op = _interpolate_to(src, op)
             args: tuple[Any, ...] = (
                 (src, op) if instance is None else (src, op, instance)
@@ -1317,12 +1330,16 @@ class BaseProcessor:
         sources: list[Any],
         instance: gds.DataSet | None,
     ) -> ApplyResult:
+        contract = _x_alignment_contract(spec)
+        if contract is not None:
+            execution = _prepare(contract, list(sources), instance)
+            with execution.applied_options():
+                value = spec.func(*execution.args)
+            return ApplyResult(
+                items=[(None, value)], contexts={None: execution.context}
+            )
         srcs = sources
-        if (
-            spec.object_kind == "signal"
-            and not spec.skip_xarray_compat
-            and len(sources) > 1
-        ):
+        if len(sources) > 1 and legacy_interpolation_applies(spec, sources):
             srcs = _align_signals(sources)
         args: tuple[Any, ...] = (srcs,) if instance is None else (srcs, instance)
         return ApplyResult(items=[(None, spec.func(*args))])
