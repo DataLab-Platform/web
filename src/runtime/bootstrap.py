@@ -5363,7 +5363,7 @@ def _scientific_refusals() -> tuple[type[BaseException], ...]:
     """Return the exception types that carry a scientific refusal code."""
     try:
         # pylint: disable-next=import-outside-toplevel
-        from sigima.proc.alignment import XAlignmentError
+        from sigima.proc.contracts import XAlignmentError
     except ImportError:  # released Sigima without alignment rules
         return ()
     return (XAlignmentError,)

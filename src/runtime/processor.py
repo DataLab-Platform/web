@@ -1068,7 +1068,7 @@ def _contract_of(spec: FeatureSpec) -> Any | None:
 def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
     """Return the contract of *spec* if it declares an X-alignment policy.
 
-    Sigima prepares such operations (:func:`sigima.proc.execution.prepare_execution`):
+    Sigima prepares such operations (:func:`sigima.proc.contracts.prepare_execution`):
     the policy declared next to the function is applied once and recorded.
     """
     if spec.object_kind != "signal":
@@ -1082,7 +1082,7 @@ def _x_alignment_contract(spec: FeatureSpec) -> Any | None:
 def _prepare(contract: Any, inputs: list[Any], instance: Any) -> Any:
     """Return the execution of *contract* prepared by Sigima."""
     # pylint: disable-next=import-outside-toplevel
-    from sigima.proc.execution import prepare_execution
+    from sigima.proc.contracts import prepare_execution
 
     return prepare_execution(contract, inputs, param=instance)
 
