@@ -207,6 +207,29 @@ def test_operation_families_replay(fresh_bootstrap):
         check_families(_reopen(bs))
 
 
+def test_metadata_read_by_evaluate_fit(fresh_bootstrap):
+    """Fit parameters read by ``evaluate_fit`` are recorded and checked."""
+    bs = fresh_bootstrap
+    line = add_signal(bs, y=X * 2.0 + 1.0, title="line")
+    (fit,) = bs.apply_feature("linear_fit", [line])
+    grid = add_signal(bs, y=np.zeros(9), x=np.linspace(0.0, 2.0, 9), title="grid")
+    bs.apply_feature("evaluate_fit", [fit], operand_id=grid)
+    activity = ledger(bs).activities[-1]
+    assert activity["call"]["operation"]["id"] == "sigima.signal.evaluate_fit"
+    (read,) = activity["context"]["metadata"]
+    assert (read["role"], read["key"]) == ("source", "fit_params")
+    activity_id = activity["activity_id"]
+    assert bs.replay_activity(activity_id)["verdict"] == "exact"
+    reopened = _reopen(bs)
+    assert reopened.replay_activity(activity_id)["verdict"] == "exact"
+    fit_obj = bs._MODEL.get(fit)
+    original = dict(fit_obj.metadata["fit_params"])
+    fit_obj.metadata["fit_params"] = {**original, "a": original["a"] + 1.0}
+    report = bs.replay_activity(activity_id)
+    assert report["eligibility"] == "input_changed"
+    assert "fit_params" in report["reason"]
+
+
 def test_roi_and_uncertainty_are_recorded(fresh_bootstrap):
     """ROI definitions and uncertainty rows are part of the recorded states."""
     bs = fresh_bootstrap
