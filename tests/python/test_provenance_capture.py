@@ -19,6 +19,7 @@ else:
     pytest.importorskip("datalab_capsule")
 
 import sigima.objects  # noqa: E402
+from sigima.config import options  # noqa: E402
 from test_provenance_workspace import fresh_runtime  # noqa: E402
 
 X = np.array([0.0, 0.25, 0.5, 0.75])
@@ -127,6 +128,83 @@ def test_analyses_record_artifacts(fresh_bootstrap):
         assert artifact["key"] in bs._MODEL.get(oid).metadata
         assert inputs_of(bs, activity)[0]["object_uuid"] == uuid_of(bs, oid)
     ledger(bs).validate()
+
+
+def test_analyses_are_verified(fresh_bootstrap):
+    """Analyses are recomputed and compared; a normal absence of result too."""
+    bs = fresh_bootstrap
+    asyncio.run(bs.run_signal_analysis(add_signal(bs), "stats"))
+    (stats,) = ledger(bs).activities
+    report = bs.replay_activity(stats["activity_id"])
+    assert report["verdict"] == "exact"
+    (output,) = report["outputs"]
+    assert output["recorded"] == "artifact"
+    assert output["observed"]["structure_match"] is True
+    # A ramp has no local maximum: the detection normally finds nothing.
+    ramp = np.add.outer(np.arange(16.0), np.arange(16.0))
+    image = bs.add_image_from_array("ramp", ramp, "", "", "")
+    assert asyncio.run(bs.run_image_analysis(image, "peak_detection")) is None
+    empty = ledger(bs).activities[-1]
+    assert empty["call"]["operation"]["id"] == "sigima.image.peak_detection"
+    assert empty["outputs"] == []
+    report = bs.replay_activity(empty["activity_id"])
+    assert report["verdict"] == "exact"
+    assert report["outputs"][0]["recorded"] == "none"
+    ledger(bs).validate()
+
+
+FAMILIES = [
+    "sigima.signal.average",
+    "sigima.signal.signals_to_image",
+    "sigima.signal.fft",
+    "sigima.signal.add_gaussian_noise",
+    "sigima.signal.stats",
+    "sigima.image.line_profile",
+    "sigima.image.centroid",
+    "sigima.image.convolution",
+]
+
+
+def run_families(bs) -> None:
+    """Run one operation of each family on fresh objects (none is opaque)."""
+    oids = [add_signal(bs, Y * k, title=f"S{k}") for k in (1, 2, 3)]
+    bs.apply_feature("average", oids)
+    bs.apply_feature("signals_to_image", oids)
+    bs.apply_feature("fft", oids[:1], params={"shift": True})
+    bs.apply_feature("add_gaussian_noise", oids[:1], params={"seed": 7, "sigma": 0.5})
+    asyncio.run(bs.run_signal_analysis(oids[0], "stats"))
+    image = add_image(bs)
+    profile = {"direction": "horizontal", "row": 1}
+    bs.apply_feature("image:line_profile", [image], params=profile)
+    asyncio.run(bs.run_image_analysis(image, "centroid"))
+    kernel = add_image(bs, "K")
+    with options.auto_normalize_kernel.context(True):
+        bs.apply_feature("image:convolution", [image], operand_id=kernel)
+
+
+def check_families(bs) -> None:
+    """Every family is identified and replayed exactly, every output compared."""
+    activities = ledger(bs).activities
+    assert [a["call"]["operation"]["id"] for a in activities] == FAMILIES
+    assert activities[2]["call"]["parameters"] == {"shift": True}
+    assert activities[-1]["context"]["options"] == {"auto_normalize_kernel": True}
+    for activity in activities:
+        assert activity["limits"] == [], activity
+        report = bs.replay_activity(activity["activity_id"])
+        assert report["verdict"] == "exact", report
+        assert [o["recorded"] for o in report["outputs"]] == [
+            "artifact" if "artifact" in o else "state" for o in activity["outputs"]
+        ]
+
+
+def test_operation_families_replay(fresh_bootstrap):
+    """Each family is recorded, saved, reopened and replayed with its outputs."""
+    bs = fresh_bootstrap
+    run_families(bs)
+    # The recorded option is applied, whatever the current setting.
+    with options.auto_normalize_kernel.context(False):
+        check_families(bs)
+        check_families(_reopen(bs))
 
 
 def test_roi_and_uncertainty_are_recorded(fresh_bootstrap):
@@ -307,6 +385,13 @@ def check_capture(bs, edition: str) -> None:
             assert [s["status"] for s in statuses[activity["activity_id"]]] == [
                 "available"
             ]
+        # Replayed here, whichever edition recorded it, under the declared rule;
+        # activities recorded without identity (older files) are never replayed.
+        report = bs.replay_activity(activity["activity_id"])
+        if activity["call"]["operation"] is None:
+            assert report["restoration"] == "opaque"
+        else:
+            assert report["verdict"] in ("exact", "within_tolerance"), report
     assert shape == CAPTURE_SHAPE
     centroid, gaussian, _stats = ledger(bs).activities
     assert centroid["call"]["inputs"] == gaussian["call"]["inputs"]

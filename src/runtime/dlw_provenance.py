@@ -44,6 +44,7 @@ try:
         validate_manifest,
     )
     from datalab_capsule.recorder import (
+        CandidateError,
         PendingActivity,
         Recorder,
         RecorderHost,
@@ -59,6 +60,9 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
     UNAVAILABLE_REASON = f"DataLab-Capsule is not installed ({_exc})"
 
     class StateUnavailableError(RuntimeError):  # type: ignore[no-redef]
+        """Stand-in when DataLab-Capsule is not installed."""
+
+    class CandidateError(RuntimeError):  # type: ignore[no-redef]
         """Stand-in when DataLab-Capsule is not installed."""
 
     class Recorder:  # type: ignore[no-redef]
@@ -560,6 +564,12 @@ class WebProvenance(Recorder):
             return None
         return super().complete_analysis(pending, obj, kind, key)
 
+    def complete_without_result(self, pending: Any) -> dict[str, Any] | None:
+        """Record a completed execution that produced no result (not an error)."""
+        if not self.available:
+            return None
+        return super().complete_without_result(pending)
+
     def verify(
         self, activity_id: str, execute_candidate: Callable[[Any], Any]
     ) -> dict[str, Any]:
@@ -572,7 +582,9 @@ class WebProvenance(Recorder):
             activity_id: Activity to verify.
             execute_candidate: ``(prepared execution) -> result``; runs the
              computation prepared by Sigima (recorded parameters and context
-             applied to the live inputs) without inserting the result.
+             applied to copies of the live inputs) without inserting the
+             result, returns what the function returned (None for no result)
+             and raises :class:`CandidateError` on error.
         """
         self._require()
         return super().verify(activity_id, execute_candidate)
