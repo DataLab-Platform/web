@@ -437,20 +437,37 @@ export interface CapsuleReview {
   review_fingerprint: string;
 }
 
-/** Verification report (DataLab-Capsule ``report-1`` document). */
+/** Comparison of one output of a replayed activity (``report-1`` ``outputs``). */
+export interface ProvenanceOutputComparison {
+  role: string;
+  /** What the activity recorded: a state, an analysis result or no result. */
+  recorded: "state" | "artifact" | "none";
+  state_id?: string;
+  artifact?: { object_uuid: string; key: string };
+  status: string;
+  verdict: string;
+  rule: Record<string, unknown> | null;
+  observed: Record<string, unknown> | null;
+  detail?: string | null;
+}
+
+/** Verification report (DataLab-Capsule ``report-1`` document). Eligibility
+ *  codes and verdicts are those of DataLab Desktop (shared recorder). */
 export interface ProvenanceReport {
   report: string;
   report_version: number;
   activity_id: string;
   restoration: string;
   eligibility: string;
-  reason?: string;
+  reason?: string | null;
+  context?: Record<string, unknown>;
   inputs: Record<string, unknown>[];
   reference: Record<string, unknown> | null;
   environment: Record<string, unknown>;
   verdict: string;
-  rule: string | null;
+  rule: Record<string, unknown> | null;
   observed: Record<string, unknown> | null;
+  outputs?: ProvenanceOutputComparison[];
   verification_activity: Record<string, unknown> | null;
 }
 
