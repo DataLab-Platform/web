@@ -34,6 +34,33 @@ def test_known_signal_features_present(bootstrap_module):
         assert expected in ids, f"feature {expected!r} missing from catalogue"
 
 
+def test_patterns_come_from_the_contracts(bootstrap_module):
+    """Patterns and result kinds of Sigima features are those of their contract.
+
+    The curated overrides hold interface choices only: they cannot declare a
+    pattern, a result kind or an X-alignment behaviour of their own.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from sigima.proc.contracts import contract_for_function
+
+    proc = bootstrap_module._proc
+    fields = set(proc.FeatureOverride.__dataclass_fields__)
+    assert not fields & {"pattern", "output_kind", "skip_xarray_compat"}
+    catalogs = (proc.build_signal_catalog(), proc.build_image_catalog())
+    checked = 0
+    for catalog in catalogs:
+        for spec in catalog.values():
+            contract = contract_for_function(spec.func)
+            assert contract is not None, spec.feature_id
+            assert spec.pattern == contract.pattern, spec.feature_id
+            assert spec.output_kind == contract.outputs[0].kind, spec.feature_id
+            checked += 1
+    assert checked == sum(len(c) for c in catalogs) > 100
+    image = catalogs[1]
+    assert image["line_profile"].output_kind == "signal"
+    assert catalogs[0]["signals_to_image"].output_kind == "image"
+
+
 def test_brightness_contrast_contract_and_processing(fresh_bootstrap):
     """Brightness/contrast supports batches and keeps persistent parameters."""
     bs = fresh_bootstrap

@@ -11,14 +11,14 @@ browser MVP.  Three computation patterns are exposed:
 * ``n_to_1`` — N source objects → one result (single call on selection).
 
 Features are discovered automatically by introspecting Sigima's
-``@computation_function`` decorated callables.  The pattern is inferred
-from the function signature (first positional parameter type:
-``SignalObj`` → 1_to_1 or 2_to_1, ``list[SignalObj]`` → n_to_1).
+``@computation_function`` decorated callables. Their pattern and the kind of
+their result come from their Sigima operation contract (the only source of
+patterns, shared with DataLab Desktop).
 
-Manual ``OVERRIDES`` complete the catalogue with curated labels, icons,
-menu locations and pattern overrides.  Functions without an override are
-hidden by default — Sigima exposes far more callables than make sense in
-a browser menu.
+Manual ``OVERRIDES`` complete the catalogue with interface choices only:
+curated labels, icons, menu locations, operand labels and preview. Functions
+without an override are hidden by default — Sigima exposes far more callables
+than make sense in a browser menu.
 """
 
 from __future__ import annotations
@@ -39,11 +39,14 @@ from guidata.dataset import (
     update_dataset,
 )
 from sigima.objects import ImageObj, SignalObj
+from sigima.proc.contracts import contract_for_function
 from sigima.proc.decorator import (
     is_computation_function,
 )
 
 Pattern = str  # "1_to_1" | "2_to_1" | "n_to_1"
+#: Contract patterns of the processing catalogue (analyses are listed apart).
+PATTERNS = ("1_to_1", "2_to_1", "n_to_1")
 
 
 # ---------------------------------------------------------------------------
@@ -53,22 +56,17 @@ Pattern = str  # "1_to_1" | "2_to_1" | "n_to_1"
 
 @dataclass
 class FeatureOverride:
-    """Curated metadata complementing auto-discovered Sigima functions."""
+    """Interface choices complementing auto-discovered Sigima functions.
+
+    The pattern, the kind of the result (destination panel) and the X
+    alignment come from the Sigima operation contract of the function.
+    """
 
     label: str
     menu_path: str  # "Operations/Difference"
-    pattern: Pattern | None = None  # auto-detected if None
     icon: str | None = None
     operand_label: str = "Operand"
-    skip_xarray_compat: bool = False
     preview_enabled: bool = True
-    # Destination panel for results.  ``None`` means "same as input panel"
-    # (the default for the vast majority of features).  Set to e.g.
-    # ``"signal"`` on an image feature whose result is a signal
-    # (line/segment/average/radial profile, projections, image histogram)
-    # or to ``"image"`` on a signal feature whose result is an image
-    # (``signals_to_image``).
-    output_kind: str | None = None
 
 
 @dataclass
@@ -170,8 +168,6 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     "signals_to_image": FeatureOverride(
         "Assemble signals into image…",
         "Operations/Assemble signals into image",
-        pattern="n_to_1",
-        output_kind="image",
     ),
     # ----- Processing menu (Qt order) -----------------------------------
     # Processing / Axis transformation -----------------------------------
@@ -189,12 +185,10 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         "Replace X by other signal's Y",
         "Processing/Axis transformation/Replace X by other signal's Y",
         operand_label="Signal whose Y becomes the X axis",
-        skip_xarray_compat=True,
     ),
     "xy_mode": FeatureOverride(
         "X-Y mode",
         "Processing/Axis transformation/X-Y mode",
-        skip_xarray_compat=True,
     ),
     "to_cartesian": FeatureOverride(
         "Convert to cartesian coordinates…",
@@ -291,7 +285,6 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
         "Evaluate fit",
         "Processing/Fitting/Evaluate fit",
         operand_label="Fit signal",
-        skip_xarray_compat=True,
     ),
     # Processing (top-level entries, Qt order) ---------------------------
     "derivative": FeatureOverride("Derivative", "Processing/Derivative"),
@@ -624,38 +617,31 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     "histogram": FeatureOverride(
         "Histogram…",
         "Analysis/Histogram",
-        output_kind="signal",
     ),
     # Analysis / Intensity profiles (cross-kind: image → signal) ---------
     "line_profile": FeatureOverride(
         "Line profile…",
         "Analysis/Intensity profiles/Line profile",
-        output_kind="signal",
     ),
     "segment_profile": FeatureOverride(
         "Segment profile…",
         "Analysis/Intensity profiles/Segment profile",
-        output_kind="signal",
     ),
     "average_profile": FeatureOverride(
         "Average profile…",
         "Analysis/Intensity profiles/Average profile",
-        output_kind="signal",
     ),
     "radial_profile": FeatureOverride(
         "Radial profile extraction…",
         "Analysis/Intensity profiles/Radial profile extraction",
-        output_kind="signal",
     ),
     "horizontal_projection": FeatureOverride(
         "Horizontal projection",
         "Analysis/Horizontal projection",
-        output_kind="signal",
     ),
     "vertical_projection": FeatureOverride(
         "Vertical projection",
         "Analysis/Vertical projection",
-        output_kind="signal",
     ),
 }
 
@@ -701,16 +687,6 @@ def _is_image_list_type(annot: Any) -> bool:
     return False
 
 
-def _is_obj_type(annot: Any, kind: str) -> bool:
-    return _is_image_type(annot) if kind == "image" else _is_signal_type(annot)
-
-
-def _is_obj_list_type(annot: Any, kind: str) -> bool:
-    return (
-        _is_image_list_type(annot) if kind == "image" else _is_signal_list_type(annot)
-    )
-
-
 def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
     """Return the DataSet parameter class of *func*, if any."""
     try:
@@ -737,31 +713,6 @@ def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
             and annot is not gds.DataSet
         ):
             return annot
-    return None
-
-
-def _infer_pattern(func: Callable[..., Any], kind: str = "signal") -> Pattern | None:
-    """Infer the computation pattern from the function's signature.
-
-    Returns ``None`` if the signature does not match a supported pattern.
-    """
-    try:
-        hints = typing.get_type_hints(func)
-    except Exception:  # pylint: disable=broad-except
-        hints = {}
-    sig = inspect.signature(func)
-    params = list(sig.parameters.values())
-    if not params:
-        return None
-    first_annot = hints.get(params[0].name, params[0].annotation)
-    if _is_obj_list_type(first_annot, kind):
-        return "n_to_1"
-    if _is_obj_type(first_annot, kind):
-        if len(params) >= 2:
-            second_annot = hints.get(params[1].name, params[1].annotation)
-            if _is_obj_type(second_annot, kind):
-                return "2_to_1"
-        return "1_to_1"
     return None
 
 
@@ -994,23 +945,22 @@ def _build_catalog_for_kind(
         func = discovered.get(fname)
         if func is None:
             continue
-        pattern = override.pattern or _infer_pattern(func, kind=kind)
-        if pattern is None:
-            print(f"[processor] skip {fname!r} ({kind}): cannot infer pattern")
+        contract = contract_for_function(func)
+        if contract is None or contract.pattern not in PATTERNS:
+            print(f"[processor] skip {fname!r} ({kind}): no supported contract")
             continue
         icon = override.icon or _FEATURE_ICON_DEFAULTS.get(fname)
         catalog[fname] = FeatureSpec(
             feature_id=fname,
             label=override.label,
             menu_path=override.menu_path,
-            pattern=pattern,
+            pattern=contract.pattern,
             icon=icon,
             operand_label=override.operand_label,
             paramclass=_extract_paramclass(func),
             func=func,
             object_kind=kind,
-            skip_xarray_compat=override.skip_xarray_compat,
-            output_kind=override.output_kind or kind,
+            output_kind=contract.outputs[0].kind,
             preview_enabled=override.preview_enabled,
         )
     missing = [k for k in overrides if k not in catalog]
@@ -1112,11 +1062,6 @@ def _interpolate_to(target: SignalObj, other: SignalObj) -> SignalObj:
 
 def _contract_of(spec: FeatureSpec) -> Any | None:
     """Return the Sigima operation contract of *spec*, or None (e.g. plugins)."""
-    try:
-        # pylint: disable-next=import-outside-toplevel
-        from sigima.proc.contracts import contract_for_function
-    except ImportError:  # released Sigima without contracts
-        return None
     return contract_for_function(spec.func)
 
 
