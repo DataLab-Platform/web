@@ -90,12 +90,27 @@ jobs:
           path: coverage-ts/
 
   e2e:
-    name: End-to-end (Playwright)
+    # The suite is split into balanced shards running in parallel: nearly
+    # all its time is spent booting Pyodide in fresh browser contexts, so a
+    # single serial job takes 15 to 40+ minutes depending on the runner.
+    # Each shard keeps the exact serial conditions (``workers: 1``); see
+    # ``scripts/e2e-shards.mjs`` and ``doc/testing-strategy.md``.
+    name: End-to-end (Playwright ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     env:
       DLW_REQUIRE_PROVENANCE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
+
+      - name: Report runner hardware
+        run: |
+          echo "vCPUs: $(nproc)"
+          lscpu | grep -E '^(Model name|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\))' || true
+          free -h
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -110,6 +125,12 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Select the spec files of this shard
+        run: >-
+          node scripts/e2e-shards.mjs plan
+          --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+          --output "$RUNNER_TEMP/e2e-specs.txt"
 
       - name: Prepare configured Sigima and guidata dependencies
         run: >-
@@ -133,12 +154,65 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
+          PLAYWRIGHT_JSON_OUTPUT_FILE: e2e-results/results-${{ matrix.shard }}.json
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/e2e-specs.txt"
+          npm run test:e2e -- --reporter=github,blob,json "${specs[@]}"
+
+      - name: Upload shard reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: |
+            blob-report/
+            e2e-results/
+          retention-days: 1
+
+  e2e-report:
+    name: End-to-end (Playwright report)
+    needs: e2e
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v7
+        with:
+          pattern: e2e-shard-*
+          path: e2e-shards
+          merge-multiple: true
+
+      - name: Merge Playwright reports
+        run: npx playwright merge-reports --reporter=html ./e2e-shards/blob-report
 
       - name: Upload Playwright report
-        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+      - name: Measure spec durations for shard balancing
+        run: >-
+          node scripts/e2e-shards.mjs timings e2e-shards/e2e-results/*.json
+          --output e2e-shard-timings.json
+
+      - name: Upload measured spec durations
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-shard-timings
+          path: e2e-shard-timings.json
+          retention-days: 30

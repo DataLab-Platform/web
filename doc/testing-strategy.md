@@ -13,9 +13,7 @@ cost/coverage trade-offs:
 | Component (TS/React)      | Vitest + RTL | ~10–100 ms    | Form behaviour, reducers, runtime mocks           |
 | End-to-end (browser)      | Playwright   | ~10–60 s each | Multi-component interactions, runtime round-trips |
 
-Playwright runs serially (`workers: 1`, ~3 min Pyodide boot per spec
-file in CI), so adding E2E tests has a real, compounding cost. Treat
-them as a scarce resource.
+Playwright runs serially (`workers: 1`) and most of its time is spent booting Pyodide in fresh browser contexts (about 10–25 s per boot depending on the CI runner), so adding E2E tests has a real, compounding cost. Treat them as a scarce resource. CI splits the suite into parallel shards to keep its duration in check (see [CI shards](#ci-shards)).
 
 A continuous layer ties the three together: GitHub Actions (`tests.yml`) runs all three on every push / PR. The Python layer runs `bootstrap.py` directly under CPython through fixtures that stub the Pyodide-only modules (`js`, `pyodide.ffi`); this gives fast feedback and high coverage without booting WebAssembly.
 
@@ -87,6 +85,22 @@ npx playwright test --project=perf     # same, explicit form
 ```
 
 When you need a perf or budget-style probe, add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `signal_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`). The default `chromium` project must ignore the same file so an ordinary E2E run remains cheap.
+
+## CI shards
+
+In [tests.yml](../.github/workflows/tests.yml) and [release.yml](../.github/workflows/release.yml), the `chromium` suite runs as four parallel jobs (`End-to-end (Playwright n/4)`), each on its own runner with the usual serial settings (`workers: 1`, fresh context per test), so each test runs in the same conditions as in a single serial run. Run serially, the suite takes 15 to more than 40 minutes depending on the speed of the runner it lands on.
+
+Playwright's own `--shard` option assigns consecutive files by test count, which is badly unbalanced here because the cost of a spec depends on how many times it boots Pyodide. [scripts/e2e-shards.mjs](../scripts/e2e-shards.mjs) assigns whole spec files instead:
+
+- the spec list comes from `playwright test --list --project=chromium`, so every regression spec runs in exactly one shard and `testIgnore` is honoured;
+- files are balanced using the durations recorded in [tests/e2e/shard-timings.json](../tests/e2e/shard-timings.json); a spec missing from that table is estimated from its number of tests;
+- specs using the worker-scoped `warmPage` fixture (`fixtures-warm.ts`) stay in the same shard, so they keep sharing one boot as in a serial run.
+
+The `End-to-end (Playwright report)` job merges the shard reports into the usual `playwright-report` artifact and publishes the durations measured in every shard as the `e2e-shard-timings` artifact. When the shards drift apart (for example after adding a costly spec), replace `tests/e2e/shard-timings.json` with that artifact's content. Each shard also logs the runner's CPU model, to tell a slow runner from a slower suite.
+
+```powershell
+node scripts/e2e-shards.mjs plan --shard 2/4      # print the spec files of shard 2
+```
 
 ## Performance benchmarks: on-demand CI and regression tracking
 
