@@ -76,13 +76,25 @@ jobs:
         run: python -m pytest tests/python
 
   e2e:
-    name: End-to-end (Playwright)
+    # Balanced parallel shards, as in ``tests.yml`` (see
+    # ``scripts/e2e-shards.mjs``); ``pack`` waits for every shard.
+    name: End-to-end (Playwright ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     needs: verify
     env:
       DLW_REQUIRE_PROVENANCE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
+
+      - name: Report runner hardware
+        run: |
+          echo "vCPUs: $(nproc)"
+          lscpu | grep -E '^(Model name|Thread\(s\) per core|Core\(s\) per socket|Socket\(s\))' || true
+          free -h
 
       - uses: actions/setup-node@v6
         with:
@@ -96,6 +108,12 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Select the spec files of this shard
+        run: >-
+          node scripts/e2e-shards.mjs plan
+          --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+          --output "$RUNNER_TEMP/e2e-specs.txt"
 
       - name: Install the published DataLab-Capsule registry (optional feature, tested)
         run: |
@@ -112,10 +130,46 @@ jobs:
           VITE_SIGIMA_INSTALL_SPEC: ""
           VITE_GUIDATA_INSTALL_SPEC: ""
           VITE_DATALAB_CAPSULE_INSTALL_SPEC: ""
-        run: npm run test:e2e
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.shard }}.zip
+        run: |
+          mapfile -t specs < "$RUNNER_TEMP/e2e-specs.txt"
+          npm run test:e2e -- --reporter=github,blob "${specs[@]}"
+
+      - name: Upload shard report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
+
+  e2e-report:
+    name: End-to-end (Playwright report)
+    runs-on: ubuntu-latest
+    needs: e2e
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Download shard reports
+        uses: actions/download-artifact@v7
+        with:
+          pattern: e2e-shard-*
+          path: blob-report
+          merge-multiple: true
+
+      - name: Merge Playwright reports
+        run: npx playwright merge-reports --reporter=html ./blob-report
 
       - name: Upload Playwright report
-        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: playwright-report
