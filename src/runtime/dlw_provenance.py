@@ -36,6 +36,7 @@ try:
         read_capsule,
     )
     from datalab_capsule.diff import diff_manifests
+    from datalab_capsule.hdf5 import has_block as _has_block
     from datalab_capsule.integrity import ProvenanceError, load_json, state_facts
     from datalab_capsule.legacy import legacy_summary
     from datalab_capsule.manifest import (
@@ -100,6 +101,14 @@ CAPSULE_MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 
 class ProvenanceResidencyError(StateUnavailableError):
     """Raised when an object's arrays are spilled to disk (not resident)."""
+
+
+def has_provenance_block(h5file: Any) -> bool:
+    """Return True if an open workspace file holds a provenance block.
+
+    Always False without DataLab-Capsule: the block could not be read anyway.
+    """
+    return UNAVAILABLE_REASON is None and _has_block(h5file)
 
 
 def object_kind(obj: Any) -> str | None:
@@ -198,6 +207,7 @@ class WebProvenance(Recorder):
         replaced: bool,
         saved_version: str | None = None,
         current_version: str | None = None,
+        appended: Any = (),
     ) -> None:
         """Adopt the ledger read from a workspace file, after its objects.
 
@@ -213,10 +223,12 @@ class WebProvenance(Recorder):
              never compared: Desktop stores its own version there, DataLab-Web
              the Sigima version.
             current_version: Ignored (see *saved_version*).
+            appended: Objects added by an appended file: those holding an
+             identifier already known to the ledger never inherit its records.
         """
         if not self.available:
             return
-        super().load(block, replaced, saved_version, None)
+        super().load(block, replaced, saved_version, None, appended=appended)
 
     def _require(self) -> None:
         if not self.available:

@@ -1145,6 +1145,9 @@ export interface WorkspaceLoadResult {
   signals: number;
   images: number;
   groups: number;
+  /** Set when a file holding provenance was appended: its provenance is not
+   *  imported (see ``workspaceHasProvenance``). */
+  provenance_notice?: string;
 }
 
 /** Parameters of the Text Import Wizard (mirrors
@@ -3522,6 +3525,15 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       },
       { silent: options.silent },
     )) as WorkspaceLoadResult;
+  }
+
+  /** Return true if *bytes* (an HDF5 workspace) hold a provenance block, so
+   *  that a caller about to append the file can warn that its provenance
+   *  will not be imported. Nothing is loaded. */
+  async workspaceHasProvenance(bytes: Uint8Array): Promise<boolean> {
+    return Boolean(
+      await this.callPy("workspace_has_provenance", { data: bytes }),
+    );
   }
 
   /** Return a workspace capsule (``.dlcapsule``): the HDF5 workspace and an

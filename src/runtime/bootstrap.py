@@ -4912,7 +4912,10 @@ def _name_objects(node: Any, oid_of: dict[str, str]) -> None:
     if isinstance(node, dict):
         uid = node.get("object_uuid")
         if isinstance(uid, str):
-            oid = oid_of.get(uid)
+            # An object reported absent is not the live object holding the same
+            # identifier after an append (identity break).
+            absent = node.get("object_present", node.get("present")) is False
+            oid = None if absent else oid_of.get(uid)
             obj = _MODEL.get(oid) if oid is not None else None
             node["id"] = oid
             node["title"] = obj.title if obj is not None else None
@@ -6857,10 +6860,42 @@ def open_workspace_from_bytes(
             counts["signals" if kind == "signal" else "images"] += 1
     _MACROS.extend(macros)
     _NOTEBOOKS.extend(notebooks)
-    _PROVENANCE.load(block, replace, saved_version)
+    appended = (
+        [] if replace else [obj for _kind, _title, objs in groups for obj in objs]
+    )
+    _PROVENANCE.load(block, replace, saved_version, appended=appended)
     if replace:
         _rebuild_last_processing()
+    elif block is not None and _PROVENANCE.available:
+        counts["provenance_notice"] = APPEND_PROVENANCE_NOTICE
     return counts
+
+
+#: Notice returned when a workspace with provenance is appended (see
+#: :func:`open_workspace_from_bytes` and :func:`workspace_has_provenance`).
+APPEND_PROVENANCE_NOTICE = (
+    "The data are added, but their earlier provenance is not imported. Open the "
+    "file replacing the current workspace to keep it."
+)
+
+
+def workspace_has_provenance(data: Any) -> bool:
+    """Return True if a workspace file (HDF5 bytes) holds a provenance block.
+
+    Lets a caller warn, before appending the file to the current workspace,
+    that its provenance will not be imported (see APPEND_PROVENANCE_NOTICE).
+    Nothing is loaded and the workspace is unchanged.
+    """
+    import io
+
+    import h5py
+
+    data = _as_bytes(data)
+    try:
+        with h5py.File(io.BytesIO(data), "r") as h5file:
+            return _prov.has_provenance_block(h5file)
+    except OSError:
+        return False
 
 
 def _capsule_attachments(attachments: Any) -> list[dict[str, Any]]:
@@ -7077,8 +7112,12 @@ def _rebuild_last_processing() -> None:
         spec = _feature_spec_of(produced["contract"].function)
         if spec is None:
             continue
+        # An input reported absent keeps its UUID: a live object holding that
+        # identifier after an append is another object (identity break).
         input_ids = [
             oid_of.get(item["object_uuid"], item["object_uuid"])
+            if item["present"]
+            else item["object_uuid"]
             for item in produced["inputs"]
         ]
         expected = {"1_to_1": 1, "2_to_1": 2}.get(spec.pattern)
@@ -7611,6 +7650,7 @@ __all__ = [
     "replay_activity",
     "describe_object_provenance",
     "describe_provenance_activity",
+    "workspace_has_provenance",
     "set_provenance_edition_version",
     "export_workspace_capsule",
     "export_referenced_capsule",
