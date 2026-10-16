@@ -6873,10 +6873,7 @@ def open_workspace_from_bytes(
 
 #: Notice returned when a workspace with provenance is appended (see
 #: :func:`open_workspace_from_bytes` and :func:`workspace_has_provenance`).
-APPEND_PROVENANCE_NOTICE = (
-    "The data are added, but their earlier provenance is not imported. Open the "
-    "file replacing the current workspace to keep it."
-)
+APPEND_PROVENANCE_NOTICE = _prov.APPEND_NOTICE
 
 
 def workspace_has_provenance(data: Any) -> bool:
