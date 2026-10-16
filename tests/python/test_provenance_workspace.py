@@ -275,3 +275,63 @@ def test_file_without_block_and_append():
     )
     assert bs._PROVENANCE.ledger.activities == activities
     assert bs._PROVENANCE.notices
+
+
+def _oid_by_title(bs, title: str) -> list[str]:
+    return [
+        oid
+        for oid, entry in bs._MODEL._objects.items()  # noqa: SLF001
+        if entry.obj.title == title
+    ]
+
+
+def test_append_with_provenance_never_attributes_records():
+    """Appending a file with provenance: notice, ledger kept, no false attribution.
+
+    Deleting S1 frees its identifier: the appended copy of S1 keeps it, but must
+    not be shown as the input of the live S2 nor inherit S1's production.
+    """
+    bs = fresh_runtime()
+    ids = build_chain(bs)
+    data = bs.save_workspace_to_bytes()
+    no_block = _edit(data, lambda f: f.__delitem__("DataLab_Provenance"))
+    assert bs.workspace_has_provenance(data) is True
+    assert bs.workspace_has_provenance(no_block) is False
+    assert bs.workspace_has_provenance(b"not a file") is False
+    s1_uuid = bs._object_uuid(bs._MODEL.get(ids["S1"]))
+    bs.delete_object(ids["S1"])
+    activities = bs._PROVENANCE.ledger.activities
+    counts = bs.open_workspace_from_bytes("again.h5", data, replace=False)
+    assert counts["provenance_notice"] == bs.APPEND_PROVENANCE_NOTICE
+    assert bs._PROVENANCE.ledger.activities == activities
+    (s1_copy,) = [
+        oid
+        for oid, entry in bs._MODEL._objects.items()  # noqa: SLF001
+        if bs._object_uuid(entry.obj) == s1_uuid
+    ]
+    view = bs.describe_object_provenance(s1_copy, check_data=True)
+    assert view["production"] is None
+    assert "appended_without_provenance" in view["limits"]
+    assert bs.get_last_processing(s1_copy) is None
+    (source,) = bs.describe_object_provenance(ids["S2"], check_data=True)["production"][
+        "inputs"
+    ]
+    assert source["object_present"] is False and source["id"] is None
+    record = bs.get_last_processing(ids["S2"])
+    assert record["missing_source_ids"] == [ids["S1"]]
+    # Appended objects are processed and recorded as usual.
+    (out,) = bs.apply_feature("normalize", [s1_copy], params={"method": "maximum"})
+    (used,) = bs.describe_object_provenance(out)["production"]["inputs"]
+    assert used["id"] == s1_copy and used["object_present"] is True
+    # Saved and reopened, the break is kept: S2 does not take the copy as input.
+    reopened = fresh_runtime()
+    reopened.open_workspace_from_bytes(
+        "both.h5", bs.save_workspace_to_bytes(), replace=True
+    )
+    reopened._PROVENANCE.ledger.validate()
+    (s2,) = _oid_by_title(reopened, bs._MODEL.get(ids["S2"]).title)[:1]
+    s2_record = reopened.get_last_processing(s2)
+    assert s2_record["missing_source_ids"] == [s1_uuid]
+    assert (
+        reopened.describe_object_provenance(s2)["production"]["inputs"][0]["id"] is None
+    )
