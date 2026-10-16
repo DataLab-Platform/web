@@ -1101,6 +1101,27 @@ input {
   display: flex;
   border-bottom: 1px solid var(--border);
   background: var(--panel-alt);
+  /* The tabs never impose their width on the panel (nor the page): in a
+     narrow panel, inactive tabs show their icon only (see below). */
+  container-type: inline-size;
+  min-width: 0;
+  overflow: hidden;
+}
+
+@container (max-width: 560px) {
+  .side-panel-tab:not(.active) {
+    flex: 0 0 auto;
+  }
+
+  /* Visually hidden, still read by screen readers (accessible name kept). */
+  .side-panel-tab:not(.active) .side-panel-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .side-panel-popout {
