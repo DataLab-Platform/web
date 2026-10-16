@@ -227,10 +227,15 @@ for (const runtimeMode of ["main", "worker"] as const) {
       await expect
         .poll(() => items.count(), { timeout: 30_000 })
         .toBeGreaterThanOrEqual(3);
+      // Click the start of the row: the title of S2 holds a link to S1 (its
+      // short ID), which selects S1 when clicked.
       await items
         .filter({ hasText: /normalize/i })
         .first()
-        .click();
+        .click({ position: { x: 4, y: 4 } });
+      await expect(page.locator(".object-tree-item.selected")).toContainText(
+        /normalize/i,
+      );
       await page.getByRole("tab", { name: "Provenance" }).click();
       const panel = page.getByTestId("provenance-panel");
       await expect(panel).toBeVisible({ timeout: 30_000 });
