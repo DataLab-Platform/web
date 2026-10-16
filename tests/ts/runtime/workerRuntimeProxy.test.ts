@@ -169,6 +169,22 @@ describe("WorkerRuntimeProxy", () => {
     });
   });
 
+  it("forwards provenance consultation through the generic proxy", () => {
+    const { worker, runtime } = setup();
+    void runtime.describeObjectProvenance("signal-2", { checkData: true });
+    expect(worker.last()).toMatchObject({
+      type: "call",
+      method: "describeObjectProvenance",
+      args: ["signal-2", { checkData: true }],
+    });
+    void runtime.describeProvenanceActivity("activity-1");
+    expect(worker.last()).toMatchObject({
+      type: "call",
+      method: "describeProvenanceActivity",
+      args: ["activity-1"],
+    });
+  });
+
   it("transfers ArrayBuffers in the arguments instead of cloning them", () => {
     const { worker, runtime } = setup();
     const data = new Float64Array([1, 2, 3, 4]);

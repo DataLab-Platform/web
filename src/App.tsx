@@ -5146,6 +5146,7 @@ export default function App() {
                 results={results}
                 onClearResults={handleClearResults}
                 width={sidePanelWidth}
+                onSelectObject={(id, kind) => void refreshPanelKind(kind, id)}
               />
             </>
           )}

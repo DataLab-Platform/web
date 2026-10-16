@@ -4874,9 +4874,9 @@ def _complete_provenance(pending: Any, dst: Any, context: dict | None) -> None:
 
 
 def _feature_spec_of(function: Any) -> Any:
-    """Return the catalogue feature whose function is *function* (identity)."""
+    """Return the catalogue processing feature whose function is *function*."""
     for spec in _full_catalog_with_plugins().values():
-        if spec.func is function and spec.pattern in ("1_to_1", "2_to_1"):
+        if spec.func is function and spec.pattern in ("1_to_1", "2_to_1", "n_to_1"):
             return spec
     return None
 
@@ -4899,6 +4899,98 @@ def replay_activity(activity_id: str) -> dict[str, Any]:
         return result.items[0][1]
 
     return _PROVENANCE.verify(activity_id, execute_candidate)
+
+
+def _name_objects(node: Any, oid_of: dict[str, str]) -> None:
+    """Add the current id and title of every object named in a description.
+
+    The ledger knows persistent UUIDs only; the Web runtime adds, next to each
+    ``object_uuid``, the transient object ``id`` and the current ``title`` of
+    the object holding it (both ``None`` when it was deleted). The title of an
+    object is never taken for the title of one of its recorded states.
+    """
+    if isinstance(node, dict):
+        uid = node.get("object_uuid")
+        if isinstance(uid, str):
+            oid = oid_of.get(uid)
+            obj = _MODEL.get(oid) if oid is not None else None
+            node["id"] = oid
+            node["title"] = obj.title if obj is not None else None
+            node["object_kind"] = _prov.object_kind(obj) if obj is not None else None
+        for value in node.values():
+            if isinstance(value, (dict, list)):
+                _name_objects(value, oid_of)
+    elif isinstance(node, list):
+        for value in node:
+            _name_objects(value, oid_of)
+
+
+def _named(description: dict[str, Any]) -> dict[str, Any]:
+    oid_of = {
+        _object_uuid(entry.obj): oid
+        for oid, entry in _MODEL._objects.items()  # noqa: SLF001
+    }
+    for key in ("object", "production", "legacy", "analyses", "activity"):
+        if key in description:
+            _name_objects(description[key], oid_of)
+    return description
+
+
+def describe_object_provenance(
+    object_id: str,
+    state_id: str | None = None,
+    check_data: bool = False,
+    trail: list[str] | None = None,
+) -> dict[str, Any]:
+    """Describe the provenance of an object, or of one of its recorded states.
+
+    Consulting reads the ledger only: no fingerprint and no array is read, so
+    objects whose arrays are on disk are never paged in. Checking the data
+    compares the object and the direct inputs and outputs of the described
+    activity with their recorded states, without computing; arrays that are
+    not resident are reported as ``unavailable``. See
+    ``datalab_capsule.recorder.Recorder.describe_object``.
+
+    Args:
+        object_id: Object whose provenance is shown (anchored on its latest
+         recorded state).
+        state_id: Recorded state to describe instead (an input expanded by the
+         user), or None.
+        check_data: Check the data (never computes).
+        trail: States already expanded above *state_id* (cycles, depth).
+
+    Returns:
+        The description, or ``{"available": False, "reason": ...}`` without
+        DataLab-Capsule.
+    """
+    if not _PROVENANCE.available:
+        return {"available": False, "reason": _prov.UNAVAILABLE_REASON}
+    if hasattr(trail, "to_py"):
+        trail = trail.to_py()
+    if state_id is not None:
+        description = _PROVENANCE.describe_state(
+            state_id, bool(check_data), list(trail or [])
+        )
+    else:
+        object_uuid = _object_uuid(_MODEL.get(object_id))
+        description = _PROVENANCE.describe_object(object_uuid, bool(check_data))
+    description["available"] = True
+    return _named(description)
+
+
+def describe_provenance_activity(
+    activity_id: str, check_data: bool = False
+) -> dict[str, Any]:
+    """Describe one recorded activity (e.g. an analysis without object output).
+
+    Returns:
+        ``{"available": True, "activity": ...}``, or ``{"available": False,
+        "reason": ...}`` without DataLab-Capsule.
+    """
+    if not _PROVENANCE.available:
+        return {"available": False, "reason": _prov.UNAVAILABLE_REASON}
+    activity = _PROVENANCE.describe_activity(activity_id, bool(check_data))
+    return _named({"available": True, "activity": activity})
 
 
 def apply_feature(
@@ -5218,23 +5310,39 @@ def get_last_processing(oid: str) -> dict[str, Any] | None:
     missing_operand_id = (
         operand_id if operand_id is not None and not _MODEL.has(operand_id) else None
     )
+    if spec.pattern == "2_to_1":
+        roles = [("source", sid) for sid in source_ids] + [("operand", operand_id)]
+    elif spec.pattern == "n_to_1":
+        roles = [("sources", sid) for sid in source_ids]
+    else:
+        roles = [("source", sid) for sid in source_ids]
     payload: dict[str, Any] = {
         "feature_id": spec.feature_id,
         "label": spec.label,
         "menu_path": spec.menu_path,
+        "pattern": spec.pattern,
         "source_ids": source_ids,
         "operand_id": operand_id,
+        "inputs": [
+            {
+                "role": role,
+                "id": sid,
+                "title": _MODEL.get(sid).title if _MODEL.has(sid) else None,
+            }
+            for role, sid in roles
+            if sid is not None
+        ],
         "missing_source_ids": missing_source_ids,
         "missing_operand_id": missing_operand_id,
+        "unavailable_reason": record.get("unavailable_reason"),
         "has_params": spec.paramclass is not None,
         "schema": None,
         "values": None,
     }
     if spec.paramclass is not None:
-        source_obj = (
-            _MODEL.get(source_ids[0])
-            if source_ids and source_ids[0] not in missing_source_ids
-            else None
+        source_obj = next(
+            (_MODEL.get(sid) for sid in source_ids if sid not in missing_source_ids),
+            None,
         )
         sw = _proc.get_schema(catalog, spec.feature_id, source_obj, record["params"])
         if sw is None:
@@ -5277,6 +5385,8 @@ def reapply_last_processing(
     spec = catalog.get(record["feature_id"])
     if spec is None:
         raise ValueError(f"Processing {record['feature_id']!r} is no longer available.")
+    if record.get("unavailable_reason"):
+        raise ValueError(record["unavailable_reason"])
     values = _proc.filter_transient_params(spec, values)
     source_ids = record["source_ids"]
     missing = [sid for sid in source_ids if not _MODEL.has(sid)]
@@ -5289,8 +5399,15 @@ def reapply_last_processing(
     operand = _MODEL.get(operand_id) if operand_id else None
     params = dict(values) if values else None
     param = _PROCESSOR.build_param_instance(spec, params)
+    # Every input is recorded: all the sources of an n-to-1 execution (keyed by
+    # None), the source and the operand of a 2-to-1 execution.
     pendings = _begin_provenance(
-        spec, param, sources[:1], source_ids[:1], origin="recompute_in_place"
+        spec,
+        param,
+        sources,
+        source_ids,
+        origin="recompute_in_place",
+        operand=operand,
     )
     ctx = _proc.ApplyContext(
         feature=spec,
@@ -5305,16 +5422,14 @@ def reapply_last_processing(
     # Take the first (and for 1_to_1/2_to_1 only) result and swap it into
     # the existing entry.  This preserves the oid, the persistent UUID, the
     # group position and any downstream references the UI may hold.
-    _, new_obj = result.items[0]
+    key, new_obj = result.items[0]
     old_uuid = _object_uuid(_MODEL._objects[oid].obj)  # noqa: SLF001
     if old_uuid is not None:
         new_obj.set_metadata_option("uuid", old_uuid)
     _MODEL._objects[oid].obj = new_obj  # noqa: SLF001
     _mark_object_data_changed(oid)
-    if pendings:
-        _complete_provenance(
-            pendings.get(source_ids[0]), new_obj, result.contexts.get(source_ids[0])
-        )
+    # The result is recorded on its final UUID, once it holds the entry.
+    _complete_provenance(pendings.get(key), new_obj, result.contexts.get(key))
     # Update the recorded params so subsequent edits start from the new
     # baseline (mirrors how DataLab desktop persists the edited DataSet).
     _LAST_PROCESSING[oid] = {
@@ -6908,45 +7023,82 @@ def get_capsule_size_limit() -> int | None:
     return _PROVENANCE.capsule_max_bytes
 
 
-def _rebuild_last_processing() -> None:
-    """Rebuild the Processing-tab records of replayable activities from the ledger.
+def _restored_values(spec: Any, contract: Any, values: Any) -> dict[str, Any]:
+    """Return the parameter values of a recorded call, as stored in records.
 
-    Only results whose current state is the activity's output, computed from a
-    source still present, get a record.
+    The values encoded in the ledger are decoded by the local contract (typed
+    values included), then read back from the parameter set, like the values
+    of the form; the encoded values are never used as form values.
+
+    Raises:
+        ValueError: If the values cannot be decoded for this feature.
     """
-    ledger = _PROVENANCE.ledger
-    if ledger is None:
+    if spec.paramclass is None:
+        return {}
+    if values is None:
+        raise ValueError("The parameters of this processing were not recorded.")
+    from guidata.dataset import restore_dataset  # pylint: disable=C0415
+
+    arguments = contract.decode_parameters(values)
+    if len(arguments) != 1 or arguments[0] is None:
+        raise ValueError("This processing does not take one parameter set.")
+    restored: dict[str, Any] = {}
+    restore_dataset(arguments[0], restored)
+    return restored
+
+
+def _rebuild_last_processing() -> None:
+    """Rebuild the Processing-tab records from the ledger after opening a file.
+
+    For each object, the call that produced its latest recorded state is
+    restored (see ``Recorder.producing_call``) when the saved content is that
+    state and the operation is a processing of the catalogue: 1-to-1, 2-to-1
+    (source and operand) and n-to-1 (every source, in order), whether or not its
+    verification is qualified. A deleted input is kept, under its UUID, and
+    reported as missing; parameters that cannot be decoded keep the record with
+    the reason.
+    """
+    if _PROVENANCE.ledger is None:
         return
     oid_of = {
         _object_uuid(entry.obj): oid
         for oid, entry in _MODEL._objects.items()  # noqa: SLF001
     }
-    for activity in ledger.activities:
-        function = _PROVENANCE.replayable_function(activity)
-        spec = None if function is None else _feature_spec_of(function)
-        if spec is None:
+    for object_uuid, out_oid in oid_of.items():
+        if object_uuid is None:
             continue
-        output = ledger.states[activity["outputs"][0]["state_id"]]
-        inputs = [
-            ledger.states[item["binding"]["state_id"]]
-            for item in activity["call"]["inputs"]
-        ]
-        latest = ledger.latest_state(output["object_uuid"])
-        out_oid = oid_of.get(output["object_uuid"])
-        input_oids = [oid_of.get(state["object_uuid"]) for state in inputs]
+        produced = _PROVENANCE.producing_call(object_uuid)
         if (
-            out_oid is None
-            or None in input_oids
-            or latest["state_id"] != output["state_id"]
-            or output["state_id"] in _PROVENANCE.state_status
+            produced is None
+            or produced["contract"] is None
+            or produced["output_status"] is not None
         ):
             continue
-        _LAST_PROCESSING[out_oid] = {
+        spec = _feature_spec_of(produced["contract"].function)
+        if spec is None:
+            continue
+        input_ids = [
+            oid_of.get(item["object_uuid"], item["object_uuid"])
+            for item in produced["inputs"]
+        ]
+        expected = {"1_to_1": 1, "2_to_1": 2}.get(spec.pattern)
+        if not input_ids or (expected is not None and len(input_ids) != expected):
+            continue
+        record: dict[str, Any] = {
             "feature_id": spec.feature_id,
-            "source_ids": input_oids[:1],
-            "operand_id": input_oids[1] if len(input_oids) > 1 else None,
-            "params": dict(activity["call"]["parameters"] or {}),
+            "source_ids": input_ids[:1] if spec.pattern == "2_to_1" else input_ids,
+            "operand_id": input_ids[1] if spec.pattern == "2_to_1" else None,
+            "params": {},
         }
+        try:
+            record["params"] = _restored_values(
+                spec, produced["contract"], produced["parameters"]
+            )
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            record["unavailable_reason"] = (
+                f"The recorded parameters cannot be used here: {exc}"
+            )
+        _LAST_PROCESSING[out_oid] = record
 
 
 # ---------------------------------------------------------------------------
@@ -7457,6 +7609,8 @@ __all__ = [
     "bridge_reapply_last_processing",
     "get_provenance_ledger",
     "replay_activity",
+    "describe_object_provenance",
+    "describe_provenance_activity",
     "set_provenance_edition_version",
     "export_workspace_capsule",
     "export_referenced_capsule",

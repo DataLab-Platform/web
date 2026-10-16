@@ -199,6 +199,16 @@ export interface ProcessingDescriptor {
   has_params: boolean;
 }
 
+/** One input of the processing that produced an object, in call order. */
+export interface ProcessingInput {
+  /** Input role: ``source``, ``operand`` or ``sources`` (aggregation). */
+  role: string;
+  /** Object id, or the persistent UUID of a deleted input. */
+  id: string;
+  /** Current title of the input, or ``null`` when it was deleted. */
+  title: string | null;
+}
+
 /** Snapshot returned by ``get_last_processing(oid)``: identifies the
  *  feature that produced *oid* and exposes its (optional) parameter
  *  schema with the values used in the latest invocation. */
@@ -206,10 +216,16 @@ export interface LastProcessingInfo {
   feature_id: string;
   label: string;
   menu_path: string;
+  /** Feature pattern (``1_to_1``, ``2_to_1`` or ``n_to_1``). */
+  pattern?: string;
   source_ids: string[];
   operand_id: string | null;
+  /** Every input in call order, repetitions included. */
+  inputs?: ProcessingInput[];
   missing_source_ids: string[];
   missing_operand_id: string | null;
+  /** Why the processing cannot be applied again here, if so. */
+  unavailable_reason?: string | null;
   has_params: boolean;
   schema: SchemaWithValues["schema"] | null;
   values: Record<string, unknown> | null;
@@ -469,6 +485,90 @@ export interface ProvenanceReport {
   observed: Record<string, unknown> | null;
   outputs?: ProvenanceOutputComparison[];
   verification_activity: Record<string, unknown> | null;
+}
+
+/** Current name of an object named in a provenance description (added by
+ *  the runtime: the ledger knows persistent UUIDs only). */
+export interface ProvenanceObjectName {
+  object_uuid: string;
+  /** Current object id, or ``null`` when the object was deleted. */
+  id: string | null;
+  /** Current title, or ``null`` when the object was deleted. */
+  title: string | null;
+  /** Kind of the current object, or ``null`` when it was deleted. */
+  object_kind?: "signal" | "image" | null;
+}
+
+/** One input of a recorded activity (``inspection`` projection). */
+export interface ProvenanceInput extends ProvenanceObjectName {
+  position: number;
+  role: string;
+  /** Recorded input state, or ``null`` for an old (legacy) record. */
+  state_id: string | null;
+  object_present: boolean;
+  produced_by: string | null;
+  /** True when the input can be expanded to its own production. */
+  has_ancestors: boolean;
+  cycle: boolean;
+  /** ``unchecked`` until the data are checked, then ``available``,
+   *  ``changed``, ``altered``, ``missing``, ``unavailable``... */
+  data: string;
+}
+
+/** One recorded output of an activity: a state or an analysis result. */
+export interface ProvenanceOutput extends ProvenanceObjectName {
+  role: string;
+  recorded: "state" | "artifact";
+  state_id?: string;
+  kind?: string;
+  key?: string;
+  object_present?: boolean;
+  status: string;
+}
+
+/** Description of one recorded activity (``inspection`` projection). */
+export interface ProvenanceActivity {
+  activity_id: string;
+  command_id: string | null;
+  origin: string;
+  edition: string | null;
+  status: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  operation: { id: string; contract_version: number } | null;
+  opaque: boolean;
+  implementation: Record<string, unknown> | null;
+  parameters: Record<string, unknown> | null;
+  input_count: number;
+  inputs: ProvenanceInput[];
+  outputs: ProvenanceOutput[];
+  no_result: boolean;
+  context: Record<string, unknown>;
+  environment: Record<string, unknown> | null;
+  limits: string[];
+  support: { function: string; verification: string; reason: string | null };
+  legacy: Record<string, unknown> | null;
+  /** Analyses only: the analysed state. */
+  analysed_state_id?: string | null;
+}
+
+/** Provenance of an object or of one of its recorded states. */
+export interface ProvenanceDescription {
+  available: boolean;
+  reason?: string | null;
+  inspection?: number;
+  object?: ProvenanceObjectName & { present: boolean };
+  state?: Record<string, unknown> | null;
+  anchor?: { latest: boolean; content: string; file_status: string | null };
+  production?: ProvenanceActivity | null;
+  object_states?: {
+    state_id: string;
+    sequence: number;
+    produced_by: string | null;
+  }[];
+  legacy?: ProvenanceActivity[];
+  analyses?: ProvenanceActivity[];
+  limits?: string[];
 }
 
 export type Pattern = "1_to_1" | "2_to_1" | "n_to_1";
@@ -4437,6 +4537,45 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     return restoreJsonNulls(
       await this.callPy("replay_activity", { activity_id: activityId }),
     ) as ProvenanceReport;
+  }
+
+  /** Describe the provenance of an object (or of one of its recorded states
+   *  with ``stateId``). Consulting never reads arrays; ``checkData`` compares
+   *  the data with their recorded states without computing, and reports
+   *  arrays that are not resident as unavailable (they are not paged in). */
+  async describeObjectProvenance(
+    objectId: string,
+    options: { stateId?: string; checkData?: boolean; trail?: string[] } = {},
+  ): Promise<ProvenanceDescription> {
+    return restoreJsonNulls(
+      await this.callPy("describe_object_provenance", {
+        object_id: objectId,
+        state_id: options.stateId ?? null,
+        check_data: options.checkData ?? false,
+        trail: options.trail ?? [],
+      }),
+    ) as ProvenanceDescription;
+  }
+
+  /** Describe one recorded activity (see {@link describeObjectProvenance}). */
+  async describeProvenanceActivity(
+    activityId: string,
+    checkData = false,
+  ): Promise<{
+    available: boolean;
+    reason?: string | null;
+    activity?: ProvenanceActivity;
+  }> {
+    return restoreJsonNulls(
+      await this.callPy("describe_provenance_activity", {
+        activity_id: activityId,
+        check_data: checkData,
+      }),
+    ) as {
+      available: boolean;
+      reason?: string | null;
+      activity?: ProvenanceActivity;
+    };
   }
 
   // ---------------------------------------------------------------------

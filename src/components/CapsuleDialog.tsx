@@ -14,8 +14,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-
 import { t } from "../i18n/translate";
+import { reportDetails } from "./ProvenanceVerdict";
 import type {
   CapsuleDiff,
   CapsuleInspection,
@@ -1077,17 +1077,6 @@ function ReviewWriter(
       {published && <p data-testid="capsule-review-published">{published}</p>}
     </section>
   );
-}
-
-/** Reason of a refusal and details of the outputs that were not found equal. */
-function reportDetails(report: ProvenanceReport): string[] {
-  const details = report.reason ? [report.reason] : [];
-  for (const output of report.outputs ?? []) {
-    if (output.detail) {
-      details.push(`${output.role}: ${output.detail}`);
-    }
-  }
-  return details;
 }
 
 function ReplayTab(props: TabProps & { info: ProvenanceLedgerInfo | null }) {

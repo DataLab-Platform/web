@@ -1272,6 +1272,65 @@ input {
   margin-top: 2px;
 }
 
+.processing-panel-inputs {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* Provenance tab (ObjectProvenancePanel) */
+.provenance-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.provenance-summary,
+.provenance-activity {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-alt);
+}
+
+.provenance-section h4 {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.provenance-activity .provenance-activity {
+  margin-top: 4px;
+}
+
+.provenance-muted {
+  color: var(--text-dim);
+}
+
+.provenance-parameters th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--text-dim);
+  padding-right: 8px;
+}
+
+.provenance-inputs,
+.provenance-outputs,
+.provenance-details ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.provenance-link {
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.provenance-actions {
+  justify-content: flex-start;
+}
+
 .editable-form-reset:disabled,
 .editable-form-apply:disabled {
   opacity: 0.45;

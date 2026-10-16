@@ -28,6 +28,7 @@ import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
 import { useMessage } from "./ConfirmDialog";
+import { ObjectProvenancePanel } from "./ObjectProvenancePanel";
 import { getRootIconUrl } from "../assets/rootIcons";
 import { t } from "../i18n/translate";
 
@@ -35,8 +36,10 @@ const CREATION_ICON = getRootIconUrl("libre-gui-add.svg");
 const PROPERTIES_ICON = getRootIconUrl("properties.svg");
 const PROCESSING_ICON = getRootIconUrl("libre-gui-cogs.svg");
 const RESULTS_ICON = getRootIconUrl("analysis.svg");
+const PROVENANCE_ICON = getRootIconUrl("history.svg");
 
-type TabId = "creation" | "properties" | "processing" | "results";
+type TabId =
+  "creation" | "properties" | "processing" | "provenance" | "results";
 
 interface Props {
   runtime: RuntimeApi;
@@ -63,6 +66,9 @@ interface Props {
   onClearResults: (key: string | null) => void;
   /** Width in pixels assigned by the host (drag-to-resize). */
   width?: number;
+  /** Select an object (e.g. an input shown in the Provenance tab), switching
+   *  panel when needed. */
+  onSelectObject?: (oid: string, kind: "signal" | "image") => void;
 }
 
 /** Browser detection for the Document Picture-in-Picture API
@@ -100,6 +106,7 @@ export function SidePanel(props: Props) {
     results,
     onClearResults,
     width,
+    onSelectObject,
   } = props;
   const [active, setActive] = useState<TabId>(preferredTab);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
@@ -280,6 +287,20 @@ export function SidePanel(props: Props) {
         )}
         <button
           role="tab"
+          aria-selected={active === "provenance"}
+          className={
+            "side-panel-tab" + (active === "provenance" ? " active" : "")
+          }
+          onClick={() => setActive("provenance")}
+          title={t("Recorded provenance of the selected object")}
+        >
+          {PROVENANCE_ICON && (
+            <img src={PROVENANCE_ICON} alt="" className="switcher-tab-icon" />
+          )}
+          {t("Provenance")}
+        </button>
+        <button
+          role="tab"
           aria-selected={active === "results"}
           className={"side-panel-tab" + (active === "results" ? " active" : "")}
           onClick={() => setActive("results")}
@@ -333,6 +354,14 @@ export function SidePanel(props: Props) {
             refreshNonce={refreshNonce}
             info={lastProcessing}
             onApplied={() => onObjectChanged(currentId)}
+          />
+        )}
+        {currentId && active === "provenance" && (
+          <ObjectProvenancePanel
+            runtime={runtime}
+            oid={currentId}
+            refreshNonce={refreshNonce}
+            onSelectObject={onSelectObject}
           />
         )}
         {currentId && active === "results" && (
@@ -628,6 +657,7 @@ function ProcessingPanel({
           id: info.missing_operand_id,
         })
       : null,
+    info.unavailable_reason ?? null,
   ].filter((message): message is string => message !== null);
   const dependenciesMissing = missingDependencyMessages.length > 0;
   const dependencyError = missingDependencyMessages.join(" ");
@@ -699,7 +729,7 @@ function ProcessingPanel({
         <ProcessingHeader info={info} />
         {dependenciesMissing && <div className="error">{dependencyError}</div>}
         <div className="side-panel-info">
-          This processing has no parameters.
+          {t("This processing has no parameters.")}
         </div>
         <div className="editable-form-footer">
           <span className="editable-form-status">&nbsp;</span>
@@ -709,9 +739,9 @@ function ProcessingPanel({
               className="editable-form-apply"
               onClick={() => void apply({})}
               disabled={dependenciesMissing}
-              title="Re-apply this processing"
+              title={t("Apply this processing again to the current inputs")}
             >
-              Re-apply
+              {t("Re-apply")}
             </button>
           </div>
         </div>
@@ -739,12 +769,30 @@ function ProcessingPanel({
   );
 }
 
+function processingRoleLabel(role: string, position: number): string {
+  if (role === "source") return t("Source");
+  if (role === "operand") return t("Operand");
+  return t("Source {index}", { index: position + 1 });
+}
+
 function ProcessingHeader({ info }: { info: LastProcessingInfo }) {
+  const inputs = info.inputs ?? [];
   return (
     <div className="processing-panel-header">
       <div className="processing-panel-title">{info.label}</div>
       {info.menu_path && (
         <div className="processing-panel-path">{info.menu_path}</div>
+      )}
+      {inputs.length > 0 && (
+        <ul className="processing-panel-inputs" aria-label={t("Input objects")}>
+          {inputs.map((input, position) => (
+            <li key={`${position}:${input.id}`}>
+              {processingRoleLabel(input.role, position)}
+              {": "}
+              {input.title ?? t("deleted object ({id})", { id: input.id })}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
