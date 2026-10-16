@@ -152,6 +152,18 @@ function originText(origin: string): string {
   }
 }
 
+/** Recorded UTC timestamp as a short local date and time (`YYYY-MM-DD HH:MM`). */
+export function shortDate(timestamp: unknown): string {
+  if (typeof timestamp !== "string" || !timestamp) return "";
+  const moment = new Date(timestamp);
+  if (Number.isNaN(moment.getTime())) return timestamp;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${moment.getFullYear()}-${pad(moment.getMonth() + 1)}-${pad(moment.getDate())} ` +
+    `${pad(moment.getHours())}:${pad(moment.getMinutes())}`
+  );
+}
+
 /** Product name of a recorded edition (`desktop`, `web`). */
 export function editionName(edition: unknown): string {
   if (edition === "desktop") return "DataLab Desktop";
@@ -386,7 +398,7 @@ function ActivityView({
   shared: Shared;
 }) {
   const parameters = Object.entries(activity.parameters ?? {});
-  const when = activity.finished_at ?? "";
+  const when = shortDate(activity.finished_at);
   return (
     <div className="provenance-activity" data-testid="provenance-activity">
       <div className="provenance-activity-title">
@@ -544,6 +556,9 @@ function InputView({
         <button
           type="button"
           className="provenance-link"
+          title={t(
+            "Show this object in the signal or image panel (it may have changed since the computation)",
+          )}
           onClick={() =>
             onSelectObject(
               input.id as string,
@@ -551,7 +566,7 @@ function InputView({
             )
           }
         >
-          {t("Select current object")}
+          {t("Go to object")}
         </button>
       )}
       {expanded && failed && <div className="error">{failed}</div>}
