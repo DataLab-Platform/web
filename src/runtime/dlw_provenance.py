@@ -45,6 +45,7 @@ try:
         validate_manifest,
     )
     from datalab_capsule.recorder import (
+        APPEND_NOTICE,
         CandidateError,
         PendingActivity,
         Recorder,
@@ -58,6 +59,10 @@ try:
     UNAVAILABLE_REASON: str | None = None
 except ImportError as _exc:  # pragma: no cover - depends on the boot install
     UNAVAILABLE_REASON = f"DataLab-Capsule is not installed ({_exc})"
+    APPEND_NOTICE = (
+        "The data are added, but their earlier provenance is not imported. Open "
+        "the file replacing the current workspace to keep it."
+    )
 
     class StateUnavailableError(RuntimeError):  # type: ignore[no-redef]
         """Stand-in when DataLab-Capsule is not installed."""

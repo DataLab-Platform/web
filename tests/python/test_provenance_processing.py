@@ -289,3 +289,59 @@ def test_failed_reapplication_records_nothing(monkeypatch):
         bs.reapply_last_processing(mean, None)
     assert len(bs._PROVENANCE.ledger.activities) == count
     assert np.array_equal(bs._MODEL.get(mean).y, before)
+
+
+def _oid(bs, object_uuid: str) -> str:
+    (oid,) = [
+        oid
+        for oid, entry in bs._MODEL._objects.items()  # noqa: SLF001
+        if bs._object_uuid(entry.obj) == object_uuid
+    ]
+    return oid
+
+
+def test_desktop_files_are_described_and_applied_again():
+    """Reference files written by DataLab Desktop: consulted, restored, reapplied."""
+    from test_provenance_workspace import FIXTURES  # noqa: PLC0415
+
+    bs = fresh_runtime()
+    bs.open_workspace_from_bytes(
+        "chain.h5", (FIXTURES / "desktop_chain.h5").read_bytes(), replace=True
+    )
+    ledger = bs._PROVENANCE.ledger
+    _a1, a2, _a3, _a4 = ledger.activities
+    s1, s2 = _oid(bs, inputs_of(bs, a2)[0][1]), _oid(bs, output_uuid(bs, a2))
+    view = bs.describe_object_provenance(s2, check_data=True)
+    production = view["production"]
+    assert production["activity_id"] == a2["activity_id"]
+    assert production["environment"]["edition"] == "desktop"
+    assert production["inputs"][0]["id"] == s1
+    assert view["anchor"]["content"] == "matches"
+    record = bs.get_last_processing(s2)
+    assert record["feature_id"] == "normalize" and record["pattern"] == "1_to_1"
+    assert record["inputs"][0]["id"] == s1 and record["unavailable_reason"] is None
+    assert bs.reapply_last_processing(s2, {"method": "amplitude"}) == s2
+    activity = bs._PROVENANCE.ledger.activities[-1]
+    assert (activity["edition"], activity["origin"]) == ("web", "recompute_in_place")
+    assert inputs_of(bs, activity) == [("source", uuid_of(bs, s1))]
+    assert output_uuid(bs, activity) == uuid_of(bs, s2)
+
+    bs = fresh_runtime()
+    bs.open_workspace_from_bytes(
+        "diff.h5", (FIXTURES / "desktop_difference.h5").read_bytes(), replace=True
+    )
+    act_ab, _act_ba = bs._PROVENANCE.ledger.activities
+    (source, a_uuid), (operand, b_uuid) = inputs_of(bs, act_ab)
+    assert (source, operand) == ("source", "operand")
+    a_b = _oid(bs, output_uuid(bs, act_ab))
+    record = bs.get_last_processing(a_b)
+    assert [(i["role"], i["id"]) for i in record["inputs"]] == [
+        ("source", _oid(bs, a_uuid)),
+        ("operand", _oid(bs, b_uuid)),
+    ]
+    bs._MODEL.get(a_b).y[:] = 0.0
+    bs.reapply_last_processing(a_b, None, [_oid(bs, a_uuid)], _oid(bs, b_uuid))
+    assert np.array_equal(bs._MODEL.get(a_b).y, A_MINUS_B)
+    activity = bs._PROVENANCE.ledger.activities[-1]
+    assert activity["context"]["x_alignment"] == RULE
+    assert bs.replay_activity(activity["activity_id"])["verdict"] == "exact"
