@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ObjectProvenancePanel,
   formatParameterValue,
+  shortDate,
 } from "../../../src/components/ObjectProvenancePanel";
 import type {
   ProvenanceActivity,
@@ -196,7 +197,9 @@ describe("ObjectProvenancePanel", () => {
       await screen.findByText("Software: DataLab Desktop 1.3.0"),
     ).toBeTruthy();
     expect(
-      screen.getByText("Processing — DataLab Desktop — 2026-10-16T00:00:00Z"),
+      screen.getByText(
+        `Processing — DataLab Desktop — ${shortDate("2026-10-16T00:00:00Z")}`,
+      ),
     ).toBeTruthy();
   });
 
@@ -287,5 +290,39 @@ describe("ObjectProvenancePanel", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText("DataLab-Capsule is not installed")).toBeTruthy();
+  });
+});
+
+describe("shortDate", () => {
+  it("shows a recorded UTC time as a short local date and time", () => {
+    const local = new Date("2026-10-16T13:32:23.759Z");
+    const pad = (value: number) => String(value).padStart(2, "0");
+    expect(shortDate("2026-10-16T13:32:23.759Z")).toBe(
+      `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())} ${pad(local.getHours())}:${pad(local.getMinutes())}`,
+    );
+    expect(shortDate(null)).toBe("");
+    expect(shortDate("not a date")).toBe("not a date");
+  });
+});
+
+describe("Go to object", () => {
+  it("selects the object holding an input, with an explicit tooltip", async () => {
+    const onSelectObject = vi.fn();
+    const runtime = {
+      describeObjectProvenance: vi.fn(async () => description()),
+      replayActivity: vi.fn(),
+    } as unknown as RuntimeApi;
+    render(
+      <ObjectProvenancePanel
+        runtime={runtime}
+        oid="s2"
+        refreshNonce={0}
+        onSelectObject={onSelectObject}
+      />,
+    );
+    const button = await screen.findByRole("button", { name: "Go to object" });
+    expect(button.getAttribute("title")).toContain("signal or image panel");
+    fireEvent.click(button);
+    expect(onSelectObject).toHaveBeenCalledWith("s1", "signal");
   });
 });
