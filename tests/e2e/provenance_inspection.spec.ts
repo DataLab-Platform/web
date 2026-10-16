@@ -216,6 +216,13 @@ for (const runtimeMode of ["main", "worker"] as const) {
       // The tree refreshes on panel switch for objects created by the API.
       await page.getByRole("tab", { name: "Images" }).click();
       await page.getByRole("tab", { name: "Signals" }).click();
+      // The side panel tabs fit in the panel (they never widen the layout).
+      expect(
+        await page.evaluate(() => {
+          const tabs = document.querySelector(".side-panel-tabs");
+          return tabs !== null && tabs.scrollWidth <= tabs.clientWidth;
+        }),
+      ).toBe(true);
       const items = page.locator(".object-tree-item");
       await expect
         .poll(() => items.count(), { timeout: 30_000 })

@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
 - **Parameter forms:** a checkbox that has only its own text, as in DataLab Desktop, no longer shows its internal field name as a label.
 - **Saving the workspace:** _File > Save to HDF5 file…_ now asks for the file before preparing the workspace, and when the browser refuses to write the chosen file (for example a policy of a managed computer), the workspace is downloaded instead of the save failing with an unhandled error.
+- **Side panel tabs:** in a narrow side panel, the tabs no longer overflow it (they covered the central area and could shift the layout): inactive tabs show their icon only, with their name as a tooltip.
 
 ## [0.9.0] - 2026-08-11
 

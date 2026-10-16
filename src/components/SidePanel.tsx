@@ -258,11 +258,12 @@ export function SidePanel(props: Props) {
             "side-panel-tab" + (active === "creation" ? " active" : "")
           }
           onClick={() => setActive("creation")}
+          title={t("Creation")}
         >
           {CREATION_ICON && (
             <img src={CREATION_ICON} alt="" className="switcher-tab-icon" />
           )}
-          {t("Creation")}
+          <span className="side-panel-tab-label">{t("Creation")}</span>
         </button>
         <button
           role="tab"
@@ -271,11 +272,12 @@ export function SidePanel(props: Props) {
             "side-panel-tab" + (active === "properties" ? " active" : "")
           }
           onClick={() => setActive("properties")}
+          title={t("Properties")}
         >
           {PROPERTIES_ICON && (
             <img src={PROPERTIES_ICON} alt="" className="switcher-tab-icon" />
           )}
-          {t("Properties")}
+          <span className="side-panel-tab-label">{t("Properties")}</span>
         </button>
         {hasProcessing && (
           <button
@@ -296,7 +298,7 @@ export function SidePanel(props: Props) {
             {PROCESSING_ICON && (
               <img src={PROCESSING_ICON} alt="" className="switcher-tab-icon" />
             )}
-            {t("Processing")}
+            <span className="side-panel-tab-label">{t("Processing")}</span>
           </button>
         )}
         <button
@@ -311,19 +313,22 @@ export function SidePanel(props: Props) {
           {PROVENANCE_ICON && (
             <img src={PROVENANCE_ICON} alt="" className="switcher-tab-icon" />
           )}
-          {t("Provenance")}
+          <span className="side-panel-tab-label">{t("Provenance")}</span>
         </button>
         <button
           role="tab"
           aria-selected={active === "results"}
           className={"side-panel-tab" + (active === "results" ? " active" : "")}
           onClick={() => setActive("results")}
+          title={t("Results")}
         >
           {RESULTS_ICON && (
             <img src={RESULTS_ICON} alt="" className="switcher-tab-icon" />
           )}
-          {t("Results")}
-          {results.length > 0 ? ` (${results.length})` : ""}
+          <span className="side-panel-tab-label">
+            {t("Results")}
+            {results.length > 0 ? ` (${results.length})` : ""}
+          </span>
         </button>
         <button
           type="button"
