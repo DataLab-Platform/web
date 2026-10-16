@@ -51,7 +51,6 @@ try:
         StateUnavailableError,
         computation_from_sigima,
     )
-    from datalab_capsule.replay import IneligibleError
     from datalab_capsule.review import create_review, validate_review
     from datalab_capsule.verify import verify_capsule
 
@@ -484,18 +483,17 @@ class WebProvenance(Recorder):
         """Largest capsule opened (bytes), or None without DataLab-Capsule."""
         return CAPSULE_MAX_BYTES if self.available else None
 
-    def replayable_function(self, activity: dict[str, Any]) -> Callable | None:
-        """Return the local function of a replayable activity, or None."""
-        operation = activity["call"]["operation"]
-        if operation is None or not self.available:
+    def producing_call(self, object_uuid: str) -> dict[str, Any] | None:
+        """Return the call that produced the latest recorded state of an object.
+
+        The operation is resolved when it is known locally, whether or not its
+        verification is qualified (see
+        :meth:`datalab_capsule.recorder.Recorder.producing_call`). None without
+        DataLab-Capsule.
+        """
+        if not self.available:
             return None
-        try:
-            contract = self.resolve_contract(
-                operation["id"], operation["contract_version"]
-            )
-        except IneligibleError:
-            return None
-        return contract.function
+        return super().producing_call(object_uuid)
 
     def set_edition_version(self, version: str) -> None:
         """Set the application version recorded in environments."""

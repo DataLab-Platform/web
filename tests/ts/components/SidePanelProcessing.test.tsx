@@ -359,4 +359,97 @@ describe("SidePanel processing editor", () => {
       "[4,3,2,1]",
     );
   });
+  it("lists every input of an aggregation and reapplies without parameters", async () => {
+    const averageInfo: LastProcessingInfo = {
+      ...info,
+      feature_id: "average",
+      label: "Average",
+      pattern: "n_to_1",
+      source_ids: ["s-1", "s-2", "s-1"],
+      inputs: [
+        { role: "sources", id: "s-1", title: "Signal A" },
+        { role: "sources", id: "s-2", title: null },
+        { role: "sources", id: "s-1", title: "Signal A" },
+      ],
+      missing_source_ids: [],
+      has_params: false,
+      schema: null,
+      values: null,
+    };
+    const reapplyLastProcessing = vi.fn(async () => "result-1");
+    const runtime = {
+      getLastProcessing: vi.fn(async () => averageInfo),
+      getPropertiesSnapshot: vi.fn(async () => null),
+      reapplyLastProcessing,
+    } as unknown as RuntimeApi;
+
+    render(
+      <DialogProvider>
+        <SidePanel
+          runtime={runtime}
+          currentId="result-1"
+          panelKind="signal"
+          refreshNonce={0}
+          onObjectChanged={() => undefined}
+          preferredTab="processing"
+          results={[]}
+          onClearResults={() => undefined}
+        />
+      </DialogProvider>,
+    );
+
+    const list = await screen.findByRole("list", { name: "Input objects" });
+    const items = Array.from(list.querySelectorAll("li")).map(
+      (item) => item.textContent,
+    );
+    expect(items).toEqual([
+      "Source 1: Signal A",
+      "Source 2: deleted object (s-2)",
+      "Source 3: Signal A",
+    ]);
+    const reapply = screen.getByRole("button", { name: "Re-apply" });
+    fireEvent.click(reapply);
+    await waitFor(() =>
+      expect(reapplyLastProcessing).toHaveBeenCalledWith("result-1", {}),
+    );
+  });
+
+  it("shows why a restored processing cannot be applied again", async () => {
+    const blockedInfo: LastProcessingInfo = {
+      ...info,
+      has_params: false,
+      schema: null,
+      values: null,
+      unavailable_reason: "The recorded parameters cannot be used here: bad",
+    };
+    const reapplyLastProcessing = vi.fn(async () => "result-1");
+    const runtime = {
+      getLastProcessing: vi.fn(async () => blockedInfo),
+      getPropertiesSnapshot: vi.fn(async () => null),
+      reapplyLastProcessing,
+    } as unknown as RuntimeApi;
+
+    render(
+      <DialogProvider>
+        <SidePanel
+          runtime={runtime}
+          currentId="result-1"
+          panelKind="signal"
+          refreshNonce={0}
+          onObjectChanged={() => undefined}
+          preferredTab="processing"
+          results={[]}
+          onClearResults={() => undefined}
+        />
+      </DialogProvider>,
+    );
+
+    expect(
+      await screen.findByText(
+        "The recorded parameters cannot be used here: bad",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Re-apply" })).toBeDisabled();
+    expect(reapplyLastProcessing).not.toHaveBeenCalled();
+  });
 });
