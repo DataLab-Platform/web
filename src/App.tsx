@@ -95,7 +95,6 @@ import { ProcessingDataSetDialog } from "./components/ProcessingDataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
-import { CapsuleDialog } from "./components/CapsuleDialog";
 import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
 import {
   markConsoleErrorsSeen,
@@ -196,6 +195,12 @@ const NotebookPanel = lazy(() =>
 const TextImportWizard = lazy(() =>
   import("./components/TextImportWizard").then((m) => ({
     default: m.TextImportWizard,
+  })),
+);
+// Only rendered once opened from the File menu.
+const CapsuleDialog = lazy(() =>
+  import("./components/CapsuleDialog").then((m) => ({
+    default: m.CapsuleDialog,
   })),
 );
 
@@ -5449,16 +5454,18 @@ export default function App() {
           />
         )}
         {capsuleOpen && runtime && (
-          <CapsuleDialog
-            runtime={runtime}
-            onClose={() => setCapsuleOpen(false)}
-            onOpened={handleCapsuleOpened}
-            onSaved={(result) => {
-              if (result.outcome === "downloaded") {
-                toastDownloaded(result.filename);
-              }
-            }}
-          />
+          <Suspense fallback={null}>
+            <CapsuleDialog
+              runtime={runtime}
+              onClose={() => setCapsuleOpen(false)}
+              onOpened={handleCapsuleOpened}
+              onSaved={(result) => {
+                if (result.outcome === "downloaded") {
+                  toastDownloaded(result.filename);
+                }
+              }}
+            />
+          </Suspense>
         )}
         {releaseNotesOpen && (
           <ReleaseNotesDialog onClose={() => setReleaseNotesOpen(false)} />

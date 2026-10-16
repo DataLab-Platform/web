@@ -8,7 +8,15 @@
  * changes" indicator + "Reset" button flag pending edits.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type {
   AnalysisResult,
@@ -28,9 +36,15 @@ import { MetadataEditor } from "./MetadataEditor";
 import { CurveStyleEditor } from "./CurveStyleEditor";
 import { ArrayPreview } from "./ArrayPreview";
 import { useMessage } from "./ConfirmDialog";
-import { ObjectProvenancePanel } from "./ObjectProvenancePanel";
 import { getRootIconUrl } from "../assets/rootIcons";
 import { t } from "../i18n/translate";
+
+// Loaded on demand: the Provenance tab is not needed to start the application.
+const ObjectProvenancePanel = lazy(() =>
+  import("./ObjectProvenancePanel").then((module) => ({
+    default: module.ObjectProvenancePanel,
+  })),
+);
 
 const CREATION_ICON = getRootIconUrl("libre-gui-add.svg");
 const PROPERTIES_ICON = getRootIconUrl("properties.svg");
@@ -357,12 +371,14 @@ export function SidePanel(props: Props) {
           />
         )}
         {currentId && active === "provenance" && (
-          <ObjectProvenancePanel
-            runtime={runtime}
-            oid={currentId}
-            refreshNonce={refreshNonce}
-            onSelectObject={onSelectObject}
-          />
+          <Suspense fallback={null}>
+            <ObjectProvenancePanel
+              runtime={runtime}
+              oid={currentId}
+              refreshNonce={refreshNonce}
+              onSelectObject={onSelectObject}
+            />
+          </Suspense>
         )}
         {currentId && active === "results" && (
           <ResultsPanel results={results} onClear={onClearResults} />
