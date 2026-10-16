@@ -160,6 +160,7 @@ import {
   downloadBytes,
   pickSaveFile,
   saveBytesToFile,
+  saveGeneratedFile,
   supportsSaveFilePicker,
   writeBytesToHandle,
 } from "./utils/saveFile";
@@ -3539,7 +3540,6 @@ export default function App() {
     if (!runtime) return;
     setBusy(true);
     try {
-      const bytes = await runtime.saveWorkspaceHdf5();
       // When no filename has been associated with the session yet
       // ("Untitled"), suggest a timestamped one. Otherwise keep the
       // last known name, mirroring desktop "Save" semantics.
@@ -3549,8 +3549,10 @@ export default function App() {
           .toISOString()
           .replace(/[-:T]/g, "")
           .replace(/\..+$/, "")}.h5`;
-      const result = await saveBytesToFile(
-        new Uint8Array(bytes),
+      // The file is chosen before the workspace is serialised: a long
+      // serialisation must not outlast the click that allows the picker.
+      const result = await saveGeneratedFile(
+        async () => new Uint8Array(await runtime.saveWorkspaceHdf5()),
         suggestedName,
         [
           acceptFromExtensions(

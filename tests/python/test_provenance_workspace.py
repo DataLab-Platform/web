@@ -329,7 +329,13 @@ def test_append_with_provenance_never_attributes_records():
         "both.h5", bs.save_workspace_to_bytes(), replace=True
     )
     reopened._PROVENANCE.ledger.validate()
-    (s2,) = _oid_by_title(reopened, bs._MODEL.get(ids["S2"]).title)[:1]
+    # The copy of S2 has the same title: S2 is found by its identifier.
+    s2_uuid = bs._object_uuid(bs._MODEL.get(ids["S2"]))
+    (s2,) = [
+        oid
+        for oid, entry in reopened._MODEL._objects.items()  # noqa: SLF001
+        if reopened._object_uuid(entry.obj) == s2_uuid
+    ]
     s2_record = reopened.get_last_processing(s2)
     assert s2_record["missing_source_ids"] == [s1_uuid]
     assert (

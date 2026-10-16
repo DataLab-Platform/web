@@ -145,14 +145,54 @@ export async function saveBytesToFile(
   types?: SaveFileTypeAccept[],
   mime = "application/octet-stream",
 ): Promise<SaveFileResult> {
+  return saveGeneratedFile(async () => bytes, suggestedName, types, mime);
+}
+
+/**
+ * Save content produced on demand: the native picker is opened first, while
+ * the click that started the save still allows it, and *produce* runs only
+ * once a file was chosen (e.g. serialising a large workspace). Same outcomes
+ * as {@link saveBytesToFile}.
+ */
+export async function saveGeneratedFile(
+  produce: () => Promise<Uint8Array>,
+  suggestedName: string,
+  types?: SaveFileTypeAccept[],
+  mime = "application/octet-stream",
+): Promise<SaveFileResult> {
   if (supportsSaveFilePicker()) {
     const handle = await pickSaveFile(suggestedName, types);
     if (!handle) return { outcome: "cancelled", filename: suggestedName };
+    return writeOrDownload(handle, await produce(), mime);
+  }
+  downloadBytes(await produce(), suggestedName, mime);
+  return { outcome: "downloaded", filename: suggestedName };
+}
+
+/**
+ * Write *bytes* to a picked file; when the browser refuses the write (e.g. a
+ * policy blocking the File System Access API on a managed computer), download
+ * them instead so that nothing is lost.
+ */
+async function writeOrDownload(
+  handle: FileSystemFileHandleLike,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<SaveFileResult> {
+  try {
     await writeBytesToHandle(handle, bytes);
     return { outcome: "saved", filename: handle.name };
+  } catch (err) {
+    if (
+      !(err instanceof DOMException) ||
+      (err.name !== "NotAllowedError" && err.name !== "SecurityError")
+    ) {
+      throw err;
+    }
+    console.warn("[saveFile] writing refused by the browser; downloading", err);
+    downloadBytes(bytes, handle.name, mime);
+    return { outcome: "downloaded", filename: handle.name };
   }
-  downloadBytes(bytes, suggestedName, mime);
-  return { outcome: "downloaded", filename: suggestedName };
 }
 
 /** Build a File System Access API accept-type from a list of extensions. */
