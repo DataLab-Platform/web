@@ -148,7 +148,12 @@ describe("ObjectProvenancePanel", () => {
     expect(container.querySelector("b")).toBeNull();
     expect(describeObjectProvenance).toHaveBeenCalledWith("s2");
 
-    fireEvent.click(screen.getByRole("button", { name: "Show recorded step" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "▸ Show recorded step" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "▾ Hide recorded step" }),
+    ).toBeTruthy();
     expect(
       await screen.findByText("sigima.signal.gaussian_filter"),
     ).toBeTruthy();

@@ -549,7 +549,10 @@ function InputView({
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? t("Hide recorded step") : t("Show recorded step")}
+          {/* The triangle says that the button shows or hides a part of the view */}
+          {expanded
+            ? `▾ ${t("Hide recorded step")}`
+            : `▸ ${t("Show recorded step")}`}
         </button>
       )}
       {input.id && input.object_present && onSelectObject && (
