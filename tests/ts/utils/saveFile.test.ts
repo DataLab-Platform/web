@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acceptFromExtensions,
   saveBytesToFile,
+  saveGeneratedFile,
   supportsSaveFilePicker,
 } from "../../../src/utils/saveFile";
 
@@ -123,6 +124,81 @@ describe("saveBytesToFile — native picker", () => {
       await expect(
         saveBytesToFile(new Uint8Array([0]), "x.bin"),
       ).rejects.toThrow("denied");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("saveGeneratedFile", () => {
+  function stubDownload() {
+    if (typeof URL.createObjectURL !== "function") {
+      (URL as { createObjectURL: (b: Blob) => string }).createObjectURL = () =>
+        "";
+    }
+    if (typeof URL.revokeObjectURL !== "function") {
+      (URL as { revokeObjectURL: (s: string) => void }).revokeObjectURL =
+        () => {};
+    }
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
+    return vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+  }
+
+  it("opens the picker before producing the content", async () => {
+    const order: string[] = [];
+    const write = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const handle = {
+      name: "ws.h5",
+      createWritable: vi.fn().mockResolvedValue({ write, close }),
+    };
+    const picker = vi.fn(async () => {
+      order.push("picker");
+      return handle;
+    });
+    const cleanup = installPicker(picker);
+    try {
+      const result = await saveGeneratedFile(async () => {
+        order.push("produce");
+        return new Uint8Array([1]);
+      }, "workspace.h5");
+      expect(order).toEqual(["picker", "produce"]);
+      expect(result).toEqual({ outcome: "saved", filename: "ws.h5" });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does not produce anything when the picker is cancelled", async () => {
+    const produce = vi.fn(async () => new Uint8Array([1]));
+    const cleanup = installPicker(
+      vi.fn().mockRejectedValue(new DOMException("aborted", "AbortError")),
+    );
+    try {
+      const result = await saveGeneratedFile(produce, "workspace.h5");
+      expect(result.outcome).toBe("cancelled");
+      expect(produce).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("downloads the file when the browser refuses to write it", async () => {
+    const click = stubDownload();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = {
+      name: "ws.h5",
+      createWritable: vi
+        .fn()
+        .mockRejectedValue(new DOMException("refused", "NotAllowedError")),
+    };
+    const cleanup = installPicker(vi.fn().mockResolvedValue(handle));
+    try {
+      const result = await saveBytesToFile(new Uint8Array([1]), "workspace.h5");
+      expect(result).toEqual({ outcome: "downloaded", filename: "ws.h5" });
+      expect(click).toHaveBeenCalledTimes(1);
     } finally {
       cleanup();
     }

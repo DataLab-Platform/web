@@ -154,6 +154,7 @@ describe("ObjectProvenancePanel", () => {
     expect(describeObjectProvenance).toHaveBeenCalledWith("s2", {
       stateId: "st1",
       trail: ["st2"],
+      checkData: false,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Check data" }));
@@ -166,6 +167,37 @@ describe("ObjectProvenancePanel", () => {
     expect(describeObjectProvenance).toHaveBeenCalledWith("s2", {
       checkData: true,
     });
+    // The expanded earlier step is checked too.
+    await waitFor(() =>
+      expect(describeObjectProvenance).toHaveBeenCalledWith("s2", {
+        stateId: "st1",
+        trail: ["st2"],
+        checkData: true,
+      }),
+    );
+  });
+
+  it("names the software that recorded a step", async () => {
+    const runtime = {
+      describeObjectProvenance: vi.fn(async () =>
+        description({
+          production: activity({
+            edition: "desktop",
+            environment: { edition: "desktop", edition_version: "1.3.0" },
+          }),
+        }),
+      ),
+      replayActivity: vi.fn(),
+    } as unknown as RuntimeApi;
+    render(
+      <ObjectProvenancePanel runtime={runtime} oid="s2" refreshNonce={0} />,
+    );
+    expect(
+      await screen.findByText("Software: DataLab Desktop 1.3.0"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Processing — DataLab Desktop — 2026-10-16T00:00:00Z"),
+    ).toBeTruthy();
   });
 
   it("verifies the computation and shows the verdict", async () => {

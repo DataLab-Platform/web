@@ -152,6 +152,13 @@ function originText(origin: string): string {
   }
 }
 
+/** Product name of a recorded edition (`desktop`, `web`). */
+export function editionName(edition: unknown): string {
+  if (edition === "desktop") return "DataLab Desktop";
+  if (edition === "web") return "DataLab Web";
+  return typeof edition === "string" ? edition : "";
+}
+
 function operationTitle(activity: ProvenanceActivity): string {
   if (activity.operation) return activity.operation.id;
   const name = (activity.implementation ?? {}).python_name;
@@ -173,6 +180,8 @@ interface Shared {
   /** Verify one activity (the panel shows the report). */
   onVerify: (activityId: string) => void;
   busy: boolean;
+  /** The data were checked: steps shown afterwards are checked too. */
+  checked: boolean;
 }
 
 export function ObjectProvenancePanel({
@@ -187,6 +196,7 @@ export function ObjectProvenancePanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<ProvenanceReport | null>(null);
+  const [checked, setChecked] = useState(false);
   // Bumped whenever the shown object or the workspace changes: results of
   // earlier requests are then dropped.
   const generation = useRef(0);
@@ -197,6 +207,7 @@ export function ObjectProvenancePanel({
     setReport(null);
     setError(null);
     setBusy(false);
+    setChecked(false);
     runtime
       .describeObjectProvenance(oid)
       .then((value) => {
@@ -214,7 +225,10 @@ export function ObjectProvenancePanel({
       const value = await runtime.describeObjectProvenance(oid, {
         checkData: true,
       });
-      if (current === generation.current) setDescription(value);
+      if (current === generation.current) {
+        setDescription(value);
+        setChecked(true);
+      }
     } catch (err) {
       if (current === generation.current) setError(String(err));
     } finally {
@@ -269,6 +283,7 @@ export function ObjectProvenancePanel({
     onSelectObject,
     onVerify: (activityId) => void verify(activityId),
     busy,
+    checked,
   };
   const anchor = description.anchor;
   const production = description.production ?? null;
@@ -377,7 +392,7 @@ function ActivityView({
       <div className="provenance-activity-title">
         <strong>{operationTitle(activity)}</strong>{" "}
         <span className="provenance-muted">
-          {[originText(activity.origin), activity.edition, when]
+          {[originText(activity.origin), editionName(activity.edition), when]
             .filter(Boolean)
             .join(" — ")}
         </span>
@@ -438,7 +453,8 @@ function ActivityView({
             ))}
           {activity.environment && (
             <li>
-              {t("Software")}: {String(activity.environment.edition ?? "?")}{" "}
+              {t("Software")}:{" "}
+              {editionName(activity.environment.edition) || "?"}{" "}
               {String(activity.environment.edition_version ?? "?")}
             </li>
           )}
@@ -475,7 +491,7 @@ function InputView({
   const [expanded, setExpanded] = useState(false);
   const [ancestor, setAncestor] = useState<ProvenanceDescription | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const { runtime, oid, onSelectObject } = shared;
+  const { runtime, oid, onSelectObject, checked } = shared;
   // The trail is compared by value: parents re-render with new arrays.
   const trailKey = trail.join("\n");
 
@@ -486,6 +502,7 @@ function InputView({
       .describeObjectProvenance(oid, {
         stateId: input.state_id,
         trail: trailKey ? trailKey.split("\n") : [],
+        checkData: checked,
       })
       .then((value) => {
         if (!cancelled) setAncestor(value);
@@ -496,7 +513,7 @@ function InputView({
     return () => {
       cancelled = true;
     };
-  }, [expanded, runtime, oid, input.state_id, trailKey]);
+  }, [expanded, runtime, oid, input.state_id, trailKey, checked]);
 
   const name = input.title ?? t("Original input missing");
   const kind = input.object_kind;
