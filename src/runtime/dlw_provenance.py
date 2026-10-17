@@ -21,7 +21,6 @@ failure keeps the result, records nothing and is logged and counted. Spilled
 
 from __future__ import annotations
 
-import collections
 import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
@@ -29,21 +28,11 @@ from typing import Any
 from sigima.objects import ImageObj, SignalObj
 
 try:
-    from datalab_capsule.archive import (
-        CapsuleError,
-        SizePolicy,
-        create_from_hdf5,
-        read_capsule,
-    )
-    from datalab_capsule.diff import diff_manifests
+    from datalab_capsule import exchange
+    from datalab_capsule.archive import SizePolicy, create_from_hdf5
     from datalab_capsule.hdf5 import has_block as _has_block
-    from datalab_capsule.integrity import ProvenanceError, load_json, state_facts
+    from datalab_capsule.integrity import state_facts
     from datalab_capsule.legacy import legacy_summary
-    from datalab_capsule.manifest import (
-        inspect_manifest,
-        manifest_fingerprint,
-        validate_manifest,
-    )
     from datalab_capsule.recorder import (
         APPEND_NOTICE,
         CandidateError,
@@ -53,8 +42,6 @@ try:
         StateUnavailableError,
         computation_from_sigima,
     )
-    from datalab_capsule.review import create_review, validate_review
-    from datalab_capsule.verify import verify_capsule
 
     UNAVAILABLE_REASON: str | None = None
 except ImportError as _exc:  # pragma: no cover - depends on the boot install
@@ -247,11 +234,6 @@ class WebProvenance(Recorder):
             max_workspace_bytes=CAPSULE_MAX_BYTES,
         )
 
-    @staticmethod
-    def _resolver(workspace: bytes | None) -> Callable[[str], bytes] | None:
-        """Resolver of a referenced workspace: the file the user selected."""
-        return None if workspace is None else (lambda _iri: workspace)
-
     def export_capsule(
         self,
         workspace: bytes,
@@ -288,50 +270,35 @@ class WebProvenance(Recorder):
     def capsule_attachment(self, data: bytes, name: str) -> bytes:
         """Return the checked bytes of one attachment, for an explicit download.
 
-        The capsule is read like any other (archive, manifest, SHA-256 and size
-        of every attachment); the attachment is returned as data, never opened.
+        See :func:`datalab_capsule.exchange.capsule_attachment`: the attachment
+        is returned as data, never opened.
 
         Raises:
             CapsuleError: If the capsule is invalid or has no such attachment.
         """
         self._require()
-        capsule = read_capsule(data, self._policy())
-        if name not in capsule.attachments:
-            raise CapsuleError(f"No such attachment: {name}")
-        return capsule.attachments[name]
+        return exchange.capsule_attachment(data, name, self._policy())
 
     def open_capsule(
         self, data: bytes, workspace: bytes | None = None
     ) -> tuple[bytes, dict[str, Any]]:
         """Validate a capsule and return its workspace bytes and its origin.
 
+        See :func:`datalab_capsule.exchange.open_capsule`; *origin* is
+        ``{"fingerprint", "name", "attachments"}`` of the capsule, to adopt with
+        :meth:`set_capsule_origin` once the workspace is open.
+
         Args:
             data: Capsule bytes.
             workspace: File selected by the user for a referenced workspace;
              it must match the SHA-256 and size of the manifest.
-
-        Returns:
-            ``(workspace, origin)``; *origin* is ``{"fingerprint", "name",
-            "attachments"}`` of the capsule, to adopt with
-            :meth:`set_capsule_origin` once the workspace is open.
 
         Raises:
             CapsuleError: If the capsule is invalid, or references a workspace
              that was not supplied or does not match.
         """
         self._require()
-        capsule = read_capsule(data, self._policy(), self._resolver(workspace))
-        if capsule.workspace is None:
-            raise CapsuleError(
-                "This capsule references its workspace: select the workspace file"
-            )
-        summary = inspect_manifest(capsule.manifest)
-        origin = {
-            "fingerprint": manifest_fingerprint(capsule.manifest),
-            "name": summary["name"],
-            "attachments": [a["name"] for a in summary["attachments"]],
-        }
-        return capsule.workspace, origin
+        return exchange.open_capsule(data, workspace, self._policy())
 
     def set_capsule_origin(self, origin: dict[str, Any]) -> None:
         """Remember the capsule the current workspace was opened from."""
@@ -341,6 +308,8 @@ class WebProvenance(Recorder):
         self, manifest: str, fingerprint: str, reviews: Sequence[str] = ()
     ) -> dict[str, Any]:
         """Check a revision retrieved from a registry; trust nothing it says.
+
+        See :func:`datalab_capsule.exchange.check_registry_revision`.
 
         Args:
             manifest: Manifest JSON text returned by the registry.
@@ -356,27 +325,7 @@ class WebProvenance(Recorder):
             ProvenanceError: If the manifest is invalid or is another revision.
         """
         self._require()
-        parsed = load_json(manifest)
-        validate_manifest(parsed)
-        actual = manifest_fingerprint(parsed)
-        if actual != fingerprint:
-            raise CapsuleError(
-                f"The registry returned another revision: {actual}, not {fingerprint}"
-            )
-        checked = []
-        for text in reviews:
-            try:
-                review = load_json(text)
-                validate_review(review, parsed)
-                status = "valid"
-            except (ValueError, ProvenanceError) as exc:
-                review, status = None, str(exc)
-            checked.append({"review": review, "status": status})
-        return {
-            "summary": inspect_manifest(parsed),
-            "manifest": parsed,
-            "reviews": checked,
-        }
+        return exchange.check_registry_revision(manifest, fingerprint, reviews)
 
     def inspect_capsule(
         self,
@@ -388,11 +337,11 @@ class WebProvenance(Recorder):
     ) -> dict[str, Any]:
         """Inspect a capsule without opening it; compute nothing.
 
-        Two results are kept apart, and neither is a replay:
+        Two results are kept apart, and neither is a replay (see
+        :func:`datalab_capsule.exchange.inspect_capsule`):
 
         - ``integrity``: the archive, the manifest, the workspace (when
-          included or supplied) and every stored state, checked by
-          :func:`datalab_capsule.verify.verify_capsule`;
+          included or supplied) and every stored state;
         - ``documents``: the verification reports and reviews supplied by the
           user (JSON texts), checked against the capsule. Their verdicts are
           what their authors claim; nothing is recomputed here.
@@ -402,78 +351,18 @@ class WebProvenance(Recorder):
             and ``manifest`` are None when the capsule cannot be read.
         """
         self._require()
-        parsed: dict[str, list[Any]] = {"reports": [], "reviews": []}
-        unreadable: list[dict[str, Any]] = []
-        for kind, texts in (("reports", reports), ("reviews", reviews)):
-            for index, text in enumerate(texts):
-                try:
-                    parsed[kind].append(load_json(text))
-                except ValueError as exc:
-                    unreadable.append(
-                        {"kind": kind[:-1], "index": index, "status": str(exc)}
-                    )
-        resolver = self._resolver(workspace)
-        try:
-            capsule = read_capsule(data, self._policy(), resolver)
-        except (OSError, ProvenanceError) as exc:
-            return {
-                "summary": None,
-                "manifest": None,
-                "integrity": {
-                    "valid": False,
-                    "fingerprint": None,
-                    "workspace": None,
-                    "states_located": None,
-                    "states_altered": [],
-                    "problems": [f"Invalid capsule: {exc}"],
-                },
-                "documents": None,
-            }
-        manifest = capsule.manifest
-        # Free the workspace copy before verify_capsule reads the archive again.
-        del capsule
-        result = verify_capsule(
+        return exchange.inspect_capsule(
             data,
-            resolve_workspace=resolver,
-            reports=parsed["reports"],
-            reviews=parsed["reviews"],
+            workspace=workspace,
+            reports=reports,
+            reviews=reviews,
             policy=self._policy(),
         )
-        rejected = collections.Counter(
-            e["status"]
-            for e in result["reports"] + result["reviews"]
-            if e["status"] != "valid"
-        )
-        integrity_problems = []
-        for problem in result["problems"]:
-            if rejected[problem]:
-                rejected[problem] -= 1
-            else:
-                integrity_problems.append(problem)
-        return {
-            "summary": inspect_manifest(manifest),
-            "manifest": manifest,
-            "integrity": {
-                "valid": not integrity_problems,
-                "fingerprint": result["fingerprint"],
-                "workspace": result["workspace"],
-                "states_located": result["states_located"],
-                "states_altered": result["states_altered"],
-                "problems": integrity_problems,
-            },
-            "documents": {
-                "reports": result["reports"],
-                "reviews": result["reviews"],
-                "unreadable": unreadable,
-            },
-        }
 
     def diff_manifests(self, old: Any, new: Any) -> dict[str, Any]:
         """Compare two capsule manifests (e.g. kept in the revision list)."""
         self._require()
-        for manifest in (old, new):
-            validate_manifest(manifest)
-        return diff_manifests(old, new)
+        return exchange.diff_checked_manifests(old, new)
 
     def create_review(
         self,
@@ -486,8 +375,7 @@ class WebProvenance(Recorder):
     ) -> dict[str, Any]:
         """Write a review of one capsule revision (a separate JSON document)."""
         self._require()
-        validate_manifest(manifest)
-        return create_review(
+        return exchange.review_of(
             manifest,
             reviewer=reviewer,
             statement=statement,
