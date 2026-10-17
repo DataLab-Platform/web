@@ -2,7 +2,7 @@
 
 DataLab-Web records how each result was obtained: the processing or analysis applied, its parameters, the objects it used with their exact content, and the software versions. This record is saved with the HDF5 workspace. DataLab-Web and DataLab Desktop both read it back, and both exchange it as a **capsule**.
 
-This page follows the usual path, from processing to exchange. Nothing in it requires a server, an account or a command line.
+This page follows the usual path, from processing to exchange. Nothing in it requires a server of your own, an account or a command line. The browser downloads the computation engine when DataLab-Web starts (there is no offline mode); your data and computations stay in the browser.
 
 ## 1. Process, save, close and reopen
 
@@ -57,7 +57,7 @@ _File > Workspace capsule…_ opens the capsule dialog. DataLab Desktop offers t
 
 The integrity of a capsule, the supplied documents and the local replay are always shown apart. A verdict written in a supplied report is what its author claims; a local replay is what DataLab-Web computed.
 
-In the browser, a capsule (and a referenced workspace) is limited to 256 MiB, and its manifest to 16 MiB. These limits are accepted sizes, not a guarantee that any workspace of that size opens in every browser.
+In the browser, a capsule (and a referenced workspace) is limited to 256 MiB, and its manifest to 16 MiB; an export that the browser could not open again is refused. These limits are accepted sizes, not a guarantee: on a laptop of 2026 (32 GiB of RAM, Chromium), capsules of about 130 MiB were exported, inspected and opened in 1.8 to 3.5 s each, and a 233 MiB capsule in up to 5.7 s, the page then using about 1.5 GiB of memory for the computation engine. Consulting a result stays immediate whatever the size; checking its data and verifying it take longer with larger arrays.
 
 ## 6. Adding a workspace instead of replacing it
 
