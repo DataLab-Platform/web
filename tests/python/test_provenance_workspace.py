@@ -168,6 +168,48 @@ def test_capsule_size_limit(monkeypatch):
     check_chain(reader, "web")
 
 
+def test_capsule_export_size_limit(monkeypatch):
+    """No capsule is exported that the browser policy would refuse to open."""
+    from datalab_capsule.archive import CapsuleError
+
+    writer = fresh_runtime()
+    build_chain(writer)
+    provenance = writer._prov
+    workspace = len(writer.save_workspace_to_bytes())
+    ref = "https://data.example.org/chain.h5"
+    for limit, manifest, message, export in (
+        (workspace // 2, None, "Workspace too large", writer.export_workspace_capsule),
+        (
+            workspace // 2,
+            None,
+            "Workspace too large",
+            lambda: writer.export_referenced_capsule(ref),
+        ),
+        (
+            workspace + 100,
+            None,
+            "too large to be opened",
+            writer.export_workspace_capsule,
+        ),
+        (
+            2 * workspace,
+            10,
+            "Capsule manifest too large",
+            writer.export_workspace_capsule,
+        ),
+    ):
+        monkeypatch.setattr(provenance, "CAPSULE_MAX_BYTES", limit)
+        if manifest is not None:
+            monkeypatch.setattr(provenance, "CAPSULE_MAX_MANIFEST_BYTES", manifest)
+        with pytest.raises(CapsuleError, match=message):
+            export()
+    monkeypatch.undo()
+    data = writer.export_workspace_capsule()
+    reader = fresh_runtime()
+    reader.open_workspace_capsule("chain.dlcapsule", data, replace=True)
+    check_chain(reader, "web")
+
+
 def test_processing_tab_records_are_rebuilt():
     """Replayable results get their Processing-tab record back after reopening."""
     writer = fresh_runtime()

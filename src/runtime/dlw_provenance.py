@@ -21,7 +21,9 @@ failure keeps the result, records nothing and is logged and counted. Spilled
 
 from __future__ import annotations
 
+import io
 import logging
+import zipfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
@@ -29,7 +31,12 @@ from sigima.objects import ImageObj, SignalObj
 
 try:
     from datalab_capsule import exchange
-    from datalab_capsule.archive import SizePolicy, create_from_hdf5
+    from datalab_capsule.archive import (
+        MANIFEST_NAME,
+        CapsuleError,
+        SizePolicy,
+        create_from_hdf5,
+    )
     from datalab_capsule.hdf5 import has_block as _has_block
     from datalab_capsule.integrity import state_facts
     from datalab_capsule.legacy import legacy_summary
@@ -93,6 +100,15 @@ CAPSULE_MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 
 class ProvenanceResidencyError(StateUnavailableError):
     """Raised when an object's arrays are spilled to disk (not resident)."""
+
+
+def _check_size(what: str, size: int, limit: int) -> None:
+    """Refuse a capsule part that the browser would not open again."""
+    if size > limit:
+        raise CapsuleError(
+            f"{what} too large to be opened in the browser: "
+            f"{size / 1024**2:.1f} MiB (limit: {limit / 1024**2:.1f} MiB)"
+        )
 
 
 def has_provenance_block(h5file: Any) -> bool:
@@ -256,9 +272,22 @@ class WebProvenance(Recorder):
             attachments: Light files selected by the user, as
              ``{name, data, media_type, description}``; declared in the
              manifest and never executed.
+
+        Raises:
+            CapsuleError: If the capsule could not be opened again in the
+             browser (see :meth:`_policy`): the workspace, or the archive known
+             from the workspace and attachments, is checked before the capsule
+             is built, the archive and its manifest once it is built. The
+             workspace was already saved: only building the archive is spared.
         """
         self._require()
-        return create_from_hdf5(
+        policy = self._policy()
+        _check_size("Workspace", len(workspace), policy.max_workspace_bytes)
+        known = sum(len(attachment["data"]) for attachment in attachments)
+        if not workspace_ref:
+            known += len(workspace)
+        _check_size("Capsule", known, policy.max_archive_bytes)
+        capsule = create_from_hdf5(
             workspace,
             name=name,
             description=description,
@@ -266,6 +295,11 @@ class WebProvenance(Recorder):
             workspace_ref=workspace_ref,
             attachments=attachments,
         )
+        _check_size("Capsule", len(capsule), policy.max_archive_bytes)
+        with zipfile.ZipFile(io.BytesIO(capsule)) as archive:
+            size = archive.getinfo(MANIFEST_NAME).file_size
+        _check_size("Capsule manifest", size, policy.max_manifest_bytes)
+        return capsule
 
     def capsule_attachment(self, data: bytes, name: str) -> bytes:
         """Return the checked bytes of one attachment, for an explicit download.
