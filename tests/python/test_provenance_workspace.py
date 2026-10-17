@@ -319,6 +319,13 @@ def test_append_with_provenance_never_attributes_records():
     assert source["object_present"] is False and source["id"] is None
     record = bs.get_last_processing(ids["S2"])
     assert record["missing_source_ids"] == [ids["S1"]]
+    # Verifying S2 never uses the copy (same identifier and content).
+    production = bs.describe_object_provenance(ids["S2"])["production"]
+    report = bs.replay_activity(production["activity_id"])
+    assert (report["verdict"], report["eligibility"]) == (
+        "not_verified",
+        "missing_input",
+    )
     # Appended objects are processed and recorded as usual.
     (out,) = bs.apply_feature("normalize", [s1_copy], params={"method": "maximum"})
     (used,) = bs.describe_object_provenance(out)["production"]["inputs"]
