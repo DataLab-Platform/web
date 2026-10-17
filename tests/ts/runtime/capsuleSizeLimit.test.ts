@@ -58,4 +58,64 @@ describe("DataLabRuntime.openWorkspaceCapsule size check", () => {
       workspace: null,
     });
   });
+
+  it("refuses a referenced workspace over the limit before reading either file", async () => {
+    const { runtime, callPy } = makeRuntime();
+    const capsule = new Blob([new Uint8Array(10)]);
+    const workspace = new Blob([new Uint8Array(1025)]);
+    const capsuleRead = vi.spyOn(capsule, "arrayBuffer");
+    const workspaceRead = vi.spyOn(workspace, "arrayBuffer");
+
+    await expect(
+      runtime.openWorkspaceCapsule("ref.dlcapsule", capsule, true, workspace),
+    ).rejects.toThrow(
+      /Referenced workspace too large: 0\.1 MiB \(limit: 0\.0 MiB\)/,
+    );
+
+    expect(capsuleRead).not.toHaveBeenCalled();
+    expect(workspaceRead).not.toHaveBeenCalled();
+    expect(callPy).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a referenced workspace at the limit", async () => {
+    const { runtime, callPy } = makeRuntime();
+    const workspace = new Uint8Array(1024);
+
+    await runtime.openWorkspaceCapsule(
+      "ref.dlcapsule",
+      new Uint8Array([1]),
+      true,
+      workspace,
+    );
+
+    expect(callPy).toHaveBeenLastCalledWith("open_workspace_capsule", {
+      filename: "ref.dlcapsule",
+      data: new Uint8Array([1]),
+      replace: true,
+      workspace,
+    });
+  });
+});
+
+describe("DataLabRuntime.inspectWorkspaceCapsule size check", () => {
+  it("refuses a referenced workspace over the limit before transferring it", async () => {
+    const { runtime, callPy } = makeRuntime();
+    const inspect = (
+      runtime as unknown as {
+        inspectWorkspaceCapsule: DataLabRuntime["inspectWorkspaceCapsule"];
+      }
+    ).inspectWorkspaceCapsule.bind(runtime);
+
+    await expect(
+      inspect(new Uint8Array(10), { workspace: new Uint8Array(1025) }),
+    ).rejects.toThrow(/Referenced workspace too large/);
+    await expect(inspect(new Uint8Array(1025))).rejects.toThrow(
+      /Capsule too large/,
+    );
+
+    expect(callPy).not.toHaveBeenCalledWith(
+      "inspect_workspace_capsule",
+      expect.anything(),
+    );
+  });
 });

@@ -3574,19 +3574,45 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     };
   }
 
-  /** Refuse a capsule over the runtime's size limit, before reading it. */
-  private async checkCapsuleSize(size: number): Promise<void> {
+  /** Refuse a capsule over the runtime's size limit, before reading it.
+   *  The same limit applies to the workspace a capsule references
+   *  (``workspace``): the Python size policy of the browser uses it for
+   *  the archive and for the workspace. */
+  private async checkCapsuleSize(
+    size: number,
+    part: "capsule" | "workspace" = "capsule",
+  ): Promise<void> {
     const limit = await this.getCapsuleSizeLimit();
     if (limit !== null && size > limit) {
       // Round the size up and the limit down so they never look equal.
       const mib = (bytes: number, round: (x: number) => number) =>
         (round((bytes / 1024 ** 2) * 10) / 10).toFixed(1);
+      const values = {
+        size: mib(size, Math.ceil),
+        limit: mib(limit, Math.floor),
+      };
       throw new Error(
-        t("Capsule too large: {size} MiB (limit: {limit} MiB)", {
-          size: mib(size, Math.ceil),
-          limit: mib(limit, Math.floor),
-        }),
+        part === "capsule"
+          ? t("Capsule too large: {size} MiB (limit: {limit} MiB)", values)
+          : t(
+              "Referenced workspace too large: {size} MiB (limit: {limit} MiB)",
+              values,
+            ),
       );
+    }
+  }
+
+  /** Check the sizes of a capsule and of the workspace it references, if
+   *  supplied, before either is read or transferred. */
+  private async checkCapsuleSizes(
+    data: Blob | Uint8Array,
+    workspace: Blob | Uint8Array | null,
+  ): Promise<void> {
+    const size = (bytes: Blob | Uint8Array) =>
+      bytes instanceof Uint8Array ? bytes.byteLength : bytes.size;
+    await this.checkCapsuleSize(size(data));
+    if (workspace !== null) {
+      await this.checkCapsuleSize(size(workspace), "workspace");
     }
   }
 
@@ -3604,16 +3630,15 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  current one by default).  Pass the selected ``File`` (a ``Blob``): its
    *  size is checked before its contents are read or transferred.  When the
    *  capsule references its workspace, pass the file the user selected as
-   *  ``workspace``: it must match the manifest. */
+   *  ``workspace``: it must match the manifest, and its size is checked
+   *  first too. */
   async openWorkspaceCapsule(
     filename: string,
     data: Blob | Uint8Array,
     replace: boolean = true,
     workspace: Blob | Uint8Array | null = null,
   ): Promise<WorkspaceLoadResult> {
-    await this.checkCapsuleSize(
-      data instanceof Uint8Array ? data.byteLength : data.size,
-    );
+    await this.checkCapsuleSizes(data, workspace);
     return (await this.callPy("open_workspace_capsule", {
       filename,
       data: await readBytes(data),
@@ -3633,10 +3658,8 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       reviews?: string[];
     } = {},
   ): Promise<CapsuleInspection> {
-    await this.checkCapsuleSize(
-      data instanceof Uint8Array ? data.byteLength : data.size,
-    );
     const workspace = options.workspace ?? null;
+    await this.checkCapsuleSizes(data, workspace);
     return restoreJsonNulls(
       await this.callPy("inspect_workspace_capsule", {
         data: await readBytes(data),

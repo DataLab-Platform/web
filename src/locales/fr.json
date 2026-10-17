@@ -967,6 +967,7 @@
   "rectangle": "rectangle",
   "Rectangle": "Rectangle",
   "Reference the workspace instead of including it": "Référencer l'espace de travail au lieu de l'inclure",
+  "Referenced workspace too large: {size} MiB (limit: {limit} MiB)": "Espace de travail référencé trop volumineux : {size} Mio (limite : {limit} Mio)",
   "referenced at {address}": "référencé à l'adresse {address}",
   "Refresh": "Actualiser",
   "Refresh the view continuously": "Rafraîchir la vue en continu",
