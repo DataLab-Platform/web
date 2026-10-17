@@ -6,6 +6,7 @@ Guides and reference material for DataLab-Web. Start with the [project README](.
 
 - [Welcome](userguide/welcome.md) — what DataLab-Web is and what you can do in it.
 - [Computation engine](userguide/computation-engine.md) — how Sigima runs in the browser.
+- [Provenance and capsules](userguide/provenance-and-capsules.md) — where a result comes from, checking and verifying it, exchanging a capsule with DataLab Desktop, and the limits.
 - [Differences from the desktop app](userguide/differences-from-desktop.md).
 
 ## Concepts & architecture

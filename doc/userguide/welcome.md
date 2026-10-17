@@ -15,6 +15,7 @@ WebAssembly). No data leaves your browser.
   plots (zoom, pan, hover, export to PNG/SVG).
 - Organise objects into groups, switch between **Signal** and **Image**
   panels, persist your workspace as an HDF5 file.
+- See where each result comes from, check and verify it, and exchange it with DataLab Desktop as a capsule (see [Provenance and capsules](provenance-and-capsules.md)).
 - Automate workflows with **macros** and **notebooks** running in dedicated
   Web Workers so the UI stays responsive.
 - Extend the application with **Python plugins** (Qt-compatible

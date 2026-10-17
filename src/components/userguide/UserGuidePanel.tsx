@@ -18,6 +18,7 @@ import { t } from "../../i18n/translate";
 import welcomeMd from "../../../doc/userguide/welcome.md?raw";
 import differencesMd from "../../../doc/userguide/differences-from-desktop.md?raw";
 import engineMd from "../../../doc/userguide/computation-engine.md?raw";
+import provenanceMd from "../../../doc/userguide/provenance-and-capsules.md?raw";
 import notebooksMd from "../../../doc/notebooks.md?raw";
 import pluginsMd from "../../../doc/plugins.md?raw";
 
@@ -39,6 +40,11 @@ const PAGES: GuidePage[] = [
     title: "Computation engine (Sigima)",
     source: engineMd,
   },
+  {
+    slug: "provenance-and-capsules",
+    title: "Provenance and capsules",
+    source: provenanceMd,
+  },
   { slug: "notebooks", title: "Notebooks", source: notebooksMd },
   { slug: "plugins", title: "Plugins", source: pluginsMd },
 ];
@@ -47,6 +53,7 @@ const PAGE_BY_FILENAME: Record<string, string> = {
   "welcome.md": "welcome",
   "differences-from-desktop.md": "differences-from-desktop",
   "computation-engine.md": "computation-engine",
+  "provenance-and-capsules.md": "provenance-and-capsules",
   "notebooks.md": "notebooks",
   "plugins.md": "plugins",
 };

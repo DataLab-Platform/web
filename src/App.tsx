@@ -130,7 +130,6 @@ import {
 } from "./components/SaveToDirectoryDialog";
 import { SidePanel } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
-import { UserGuidePanel } from "./components/userguide/UserGuidePanel";
 import {
   WelcomeView,
   readShowWelcomeOnStartup,
@@ -196,6 +195,13 @@ const NotebookPanel = lazy(() =>
 const TextImportWizard = lazy(() =>
   import("./components/TextImportWizard").then((m) => ({
     default: m.TextImportWizard,
+  })),
+);
+// Only rendered once opened from the Help menu: the guide pages are bundled
+// Markdown, kept out of the initial bundle.
+const UserGuidePanel = lazy(() =>
+  import("./components/userguide/UserGuidePanel").then((m) => ({
+    default: m.UserGuidePanel,
   })),
 );
 // Only rendered once opened from the File menu.
@@ -5276,7 +5282,9 @@ export default function App() {
           )}
           {userGuideOpen && (
             <div className="userguide-floating-host">
-              <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
+              <Suspense fallback={null}>
+                <UserGuidePanel onClose={() => setUserGuideOpen(false)} />
+              </Suspense>
             </div>
           )}
         </div>
