@@ -131,7 +131,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
     // A separate context reads the saved file: no memory or OPFS reuse.
     let readerContext: Awaited<ReturnType<Browser["newContext"]>>;
     let reader: Page;
-    const url = runtimeMode === "worker" ? "/?runtime=worker" : "/";
+    const url = `/?runtime=${runtimeMode}`;
 
     test.beforeAll(async ({ browser }) => {
       context = await browser.newContext();

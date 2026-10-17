@@ -162,7 +162,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
 
     let context: Awaited<ReturnType<Browser["newContext"]>>;
     let page: Page;
-    const url = runtimeMode === "worker" ? "/?runtime=worker" : "/";
+    const url = `/?runtime=${runtimeMode}`;
 
     test.beforeAll(async ({ browser }) => {
       context = await browser.newContext();
