@@ -88,11 +88,13 @@ _logger = logging.getLogger(__name__)
 
 EDITION = "web"
 
-#: Largest capsule (archive and workspace, bytes) opened in the browser. Opening
-#: one grows the WebAssembly heap by about 3.5 times its size (Pyodide 0.26.4 in
-#: Chromium: +841 MiB for a 240 MiB capsule, heap then 1.1 GiB), and this 32-bit
-#: heap cannot exceed 4 GiB. The TypeScript runtime checks the file size before
-#: reading it.
+#: Largest capsule (archive and workspace, bytes) opened in the browser. The
+#: 32-bit WebAssembly heap cannot exceed 4 GiB; on 17 Oct 2026 (Pyodide 0.26.4,
+#: Chromium 153), a session working with a 233 MiB capsule raised it to
+#: 1.5 GiB (DataLab-Capsule, doc/performance.md). An earlier observation in
+#: that environment, +841 MiB of heap to open a 240 MiB capsule (heap then
+#: 1.1 GiB), was not measured again on its own. The TypeScript runtime checks
+#: the file size before reading it.
 CAPSULE_MAX_BYTES = 256 * 1024 * 1024
 #: Largest manifest opened in the browser (bytes).
 CAPSULE_MAX_MANIFEST_BYTES = 16 * 1024 * 1024
