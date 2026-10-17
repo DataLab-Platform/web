@@ -1,9 +1,10 @@
 name: perf
 
-# On-demand performance-benchmark guard. The multi-minute perf specs are
-# deterministic with respect to the code, so there is no point re-running
-# them on every commit (a time-based schedule would add noise, not signal).
-# Instead they run only when explicitly wanted:
+# On-demand performance-benchmark guard. The multi-minute perf specs are too
+# costly to re-run on every commit, and their timings are noisy on shared
+# runners (a time-based schedule would add noise, not signal); only their
+# structural metrics (sizes, counts) are deterministic. They run only when
+# explicitly wanted:
 #
 #   * manually (``workflow_dispatch``),
 #   * on a pull request carrying the ``run-perf`` label,
@@ -65,17 +66,26 @@ jobs:
           --wheel-dir .wheels
           --github-env "$GITHUB_ENV"
 
+      # Same configuration as the CI: provenance_capsule_perf measures the
+      # provenance and capsule paths, and must not skip them.
+      - name: Prepare configured DataLab-Capsule dependency
+        run: >-
+          python scripts/capsule_dependency.py prepare-pyodide
+          --wheel-dir .wheels
+          --github-env "$GITHUB_ENV"
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
       - name: Run perf benchmarks
         # ``test:e2e:perf`` is ``playwright test --project=perf`` (image_perf,
-        # signal_perf + opfs_*); the comparative ``benchmark`` project is never
-        # run here.
+        # signal_perf, opfs_*, provenance_capsule_perf with its quick profile);
+        # the comparative ``benchmark`` project is never run here.
         # PW_PERF is redundant with the ``--project=perf`` flag but makes the
         # opt-in explicit.
         env:
           PW_PERF: "1"
+          DLW_REQUIRE_PROVENANCE: "1"
         run: npm run test:e2e:perf
 
       - name: Convert results to benchmark format

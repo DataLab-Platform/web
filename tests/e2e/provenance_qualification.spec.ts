@@ -134,7 +134,7 @@ for (const runtimeMode of ["main", "worker"] as const) {
     page,
   }) => {
     test.setTimeout(300_000);
-    await page.goto(runtimeMode === "worker" ? "/?runtime=worker" : "/");
+    await page.goto(`/?runtime=${runtimeMode}`);
     await waitForRuntimeReady(page);
     const run = await runQualification(page);
     requireProvenance(run.available);

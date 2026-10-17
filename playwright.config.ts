@@ -18,7 +18,8 @@ import { defineConfig, devices } from "@playwright/test";
  *   * ``chromium`` (default) — the regression suite. Excludes
  *     performance benchmarks and ``_repro_*`` throwaway probes.
  *   * ``perf`` (opt-in) — performance-only specs (``image_perf``,
- *     ``signal_perf``, ``opfs_*_bench``). Run with ``npx playwright test --project=perf``
+ *     ``signal_perf``, ``opfs_*_bench``, ``provenance_capsule_perf``). Run
+ *     with ``npx playwright test --project=perf``
  *     or ``npm run test:e2e:perf``. The on-demand ``perf`` CI workflow
  *     drives this project (see ``.github/workflows/perf.yml``).
  *   * ``benchmark`` (opt-in) — comparative Web-vs-Qt suite under
@@ -93,6 +94,7 @@ export default defineConfig({
         /opfs_storage_bench\.spec\.ts/,
         /opfs_sync_spike\.spec\.ts/,
         /opfs_worker_bench\.spec\.ts/,
+        /provenance_capsule_perf\.spec\.ts/,
         /_repro_.*\.spec\.ts/,
         /tests[\\/]benchmark[\\/]/,
         // The demo-recording spec is opt-in: it is driven by its own
@@ -115,6 +117,7 @@ export default defineConfig({
               /opfs_storage_bench\.spec\.ts/,
               /opfs_sync_spike\.spec\.ts/,
               /opfs_worker_bench\.spec\.ts/,
+              /provenance_capsule_perf\.spec\.ts/,
             ],
             timeout: 600_000,
           },

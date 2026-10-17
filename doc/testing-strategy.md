@@ -104,7 +104,7 @@ node scripts/e2e-shards.mjs plan --shard 2/4      # print the spec files of shar
 
 ## Performance benchmarks: on-demand CI and regression tracking
 
-Perf benchmarks are **deterministic with respect to the code**: if nothing changes, the numbers do not change, so re-running them on every commit (or on a fixed schedule) would add noise, not signal. They are therefore driven by a dedicated, opt-in workflow — [.github/workflows/perf.yml](../.github/workflows/perf.yml) — that runs the `perf` project (`npm run test:e2e:perf`) only when wanted:
+Perf benchmarks take minutes, and only part of what they measure is deterministic: structural metrics (payload and file sizes, point counts, the heap of the disk mode that must stay flat) depend on the code alone, whereas durations and the growth of the WebAssembly heap in RAM mode depend on the runner, the browser and the allocator. Re-running them on every commit (or on a fixed schedule) would add noise, not signal. They are therefore driven by a dedicated, opt-in workflow — [.github/workflows/perf.yml](../.github/workflows/perf.yml) — that runs the `perf` project (`npm run test:e2e:perf`) only when wanted:
 
 - manually via **Run workflow** (`workflow_dispatch`);
 - on a pull request labelled `run-perf` (opt-in per PR);
@@ -113,10 +113,12 @@ Perf benchmarks are **deterministic with respect to the code**: if nothing chang
 
 Results are tracked over time with [`benchmark-action/github-action-benchmark`](https://github.com/benchmark-action/github-action-benchmark) on the orphan `benchmarks` branch (open `dev/bench/determinist/index.html` or `dev/bench/timings/index.html` from that branch to view the charts). [scripts/perf-to-benchmark-json.mjs](../scripts/perf-to-benchmark-json.mjs) converts the raw result JSON into the action's `customSmallerIsBetter` format, splitting metrics into two groups with different policies:
 
-- **Deterministic** (memory Δheap in MiB, actual typed-array payload bytes, points handed to Plotly) — these make trustworthy gates. On a `run-perf` pull request, an increase beyond **125 %** of the baseline **fails the check** and comments on the PR. On `main` / tags the value is recorded but never fails (the change is already merged).
-- **Timings** (milliseconds) — noisy on shared CI runners, so they are tracked with a wide **200 %** threshold and **never fail**; they exist purely for trend inspection.
+- **Deterministic** (memory Δheap in MiB of the disk mode, actual typed-array payload bytes, points handed to Plotly, sizes of the saved workspace and of the exported capsules) — these make trustworthy gates. On a `run-perf` pull request, an increase beyond **125 %** of the baseline **fails the check** and comments on the PR. On `main` / tags the value is recorded but never fails (the change is already merged).
+- **Trends** (milliseconds, and allocator-dependent memory such as the RAM-mode heap growth) — noisy on shared CI runners, so they are tracked with a wide **200 %** threshold and **never fail**; they exist purely for trend inspection. A duration measured on a shared runner is never turned into a blocking threshold.
 
 `image_perf.spec.ts` separates the runtime queue/bridge measurement from the React grid commit and canvas paint. `signal_perf.spec.ts` covers 10 k, 100 k, 500 k and 1 M samples and records visible latency, Plotly point count, long tasks, hover, pan and zoom. A small `datalab-web:plot-rendered` event is emitted from the existing active-plot registry after `react-plotly` finishes; the shared `tests/e2e/helpers/plotlyMetrics.ts` helper installs its observers before navigation so first renders are not lost.
+
+`provenance_capsule_perf.spec.ts` measures the provenance and capsule paths (captured processing, saving and reopening, consultation, data check, verification, capsule export, inspection and opening, open/close cycles, referenced workspaces, a long ledger and its Local replay list) in a fresh browser context per runtime and storage mode, and writes a report in the format described in DataLab-Capsule's `doc/performance.md`. `DLW_PERF_PROFILE` selects `quick` (default, every mode, small data), `representative` (worker, RAM and disk, 1000-activity ledger), `diagnostic` (main thread, RAM) or `capacity` (worker, close to the 256 MiB capsule limit); the workflow runs `quick`, the other profiles are run on a described computer. The perf workflow prepares DataLab-Capsule as the CI does and requires provenance (`DLW_REQUIRE_PROVENANCE=1`).
 
 The cheap deterministic invariants encoded directly in the specs (data-integrity checksums, spill counts, the heap-decoupling `expect(...)`) still run wherever the `perf` project runs and fail fast on a broken guarantee, independent of the chart thresholds.
 

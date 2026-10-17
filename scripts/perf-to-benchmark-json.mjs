@@ -253,6 +253,66 @@ function cfgLabel(r) {
   }
 }
 
+// --- provenance_capsule_perf (report version 1) ----------------------
+{
+  const got = latest("provenance_capsule_perf_");
+  if (got) {
+    used.push(got.file);
+    /** @type {Record<string, any>} */
+    const sizeMetrics = {
+      "workspace.save": ["hdf5_bytes", "workspace HDF5", 1e6, "MB"],
+      "capsule.export": ["archive_bytes", "capsule archive", 1e6, "MB"],
+      "ledger.export": ["archive_bytes", "ledger capsule archive", 1e6, "MB"],
+    };
+    const timed = new Set([
+      "process.gaussian_filter",
+      "workspace.save",
+      "workspace.reopen",
+      "consult.describe",
+      "consult.check-data",
+      "consult.verify",
+      "capsule.export",
+      "capsule.inspect",
+      "capsule.open-empty",
+      "capsule.open-over-current",
+      "ledger.describe-last",
+      "ledger.replay-list",
+    ]);
+    for (const c of got.data.cases) {
+      if (c.status !== "ok") continue;
+      const mode = `${c.mode.execution.replace("browser-", "")}/${c.mode.storage}`;
+      const label = `[${got.data.profile} ${mode}]`;
+      // Deterministic: structural sizes of what is saved and exported. The
+      // manifest also records dates and versions, so it is not tracked here.
+      const size = sizeMetrics[c.id];
+      if (size && c.sizes && typeof c.sizes[size[0]] === "number") {
+        determinist.push({
+          name: `provenance · ${size[1]} ${label}`,
+          unit: size[3],
+          value: +(c.sizes[size[0]] / size[2]).toFixed(3),
+        });
+      }
+      // Trend only: durations and WebAssembly heap growth depend on the
+      // runner and on the allocator.
+      if (timed.has(c.id) && typeof c.median_ms === "number") {
+        timings.push({
+          name: `provenance · ${c.id} ${label}`,
+          unit: "ms",
+          value: +c.median_ms.toFixed(1),
+        });
+      }
+      const growth = c.memory?.wasm_heap?.growth_bytes;
+      if (c.id === "capsule.open-empty" && typeof growth === "number") {
+        timings.push({
+          name: `provenance · capsule.open-empty Δheap ${label}`,
+          unit: "MiB",
+          value: +(growth / MiB).toFixed(1),
+        });
+      }
+    }
+  }
+}
+
 if (used.length === 0) {
   console.error(
     `[perf-to-benchmark] no result files found in ${resultsDir} — did the perf project run?`,
