@@ -336,4 +336,42 @@ describe("WorkerRuntimeProxy", () => {
     expect(worker.terminated).toBe(true);
     await expect(promise).rejects.toThrow("runtime worker disposed");
   });
+
+  it("rejects in-flight calls on a worker error after boot", async () => {
+    const { worker, proxy, runtime } = setup();
+    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    worker.emit({ type: "ready", mirror: MIRROR });
+    await ready;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const promise = (runtime.listImages as () => Promise<unknown>)();
+    worker.emitError("out of memory");
+    await expect(promise).rejects.toThrow(
+      /runtime worker error: out of memory/,
+    );
+    // The failed call is forgotten: a late result is ignored.
+    const id = (worker.sent.find((m) => m.type === "call") as { id: number })
+      .id;
+    worker.emit({ type: "result", id, ok: true, value: [] });
+    error.mockRestore();
+  });
+
+  it("forgets a call whose message could not be posted", async () => {
+    const { worker, runtime } = setup();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(worker, "postMessage").mockImplementationOnce(() => {
+      throw new Error("DataCloneError");
+    });
+    const call = runtime.listImages as () => Promise<unknown>;
+    await expect(call()).rejects.toThrow("DataCloneError");
+    // The next call is unaffected and resolves normally.
+    const next = call();
+    worker.emit({
+      type: "result",
+      id: (worker.last() as { id: number }).id,
+      ok: true,
+      value: [1],
+    });
+    await expect(next).resolves.toEqual([1]);
+    error.mockRestore();
+  });
 });

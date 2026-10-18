@@ -99,6 +99,9 @@ export class WorkerRuntimeProxy {
         this.rejectReady(new Error(detail));
       } else {
         console.error("[workerRuntime] worker error:", detail);
+        // An uncaught error may have stopped the call in progress: its result
+        // will never come, so the calls waiting for one fail now.
+        this.rejectPending(new Error(`runtime worker error: ${detail}`));
       }
     });
   }
@@ -122,13 +125,17 @@ export class WorkerRuntimeProxy {
 
   /** Tear down the worker and reject any in-flight calls. */
   dispose(): void {
-    const err = new Error("runtime worker disposed");
-    for (const { reject } of this.pending.values()) reject(err);
-    this.pending.clear();
+    this.rejectPending(new Error("runtime worker disposed"));
     this.worker.terminate();
   }
 
   // --- Internals ---------------------------------------------------------
+
+  private rejectPending(err: Error): void {
+    const pending = Array.from(this.pending.values());
+    this.pending.clear();
+    for (const { reject } of pending) reject(err);
+  }
 
   private post(message: KernelRequest, transfer?: Transferable[]): void {
     try {
@@ -205,7 +212,13 @@ export class WorkerRuntimeProxy {
     const transfer = collectTransferables(args);
     return new Promise<unknown>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.post({ type: "call", id, method, args }, transfer);
+      try {
+        this.post({ type: "call", id, method, args }, transfer);
+      } catch (err) {
+        // Never sent: no result will come for this call
+        this.pending.delete(id);
+        reject(err);
+      }
     });
   }
 
