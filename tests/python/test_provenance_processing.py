@@ -397,3 +397,40 @@ def test_erase_is_recorded_and_replayed(fresh_bootstrap):
     activity = _activity_producing(bs, new_oid)
     assert activity["call"]["operation"]["id"] == "sigima.image.erase"
     assert bs.replay_activity(activity["activity_id"])["verdict"] == "exact"
+
+
+OPTIONAL_PARAMETER_FEATURES = (
+    "fft",
+    "magnitude_spectrum",
+    "psd",
+    "image:fft",
+    "image:ifft",
+    "image:magnitude_spectrum",
+    "image:psd",
+    "image:zero_padding",
+)
+
+
+@pytest.mark.parametrize("feature", OPTIONAL_PARAMETER_FEATURES)
+def test_optional_parameter_set_is_the_feature_parameters(fresh_bootstrap, feature):
+    """``SomeParam | None = None`` is the parameter set of the feature."""
+    spec = fresh_bootstrap._CATALOG[feature]
+    contract = fresh_bootstrap._proc._contract_of(spec)
+    assert spec.paramclass is not None
+    assert spec.paramclass is contract.paramclass
+
+
+def test_image_zero_padding_parameters_are_restored():
+    """The parameters of an image zero padding survive saving and reopening."""
+    writer = fresh_runtime()
+    data = np.arange(16 * 16, dtype=float).reshape(16, 16)
+    i0 = writer.add_image_from_array("I0", data, width=16, height=16)
+    params = {"strategy": "custom", "rows": 3, "cols": 2}
+    (i1,) = writer.apply_feature("image:zero_padding", [i0], params=params)
+    assert writer._MODEL.get(i1).data.shape == (19, 18)
+    expected = writer.get_last_processing(i1)["values"]
+    assert {k: expected[k] for k in params} == params
+    reader, oid_of = reopen(writer)
+    record = reader.get_last_processing(oid_of(i1))
+    assert record["unavailable_reason"] is None
+    assert record["values"] == expected

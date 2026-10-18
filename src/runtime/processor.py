@@ -26,6 +26,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+import types
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -687,6 +688,10 @@ def _is_image_list_type(annot: Any) -> bool:
     return False
 
 
+# Origins of ``typing.Union`` and of ``X | Y`` evaluated at runtime
+_UNION_ORIGINS = (typing.Union, types.UnionType)
+
+
 def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
     """Return the DataSet parameter class of *func*, if any."""
     try:
@@ -700,6 +705,12 @@ def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
         annot = hints.get(p.name, p.annotation)
         if isinstance(annot, str):
             annot = func_globals.get(annot, annot)
+        # An optional parameter set (``SomeParam | None = None``) is still one
+        members = typing.get_args(annot)
+        if type(None) in members and typing.get_origin(annot) in _UNION_ORIGINS:
+            others = [member for member in members if member is not type(None)]
+            if len(others) == 1:
+                annot = others[0]
         if (
             _is_signal_type(annot)
             or _is_signal_list_type(annot)
@@ -957,7 +968,7 @@ def _build_catalog_for_kind(
             pattern=contract.pattern,
             icon=icon,
             operand_label=override.operand_label,
-            paramclass=_extract_paramclass(func),
+            paramclass=contract.paramclass or _extract_paramclass(func),
             func=func,
             object_kind=kind,
             output_kind=contract.outputs[0].kind,
