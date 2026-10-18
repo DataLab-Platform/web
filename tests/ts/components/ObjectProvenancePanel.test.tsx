@@ -120,6 +120,42 @@ describe("formatParameterValue", () => {
 });
 
 describe("ObjectProvenancePanel", () => {
+  it("names old records by their function and shows their issues", async () => {
+    const old = activity({
+      activity_id: "legacy1",
+      origin: "legacy_metadata",
+      edition: null,
+      finished_at: null,
+      operation: null,
+      parameters: null,
+      inputs: [],
+      input_count: 0,
+      outputs: [],
+      legacy: {
+        record: { func_name: "moving_average", pattern: "1-to-1" },
+        parameters: { n: 5 },
+        issues: ["unavailable_input", "version_mismatch"],
+      },
+    });
+    const runtime = {
+      describeObjectProvenance: vi.fn(async () =>
+        description({ production: null, legacy: [old] }),
+      ),
+      replayActivity: vi.fn(),
+    } as unknown as RuntimeApi;
+    render(
+      <ObjectProvenancePanel runtime={runtime} oid="s2" refreshNonce={0} />,
+    );
+    expect(await screen.findByText("moving_average")).toBeTruthy();
+    expect(screen.getByText("n")).toBeTruthy();
+    expect(screen.getByTestId("provenance-legacy-issues").textContent).toBe(
+      "Old record: a source object is no longer in the workspace, " +
+        "the workspace was saved by another version",
+    );
+    expect(screen.queryByText("Unknown operation")).toBeNull();
+    expect(screen.queryByText("Verify this step")).toBeNull();
+  });
+
   it("consults, expands an input and checks the data on request", async () => {
     const describeObjectProvenance = vi.fn(
       async (

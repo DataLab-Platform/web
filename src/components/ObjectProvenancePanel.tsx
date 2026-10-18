@@ -174,7 +174,62 @@ export function editionName(edition: unknown): string {
 function operationTitle(activity: ProvenanceActivity): string {
   if (activity.operation) return activity.operation.id;
   const name = (activity.implementation ?? {}).python_name;
-  return typeof name === "string" ? name : t("Unknown operation");
+  if (typeof name === "string") return name;
+  // A record of an old workspace only names the function it applied.
+  const record = activity.legacy?.record;
+  const funcName =
+    record && typeof record === "object"
+      ? (record as Record<string, unknown>).func_name
+      : undefined;
+  return typeof funcName === "string" && funcName
+    ? funcName
+    : t("Unknown operation");
+}
+
+/** Readable text of an issue found in a record of an old workspace. */
+function legacyIssueText(issue: string): string {
+  switch (issue) {
+    case "missing_ancestry":
+      return t("the source objects are not recorded");
+    case "unavailable_input":
+      return t("a source object is no longer in the workspace");
+    case "unsupported_operation":
+      return t("the processing is unknown to this application");
+    case "pattern_unknown":
+      return t("the kind of processing is unknown");
+    case "parameters_unreadable":
+      return t("the parameters cannot be read");
+    case "result_not_identified":
+      return t("the result of the analysis is not identified");
+    case "output_not_observed":
+      return t("the object could not be read");
+    case "record_unreadable":
+      return t("the record cannot be read");
+    case "version_unknown":
+      return t("the version that saved the workspace is unknown");
+    case "version_mismatch":
+      return t("the workspace was saved by another version");
+    default:
+      return issue;
+  }
+}
+
+/** Issues and parameters of a record of an old workspace. */
+function legacyDetails(activity: ProvenanceActivity): {
+  issues: string[];
+  parameters: [string, unknown][];
+} {
+  const legacy = activity.legacy ?? {};
+  const issues = Array.isArray(legacy.issues)
+    ? legacy.issues.filter(
+        (issue): issue is string => typeof issue === "string",
+      )
+    : [];
+  const parameters =
+    legacy.parameters && typeof legacy.parameters === "object"
+      ? Object.entries(legacy.parameters as Record<string, unknown>)
+      : [];
+  return { issues, parameters };
 }
 
 interface Props {
@@ -397,7 +452,9 @@ function ActivityView({
   trail: string[];
   shared: Shared;
 }) {
-  const parameters = Object.entries(activity.parameters ?? {});
+  const legacy = legacyDetails(activity);
+  const recorded = Object.entries(activity.parameters ?? {});
+  const parameters = recorded.length > 0 ? recorded : legacy.parameters;
   const when = shortDate(activity.finished_at);
   return (
     <div className="provenance-activity" data-testid="provenance-activity">
@@ -425,6 +482,19 @@ function ActivityView({
         </table>
       )}
       {activity.no_result && <div>{t("Nothing was found (not an error)")}</div>}
+      {activity.origin === "legacy_metadata" && (
+        <div
+          className="provenance-muted"
+          data-testid="provenance-legacy-issues"
+        >
+          {t("Old record: {issues}", {
+            issues:
+              legacy.issues.length > 0
+                ? legacy.issues.map(legacyIssueText).join(", ")
+                : t("no issue"),
+          })}
+        </div>
+      )}
       <ol className="provenance-inputs" aria-label={t("Inputs")}>
         {activity.inputs.map((input) => (
           <InputView
