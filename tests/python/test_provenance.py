@@ -249,9 +249,13 @@ def test_refusals_happen_before_any_computation(fresh_bootstrap, counted_apply):
     assert bs.replay_activity(act_id)["eligibility"] == "unsupported_contract"
     operation["contract_version"] = 1
 
+    # Same data, other ROI: verified on a copy with the recorded ROI.
     bs.set_signal_roi(src, [{"xmin": 0.5, "xmax": 2.5, "title": "range"}])
-    assert bs.replay_activity(act_id)["eligibility"] == "input_changed"
+    report = bs.replay_activity(act_id)
+    assert (report["eligibility"], report["verdict"]) == ("ready", "exact")
+    assert bs._MODEL.get(src).roi is not None
     bs._MODEL.get(src).roi = None
+    count = counted_apply["count"]
 
     obj = bs._MODEL.get(src)
     obj.set_xydata(obj.x, obj.y + 1.0)

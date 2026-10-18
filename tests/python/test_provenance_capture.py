@@ -153,6 +153,31 @@ def test_analyses_are_verified(fresh_bootstrap):
     ledger(bs).validate()
 
 
+def test_detection_rois_keep_the_analysis_verifiable(fresh_bootstrap):
+    """ROIs created on the input by a detection do not refuse its verification;
+    the objects named by the activity are those its verification reads."""
+    from sigima.tests.data import create_peak_image  # noqa: PLC0415
+
+    bs = fresh_bootstrap
+    peaks = create_peak_image()
+    image = bs.add_image_from_array("peaks", peaks.data, "", "", "")
+    other = add_image(bs, "other")
+    result = asyncio.run(
+        bs.run_image_analysis(image, "peak_detection", {"create_rois": True})
+    )
+    assert result is not None
+    assert bs._MODEL.get(image).roi is not None
+    activity = ledger(bs).activities[-1]
+    assert activity["call"]["operation"]["id"] == "sigima.image.peak_detection"
+    assert inputs_of(bs, activity)[0].get("roi") is None
+    assert bs.activity_object_ids(activity["activity_id"]) == [image]
+    assert other not in bs.activity_object_ids(activity["activity_id"])
+    report = bs.replay_activity(activity["activity_id"])
+    assert (report["eligibility"], report["verdict"]) == ("ready", "exact")
+    assert bs._MODEL.get(image).roi is not None
+    assert bs.activity_object_ids("unknown") == []
+
+
 FAMILIES = [
     "sigima.signal.average",
     "sigima.signal.signals_to_image",
