@@ -4965,6 +4965,33 @@ def replay_activity(activity_id: str) -> dict[str, Any]:
     return _PROVENANCE.verify(activity_id, execute_candidate)
 
 
+def activity_object_ids(activity_id: str) -> list[str]:
+    """Return the ids of the live objects named by a recorded activity.
+
+    These are the objects of its input states and of its recorded outputs
+    (result states, objects holding analysis results): the only arrays a
+    verification of the activity reads (see :func:`replay_activity`).
+    """
+    if not _PROVENANCE.available:
+        return []
+    ledger = _PROVENANCE.ledger
+    try:
+        activity = ledger.activity(activity_id)
+    except KeyError:
+        return []
+    states = [item["binding"]["state_id"] for item in activity["call"]["inputs"]]
+    states += [o["state_id"] for o in activity["outputs"] if "state_id" in o]
+    uuids = {ledger.states[state_id]["object_uuid"] for state_id in states}
+    uuids |= {
+        o["artifact"]["object_uuid"] for o in activity["outputs"] if "artifact" in o
+    }
+    return [
+        oid
+        for oid, entry in _MODEL._objects.items()  # noqa: SLF001
+        if _object_uuid(entry.obj) in uuids
+    ]
+
+
 def _name_objects(node: Any, oid_of: dict[str, str]) -> None:
     """Add the current id and title of every object named in a description.
 
@@ -7762,6 +7789,7 @@ __all__ = [
     "bridge_reapply_last_processing",
     "get_provenance_ledger",
     "replay_activity",
+    "activity_object_ids",
     "describe_object_provenance",
     "describe_provenance_activity",
     "workspace_has_provenance",

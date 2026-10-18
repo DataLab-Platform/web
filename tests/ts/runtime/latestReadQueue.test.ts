@@ -211,4 +211,38 @@ describe("DataLabRuntime latest-read queue", () => {
     expect(calls).not.toContain("detach_object_array");
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
   });
+
+  it("pages in only the objects of the activity verified", async () => {
+    const calls: string[] = [];
+    const attached: unknown[] = [];
+    const runtime = makeRuntime((name, kwargs) => {
+      calls.push(name);
+      if (name === "activity_object_ids") {
+        expect(kwargs.activity_id).toBe("act-1");
+        return ["source", "result", "resident"];
+      }
+      if (name === "attach_object_array") attached.push(kwargs.oid);
+      if (name === "release_object_array") return true;
+      return name === "replay_activity" ? { verdict: "exact" } : null;
+    });
+    const get = vi.fn(async () => new Uint8Array([1]));
+    runtime.storageMode = "disk";
+    runtime.opfsStore = { get };
+    for (const oid of ["source", "result", "other-1", "other-2"]) {
+      runtime.spilledOids.add(oid);
+    }
+
+    await expect(
+      runtime.callPy("replay_activity", { activity_id: "act-1" }),
+    ).resolves.toEqual({ verdict: "exact" });
+
+    expect(attached).toEqual(["source", "result"]);
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(calls.indexOf("attach_object_array")).toBeLessThan(
+      calls.indexOf("replay_activity"),
+    );
+    for (const oid of ["source", "result", "other-1", "other-2"]) {
+      expect(runtime.spilledOids.has(oid)).toBe(true);
+    }
+  });
 });

@@ -2245,10 +2245,14 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  (e.g. workspace serialisation). */
   private static readonly NEEDS_ALL_RESIDENT: ReadonlySet<string> = new Set([
     "save_workspace_to_bytes",
-    "replay_activity",
     "export_workspace_capsule",
     "export_referenced_capsule",
   ]);
+  /** Calls on one recorded activity (``activity_id`` kwarg) that read the
+   *  arrays of the objects it names only (inputs and recorded outputs). */
+  private static readonly NEEDS_ACTIVITY_OBJECTS: ReadonlySet<string> = new Set(
+    ["replay_activity"],
+  );
   /** Calls that replace the whole model with freshly-loaded objects, so
    *  the on-disk store must be reset and every new object re-spilled. */
   private static readonly REPLACES_MODEL: ReadonlySet<string> = new Set([
@@ -2521,6 +2525,11 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     let targets: string[];
     if (DataLabRuntime.NEEDS_ALL_RESIDENT.has(name)) {
       targets = Array.from(this.spilledOids);
+    } else if (DataLabRuntime.NEEDS_ACTIVITY_OBJECTS.has(name)) {
+      const oids = await this.invokePy<string[]>("activity_object_ids", {
+        activity_id: kwargs.activity_id,
+      });
+      targets = oids.filter((oid) => this.spilledOids.has(oid));
     } else {
       targets = DataLabRuntime.referencedOids(kwargs).filter((oid) =>
         this.spilledOids.has(oid),
