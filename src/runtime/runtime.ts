@@ -2287,6 +2287,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  in bootstrap.py), not as a Python traceback to format. */
   private static readonly REFUSABLE: ReadonlySet<string> = new Set([
     "apply_feature",
+    "check_feature_inputs",
     "preview_feature",
     "apply_processing",
     "reapply_last_processing",
@@ -2569,16 +2570,24 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     }
   }
 
-  /** Best-effort re-spill on the error path (never throws). */
+  /** Best-effort re-spill on the error path (never throws). Objects that a
+   *  failed call produced before raising (e.g. the results of a first group)
+   *  stay in the workspace: they are spilled as on success. */
   private async diskGuardReleaseFailsafe(
     name: string,
     pagedIn: string[],
   ): Promise<void> {
-    void name;
     for (const oid of pagedIn) {
       if (this.spilledOids.has(oid)) continue;
       try {
         await this.releaseDirect(oid);
+      } catch {
+        // Swallow — we're already on an error path.
+      }
+    }
+    if (DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
+      try {
+        await this.spillAllResidentDirect();
       } catch {
         // Swallow — we're already on an error path.
       }
@@ -4359,6 +4368,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     params: Record<string, unknown> | null = null,
     groupIds: string[] = [],
     previewToken: string | null = null,
+    commandId: string | null = null,
   ): Promise<string[]> {
     return (await this.callPy("apply_feature", {
       feature_id: featureId,
@@ -4367,7 +4377,26 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       params,
       group_ids: groupIds,
       preview_token: previewToken,
+      command_id: commandId,
     })) as string[];
+  }
+
+  /** Refuse, before computing anything, inputs that {@link applyFeature}
+   *  would refuse (e.g. X alignment): a command applied one object at a
+   *  time is then applied entirely or not at all. Throws
+   *  {@link ScientificRefusalError} on refusal. */
+  async checkFeatureInputs(
+    featureId: string,
+    sourceIds: string[],
+    operandId: string | null = null,
+    params: Record<string, unknown> | null = null,
+  ): Promise<void> {
+    await this.callPy("check_feature_inputs", {
+      feature_id: featureId,
+      source_ids: sourceIds,
+      operand_id: operandId,
+      params,
+    });
   }
 
   // ------------------------------------------------------------------

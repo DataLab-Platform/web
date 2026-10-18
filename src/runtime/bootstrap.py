@@ -5016,8 +5016,12 @@ def apply_feature(
     params: dict[str, Any] | None = None,
     group_ids: list[str] | None = None,
     preview_token: str | None = None,
+    command_id: str | None = None,
 ) -> list[str]:
     """Apply *feature_id* to *source_ids* and return the new object ids.
+
+    *command_id* identifies the user command in provenance, when it is applied
+    in several calls (one per object); by default, each call is a command.
 
     Result placement:
         * ``1_to_1`` / ``2_to_1``: each result goes into the same group as its
@@ -5061,6 +5065,7 @@ def apply_feature(
             operand,
             params,
         )
+    command_id = command_id or str(uuid.uuid4())
     # Snapshot the source ID list *before* running the computation so
     # title patching is robust against any concurrent model mutation.
     src_ids_snapshot = list(source_ids)
@@ -5070,7 +5075,12 @@ def apply_feature(
     if result is None:
         param = _PROCESSOR.build_param_instance(spec, params)
         pendings = _begin_provenance(
-            spec, param, sources, src_ids_snapshot, operand=operand
+            spec,
+            param,
+            sources,
+            src_ids_snapshot,
+            command_id=command_id,
+            operand=operand,
         )
         ctx = _proc.ApplyContext(
             feature=spec,
@@ -5081,7 +5091,9 @@ def apply_feature(
         )
         result = _PROCESSOR.apply(ctx, source_ids)
     else:
-        pendings = _begin_provenance(spec, result.param, sources, src_ids_snapshot)
+        pendings = _begin_provenance(
+            spec, result.param, sources, src_ids_snapshot, command_id=command_id
+        )
     new_ids: list[str] = []
     for source_oid, dst in result.items:
         # Resolve the placeholder-based title produced by Sigima
@@ -5243,15 +5255,22 @@ def _apply_feature_grouped(
             "params": dict(params) if params else {},
         }
 
-    if spec.pattern == "n_to_1":
-        # One destination group; aggregate each source group separately.
-        dst_gid = _MODEL.create_group(
-            spec.object_kind, name=f"{func_name}({','.join(group_ids)})"
+    # Every group is checked before any is computed: a refused group (e.g. X
+    # alignment) leaves the workspace unchanged.
+    members = [(gid, _members(gid)) for gid in group_ids]
+    members = [(gid, ids) for gid, ids in members if ids]
+    for _gid, member_ids in members:
+        _PROCESSOR.check_inputs(
+            spec,
+            [_MODEL.get(oid) for oid in member_ids],
+            operand,
+            _PROCESSOR.build_param_instance(spec, params),
         )
-        for gid in group_ids:
-            member_ids = _members(gid)
-            if not member_ids:
-                continue
+    if spec.pattern == "n_to_1":
+        # One destination group, created with the first result; aggregate each
+        # source group separately.
+        dst_gid = None
+        for gid, member_ids in members:
             member_objs = [_MODEL.get(oid) for oid in member_ids]
             param = _PROCESSOR.build_param_instance(spec, params)
             pendings.update(
@@ -5267,14 +5286,15 @@ def _apply_feature_grouped(
                 param_instance=param,
             )
             result = _PROCESSOR.apply(ctx, member_ids)
+            if dst_gid is None:
+                dst_gid = _MODEL.create_group(
+                    spec.object_kind, name=f"{func_name}({','.join(group_ids)})"
+                )
             for source_oid, dst in result.items:
                 _place(source_oid, dst, member_ids, dst_gid, result.contexts)
     else:
         # 1_to_1 / 2_to_1: one result group per source group.
-        for gid in group_ids:
-            member_ids = _members(gid)
-            if not member_ids:
-                continue
+        for gid, member_ids in members:
             member_objs = [_MODEL.get(oid) for oid in member_ids]
             param = _PROCESSOR.build_param_instance(spec, params)
             pendings.update(
@@ -5299,6 +5319,38 @@ def _apply_feature_grouped(
             for source_oid, dst in result.items:
                 _place(source_oid, dst, member_ids, dst_gid, result.contexts)
     return new_ids
+
+
+def check_feature_inputs(
+    feature_id: str,
+    source_ids: list[str],
+    operand_id: str | None = None,
+    params: dict[str, Any] | None = None,
+) -> None:
+    """Refuse, before computing anything, inputs that *feature_id* refuses.
+
+    The front-end applies a feature to several objects one call at a time (so
+    that it can be cancelled): checking every input first applies a refused
+    command entirely or not at all, as a single call does.
+
+    Raises:
+        Exception: The refusal raised by Sigima (e.g. X alignment), as
+         :func:`apply_feature` would raise it.
+    """
+    spec = _full_catalog_with_plugins().get(feature_id)
+    if spec is None:
+        raise ValueError(f"Unknown feature: {feature_id!r}")
+    if hasattr(source_ids, "to_py"):
+        source_ids = source_ids.to_py()
+    if hasattr(params, "to_py"):
+        params = params.to_py()
+    params = _proc.filter_transient_params(spec, params)
+    _PROCESSOR.check_inputs(
+        spec,
+        [_MODEL.get(oid) for oid in source_ids],
+        _MODEL.get(operand_id) if operand_id else None,
+        _PROCESSOR.build_param_instance(spec, params),
+    )
 
 
 # Per-object record of the last processing that produced it.  Keyed by the
@@ -5529,6 +5581,7 @@ def _refusable(func):
 
 
 bridge_apply_feature = _refusable(apply_feature)
+bridge_check_feature_inputs = _refusable(check_feature_inputs)
 bridge_preview_feature = _refusable(preview_feature)
 bridge_apply_processing = _refusable(apply_processing)
 bridge_reapply_last_processing = _refusable(reapply_last_processing)

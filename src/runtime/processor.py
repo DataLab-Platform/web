@@ -1193,6 +1193,29 @@ class BaseProcessor:
         result.param = instance
         return result
 
+    def check_inputs(
+        self,
+        spec: FeatureSpec,
+        sources: list[Any],
+        operand: Any | None,
+        instance: gds.DataSet | None,
+    ) -> None:
+        """Refuse, without computing anything, inputs that :meth:`apply` refuses.
+
+        Operations whose contract aligns their inputs on X are prepared by
+        Sigima, which raises on a refused alignment: preparing every execution
+        of a command first lets the caller apply it in several calls without
+        committing part of it.
+        """
+        contract = _x_alignment_contract(spec)
+        if contract is None:
+            return
+        if spec.pattern == "2_to_1" and operand is not None:
+            for src in sources:
+                _prepare(contract, [src, operand], instance)
+        elif spec.pattern == "n_to_1":
+            _prepare(contract, list(sources), instance)
+
     def build_param_instance(
         self, spec: FeatureSpec, params: dict[str, Any] | None
     ) -> gds.DataSet | None:

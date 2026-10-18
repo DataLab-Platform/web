@@ -218,6 +218,85 @@ def test_refusal_comes_before_any_computation(fresh_bootstrap, monkeypatch):
     assert len(calls) == 1
 
 
+def test_inputs_are_checked_before_a_command_applied_per_source(fresh_bootstrap):
+    """Checking the inputs refuses a command without computing anything."""
+    from sigima.proc.contracts import XAlignmentError
+
+    bs = fresh_bootstrap
+    operand = add(bs, [0, 1, 2], [0, 1, 2], "operand")
+    covered = add(bs, [0.5, 1, 1.5], [0, 1, 2], "covered")
+    uncovered = add(bs, [0, 1, 3], [0, 1, 2], "uncovered")
+    tree = bs.get_panel_tree("signal")
+    with pytest.raises(XAlignmentError):
+        bs.check_feature_inputs("difference", [covered, uncovered], operand)
+    refused = bs.bridge_check_feature_inputs(
+        "difference", [covered, uncovered], operand_id=operand
+    )
+    assert refused["refused"]["code"] == "insufficient_coverage"
+    assert bs.bridge_check_feature_inputs(
+        "difference", [covered], operand_id=operand
+    ) == {"value": None}
+    assert bs.get_panel_tree("signal") == tree
+    assert bs._PROVENANCE.ledger.activities == ()
+
+
+def test_command_applied_per_source_is_one_command(fresh_bootstrap):
+    """Calls sharing a command id are recorded as one command."""
+    bs = fresh_bootstrap
+    operand = add(bs, [0, 1, 2], [0, 1, 2], "operand")
+    sources = [add(bs, [0, 1, 2], [k, k, k], f"S{k}") for k in range(2)]
+    for source in sources:
+        bs.apply_feature("difference", [source], operand_id=operand, command_id="c1")
+    bs.apply_feature("difference", [sources[0]], operand_id=operand)
+    first, second, third = bs._PROVENANCE.ledger.activities
+    assert first["command_id"] == second["command_id"] == "c1"
+    assert third["command_id"] not in (None, "c1")
+
+
+def test_refused_group_creates_nothing(fresh_bootstrap):
+    """Group-exclusive: a refused group stops the command before any group."""
+    from sigima.proc.contracts import XAlignmentError
+
+    bs = fresh_bootstrap
+    panel = bs._MODEL.panel("signal")
+    operand = add(bs, [0, 1, 2], [0, 1, 2], "operand")
+    covered = add(bs, [0.5, 1, 1.5], [0, 1, 2], "covered")
+    g1 = panel.find_group_of(covered).gid
+    g2 = bs._MODEL.create_group("signal", name="second")
+    uncovered = bs._MODEL.add_object(
+        "signal",
+        bs._MODEL.get(add(bs, [0, 1, 3], [0, 1, 2], "uncovered")).copy(),
+        group_id=g2,
+    )
+    tree = bs.get_panel_tree("signal")
+    with pytest.raises(XAlignmentError):
+        bs.apply_feature(
+            "difference",
+            [covered, uncovered],
+            operand_id=operand,
+            group_ids=[g1, g2],
+        )
+    assert bs.get_panel_tree("signal") == tree
+    assert bs._PROVENANCE.ledger.activities == ()
+
+
+def test_failed_aggregation_creates_no_group(fresh_bootstrap, monkeypatch):
+    """Group-exclusive n-to-1: the result group is created with its first result."""
+    bs = fresh_bootstrap
+    panel = bs._MODEL.panel("signal")
+    ids = [add(bs, [0, 1, 2], [k, k, k], f"S{k}") for k in range(2)]
+    gid = panel.find_group_of(ids[0]).gid
+    groups = len(bs.get_panel_tree("signal")["groups"])
+
+    def failing(*_args, **_kwargs):
+        raise RuntimeError("computation failed")
+
+    monkeypatch.setattr(bs._PROCESSOR, "apply", failing)
+    with pytest.raises(RuntimeError):
+        bs.apply_feature("average", ids, group_ids=[gid])
+    assert len(bs.get_panel_tree("signal")["groups"]) == groups
+
+
 def test_bridge_returns_refusals_as_data(fresh_bootstrap):
     """The JS bridge gets the refusal code and reason, not a traceback to format."""
     bs = fresh_bootstrap

@@ -1549,6 +1549,9 @@ export default function App() {
           ? previewToken
           : null;
       setBusy(true);
+      // Results already inserted in the workspace, shown even if a later
+      // object of the command fails.
+      const produced: string[] = [];
       try {
         // Cooperative cancellation: when a 1-to-1 / 2-to-1 feature is applied
         // to *several* selected objects, run it one object at a time through
@@ -1566,18 +1569,34 @@ export default function App() {
           (feature.pattern === "1_to_1" || feature.pattern === "2_to_1");
         let newIds: string[];
         if (cooperative) {
+          // One command, applied one object at a time: every input is checked
+          // first (a refused pair computes nothing, as in a single call) and
+          // provenance records the executions under a single command.
+          if (feature.pattern === "2_to_1") {
+            await runtime.checkFeatureInputs(
+              feature.id,
+              sourceIds,
+              operandId,
+              values,
+            );
+          }
+          const commandId = crypto.randomUUID();
           const { results } = await runWithProgress<string[]>({
             title: t("Computing: {feature}", { feature: feature.label }),
             total: sourceIds.length,
-            step: async (i) =>
-              runtime.applyFeature(
+            step: async (i) => {
+              const ids = await runtime.applyFeature(
                 feature.id,
                 [sourceIds[i]],
                 operandId,
                 values,
                 [],
                 null,
-              ),
+                commandId,
+              );
+              produced.push(...ids);
+              return ids;
+            },
           });
           newIds = results.flat();
           if (newIds.length === 0) return; // cancelled before any result
@@ -1615,6 +1634,14 @@ export default function App() {
           await refresh(lastId);
         }
       } catch (err) {
+        if (produced.length > 0) {
+          const lastProduced = produced[produced.length - 1];
+          if (feature.output_kind !== feature.object_kind) {
+            await refreshPanelKind(feature.output_kind, lastProduced);
+          } else {
+            await refresh(lastProduced);
+          }
+        }
         // A computation raising in Sigima/Pyodide (e.g. gamma correction on
         // an image with negative values) is a *processing* problem, not a
         // crash: surface the full traceback in a copy-pasteable modal
