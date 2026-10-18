@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "../i18n/translate";
-import { reportDetails } from "./ProvenanceVerdict";
+import { reportDetails, reportSummary } from "./ProvenanceVerdict";
 import type {
   CapsuleDiff,
   CapsuleInspection,
@@ -1168,9 +1168,7 @@ function ReplayTab(
                   <td>{activity.call.operation?.id ?? t("opaque")}</td>
                   <td>
                     <span data-testid="capsule-replay-verdict">
-                      {report
-                        ? `${report.verdict} (${report.eligibility})`
-                        : ""}
+                      {report ? reportSummary(report) : ""}
                     </span>
                     {report && reportDetails(report).length > 0 && (
                       <ul

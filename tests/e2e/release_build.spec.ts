@@ -65,7 +65,7 @@ test.describe("release build", () => {
       await expect(verdict).not.toHaveText("");
       verdicts.push((await verdict.textContent()) ?? "");
     }
-    expect(verdicts.some((v) => v.startsWith("exact"))).toBe(true);
+    expect(verdicts.some((v) => v.startsWith("Exact"))).toBe(true);
     expect(verdicts.some((v) => v.startsWith("different"))).toBe(false);
     await closeDialog(page);
 

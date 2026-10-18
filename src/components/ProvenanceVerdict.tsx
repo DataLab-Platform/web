@@ -36,6 +36,33 @@ export function verdictText(verdict: string): string {
   }
 }
 
+/** Translated text of the eligibility code of a verification report. */
+export function eligibilityText(eligibility: string): string {
+  switch (eligibility) {
+    case "ready":
+      return t("ready");
+    case "missing_input":
+      return t("input missing");
+    case "input_changed":
+      return t("input changed");
+    case "unsupported_operation":
+      return t("operation not supported");
+    case "unsupported_contract":
+      return t("operation version not supported");
+    case "unsupported_context":
+      return t("context not supported");
+    case "invalid_parameters":
+      return t("invalid parameters");
+    default:
+      return eligibility;
+  }
+}
+
+/** Verdict and eligibility of a report, e.g. ``Exact (ready)``. */
+export function reportSummary(report: ProvenanceReport): string {
+  return `${verdictText(report.verdict)} (${eligibilityText(report.eligibility)})`;
+}
+
 export function ProvenanceVerdict({ report }: { report: ProvenanceReport }) {
   const details = reportDetails(report);
   const environment = report.environment as { match?: string } | undefined;
@@ -43,7 +70,9 @@ export function ProvenanceVerdict({ report }: { report: ProvenanceReport }) {
     <div className="provenance-verdict" data-testid="provenance-verdict">
       <div>
         {t("Verification: {verdict}", { verdict: verdictText(report.verdict) })}{" "}
-        <span className="provenance-muted">({report.eligibility})</span>
+        <span className="provenance-muted">
+          ({eligibilityText(report.eligibility)})
+        </span>
       </div>
       {details.length > 0 && (
         <ul className="provenance-details">

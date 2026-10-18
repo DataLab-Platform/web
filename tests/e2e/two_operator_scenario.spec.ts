@@ -78,9 +78,9 @@ test.describe("two-operator scenario, operator B", () => {
       await expect(verdict).not.toHaveText("");
       verdicts.push((await verdict.textContent()) ?? "");
     }
-    expect(verdicts.some((v) => v.startsWith("exact"))).toBe(true);
+    expect(verdicts.some((v) => v.startsWith("Exact"))).toBe(true);
     expect(verdicts.some((v) => v.startsWith("different"))).toBe(false);
-    const exact = verdicts.findIndex((v) => v.startsWith("exact"));
+    const exact = verdicts.findIndex((v) => v.startsWith("Exact"));
     const reportPath = await download(
       page,
       () => rows.nth(exact).getByTestId("capsule-save-report").click(),
