@@ -277,7 +277,7 @@ def test_registry_revision_is_checked_not_trusted():
 
 def test_browser_registry_limits_are_those_of_the_capsule_client():
     """The browser reads registry responses with DataLab-Capsule's limits."""
-    from datalab_capsule import registry, registry_client
+    from datalab_capsule import archive, registry, registry_client
 
     source = (
         Path(__file__).parents[2] / "src" / "storage" / "capsuleRegistry.ts"
@@ -291,4 +291,5 @@ def test_browser_registry_limits_are_those_of_the_capsule_client():
         "listing": registry_client.MAX_LISTING_BYTES,
         "manifest": registry.MAX_REGISTRY_MANIFEST_BYTES,
         "reply": registry_client.MAX_REPLY_BYTES,
+        "attachment": archive.MAX_ATTACHMENT_BYTES,
     }

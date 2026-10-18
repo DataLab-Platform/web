@@ -162,6 +162,11 @@ describe("registry response limits", () => {
     await expect(
       client.getAttachment(FP, "p.txt", "0".repeat(64), 100),
     ).rejects.toThrow("exceeds 100 bytes");
+    // A manifest declaring a huge attachment does not raise the limit
+    vi.stubGlobal("fetch", huge(REGISTRY_LIMITS.attachment));
+    await expect(
+      client.getAttachment(FP, "p.txt", "0".repeat(64), 2 ** 40),
+    ).rejects.toThrow(`exceeds ${REGISTRY_LIMITS.attachment} bytes`);
   });
 
   it("keeps the status text when an error body is too large", async () => {

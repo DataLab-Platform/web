@@ -92,6 +92,8 @@ export const REGISTRY_LIMITS = {
   manifest: 8_388_608,
   /** Status, publication result or error (``MAX_REPLY_BYTES``). */
   reply: 65_536,
+  /** An attachment (``archive.MAX_ATTACHMENT_BYTES``). */
+  attachment: 16_777_216,
 } as const;
 
 /** Read a response body, refusing it as soon as it exceeds *limit* bytes. */
@@ -255,7 +257,12 @@ export class RegistryClient {
     const response = await this.request(
       `${RegistryClient.revisionPath(fingerprint)}/attachments/${encodeURIComponent(name)}`,
     );
-    const data = await readLimited(response, size);
+    // The size comes from a checked manifest, but a manifest may declare any
+    // size: never read more than an attachment may hold.
+    const data = await readLimited(
+      response,
+      Math.min(size, REGISTRY_LIMITS.attachment),
+    );
     if (data.byteLength !== size || (await sha256Hex(data)) !== sha256) {
       throw new Error(
         t(
