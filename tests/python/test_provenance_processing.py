@@ -345,3 +345,55 @@ def test_desktop_files_are_described_and_applied_again():
     activity = bs._PROVENANCE.ledger.activities[-1]
     assert activity["context"]["x_alignment"] == RULE
     assert bs.replay_activity(activity["activity_id"])["verdict"] == "exact"
+
+
+def _activity_producing(bs, oid: str) -> dict:
+    """Return the recorded activity that produced object *oid*."""
+    uuid = bs._object_uuid(bs._MODEL.get(oid))
+    ledger = bs._PROVENANCE.ledger
+    for activity in ledger.activities:
+        for output in activity["outputs"]:
+            if ledger.states[output["state_id"]]["object_uuid"] == uuid:
+                return activity
+    raise AssertionError(f"No activity produced {oid}")
+
+
+@pytest.mark.parametrize("merged", [False, True])
+def test_roi_extraction_is_recorded_and_replayed(fresh_bootstrap, merged):
+    """Signal and image ROI extractions are recorded as one command."""
+    bs = fresh_bootstrap
+    x = np.linspace(0, 10, 128)
+    sig = bs.add_signal_from_arrays("raw", x, np.sin(x))
+    bs.set_signal_roi(sig, [{"xmin": 1.0, "xmax": 4.0}, {"xmin": 6.0, "xmax": 9.0}])
+    data = np.arange(64 * 64, dtype=float).reshape(64, 64)
+    ima = bs.add_image_from_array("img", data, width=64, height=64)
+    bs.set_image_roi(
+        ima,
+        [
+            {"geometry": "rectangle", "x0": 4, "y0": 4, "dx": 20, "dy": 20},
+            {"geometry": "rectangle", "x0": 32, "y0": 32, "dx": 20, "dy": 20},
+        ],
+    )
+    for out_ids in (
+        bs.extract_signal_rois(sig, merged),
+        bs.extract_image_rois(ima, merged),
+    ):
+        assert len(out_ids) == (1 if merged else 2)
+        activities = [_activity_producing(bs, oid) for oid in out_ids]
+        assert len({a["command_id"] for a in activities}) == 1
+        for activity in activities:
+            report = bs.replay_activity(activity["activity_id"])
+            assert report["verdict"] == "exact", report
+
+
+def test_erase_is_recorded_and_replayed(fresh_bootstrap):
+    """Erasing an area of an image is recorded."""
+    bs = fresh_bootstrap
+    data = np.arange(64 * 64, dtype=float).reshape(64, 64)
+    src = bs.add_image_from_array("img", data, width=64, height=64)
+    new_oid = bs.erase_image_area(
+        src, [{"geometry": "rectangle", "x0": 8, "y0": 8, "dx": 16, "dy": 16}]
+    )
+    activity = _activity_producing(bs, new_oid)
+    assert activity["call"]["operation"]["id"] == "sigima.image.erase"
+    assert bs.replay_activity(activity["activity_id"])["verdict"] == "exact"

@@ -2278,6 +2278,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     "apply_processing",
     "apply_feature",
     "extract_image_rois",
+    "extract_signal_rois",
     "erase_image_area",
     "commit_interactive_fit",
     "add_object_pickled",
@@ -2302,7 +2303,9 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     }
     for (const k of DataLabRuntime.OIDS_KEYS) {
       const v = kwargs[k];
-      if (Array.isArray(v)) {
+      // Some calls accept a single id where a list is expected.
+      if (typeof v === "string") out.push(v);
+      else if (Array.isArray(v)) {
         for (const x of v) if (typeof x === "string") out.push(x);
       }
     }

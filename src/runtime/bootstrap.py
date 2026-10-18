@@ -3851,6 +3851,27 @@ def delete_image_roi_at(oid: str, index: int) -> None:
         obj.roi = new_roi
 
 
+def _add_recorded_result(
+    kind: str,
+    func: Any,
+    obj: Any,
+    param: Any,
+    patch_oid: str,
+    group_id: str | None,
+    command_id: str,
+) -> str:
+    """Compute ``func(obj, param)``, insert the result and record its provenance.
+
+    The input state is recorded before the computation, as for features.
+    """
+    pending = _PROVENANCE.begin(func, param, obj, command_id)
+    result = func(obj, param)
+    patch_title_with_ids(result, [patch_oid])
+    new_oid = _MODEL.add_object(kind, result, group_id=group_id)
+    _complete_provenance(pending, result, None)
+    return new_oid
+
+
 def extract_image_rois(oids, merged: bool) -> list[str]:
     """Extract the ROIs of one or several images into new images.
 
@@ -3885,6 +3906,7 @@ def extract_image_rois(oids, merged: bool) -> list[str]:
 
     panel = _MODEL._panels["image"]  # noqa: SLF001
     out_ids: list[str] = []
+    command_id = str(uuid.uuid4())
     for target_oid in oids:
         obj = _MODEL.get(target_oid)
         src_group_id: str | None = None
@@ -3898,15 +3920,29 @@ def extract_image_rois(oids, merged: bool) -> list[str]:
             single.to_param(roi_src, i) for i, single in enumerate(roi.single_rois)
         ]
         if merged:
-            result = sipi.extract_rois(obj, params)
-            patch_title_with_ids(result, [target_oid])
-            out_ids.append(_MODEL.add_object("image", result, group_id=src_group_id))
+            out_ids.append(
+                _add_recorded_result(
+                    "image",
+                    sipi.extract_rois,
+                    obj,
+                    params,
+                    target_oid,
+                    src_group_id,
+                    command_id,
+                )
+            )
         else:
             for p in params:
-                result = sipi.extract_roi(obj, p)
-                patch_title_with_ids(result, [target_oid])
                 out_ids.append(
-                    _MODEL.add_object("image", result, group_id=src_group_id)
+                    _add_recorded_result(
+                        "image",
+                        sipi.extract_roi,
+                        obj,
+                        p,
+                        target_oid,
+                        src_group_id,
+                        command_id,
+                    )
                 )
     return out_ids
 
@@ -3944,9 +3980,9 @@ def erase_image_area(oid: str, segments: list[dict[str, Any]] | None) -> str:
         src_group_id = panel.find_group_of(oid).gid
     except Exception:
         src_group_id = None
-    result = sipi.erase(obj, params)
-    patch_title_with_ids(result, [oid])
-    return _MODEL.add_object("image", result, group_id=src_group_id)
+    return _add_recorded_result(
+        "image", sipi.erase, obj, params, oid, src_group_id, str(uuid.uuid4())
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -4222,6 +4258,7 @@ def extract_signal_rois(oids, merged: bool) -> list[str]:
     # respective parent.
     panel = _MODEL._panels["signal"]  # noqa: SLF001
     out_ids: list[str] = []
+    command_id = str(uuid.uuid4())
     for target_oid in oids:
         obj = _MODEL.get(target_oid)
         src_group_id: str | None = None
@@ -4235,15 +4272,29 @@ def extract_signal_rois(oids, merged: bool) -> list[str]:
             single.to_param(roi_src, i) for i, single in enumerate(roi.single_rois)
         ]
         if merged:
-            result = sips.extract_rois(obj, params)
-            patch_title_with_ids(result, [target_oid])
-            out_ids.append(_MODEL.add_object("signal", result, group_id=src_group_id))
+            out_ids.append(
+                _add_recorded_result(
+                    "signal",
+                    sips.extract_rois,
+                    obj,
+                    params,
+                    target_oid,
+                    src_group_id,
+                    command_id,
+                )
+            )
         else:
             for p in params:
-                result = sips.extract_roi(obj, p)
-                patch_title_with_ids(result, [target_oid])
                 out_ids.append(
-                    _MODEL.add_object("signal", result, group_id=src_group_id)
+                    _add_recorded_result(
+                        "signal",
+                        sips.extract_roi,
+                        obj,
+                        p,
+                        target_oid,
+                        src_group_id,
+                        command_id,
+                    )
                 )
     return out_ids
 
