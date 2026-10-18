@@ -1692,9 +1692,12 @@ def get_object_stats(oid: str) -> dict[str, Any]:
 # Mirrors :data:`_PLOTLY_ANNOTATIONS_KEY` defined later in the module.
 _HIDDEN_METADATA_KEYS = ("_dlw_creation_stype_", "_dlw_plotly_annotations")
 
+# Identity of an object: provenance refers to it, metadata edits keep it.
+_UUID_METADATA_KEY = "__uuid"
+
 
 def _metadata_visible(key: str) -> bool:
-    if key in _HIDDEN_METADATA_KEYS:
+    if key in _HIDDEN_METADATA_KEYS or key == _UUID_METADATA_KEY:
         return False
     if key.startswith("Geometry_") and key.endswith("_dict"):
         return False
@@ -1823,7 +1826,7 @@ def _metadata_paste_exclusions() -> set[str]:
     """
     from sigima.objects.base import ROI_KEY
 
-    return {ROI_KEY, "__uuid", _LUT_RANGE_KEY} | set(_HIDDEN_METADATA_KEYS)
+    return {ROI_KEY, _UUID_METADATA_KEY, _LUT_RANGE_KEY} | set(_HIDDEN_METADATA_KEYS)
 
 
 def has_metadata_in_clipboard() -> bool:
@@ -2197,7 +2200,10 @@ def delete_object_metadata(oids: list[str], keep_roi: bool = False) -> bool:
     for oid in oids:
         obj = _MODEL.get(oid)
         roi_backup = getattr(obj, "roi", None) if keep_roi else None
+        uuid = obj.metadata.get(_UUID_METADATA_KEY)
         obj.reset_metadata_to_defaults()
+        if uuid is not None:
+            obj.metadata[_UUID_METADATA_KEY] = uuid
         if keep_roi and roi_backup is not None:
             obj.roi = roi_backup
     return True
@@ -2244,7 +2250,8 @@ def import_object_metadata_bytes(oid: str, data: Any) -> None:
     """Replace *oid*'s metadata from ``.dlabmeta`` (JSON) bytes.
 
     Uses Sigima's :func:`read_metadata`, matching DataLab desktop's
-    "Import metadata".
+    "Import metadata". The object keeps its own identity (``__uuid``): the
+    one of the exported object is ignored.
     """
     import os
     import tempfile
@@ -2260,7 +2267,13 @@ def import_object_metadata_bytes(oid: str, data: Any) -> None:
     try:
         with open(path, "wb") as fh:
             fh.write(bytes(data))
-        _MODEL.get(oid).metadata = read_metadata(path)
+        obj = _MODEL.get(oid)
+        metadata = read_metadata(path)
+        metadata.pop(_UUID_METADATA_KEY, None)
+        uuid = obj.metadata.get(_UUID_METADATA_KEY)
+        if uuid is not None:
+            metadata[_UUID_METADATA_KEY] = uuid
+        obj.metadata = metadata
     finally:
         try:
             os.remove(path)

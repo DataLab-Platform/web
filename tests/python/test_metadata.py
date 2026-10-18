@@ -282,6 +282,27 @@ def test_delete_object_metadata(fresh_bootstrap):
     assert "custom_key" not in keys
 
 
+def test_delete_object_metadata_keeps_identity(fresh_bootstrap):
+    """Deleting metadata keeps the object UUID that provenance refers to."""
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    uuid = bs._MODEL.get(oid).metadata["__uuid"]
+    assert bs.delete_object_metadata([oid]) is True
+    assert bs._MODEL.get(oid).metadata["__uuid"] == uuid
+
+
+def test_object_uuid_is_not_editable_metadata(fresh_bootstrap):
+    """The object UUID is neither listed nor editable as metadata."""
+    bs = fresh_bootstrap
+    oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])
+    uuid = bs._MODEL.get(oid).metadata["__uuid"]
+    assert "__uuid" not in {entry["key"] for entry in bs.list_object_metadata(oid)}
+    with pytest.raises(ValueError):
+        bs.set_object_metadata_value(oid, "__uuid", "string", "other")
+    assert bs.delete_object_metadata_key(oid, "__uuid") is False
+    assert bs._MODEL.get(oid).metadata["__uuid"] == uuid
+
+
 def test_delete_object_metadata_empty_selection(fresh_bootstrap):
     bs = fresh_bootstrap
     assert bs.delete_object_metadata([]) is False
@@ -303,6 +324,17 @@ def test_export_import_metadata_round_trip(fresh_bootstrap):
     bs.import_object_metadata_bytes(dst, data)
     keys = {entry["key"] for entry in bs.list_object_metadata(dst)}
     assert "custom_key" in keys
+
+
+def test_import_metadata_keeps_identity(fresh_bootstrap):
+    """Importing metadata exported from another object keeps the UUID."""
+    bs = fresh_bootstrap
+    src = bs.add_signal_from_arrays("S1", [0, 1], [0, 0])
+    dst = bs.add_signal_from_arrays("S2", [0, 1], [0, 0])
+    uuid = bs._MODEL.get(dst).metadata["__uuid"]
+    bs.import_object_metadata_bytes(dst, bs.export_object_metadata_bytes(src))
+    assert bs._MODEL.get(dst).metadata["__uuid"] == uuid
+    assert bs._MODEL.get(src).metadata["__uuid"] != uuid
 
 
 def test_get_panel_titles_text(fresh_bootstrap):
