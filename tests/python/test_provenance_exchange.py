@@ -143,6 +143,40 @@ def test_revision_review_and_comparison_across_runtimes():
     assert other["integrity"]["valid"]
 
 
+def test_revision_after_saving_the_workspace():
+    """A workspace saved and opened again still knows its parent capsule."""
+    _writer, parent = _exported("chain")
+    reader = fresh_runtime()
+    reader.open_workspace_capsule("chain.dlcapsule", parent, replace=True)
+    origin = reader.get_provenance_ledger()["capsule_origin"]
+    saved = reader.save_workspace_to_bytes()
+    # Another session opens the saved workspace file.
+    later = fresh_runtime()
+    later.open_workspace_from_bytes("work.h5", saved, replace=True)
+    check_chain(later, "web")
+    assert later.get_provenance_ledger()["capsule_origin"] == origin
+    child = later.export_workspace_capsule(
+        name="child", revision_of=origin["fingerprint"]
+    )
+    assert (
+        later.inspect_workspace_capsule(child)["summary"]["revision_of"]
+        == (origin["fingerprint"])
+    )
+    # Appending a workspace keeps the parent of the current one.
+    other = fresh_runtime()
+    build_chain(other)
+    later.open_workspace_from_bytes(
+        "other.h5", other.save_workspace_to_bytes(), replace=False
+    )
+    assert later.get_provenance_ledger()["capsule_origin"] == origin
+    # A new workspace has no parent.
+    fresh = fresh_runtime()
+    fresh.open_workspace_from_bytes(
+        "other.h5", other.save_workspace_to_bytes(), replace=True
+    )
+    assert fresh.get_provenance_ledger()["capsule_origin"] is None
+
+
 def test_referenced_workspace_variant():
     """A referenced workspace is checked and opened only when the user supplies it."""
     writer = fresh_runtime()

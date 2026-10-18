@@ -49,7 +49,7 @@ To keep a result verifiable, keep the objects it was computed from before saving
 
 _File > Workspace capsule…_ opens the capsule dialog. DataLab Desktop offers the same dialog, and a capsule exported by either edition opens in the other one.
 
-- **Export**: name, description, attachments (light files such as a protocol, at most 8 of 16 MiB each, never opened), and **Revision of…** when the workspace was opened from a capsule. **Reference the workspace instead of including it** stores only the address, size and SHA-256 of the workspace. **Export capsule…** downloads the capsule.
+- **Export**: name, description, attachments (light files such as a protocol, at most 8 of 16 MiB each, never opened), and **Revision of…** when the workspace was opened from a capsule (also after it was saved as a workspace file and opened again). **Reference the workspace instead of including it** stores only the address, size and SHA-256 of the workspace. **Export capsule…** downloads the capsule.
 - **Inspect**: **Choose a capsule…** checks a capsule without opening it. It shows the summary, the **Attachments** (saved only with **Save…**), the **Integrity** computed from the files (nothing is recomputed), and the **Supplied documents** (verification reports and reviews, added with **Add a verification report…** and **Add a review…**). **Write a review** creates a separate review file. **Open as workspace** replaces the current workspace by the workspace of the capsule.
 - **Local replay** lists the recorded activities of the open workspace. **Replay** recomputes one and gives its verdict; **Save report…** saves the verification report.
 - **Revisions** lists the capsules exported, inspected or retrieved in this browser, and compares two of them (**Compare**).

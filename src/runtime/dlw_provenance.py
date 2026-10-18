@@ -75,6 +75,7 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
             self.notices: list[str] = []
             self.capture_failures = 0
             self.file_status: str | None = None
+            self.capsule_origin: dict[str, Any] | None = None
 
     RecorderHost = None  # type: ignore[assignment,misc]
     PendingActivity = None  # type: ignore[assignment,misc]
@@ -168,9 +169,6 @@ class WebProvenance(Recorder):
         super().__init__(host, computation)
         if host is None:
             self.ledger = None
-        #: ``{"fingerprint", "name", "attachments"}`` of the capsule the
-        #: workspace was opened from (the parent of a revision exported later).
-        self.capsule_origin: dict[str, Any] | None = None
 
     @property
     def available(self) -> bool:
@@ -185,26 +183,27 @@ class WebProvenance(Recorder):
     # -- Workspace lifecycle ------------------------------------------------
 
     def reset(self) -> None:
-        """Start an empty ledger for a new workspace."""
+        """Start an empty ledger for a new workspace (no capsule origin)."""
         if self.available:
             super().reset()
         else:
             self.state_status = {}
             self.notices = []
             self.file_status = None
-        self.capsule_origin = None
+            self.capsule_origin = None
 
     def save(self, h5file: Any) -> None:
-        """Write the ledger block into a workspace file, after its panels."""
+        """Write the ledger block (and the capsule origin) into a workspace file,
+        after its panels."""
         if self.available:
             super().save(h5file)
 
-    def read(self, h5file: Any) -> tuple[Any, dict[str, str]] | None:
+    def read(self, h5file: Any) -> tuple[Any, ...] | None:
         """Read and validate the block of a workspace file before anything changes.
 
         Returns:
-            ``(ledger, state_status)``, or None without block or without
-            DataLab-Capsule.
+            ``(ledger, state_status, capsule_origin)``, or None without block or
+            without DataLab-Capsule.
 
         Raises:
             ProvenanceFormatError: If the block is invalid.
@@ -213,7 +212,7 @@ class WebProvenance(Recorder):
 
     def load(
         self,
-        block: tuple[Any, dict[str, str]] | None,
+        block: tuple[Any, ...] | None,
         replaced: bool,
         saved_version: str | None = None,
         current_version: str | None = None,
@@ -223,12 +222,14 @@ class WebProvenance(Recorder):
 
         Processing records of objects unknown to the ledger (workspaces saved
         without provenance, by DataLab Desktop) are then imported as
-        ``legacy_metadata`` activities.
+        ``legacy_metadata`` activities. The capsule the workspace was opened
+        from, saved with it, is restored (see ``capsule_origin``).
 
         Args:
             block: Result of :meth:`read`.
             replaced: False when the file was appended to the current workspace:
-             ledgers are not merged and the file's block is ignored.
+             ledgers are not merged and the file's block is ignored (the capsule
+             origin of the current workspace is kept).
             saved_version: ``DataLab_Version`` of the file, as stored. It is
              never compared: Desktop stores its own version there, DataLab-Web
              the Sigima version.
