@@ -239,7 +239,13 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
               />
             )}
             {tab === "replay" && (
-              <ReplayTab runtime={runtime} info={info} busy={busy} run={run} />
+              <ReplayTab
+                runtime={runtime}
+                info={info}
+                busy={busy}
+                run={run}
+                onSaved={onSaved}
+              />
             )}
             {tab === "revisions" && (
               <RevisionsTab
@@ -566,10 +572,13 @@ function InspectTab(
   const choose = async () => {
     const file = await pickFile(".dlcapsule,.zip");
     if (!file) return;
+    // Nothing of the previous capsule is shown while the new one is inspected
     setCapsule(file);
     setWorkspace(null);
     setReports([]);
     setReviews([]);
+    setInspection(null);
+    setPublished(null);
     await inspect(file, { workspace: null, reports: [], reviews: [] });
   };
 
@@ -723,6 +732,8 @@ function InspectTab(
           />
           {summary && inspection.manifest && (
             <ReviewWriter
+              // A review cites reports of this capsule only
+              key={summary.fingerprint}
               runtime={runtime}
               manifest={inspection.manifest}
               registry={registry}
@@ -1101,8 +1112,13 @@ function ReviewWriter(
   );
 }
 
-function ReplayTab(props: TabProps & { info: ProvenanceLedgerInfo | null }) {
-  const { runtime, info, busy, run } = props;
+function ReplayTab(
+  props: TabProps & {
+    info: ProvenanceLedgerInfo | null;
+    onSaved: (result: SaveFileResult) => void;
+  },
+) {
+  const { runtime, info, busy, run, onSaved } = props;
   const [reports, setReports] = useState<Record<string, ProvenanceReport>>({});
   const activities = useMemo(() => info?.ledger?.activities ?? [], [info]) as {
     activity_id: string;
@@ -1115,9 +1131,12 @@ function ReplayTab(props: TabProps & { info: ProvenanceLedgerInfo | null }) {
       setReports((current) => ({ ...current, [activityId]: report }));
     });
 
-  const save = async (report: ProvenanceReport) => {
-    await saveJson(report, `report-${shortId(report.activity_id)}.json`);
-  };
+  const save = (report: ProvenanceReport) =>
+    run(async () => {
+      onSaved(
+        await saveJson(report, `report-${shortId(report.activity_id)}.json`),
+      );
+    });
 
   return (
     <div className="capsule-tab" data-testid="capsule-replay">
