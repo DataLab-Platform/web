@@ -40,6 +40,7 @@ import {
 import {
   acceptFromExtensions,
   saveBytesToFile,
+  saveGeneratedFile,
   type SaveFileResult,
 } from "../utils/saveFile";
 
@@ -71,6 +72,13 @@ async function saveJson(
   );
 }
 
+/** Default filename of a referenced workspace: the last segment of its IRI,
+ *  without the characters a file name cannot hold (``urn:uuid:...``). */
+export function workspaceFilename(iri: string): string {
+  const leaf = iri.split(/[/:]/).filter(Boolean).pop() ?? "";
+  const base = leaf.replace(/[^\w.-]+/g, "_") || "workspace";
+  return base.toLowerCase().endsWith(".h5") ? base : `${base}.h5`;
+}
 function shortId(id: string | null | undefined): string {
   if (!id) return "";
   const raw = id.replace(/^#(activity|state)-/, "").replace(/^sha256:/, "");
@@ -333,36 +341,57 @@ function ExportTab(
         ),
       };
       const filename = `${(name || "workspace").replace(/[^\w.-]+/g, "_")}.dlcapsule`;
-      let capsule: Uint8Array;
+      // The save picker is opened first, while the click still allows it:
+      // the capsule is produced once a file was chosen.
+      const produced: { capsule?: Uint8Array } = {};
+      let saved: SaveFileResult;
       if (referenced) {
-        const exported = await runtime.exportReferencedCapsule(
-          workspaceRef,
-          name || null,
-          options,
-        );
-        capsule = exported.capsule;
         // The workspace is saved separately, to be published at the IRI.
-        const leaf = workspaceRef.split("/").pop() || "workspace.h5";
-        onSaved(
-          await saveBytesToFile(
-            exported.workspace,
-            leaf,
-            [
-              acceptFromExtensions(
-                t("HDF5 files"),
-                ["h5"],
-                "application/x-hdf",
-              ),
-            ],
-            "application/x-hdf",
-          ),
+        const hdf5 = [
+          acceptFromExtensions(t("HDF5 files"), ["h5"], "application/x-hdf"),
+        ];
+        const workspaceSaved = await saveGeneratedFile(
+          async () => {
+            const exported = await runtime.exportReferencedCapsule(
+              workspaceRef,
+              name || null,
+              options,
+            );
+            produced.capsule = exported.capsule;
+            return exported.workspace;
+          },
+          workspaceFilename(workspaceRef),
+          hdf5,
+          "application/x-hdf",
+        );
+        if (workspaceSaved.outcome === "cancelled" || !produced.capsule) return;
+        onSaved(workspaceSaved);
+        saved = await saveBytesToFile(
+          produced.capsule,
+          filename,
+          [capsuleAccept()],
+          "application/zip",
         );
       } else {
-        capsule = await runtime.exportWorkspaceCapsule(name || null, options);
+        saved = await saveGeneratedFile(
+          async () => {
+            produced.capsule = await runtime.exportWorkspaceCapsule(
+              name || null,
+              options,
+            );
+            return produced.capsule;
+          },
+          filename,
+          [capsuleAccept()],
+          "application/zip",
+        );
       }
-      // Worker mode transfers (detaches) argument buffers: inspect a copy,
-      // the capsule bytes are saved below.
-      const inspection = await runtime.inspectWorkspaceCapsule(capsule.slice());
+      if (saved.outcome === "cancelled" || !produced.capsule) return;
+      // Only a saved capsule is a revision. Its bytes are no longer needed:
+      // worker mode may transfer (detach) them.
+      const inspection = await runtime.inspectWorkspaceCapsule(
+        produced.capsule,
+      );
       if (inspection.summary && inspection.manifest) {
         await recordRevision({
           fingerprint: inspection.summary.fingerprint,
@@ -373,14 +402,7 @@ function ExportTab(
           manifest: inspection.manifest,
         });
       }
-      await onSaved(
-        await saveBytesToFile(
-          capsule,
-          filename,
-          [capsuleAccept()],
-          "application/zip",
-        ),
-      );
+      await onSaved(saved);
     });
 
   return (

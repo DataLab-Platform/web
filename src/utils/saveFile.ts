@@ -161,12 +161,30 @@ export async function saveGeneratedFile(
   mime = "application/octet-stream",
 ): Promise<SaveFileResult> {
   if (supportsSaveFilePicker()) {
-    const handle = await pickSaveFile(suggestedName, types);
+    let handle: FileSystemFileHandleLike | null;
+    try {
+      handle = await pickSaveFile(suggestedName, types);
+    } catch (err) {
+      // The picker needs a recent user gesture: when it is opened too late
+      // (e.g. the second file of a save) or blocked by a policy, download.
+      if (!isBrowserRefusal(err)) throw err;
+      console.warn("[saveFile] save picker refused by the browser", err);
+      downloadBytes(await produce(), suggestedName, mime);
+      return { outcome: "downloaded", filename: suggestedName };
+    }
     if (!handle) return { outcome: "cancelled", filename: suggestedName };
     return writeOrDownload(handle, await produce(), mime);
   }
   downloadBytes(await produce(), suggestedName, mime);
   return { outcome: "downloaded", filename: suggestedName };
+}
+
+/** ``true`` for a File System Access API call refused by the browser. */
+function isBrowserRefusal(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === "NotAllowedError" || err.name === "SecurityError")
+  );
 }
 
 /**
@@ -183,12 +201,7 @@ async function writeOrDownload(
     await writeBytesToHandle(handle, bytes);
     return { outcome: "saved", filename: handle.name };
   } catch (err) {
-    if (
-      !(err instanceof DOMException) ||
-      (err.name !== "NotAllowedError" && err.name !== "SecurityError")
-    ) {
-      throw err;
-    }
+    if (!isBrowserRefusal(err)) throw err;
     console.warn("[saveFile] writing refused by the browser; downloading", err);
     downloadBytes(bytes, handle.name, mime);
     return { outcome: "downloaded", filename: handle.name };

@@ -115,19 +115,44 @@ describe("saveBytesToFile — native picker", () => {
     }
   });
 
-  it("propagates non-abort picker errors", async () => {
-    const picker = vi
-      .fn()
-      .mockRejectedValue(new DOMException("denied", "SecurityError"));
+  it("propagates unexpected picker errors", async () => {
+    const picker = vi.fn().mockRejectedValue(new TypeError("broken"));
     const cleanup = installPicker(picker);
     try {
       await expect(
         saveBytesToFile(new Uint8Array([0]), "x.bin"),
-      ).rejects.toThrow("denied");
+      ).rejects.toThrow("broken");
     } finally {
       cleanup();
     }
   });
+
+  it.each(["SecurityError", "NotAllowedError"])(
+    "downloads when the browser refuses the picker (%s)",
+    async (name) => {
+      // e.g. the second file of a save, opened after the user gesture expired
+      const picker = vi
+        .fn()
+        .mockRejectedValue(new DOMException("denied", name));
+      const cleanup = installPicker(picker);
+      if (typeof URL.createObjectURL !== "function") {
+        (URL as { createObjectURL: (b: Blob) => string }).createObjectURL =
+          () => "";
+      }
+      vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
+      const click = vi
+        .spyOn(HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {});
+      try {
+        const result = await saveBytesToFile(new Uint8Array([0]), "x.bin");
+        expect(result).toEqual({ outcome: "downloaded", filename: "x.bin" });
+        expect(click).toHaveBeenCalledTimes(1);
+      } finally {
+        click.mockRestore();
+        cleanup();
+      }
+    },
+  );
 });
 
 describe("saveGeneratedFile", () => {
