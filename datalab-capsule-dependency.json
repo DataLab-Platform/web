@@ -1,4 +1,4 @@
 {
-  "publishedRequirement": null,
-  "developmentRef": "5317099231146a371c3594d5c5014b95490307d7"
+  "publishedRequirement": "datalab-capsule==0.1.0",
+  "developmentRef": null
 }
