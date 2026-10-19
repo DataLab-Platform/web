@@ -67,6 +67,7 @@ def test_image_processing_is_captured(fresh_bootstrap):
     output = ledger(bs).states[activity["outputs"][0]["state_id"]]
     assert output["kind"] == "image" and output["object_uuid"] == uuid_of(bs, result)
     assert activity["call"]["parameters"]["sigma"] == 1.0
+    assert bs.activity_object_ids(activity["activity_id"]) == [src, result]
     ledger(bs).validate()
 
 
@@ -127,7 +128,70 @@ def test_analyses_record_artifacts(fresh_bootstrap):
         assert artifact["object_uuid"] == uuid_of(bs, oid)
         assert artifact["key"] in bs._MODEL.get(oid).metadata
         assert inputs_of(bs, activity)[0]["object_uuid"] == uuid_of(bs, oid)
+        assert bs.activity_object_ids(activity["activity_id"]) == [oid]
     ledger(bs).validate()
+
+
+def test_opaque_activity_needs_no_arrays(fresh_bootstrap, counted_apply, monkeypatch):
+    """An ordinary opaque call is refused without loading any of its objects."""
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    (result,) = bs.apply_feature("normalize", [src], params={"method": "maximum"})
+    (activity,) = ledger(bs).activities
+    activity["call"]["operation"] = None
+    ledger(bs).validate()
+    for oid in (src, result):
+        monkeypatch.setitem(bs._SPILLED, oid, {})
+    before = counted_apply["count"]
+    assert bs.activity_object_ids(activity["activity_id"]) == []
+    report = bs.replay_activity(activity["activity_id"])
+    assert (report["restoration"], report["eligibility"]) == (
+        "opaque",
+        "unsupported_operation",
+    )
+    assert counted_apply["count"] == before
+
+
+def test_identified_activity_does_not_hide_invalid_binding(fresh_bootstrap):
+    """Missing state bindings of identified calls are not treated as opaque."""
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    bs.apply_feature("normalize", [src], params={"method": "maximum"})
+    (activity,) = ledger(bs).activities
+    del activity["call"]["inputs"][0]["binding"]["state_id"]
+    with pytest.raises(KeyError, match="state_id"):
+        bs.activity_object_ids(activity["activity_id"])
+
+
+@pytest.mark.parametrize("missing", ["source", "result", "artifact"])
+def test_activity_objects_exclude_reused_identities(fresh_bootstrap, missing):
+    """An appended replacement holds neither an old state nor its artifact."""
+    bs = fresh_bootstrap
+    src = add_signal(bs)
+    (result,) = bs.apply_feature("normalize", [src], params={"method": "maximum"})
+    if missing == "artifact":
+        asyncio.run(bs.run_signal_analysis(src, "stats"))
+    activity = ledger(bs).activities[-1]
+    removed = result if missing == "result" else src
+    old_uuid = uuid_of(bs, removed)
+    saved = bs.save_workspace_to_bytes()
+    bs.delete_object(removed)
+    bs.open_workspace_from_bytes("append.h5", saved, replace=False)
+    replacement = next(
+        oid
+        for oid, obj in bs._MODEL.iter_all("signal")
+        if bs._object_uuid(obj) == old_uuid
+    )
+    selected = bs.activity_object_ids(activity["activity_id"])
+    assert replacement not in selected
+    assert (
+        selected
+        == {
+            "source": [result],
+            "result": [src],
+            "artifact": [],
+        }[missing]
+    )
 
 
 def test_analyses_are_verified(fresh_bootstrap):

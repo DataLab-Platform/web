@@ -37,6 +37,7 @@ try:
         SizePolicy,
         create_from_hdf5,
     )
+    from datalab_capsule.calls import is_opaque
     from datalab_capsule.hdf5 import has_block as _has_block
     from datalab_capsule.integrity import state_facts
     from datalab_capsule.legacy import legacy_summary
@@ -436,6 +437,32 @@ class WebProvenance(Recorder):
         if not self.available:
             return None
         return super().producing_call(object_uuid)
+
+    def activity_objects(self, activity_id: str) -> list[SignalObj | ImageObj]:
+        """Return the live holders read by verification, without reading arrays.
+
+        Opaque calls are refused before any data access. Identified calls use
+        the recorder's identity rules, including breaks caused by an append.
+        """
+        if not self.available:
+            return []
+        try:
+            activity = self.ledger.activity(activity_id)
+        except KeyError:
+            return []
+        if is_opaque(activity["call"]):
+            return []
+        state_ids = [item["binding"]["state_id"] for item in activity["call"]["inputs"]]
+        state_ids += [
+            output["state_id"] for output in activity["outputs"] if "state_id" in output
+        ]
+        holders = [self._state_holder(self.ledger.states[sid]) for sid in state_ids]
+        holders += [
+            self._artifact_holder(activity, output["artifact"])
+            for output in activity["outputs"]
+            if "artifact" in output
+        ]
+        return [obj for obj in holders if obj is not None]
 
     def set_edition_version(self, version: str) -> None:
         """Set the application version recorded in environments."""

@@ -245,4 +245,31 @@ describe("DataLabRuntime latest-read queue", () => {
       expect(runtime.spilledOids.has(oid)).toBe(true);
     }
   });
+
+  it("refuses an opaque activity without reading or releasing disk objects", async () => {
+    const calls: string[] = [];
+    const report = {
+      restoration: "opaque",
+      eligibility: "unsupported_operation",
+    };
+    const runtime = makeRuntime((name) => {
+      calls.push(name);
+      if (name === "activity_object_ids") return [];
+      return name === "replay_activity" ? report : null;
+    });
+    const get = vi.fn();
+    const put = vi.fn();
+    runtime.storageMode = "disk";
+    runtime.opfsStore = { get, put };
+    runtime.spilledOids.add("unrelated");
+
+    await expect(
+      runtime.callPy("replay_activity", { activity_id: "legacy" }),
+    ).resolves.toEqual(report);
+
+    expect(calls).toEqual(["activity_object_ids", "replay_activity"]);
+    expect(get).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect([...runtime.spilledOids]).toEqual(["unrelated"]);
+  });
 });

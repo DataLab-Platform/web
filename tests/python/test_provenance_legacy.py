@@ -131,6 +131,7 @@ def test_legacy_activities_are_never_replayed(fresh_bootstrap, counted_apply):
     bs = fresh_bootstrap
     _open(bs, LEGACY.read_bytes())
     for activity in bs._PROVENANCE.ledger.activities:
+        assert bs.activity_object_ids(activity["activity_id"]) == []
         report = bs.replay_activity(activity["activity_id"])
         assert report["restoration"] == "opaque"
         assert report["eligibility"] == "unsupported_operation"

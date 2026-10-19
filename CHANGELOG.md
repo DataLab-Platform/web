@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Older workspaces in disk storage mode:** verifying an old processing record now gives its normal explicit refusal instead of an error, without loading arrays or running a calculation. Added objects that reuse a deleted object's identifier are not loaded as its former inputs or references.
 - **Refusals across the worker:** when a two-signal operation is refused (for example an operand that does not cover the source grid), the reason and its code are now always shown, including in worker mode, and nothing is computed.
 - **Plugin and macro dialogs:** fields enabled by another option, and values computed from other fields, now update while the dialog is open; they previously stayed frozen until the dialog was closed.
 - **Parameter forms:** a checkbox that has only its own text, as in DataLab Desktop, no longer shows its internal field name as a label.

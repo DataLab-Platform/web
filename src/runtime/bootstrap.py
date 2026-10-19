@@ -4972,23 +4972,11 @@ def activity_object_ids(activity_id: str) -> list[str]:
     (result states, objects holding analysis results): the only arrays a
     verification of the activity reads (see :func:`replay_activity`).
     """
-    if not _PROVENANCE.available:
-        return []
-    ledger = _PROVENANCE.ledger
-    try:
-        activity = ledger.activity(activity_id)
-    except KeyError:
-        return []
-    states = [item["binding"]["state_id"] for item in activity["call"]["inputs"]]
-    states += [o["state_id"] for o in activity["outputs"] if "state_id" in o]
-    uuids = {ledger.states[state_id]["object_uuid"] for state_id in states}
-    uuids |= {
-        o["artifact"]["object_uuid"] for o in activity["outputs"] if "artifact" in o
-    }
+    holders = {id(obj) for obj in _PROVENANCE.activity_objects(activity_id)}
     return [
         oid
         for oid, entry in _MODEL._objects.items()  # noqa: SLF001
-        if _object_uuid(entry.obj) in uuids
+        if id(entry.obj) in holders
     ]
 
 

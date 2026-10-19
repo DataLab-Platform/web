@@ -152,6 +152,7 @@ def test_without_the_library(monkeypatch):
     bs = fresh_runtime()
     s0 = bs.add_signal_from_arrays("S0", X, Y, xunit="s")
     monkeypatch.setattr(bs._PROVENANCE, "ledger", None)
+    assert bs.activity_object_ids("unknown") == []
     view = bs.describe_object_provenance(s0)
     assert view["available"] is False
     assert bs.describe_provenance_activity("x")["available"] is False

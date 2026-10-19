@@ -363,6 +363,7 @@ def test_append_with_provenance_never_attributes_records():
     assert record["missing_source_ids"] == [ids["S1"]]
     # Verifying S2 never uses the copy (same identifier and content).
     production = bs.describe_object_provenance(ids["S2"])["production"]
+    assert bs.activity_object_ids(production["activity_id"]) == [ids["S2"]]
     report = bs.replay_activity(production["activity_id"])
     assert (report["verdict"], report["eligibility"]) == (
         "not_verified",
