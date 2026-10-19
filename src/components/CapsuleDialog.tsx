@@ -13,7 +13,7 @@
  * All the logic lives in DataLab-Capsule, called through the runtime.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n/translate";
 import { reportDetails, reportSummary } from "./ProvenanceVerdict";
 import type {
@@ -147,14 +147,26 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
   const [revisions, setRevisions] = useState<CapsuleRevision[]>([]);
   const [registry, setRegistry] =
     useState<RegistrySettings>(loadRegistrySettings);
+  const refreshGeneration = useRef(0);
 
   const refreshInfo = useCallback(async () => {
-    setInfo(await runtime.getProvenanceLedger());
-    setRevisions(await listRevisions());
+    const generation = ++refreshGeneration.current;
+    const [nextInfo, nextRevisions] = await Promise.all([
+      runtime.getProvenanceLedger(),
+      listRevisions(),
+    ]);
+    if (generation !== refreshGeneration.current) return;
+    setInfo(nextInfo);
+    setRevisions(nextRevisions);
   }, [runtime]);
 
   useEffect(() => {
-    void refreshInfo();
+    void refreshInfo().catch((err: unknown) =>
+      setError(err instanceof Error ? err.message : String(err)),
+    );
+    return () => {
+      refreshGeneration.current += 1;
+    };
   }, [refreshInfo]);
 
   useEffect(() => {
@@ -198,6 +210,7 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
               aria-selected={tab === id}
               className={tab === id ? "active" : ""}
               onClick={() => setTab(id)}
+              disabled={busy}
             >
               {label}
             </button>
@@ -371,7 +384,7 @@ function ExportTab(
           "application/x-hdf",
         );
         if (workspaceSaved.outcome === "cancelled" || !produced.capsule) return;
-        onSaved(workspaceSaved);
+        await onSaved(workspaceSaved);
         saved = await saveBytesToFile(
           produced.capsule,
           filename,
@@ -398,16 +411,26 @@ function ExportTab(
       const inspection = await runtime.inspectWorkspaceCapsule(
         produced.capsule,
       );
-      if (inspection.summary && inspection.manifest) {
-        await recordRevision({
-          fingerprint: inspection.summary.fingerprint,
-          name: inspection.summary.name,
-          revisionOf: inspection.summary.revision_of,
-          datePublished: inspection.summary.date_published,
-          source: "exported",
-          manifest: inspection.manifest,
-        });
+      if (
+        !inspection.integrity.valid ||
+        !inspection.summary ||
+        !inspection.manifest
+      ) {
+        throw new Error(
+          [
+            t("The exported capsule could not be validated."),
+            ...inspection.integrity.problems,
+          ].join("\n"),
+        );
       }
+      await recordRevision({
+        fingerprint: inspection.summary.fingerprint,
+        name: inspection.summary.name,
+        revisionOf: inspection.summary.revision_of,
+        datePublished: inspection.summary.date_published,
+        source: "exported",
+        manifest: inspection.manifest,
+      });
       await onSaved(saved);
     });
 

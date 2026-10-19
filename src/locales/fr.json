@@ -1222,6 +1222,7 @@
   "The data of the object are not loaded: they cannot be checked": "Les données de l'objet ne sont pas chargées : elles ne peuvent pas être contrôlées",
   "The data of the result are not loaded: they cannot be checked": "Les données du résultat ne sont pas chargées : elles ne peuvent pas être contrôlées",
   "The data of this input are not loaded: they cannot be checked": "Les données de cette entrée ne sont pas chargées : elles ne peuvent pas être contrôlées",
+  "The exported capsule could not be validated.": "La capsule exportée n'a pas pu être validée.",
   "The first signal provides the axis titles.": "Le premier signal définit les titres des axes.",
   "The following traceback may help to understand the problem:": "La trace d'appels suivante peut aider à comprendre le problème :",
   "The full user guide opens in a side drawer, and you can replay this tour any time from Help → Welcome.": "Le guide utilisateur complet s'ouvre dans un panneau latéral, et vous pouvez rejouer cette visite à tout moment depuis Aide → Bienvenue.",

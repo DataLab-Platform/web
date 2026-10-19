@@ -107,11 +107,14 @@ export async function exportCapsule(
   if (options.revision !== undefined) {
     await page.getByTestId("capsule-as-revision").setChecked(options.revision);
   }
-  return download(
+  const target = await download(
     page,
     () => page.getByTestId("capsule-export-button").click(),
     `${name}.dlcapsule`,
   );
+  await expect(page.getByTestId("capsule-export-button")).toBeEnabled();
+  await expect(page.getByTestId("capsule-error")).toHaveCount(0);
+  return target;
 }
 
 export async function inspect(page: Page, path: string): Promise<void> {

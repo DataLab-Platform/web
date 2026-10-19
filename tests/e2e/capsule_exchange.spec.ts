@@ -264,16 +264,22 @@ test.describe("capsule exchange between two browsers", () => {
 
     // Attachment changes have their own group; nothing is inferred from them.
     await author.getByRole("tab", { name: "Revisions" }).click();
-    const labels = await author
-      .getByTestId("capsule-diff-old")
-      .locator("option")
-      .allTextContents();
-    await author.getByTestId("capsule-diff-old").selectOption({
-      label: labels.find((l) => l.startsWith("chain-plain ("))!,
-    });
-    await author.getByTestId("capsule-diff-new").selectOption({
-      label: labels.find((l) => l.startsWith("chain-attached ("))!,
-    });
+    for (const [testId, name] of [
+      ["capsule-diff-old", "chain-plain"],
+      ["capsule-diff-new", "chain-attached"],
+    ]) {
+      const select = author.getByTestId(testId);
+      const option = select.getByRole("option", {
+        name: new RegExp(`^${name} \\(`),
+      });
+      await expect(option).toHaveCount(1);
+      const value = await option.getAttribute("value");
+      expect(value).toBeTruthy();
+      if (!value) throw new Error(`Revision ${name} has no fingerprint`);
+      await select.selectOption(value);
+      await expect(select).toHaveValue(value);
+    }
+    await expect(author.getByTestId("capsule-compare")).toBeEnabled();
     await author.getByTestId("capsule-compare").click();
     await expect(author.getByTestId("capsule-diff-attachments")).toContainText(
       "added attachment points.csv",
