@@ -57,6 +57,14 @@ import { hashBytes } from "../plugins/trustStore";
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 import { fetchBundledPluginWheels } from "./bundledPlugins";
 import {
+  DISK_SWEEP_CALLS,
+  MUTATES_HEAVY,
+  MUTATING_PY_FUNCTIONS,
+  pageInPlan,
+  REFUSABLE,
+  REPLACES_MODEL,
+} from "./pyCallPolicy";
+import {
   ScientificRefusalError,
   type ScientificRefusal,
 } from "./workerProtocol";
@@ -1734,102 +1742,6 @@ export class DataLabRuntime {
     private readonly pluginWheelStore: PluginWheelStore | null = null,
   ) {}
 
-  /**
-   * Workspace mutation tracker.
-   *
-   * The set below lists every ``bootstrap.py`` callable that mutates
-   * the durable workspace state — i.e. anything whose effect is
-   * persisted by ``save_workspace_to_bytes`` and would be lost on
-   * reload unless saved as an HDF5 workspace. ``callPy`` invokes all
-   * registered mutation listeners after each successful call to one
-   * of these functions, so the React layer can flip a single
-   * "workspace dirty" flag without sprinkling ``markDirty()`` at
-   * every UI call site.
-   *
-   * Keep this list narrow on purpose: read-only helpers
-   * (``list_*``, ``get_*``, schema queries, IO format probes) must
-   * NOT appear here. ``open_workspace_from_bytes`` and
-   * ``save_workspace_to_bytes`` are intentionally absent — they're
-   * the *clean* transitions, handled separately in ``App.tsx``.
-   */
-  private static readonly MUTATING_PY_FUNCTIONS: ReadonlySet<string> =
-    new Set<string>([
-      // Object model — signals & images
-      "create_signal",
-      "create_signal_typed",
-      "create_image",
-      "create_image_typed",
-      "add_signal_from_arrays",
-      "add_image_from_array",
-      "set_signal_style",
-      "update_signal_creation_params",
-      "update_image_creation_params",
-      "set_object_property_values",
-      "set_object_metadata_value",
-      "delete_object_metadata_key",
-      "paste_object_metadata",
-      "add_object_metadata",
-      "delete_object_metadata",
-      "import_object_metadata_bytes",
-      "set_object_meta",
-      "set_signal_roi",
-      "delete_signal_roi_at",
-      "set_image_roi",
-      "delete_image_roi_at",
-      "create_image_roi_grid",
-      "extract_signal_rois",
-      "extract_image_rois",
-      "delete_object",
-      "delete_all_objects",
-      "delete_signal",
-      "rename_object",
-      "move_object",
-      "move_objects",
-      "create_group",
-      "rename_group",
-      "delete_group",
-      "set_plotly_annotations",
-      "set_lut_range",
-      "set_colormap",
-      "clear_signal_results",
-      "clear_image_results",
-      "erase_image_area",
-      "distribute_images_on_grid",
-      "reset_image_positions",
-      "apply_feature",
-      "apply_processing",
-      "reapply_last_processing",
-      "run_signal_analysis",
-      "run_image_analysis",
-      "run_plugin_recipe",
-      "launch_plugin_tool",
-      "acquire_plugin_instrument",
-      "open_signal_from_bytes",
-      "open_image_from_bytes",
-      "open_from_directory_chunk",
-      "import_signal_csv",
-      "commit_text_import",
-      "add_object_pickled",
-      "set_object_pickled",
-      "reset_all",
-      // Macros
-      "create_macro",
-      "rename_macro",
-      "delete_macro",
-      "set_macro_code",
-      "duplicate_macro",
-      "reorder_macros",
-      "replace_macros",
-      // Notebooks
-      "create_notebook",
-      "rename_notebook",
-      "delete_notebook",
-      "set_notebook_content",
-      "duplicate_notebook",
-      "reorder_notebooks",
-      "replace_notebooks",
-    ]);
-
   private mutationListeners: Set<(name: string) => void> = new Set();
 
   /**
@@ -2223,108 +2135,6 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   /** Cache of {@link getCapsuleSizeLimit} (undefined until read). */
   private capsuleSizeLimit: number | null | undefined;
 
-  /** kwarg keys carrying a single object id referenced by a call. */
-  private static readonly OID_KEYS: readonly string[] = [
-    "oid",
-    "id",
-    "operand_id",
-    "source_id",
-  ];
-  /** kwarg keys carrying a list of object ids referenced by a call. */
-  private static readonly OIDS_KEYS: readonly string[] = [
-    "oids",
-    "ids",
-    "source_ids",
-  ];
-  /** Calls that delete their referenced objects — never page those in. */
-  private static readonly DELETES_OBJECTS: ReadonlySet<string> = new Set([
-    "delete_object",
-    "delete_all_objects",
-  ]);
-  /** Calls that iterate the *whole* model and need every array resident
-   *  (e.g. workspace serialisation). */
-  private static readonly NEEDS_ALL_RESIDENT: ReadonlySet<string> = new Set([
-    "save_workspace_to_bytes",
-    "export_workspace_capsule",
-    "export_referenced_capsule",
-  ]);
-  /** Calls on one recorded activity (``activity_id`` kwarg) that read the
-   *  arrays of the objects it names only (inputs and recorded outputs). */
-  private static readonly NEEDS_ACTIVITY_OBJECTS: ReadonlySet<string> = new Set(
-    ["replay_activity"],
-  );
-  /** Calls that replace the whole model with freshly-loaded objects, so
-   *  the on-disk store must be reset and every new object re-spilled. */
-  private static readonly REPLACES_MODEL: ReadonlySet<string> = new Set([
-    "open_workspace_from_bytes",
-    "open_workspace_capsule",
-    "reset_all",
-  ]);
-  /** Calls that mutate an existing object's heavy array **in place**, so
-   *  a paged-in operand must be re-serialised (not just released). */
-  private static readonly MUTATES_HEAVY: ReadonlySet<string> = new Set([
-    "set_image_data",
-    "set_signal_xydata",
-    "reapply_last_processing",
-    "update_image_creation_params",
-    "update_signal_creation_params",
-  ]);
-  /** Calls whose return value is one or more freshly-produced object ids
-   *  that must be spilled to disk afterwards (in disk mode). */
-  private static readonly PRODUCES_OBJECTS: ReadonlySet<string> = new Set([
-    "add_image_from_array",
-    "add_signal_from_arrays",
-    "create_signal",
-    "create_image",
-    "create_signal_typed",
-    "create_image_typed",
-    "duplicate_object",
-    "apply_processing",
-    "apply_feature",
-    "extract_image_rois",
-    "extract_signal_rois",
-    "erase_image_area",
-    "commit_interactive_fit",
-    "add_object_pickled",
-    "plot_results",
-  ]);
-  /** Calls whose scientific refusals come back as data (``bridge_<name>``
-   *  in bootstrap.py), not as a Python traceback to format. */
-  private static readonly REFUSABLE: ReadonlySet<string> = new Set([
-    "apply_feature",
-    "check_feature_inputs",
-    "preview_feature",
-    "apply_processing",
-    "reapply_last_processing",
-  ]);
-
-  /** Collect the object ids referenced by *kwargs* (single + list keys). */
-  private static referencedOids(kwargs: Record<string, unknown>): string[] {
-    const out: string[] = [];
-    for (const k of DataLabRuntime.OID_KEYS) {
-      const v = kwargs[k];
-      if (typeof v === "string") out.push(v);
-    }
-    for (const k of DataLabRuntime.OIDS_KEYS) {
-      const v = kwargs[k];
-      // Some calls accept a single id where a list is expected.
-      if (typeof v === "string") out.push(v);
-      else if (Array.isArray(v)) {
-        for (const x of v) if (typeof x === "string") out.push(x);
-      }
-    }
-    return out;
-  }
-
-  /** Normalise a call's return value into a flat list of object ids. */
-  private static producedOids(value: unknown): string[] {
-    if (typeof value === "string") return [value];
-    if (Array.isArray(value)) {
-      return value.filter((x): x is string => typeof x === "string");
-    }
-    return [];
-  }
-
   /**
    * Invoke a bootstrap.py callable **without** queueing.
    *
@@ -2338,7 +2148,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     kwargs: Record<string, unknown> = {},
     options: { silent?: boolean } = {},
   ): Promise<T> {
-    const refusable = DataLabRuntime.REFUSABLE.has(name);
+    const refusable = REFUSABLE.has(name);
     const fn = this.py.globals.get(refusable ? `bridge_${name}` : name);
     if (!fn) {
       throw new Error(`Python function not found: ${name}`);
@@ -2377,7 +2187,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       // returns successfully — failed mutations don't dirty the
       // workspace. ``silent`` lets panel bootstrap code seed default
       // content without surfacing it as a user edit.
-      if (!options.silent && DataLabRuntime.MUTATING_PY_FUNCTIONS.has(name)) {
+      if (!options.silent && MUTATING_PY_FUNCTIONS.has(name)) {
         this.emitWorkspaceMutation(name);
       }
       return value;
@@ -2448,19 +2258,21 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     try {
       value = await this.invokePy<T>(name, kwargs, options);
     } catch (err) {
-      // Re-spill anything we paged in when the call throws, so a failed
-      // operation never leaves the WASM heap inflated. On success,
-      // ``diskGuardAfter`` re-spills instead: it must rewrite the on-disk
-      // copy of objects mutated in place, which a release would skip.
-      await this.diskGuardReleaseFailsafe(name, pagedIn);
+      // Return what we paged in to disk when the call throws, so a failed
+      // operation never leaves the WASM heap inflated, and spill what it may
+      // have produced before raising (e.g. the results of a first group).
+      await this.diskGuardFailsafe(name, pagedIn);
       throw err;
     }
-    await this.diskGuardAfter(name, kwargs, value, pagedIn);
+    await this.diskGuardAfter(name, kwargs, pagedIn);
     return value;
   }
 
   // ------------------------------------------------------------------
   // Disk-mode guard (runs inside the serialised section)
+  //
+  // What each call pages in, and after which calls the on-disk store is
+  // reconciled with the model, is declared in ``pyCallPolicy.ts``.
   // ------------------------------------------------------------------
 
   private requireStore(): ObjectByteStore {
@@ -2477,7 +2289,9 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    *  the Python heap is single-threaded.  Returns the ids actually
    *  paged in, so they can be re-spilled afterwards (direct, unqueued). */
   private async pageInBatch(oids: string[]): Promise<string[]> {
-    const targets = oids.filter((oid) => this.spilledOids.has(oid));
+    const targets = Array.from(new Set(oids)).filter((oid) =>
+      this.spilledOids.has(oid),
+    );
     if (targets.length === 0) return [];
     const store = this.requireStore();
     const buffers = await Promise.all(targets.map((oid) => store.get(oid)));
@@ -2506,104 +2320,119 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     return true;
   }
 
-  /** Drop a resident object's array without rewriting its (current) OPFS
-   *  copy — used to re-spill read-only page-ins at no I/O cost. */
-  private async releaseDirect(oid: string): Promise<void> {
-    const released = (await this.invokePy("release_object_array", {
-      oid,
-    })) as boolean;
-    if (released) this.spilledOids.add(oid);
+  /** Return a paged-in object to disk once the call that needed it is over
+   *  (direct, unqueued). Its on-disk copy is rewritten only when the call
+   *  changed its data (always when *rewrite* is set), and deleted when the
+   *  object left the model; otherwise the array is just dropped. */
+  private async settleDirect(oid: string, rewrite: boolean): Promise<void> {
+    if (rewrite) {
+      await this.spillDirect(oid);
+      return;
+    }
+    const settled = await this.invokePy<{
+      state: "released" | "rewritten" | "spilled" | "gone";
+      payload?: Uint8Array;
+    }>("settle_object_array", { oid });
+    if (settled.state === "gone") {
+      await this.requireStore().delete(oid);
+      return;
+    }
+    if (settled.state === "rewritten") {
+      await this.requireStore().put(oid, settled.payload as Uint8Array);
+    }
+    this.spilledOids.add(oid);
   }
 
-  /** Make referenced (or all) objects resident before the call. Returns
+  /** Make the objects the call reads resident before the call. Returns
    *  the ids that were actually paged in, so they can be re-spilled. */
   private async diskGuardBefore(
     name: string,
     kwargs: Record<string, unknown>,
   ): Promise<string[]> {
-    if (DataLabRuntime.DELETES_OBJECTS.has(name)) return [];
-    let targets: string[];
-    if (DataLabRuntime.NEEDS_ALL_RESIDENT.has(name)) {
-      targets = Array.from(this.spilledOids);
-    } else if (DataLabRuntime.NEEDS_ACTIVITY_OBJECTS.has(name)) {
-      const oids = await this.invokePy<string[]>("activity_object_ids", {
-        activity_id: kwargs.activity_id,
-      });
-      targets = oids.filter((oid) => this.spilledOids.has(oid));
-    } else {
-      targets = DataLabRuntime.referencedOids(kwargs).filter((oid) =>
-        this.spilledOids.has(oid),
-      );
+    const plan = pageInPlan(name, kwargs);
+    switch (plan.kind) {
+      case "none":
+        return [];
+      case "all":
+        return this.pageInBatch(Array.from(this.spilledOids));
+      case "resolve":
+        return this.pageInBatch(
+          await this.invokePy<string[]>(plan.helper, plan.kwargs),
+        );
+      default:
+        return this.pageInBatch(plan.oids);
     }
-    return this.pageInBatch(targets);
   }
 
-  /** Re-spill paged-in operands and spill freshly-produced results. */
+  /** Return paged-in objects to disk and reconcile the on-disk store with
+   *  the model after a call adding, deleting or replacing objects. */
   private async diskGuardAfter(
     name: string,
     kwargs: Record<string, unknown>,
-    value: unknown,
     pagedIn: string[],
   ): Promise<void> {
-    if (DataLabRuntime.DELETES_OBJECTS.has(name)) {
-      await this.reconcileDeletedSpills();
-      return;
+    const rewrite = MUTATES_HEAVY.has(name);
+    for (const oid of pagedIn) await this.settleDirect(oid, rewrite);
+    if (REPLACES_MODEL.has(name) && kwargs.replace !== false) {
+      // A replaced model forgets the old store at once; an appended file
+      // keeps the current objects and their on-disk copies.
+      this.spilledOids.clear();
+      await this.requireStore().clear();
     }
-    if (DataLabRuntime.REPLACES_MODEL.has(name)) {
-      // A replaced model forgets the old store; an appended file keeps the
-      // current objects and their on-disk copies. Either way, spill every
-      // freshly-loaded (resident) object.
-      if (kwargs.replace !== false) {
-        this.spilledOids.clear();
-        await this.requireStore().clear();
-      }
-      await this.spillAllResidentDirect();
-      return;
-    }
-    const mutated = DataLabRuntime.MUTATES_HEAVY.has(name);
-    for (const oid of pagedIn) {
-      if (mutated) {
-        // Data changed in place → rewrite the on-disk copy.
-        await this.spillDirect(oid);
-      } else {
-        // Read-only access → drop the array, keep the existing file.
-        await this.releaseDirect(oid);
-      }
-    }
-    if (DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
-      for (const oid of DataLabRuntime.producedOids(value)) {
-        await this.spillDirect(oid);
-      }
-    }
+    const swept = DISK_SWEEP_CALLS.has(name) && (await this.diskSweepDirect());
     // Reclaim heap pages freed by the placeholders so later allocations
     // reuse them instead of growing the heap.
-    if (pagedIn.length || DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
+    if (pagedIn.length || swept) {
       await this.invokePy("collect_garbage");
     }
   }
 
-  /** Best-effort re-spill on the error path (never throws). Objects that a
-   *  failed call produced before raising (e.g. the results of a first group)
-   *  stay in the workspace: they are spilled as on success. */
-  private async diskGuardReleaseFailsafe(
+  /** Best-effort counterpart of {@link diskGuardAfter} on the error path
+   *  (never throws). Objects that a failed call produced before raising stay
+   *  in the workspace: they are spilled as on success. */
+  private async diskGuardFailsafe(
     name: string,
     pagedIn: string[],
   ): Promise<void> {
     for (const oid of pagedIn) {
       if (this.spilledOids.has(oid)) continue;
       try {
-        await this.releaseDirect(oid);
+        await this.settleDirect(oid, false);
       } catch {
         // Swallow — we're already on an error path.
       }
     }
-    if (DataLabRuntime.PRODUCES_OBJECTS.has(name)) {
+    if (DISK_SWEEP_CALLS.has(name)) {
       try {
-        await this.spillAllResidentDirect();
+        await this.diskSweepDirect();
       } catch {
         // Swallow — we're already on an error path.
       }
     }
+  }
+
+  /** Reconcile the on-disk store with the model (direct, unqueued): delete
+   *  the on-disk copy of every object that left the model or whose data was
+   *  replaced (e.g. by a macro), then spill every object left in memory
+   *  (created, loaded or replaced). Returns whether anything moved. */
+  private async diskSweepDirect(): Promise<boolean> {
+    const state = await this.invokePy<{
+      spilled: string[];
+      resident: string[];
+    }>("disk_sweep_state");
+    const live = new Set(state.spilled);
+    let moved = false;
+    for (const oid of Array.from(this.spilledOids)) {
+      if (!live.has(oid)) {
+        this.spilledOids.delete(oid);
+        await this.requireStore().delete(oid);
+        moved = true;
+      }
+    }
+    for (const oid of state.resident) {
+      if (await this.spillDirect(oid)) moved = true;
+    }
+    return moved;
   }
 
   /** Spill every resident object (direct, unqueued). */
@@ -2621,20 +2450,6 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   /** Page every spilled object back in (direct, unqueued). */
   private async pageInAllDirect(): Promise<void> {
     await this.pageInBatch(Array.from(this.spilledOids));
-  }
-
-  /** After a delete, drop the OPFS files of objects no longer present in
-   *  bootstrap's ``_SPILLED`` set, and sync the JS mirror. */
-  private async reconcileDeletedSpills(): Promise<void> {
-    const remaining = new Set(
-      (await this.invokePy("spilled_object_ids")) as string[],
-    );
-    for (const oid of Array.from(this.spilledOids)) {
-      if (!remaining.has(oid)) {
-        await this.requireStore().delete(oid);
-        this.spilledOids.delete(oid);
-      }
-    }
   }
 
   // ------------------------------------------------------------------
@@ -2760,6 +2575,29 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       "add_image_from_array",
       params as unknown as Record<string, unknown>,
     )) as string;
+  }
+
+  /** Add an object sent by a macro (base-64 pickle of a ``SignalObj`` /
+   *  ``ImageObj``) to the *kind* panel and return its id (mirrors
+   *  :func:`bootstrap.add_object_pickled`). */
+  async addObjectPickled(
+    pickledB64: string,
+    kind: PanelKind,
+    groupId: string | null = null,
+  ): Promise<string> {
+    return (await this.callPy("add_object_pickled", {
+      pickled_b64: pickledB64,
+      kind,
+      group_id: groupId,
+    })) as string;
+  }
+
+  /** Replace the object a macro sent back (base-64 pickle), matched by its
+   *  UUID, and return its id (mirrors :func:`bootstrap.set_object_pickled`). */
+  async setObjectPickled(pickledB64: string): Promise<string> {
+    return (await this.callPy("set_object_pickled", {
+      pickled_b64: pickledB64,
+    })) as string;
   }
 
   /** List the supported signal-generation types (mirrors DataLab's
@@ -4974,40 +4812,9 @@ from datalab.registries import EXTRA_MENU_ACTIONS
   async triggerPluginAction(
     actionId: string,
   ): Promise<{ signal: string[]; image: string[] }> {
-    const result = (await this.py.runPythonAsync(`
-import inspect
-from datalab.registries import EXTRA_MENU_ACTIONS
-from dlw_main import WebMainBridge as _WMB
-_bridge = _WMB()
-_target = None
-for _kind in ("signal", "image"):
-    for _entry in EXTRA_MENU_ACTIONS[_kind]:
-        if _entry.action_id == ${JSON.stringify(actionId)}:
-            _target = _entry
-            break
-    if _target is not None:
-        break
-if _target is None:
-    raise KeyError("Unknown plugin action: ${actionId}")
-_before = {k: set(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
-_result = _target.triggered()
-if inspect.isawaitable(_result):
-    await _result
-_after = {k: list(_bridge.get_object_uuids(k)) for k in ("signal", "image")}
-{k: [oid for oid in _after[k] if oid not in _before[k]] for k in ("signal", "image")}
-`)) as unknown;
-    // Pyodide returns a PyProxy for dict; convert to plain object via toJs.
-    if (
-      result &&
-      typeof (result as { toJs?: () => unknown }).toJs === "function"
-    ) {
-      const obj = (result as { toJs: (opts: unknown) => unknown }).toJs({
-        dict_converter: Object.fromEntries,
-      });
-      (result as { destroy?: () => void }).destroy?.();
-      return obj as { signal: string[]; image: string[] };
-    }
-    return result as { signal: string[]; image: string[] };
+    return (await this.callPy("trigger_plugin_action", {
+      action_id: actionId,
+    })) as { signal: string[]; image: string[] };
   }
 
   // ---------------------------------------------------------------------

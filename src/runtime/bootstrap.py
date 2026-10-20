@@ -2791,12 +2791,21 @@ def rename_group(gid: str, name: str, kind: str = "signal") -> None:
     _MODEL.rename_group(kind, gid, name)
 
 
+def _forget_object(oid: str) -> None:
+    """Discard every per-object state kept for *oid* once it left the model."""
+    _drop_object_data_state(oid)
+    _LAST_PROCESSING.pop(oid, None)
+    _CREATION_PARAMS.pop(oid, None)
+    _SPILLED.pop(oid, None)
+    _PAGED_IN_REVISIONS.pop(oid, None)
+
+
 def delete_group(gid: str, kind: str = "signal") -> None:
     """Delete group *gid* (and all its objects) in *kind* panel."""
     oids = list(_MODEL.panel(kind).find_group(gid).object_ids)
     _MODEL.delete_group(kind, gid)
     for oid in oids:
-        _drop_object_data_state(oid)
+        _forget_object(oid)
 
 
 def rename_object(oid: str, name: str) -> None:
@@ -2827,10 +2836,7 @@ def duplicate_object(oid: str) -> str:
 def delete_object(oid: str) -> None:
     """Delete object *oid* from its panel."""
     _MODEL.delete_object(oid)
-    _drop_object_data_state(oid)
-    _LAST_PROCESSING.pop(oid, None)
-    _CREATION_PARAMS.pop(oid, None)
-    _SPILLED.pop(oid, None)
+    _forget_object(oid)
 
 
 def delete_all_objects(kind: str = "signal") -> None:
@@ -2846,10 +2852,7 @@ def delete_all_objects(kind: str = "signal") -> None:
     ]
     for oid in oids:
         _MODEL.delete_object(oid)
-        _drop_object_data_state(oid)
-        _LAST_PROCESSING.pop(oid, None)
-        _CREATION_PARAMS.pop(oid, None)
-        _SPILLED.pop(oid, None)
+        _forget_object(oid)
     panel = _MODEL.panel(kind)
     panel.groups.clear()
     panel.ensure_default_group()
@@ -2887,6 +2890,10 @@ def set_object_pickled(pickled_b64: str) -> str:
     for entry in _MODEL._objects.values():  # noqa: SLF001
         if _object_uuid(entry.obj) == target_uuid:
             entry.obj = obj
+            # The replacement carries its own data: an on-disk copy of the
+            # replaced object is stale and must never be paged in again (the
+            # disk guard spills the new data afterwards).
+            _SPILLED.pop(entry.oid, None)
             _mark_object_data_changed(entry.oid)
             return entry.oid
     raise KeyError(f"No object with UUID {target_uuid!r} in the workspace")
@@ -2966,6 +2973,8 @@ def reset_all() -> None:
         panel.ensure_default_group()
     _LAST_PROCESSING.clear()
     _CREATION_PARAMS.clear()
+    _SPILLED.clear()
+    _PAGED_IN_REVISIONS.clear()
     _clear_data_summary_cache()
     _MACROS.clear()
     _NOTEBOOKS.clear()
@@ -3049,6 +3058,10 @@ def get_data_memory() -> dict[str, int]:
 
 # Maps oid -> {"kind", "attr", "shape", "dtype"} for every spilled object.
 _SPILLED: dict[str, dict[str, Any]] = {}
+# Maps oid -> data revision (``_DATA_REVISIONS``) of every object paged in by
+# the disk guard, so that :func:`settle_object_array` knows whether the
+# on-disk copy is still current once the call that needed it is over.
+_PAGED_IN_REVISIONS: dict[str, int] = {}
 
 
 def _heavy_attr(kind: str) -> str:
@@ -3075,6 +3088,7 @@ def detach_object_array(oid: str) -> bytes:
 
     if oid in _SPILLED or oid not in _MODEL._objects:  # noqa: SLF001
         return b""
+    _PAGED_IN_REVISIONS.pop(oid, None)
     entry = _MODEL._objects[oid]  # noqa: SLF001
     attr = _heavy_attr(entry.kind)
     arr = np.asarray(getattr(entry.obj, attr))
@@ -3128,6 +3142,7 @@ def attach_object_array(oid: str, payload: bytes) -> bool:
     arr = np.load(io.BytesIO(data), allow_pickle=False)
     setattr(entry.obj, _SPILLED[oid]["attr"], arr)
     _SPILLED.pop(oid, None)
+    _PAGED_IN_REVISIONS[oid] = _DATA_REVISIONS.get(oid, 0)
     return True
 
 
@@ -3149,6 +3164,7 @@ def release_object_array(oid: str) -> bool:
     """
     if oid in _SPILLED or oid not in _MODEL._objects:  # noqa: SLF001
         return False
+    _PAGED_IN_REVISIONS.pop(oid, None)
     entry = _MODEL._objects[oid]  # noqa: SLF001
     attr = _heavy_attr(entry.kind)
     arr = np.asarray(getattr(entry.obj, attr))
@@ -3164,6 +3180,36 @@ def release_object_array(oid: str) -> bool:
         placeholder = np.zeros((arr.shape[0], 1), dtype=arr.dtype)
     setattr(entry.obj, attr, placeholder)
     return True
+
+
+def settle_object_array(oid: str) -> dict[str, Any]:
+    """Return a paged-in object to disk once the call that needed it is over.
+
+    The on-disk copy is kept when the object's data did not change since
+    :func:`attach_object_array` (the array is just released); otherwise the
+    array is serialised afresh so the JS runtime rewrites that copy. Data
+    changes are those recorded by :func:`_mark_object_data_changed`.
+
+    Args:
+        oid: object identifier in :data:`_MODEL`.
+
+    Returns:
+        ``{"state": "released"}`` when the on-disk copy is still current,
+        ``{"state": "rewritten", "payload": <.npy bytes>}`` when it must be
+        rewritten, ``{"state": "spilled"}`` when the array is already on disk,
+        and ``{"state": "gone"}`` when *oid* left the model during the call.
+    """
+    if oid not in _MODEL._objects:  # noqa: SLF001
+        _SPILLED.pop(oid, None)
+        _PAGED_IN_REVISIONS.pop(oid, None)
+        return {"state": "gone"}
+    if oid in _SPILLED:
+        return {"state": "spilled"}
+    revision = _PAGED_IN_REVISIONS.get(oid)
+    if revision is not None and revision == _DATA_REVISIONS.get(oid, 0):
+        release_object_array(oid)
+        return {"state": "released"}
+    return {"state": "rewritten", "payload": detach_object_array(oid)}
 
 
 def is_object_spilled(oid: str) -> bool:
@@ -3196,6 +3242,30 @@ def spillable_objects() -> list[dict[str, Any]]:
             out.append({"oid": oid, "kind": entry.kind, "nbytes": int(nbytes)})
     out.sort(key=lambda d: d["nbytes"], reverse=True)
     return out
+
+
+def disk_sweep_state() -> dict[str, list[str]]:
+    """Return the on-disk bookkeeping the JS disk guard reconciles with.
+
+    Called after the calls that add, delete or replace objects. The spill
+    records of objects that left the model (e.g. deleted with their group or
+    by a workspace reset) are forgotten first, so that only live objects are
+    reported.
+
+    Returns:
+        ``{"spilled": [...], "resident": [...]}``: ids of the objects whose
+        heavy array is on disk, and ids of the objects whose heavy array is in
+        memory (e.g. just created, or replaced by a macro), largest first.
+    """
+    objects = _MODEL._objects  # noqa: SLF001
+    for oid in [oid for oid in _SPILLED if oid not in objects]:
+        _SPILLED.pop(oid, None)
+    for oid in [oid for oid in _PAGED_IN_REVISIONS if oid not in objects]:
+        _PAGED_IN_REVISIONS.pop(oid, None)
+    return {
+        "spilled": list(_SPILLED),
+        "resident": [item["oid"] for item in spillable_objects()],
+    }
 
 
 def forget_spilled(oid: str) -> None:
@@ -5425,6 +5495,22 @@ def check_feature_inputs(
 _LAST_PROCESSING: dict[str, dict[str, Any]] = globals().get("_LAST_PROCESSING", {})
 
 
+def last_processing_input_ids(oid: str) -> list[str]:
+    """Return the ids of the objects whose data :func:`get_last_processing` reads.
+
+    Only the first available source is read, to initialize the parameters of
+    the processing from its source (e.g. ``RadialProfileParam``); never *oid*
+    itself. The disk guard pages these objects in before the call.
+    """
+    record = _LAST_PROCESSING.get(oid)
+    if record is None:
+        return []
+    spec = _full_catalog_with_plugins().get(record["feature_id"])
+    if spec is None or spec.paramclass is None:
+        return []
+    return next(([sid] for sid in record["source_ids"] if _MODEL.has(sid)), [])
+
+
 def get_last_processing(oid: str) -> dict[str, Any] | None:
     """Return the last processing applied to produce *oid*, or ``None``.
 
@@ -6711,6 +6797,44 @@ def list_plugins() -> list[dict[str, Any]]:
     return _plugins_module().list_plugins()
 
 
+async def trigger_plugin_action(action_id: str) -> dict[str, list[str]]:
+    """Run the plugin menu action *action_id*.
+
+    The action runs plugin code that may read any object of the workspace
+    (the browser bridge has no live selection model), so in on-disk storage
+    mode the disk guard keeps every object in memory for its duration.
+
+    Returns:
+        The ids of the objects the action added to each panel.
+    """
+    import inspect
+
+    from datalab.registries import EXTRA_MENU_ACTIONS
+    from dlw_main import WebMainBridge
+
+    bridge = WebMainBridge()
+    kinds = ("signal", "image")
+    target = next(
+        (
+            entry
+            for kind in kinds
+            for entry in EXTRA_MENU_ACTIONS[kind]
+            if entry.action_id == action_id
+        ),
+        None,
+    )
+    if target is None:
+        raise KeyError(f"Unknown plugin action: {action_id}")
+    before = {kind: set(bridge.get_object_uuids(kind)) for kind in kinds}
+    result = target.triggered()
+    if inspect.isawaitable(result):
+        await result
+    return {
+        kind: [oid for oid in bridge.get_object_uuids(kind) if oid not in before[kind]]
+        for kind in kinds
+    }
+
+
 # ---------------------------------------------------------------------------
 # Native HDF5 workspace I/O (DataLab-compatible)
 # ---------------------------------------------------------------------------
@@ -6984,6 +7108,7 @@ def open_workspace_from_bytes(
         _LAST_PROCESSING.clear()
         _PREVIEW_RESULT = None
         _SPILLED.clear()
+        _PAGED_IN_REVISIONS.clear()
     for kind, grp_title, objs in groups:
         gid = _MODEL.create_group(kind, name=grp_title)
         counts["groups"] += 1

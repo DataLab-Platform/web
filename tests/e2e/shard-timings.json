@@ -8,6 +8,7 @@
   "capsule_exchange.spec.ts": 212,
   "central_view_switch.spec.ts": 26,
   "clear_recent_probe.spec.ts": 49,
+  "disk_mode_data.spec.ts": 40,
   "i18n.spec.ts": 75,
   "image-lod.spec.ts": 27,
   "image-pan.spec.ts": 31,

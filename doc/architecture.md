@@ -344,6 +344,7 @@ Why this exists:
   by spec**, so it is selected only when the runtime runs in the worker.
   Either way HDF5 stays the durable source of truth — OPFS is an
   ephemeral spill cache.
+- **Disk guard policy.** In disk mode every object holds a 1-element placeholder at rest, and `runtime.ts` pages arrays in only around the Python call that reads them. `pyCallPolicy.ts` declares what each call reads (object ids passed as `oid`, `current_oid`, `source_oid`, `selected_oids`, `candidate_ids`, `bindings`…, or a Python resolver such as `last_processing_input_ids`, or every object for workspace serialisation and plugin menu actions) and after which calls the OPFS store is reconciled with the model (`disk_sweep_state`: on-disk copies of objects that left the model are deleted, objects left in memory are spilled, whatever the call returns). A paged-in object is settled after the call (`settle_object_array`): its on-disk copy is rewritten only when its data revision changed. Two audits keep the policy complete: `tests/ts/runtime/pyCallPolicyAudit.test.ts` requires every identifier-like kwarg passed to `callPy` to be classified, and `tests/python/test_py_call_policy_audit.py` requires every called Python function that adds, deletes or replaces objects to be followed by a reconciliation.
 - **Zero-copy bridge.** `workerProtocol.collectTransferables` passes every
   `ArrayBuffer` in call arguments and return values as a `postMessage`
   transferable, so binary payloads (image/signal arrays, file/HDF5 bytes)

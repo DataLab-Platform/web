@@ -8,7 +8,7 @@
  * This module is the single source of truth.
  */
 
-import type { RuntimeApi } from "./runtime";
+import type { PanelKind, RuntimeApi } from "./runtime";
 
 export interface BridgeExternalCallbacks {
   getSelection?: () => string[];
@@ -97,22 +97,22 @@ export function buildProxyBridge(
       s.getObjectUuids((p as { panel: string }).panel),
     delete_object: async (p: unknown) => {
       const oid = (p as { oid: string }).oid;
-      await s.runPython(`_MODEL.delete_object(${JSON.stringify(oid)})`);
+      await s.deleteObject(oid);
       ext.onModelChanged?.(null);
       return null;
     },
     add_object: async (p: unknown) => {
       const a = p as {
         pickled_b64: string;
-        kind: string;
+        kind: PanelKind;
         group_id?: string | null;
         set_current?: boolean;
       };
-      const oid = (await s.runPython(
-        `add_object_pickled(${JSON.stringify(a.pickled_b64)}, ` +
-          `${JSON.stringify(a.kind)}, ` +
-          `${a.group_id ? JSON.stringify(a.group_id) : "None"})`,
-      )) as string;
+      const oid = await s.addObjectPickled(
+        a.pickled_b64,
+        a.kind,
+        a.group_id ?? null,
+      );
       ext.onModelChanged?.(a.kind);
       if (a.set_current !== false) {
         ext.selectObjects?.([oid], a.kind);
@@ -121,9 +121,7 @@ export function buildProxyBridge(
     },
     set_object: async (p: unknown) => {
       const a = p as { pickled_b64: string };
-      const oid = (await s.runPython(
-        `set_object_pickled(${JSON.stringify(a.pickled_b64)})`,
-      )) as string;
+      const oid = await s.setObjectPickled(a.pickled_b64);
       ext.onModelChanged?.(null);
       return oid;
     },
@@ -133,10 +131,10 @@ export function buildProxyBridge(
         panel?: string | null;
         select?: boolean;
       };
-      const panel = a.panel ?? ext.getCurrentPanel?.() ?? "signal";
-      const gid = (await s.runPython(
-        `create_group(${JSON.stringify(panel)}, ${JSON.stringify(a.title)})`,
-      )) as string;
+      const panel = (a.panel ??
+        ext.getCurrentPanel?.() ??
+        "signal") as PanelKind;
+      const gid = await s.createGroup(panel, a.title);
       ext.onModelChanged?.(panel);
       if (a.select) {
         ext.selectObjects?.([], panel);
@@ -171,7 +169,7 @@ export function buildProxyBridge(
       )) as unknown;
     },
     reset_all: async () => {
-      await s.runPython("reset_all()");
+      await s.resetAll();
       ext.onModelChanged?.(null);
       return null;
     },

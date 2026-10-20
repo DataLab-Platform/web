@@ -17,26 +17,41 @@ interface RuntimeInternals {
     get: (oid: string) => Promise<Uint8Array>;
     put: (oid: string, bytes: Uint8Array) => Promise<void>;
     clear: () => Promise<void>;
+    delete: (oid: string) => Promise<void>;
   } | null;
   spilledOids: Set<string>;
   callPy<T>(name: string, kwargs?: Record<string, unknown>): Promise<T>;
 }
 
 /** Disk-mode runtime with one spilled object ("old") and one freshly-loaded
- *  resident object ("new") reported by ``spillable_objects``. */
+ *  resident object ("new"), mirroring the bookkeeping of ``bootstrap.py``. */
 function makeDiskRuntime() {
   const runtime = Object.create(DataLabRuntime.prototype) as RuntimeInternals;
   const store = {
     get: vi.fn(async () => new Uint8Array([1])),
     put: vi.fn(async () => {}),
     clear: vi.fn(async () => {}),
+    delete: vi.fn(async () => {}),
   };
+  const pySpilled = new Set(["old"]);
   runtime.py = {
     globals: {
       get: (name) => ({
-        callKwargs: () => {
-          if (name === "spillable_objects") return [{ oid: "new" }];
-          if (name === "detach_object_array") return new Uint8Array([2]);
+        callKwargs: (kwargs) => {
+          if (name === "open_workspace_from_bytes") {
+            if (kwargs.replace !== false) pySpilled.clear();
+            return null;
+          }
+          if (name === "disk_sweep_state") {
+            return {
+              spilled: Array.from(pySpilled),
+              resident: pySpilled.has("new") ? [] : ["new"],
+            };
+          }
+          if (name === "detach_object_array") {
+            pySpilled.add(String(kwargs.oid));
+            return new Uint8Array([2]);
+          }
           return null;
         },
         destroy: () => {},
@@ -57,6 +72,7 @@ describe("DataLabRuntime disk guard on workspace open", () => {
     await runtime.callPy("open_workspace_from_bytes", { replace: false });
 
     expect(store.clear).not.toHaveBeenCalled();
+    expect(store.delete).not.toHaveBeenCalled();
     expect(runtime.spilledOids).toEqual(new Set(["old", "new"]));
     expect(store.put).toHaveBeenCalledWith("new", new Uint8Array([2]));
   });

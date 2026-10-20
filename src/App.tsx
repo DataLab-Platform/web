@@ -1086,7 +1086,7 @@ export default function App() {
   // Workspace-dirty tracking.
   //
   // The runtime tags every Python helper that mutates durable state
-  // (``MUTATING_PY_FUNCTIONS`` in ``runtime.ts``) and notifies
+  // (``MUTATING_PY_FUNCTIONS`` in ``pyCallPolicy.ts``) and notifies
   // listeners after each successful call. We subscribe once and flip
   // the workspace context's ``dirty`` flag — UI indicators (window
   // title •, ``beforeunload`` guard) react automatically.

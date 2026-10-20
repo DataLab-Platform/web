@@ -125,7 +125,7 @@ describe("DataLabRuntime latest-read queue", () => {
     const sourceBytes = new Uint8Array([1, 2, 3]);
     const runtime = makeRuntime((name) => {
       calls.push(name);
-      if (name === "release_object_array") return true;
+      if (name === "settle_object_array") return { state: "released" };
       // Refusable calls go through ``bridge_<name>``, which wraps the value.
       if (name === "bridge_preview_feature") {
         return {
@@ -160,7 +160,7 @@ describe("DataLabRuntime latest-read queue", () => {
     expect(calls.indexOf("attach_object_array")).toBeLessThan(
       calls.indexOf("bridge_preview_feature"),
     );
-    expect(calls.indexOf("release_object_array")).toBeGreaterThan(
+    expect(calls.indexOf("settle_object_array")).toBeGreaterThan(
       calls.indexOf("bridge_preview_feature"),
     );
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
@@ -172,7 +172,7 @@ describe("DataLabRuntime latest-read queue", () => {
     const runtime = makeRuntime((name) => {
       calls.push(name);
       if (name === "detach_object_array") return newBytes;
-      if (name === "release_object_array") return true;
+      if (name === "settle_object_array") return { state: "released" };
       if (name === "set_signal_xydata") return null;
       return null;
     });
@@ -183,7 +183,7 @@ describe("DataLabRuntime latest-read queue", () => {
 
     await runtime.callPy("set_signal_xydata", { oid: "signal-1" });
 
-    expect(calls).not.toContain("release_object_array");
+    expect(calls).not.toContain("settle_object_array");
     expect(calls.indexOf("detach_object_array")).toBeGreaterThan(
       calls.indexOf("set_signal_xydata"),
     );
@@ -195,7 +195,7 @@ describe("DataLabRuntime latest-read queue", () => {
     const calls: string[] = [];
     const runtime = makeRuntime((name) => {
       calls.push(name);
-      if (name === "release_object_array") return true;
+      if (name === "settle_object_array") return { state: "released" };
       if (name === "set_signal_xydata") throw new Error("failed");
       return null;
     });
@@ -207,7 +207,7 @@ describe("DataLabRuntime latest-read queue", () => {
       runtime.callPy("set_signal_xydata", { oid: "signal-1" }),
     ).rejects.toThrow("failed");
 
-    expect(calls).toContain("release_object_array");
+    expect(calls).toContain("settle_object_array");
     expect(calls).not.toContain("detach_object_array");
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
   });
@@ -222,7 +222,7 @@ describe("DataLabRuntime latest-read queue", () => {
         return ["source", "result", "resident"];
       }
       if (name === "attach_object_array") attached.push(kwargs.oid);
-      if (name === "release_object_array") return true;
+      if (name === "settle_object_array") return { state: "released" };
       return name === "replay_activity" ? { verdict: "exact" } : null;
     });
     const get = vi.fn(async () => new Uint8Array([1]));
