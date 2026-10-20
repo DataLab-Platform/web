@@ -23,7 +23,7 @@ pre-commit>=3.7
 # sigima-dependency.json and guidata-dependency.json. Use
 # scripts/sigima_dependency.py to install the configured revisions together
 # with these mandatory dependencies.
-guidata>=3.15.0
+guidata>=3.16.0
 numpy>=1.22
 scipy>=1.10.1
 scikit-image>=0.19.2

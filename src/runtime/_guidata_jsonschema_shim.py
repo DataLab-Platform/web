@@ -1,9 +1,10 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause License
 # See LICENSE file for details
 # @shim-registry: guidata-jsonschema
-"""Add browser-specific schema hints missing from guidata 3.15.
+"""Add browser-specific schema hints missing from guidata.
 
-Guidata provides the JSON Schema exporter natively from version 3.15.0.
+Guidata provides the JSON Schema exporter natively from version 3.15.0, and
+DataLab-Web requires guidata 3.16 or later (see ``guidata-dependency.json``).
 DataLab-Web additionally needs the ``variable_size`` and ``minmax`` item
 properties to configure its array editor and the ``even`` constraint to
 validate integer controls. This patch augments only guidata's native item

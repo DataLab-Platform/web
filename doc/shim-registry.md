@@ -25,7 +25,7 @@ Only **backport** shims belong in `SHIM_REGISTRY`. Architectural layers are deli
 
 ## Current guidata state
 
-DataLab-Web requires guidata 3.15 or later. That release provides `guidata.dataset.backends`, `DataSet.edit_async()`, and the public JSON Schema export API natively, so the former backend shim has been deleted. The remaining `_guidata_jsonschema_shim.py` does not replace the exporter: it augments guidata's native `FloatArrayItem` converter with `x-guidata-variable-size` and `x-guidata-minmax`, which the browser array editor consumes. No released upstream version currently provides those two hints, so its registry entry intentionally uses `removableFrom: null`.
+DataLab-Web requires guidata 3.16 or later. Guidata 3.15 introduced `guidata.dataset.backends`, `DataSet.edit_async()`, and the public JSON Schema export API natively, so the former backend shim has been deleted. The remaining `_guidata_jsonschema_shim.py` does not replace the exporter: it augments guidata's native `FloatArrayItem` converter with `x-guidata-variable-size` and `x-guidata-minmax`, which the browser array editor consumes. No released upstream version currently provides those two hints, so its registry entry intentionally uses `removableFrom: null`.
 
 ## How versions are resolved
 
@@ -33,7 +33,7 @@ DataLab-Web requires guidata 3.15 or later. That release provides `guidata.datas
 
 | Package                  | How the runtime gets it                                  | Fast-audit source                                                                                                    |
 | ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `guidata`                | `micropip.install("guidata>=3.15.0")`                    | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
+| `guidata`                | `micropip.install("guidata>=3.16.0")`                    | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
 | `sigima`                 | `micropip.install("sigima>=1.1.6")`                      | Latest PyPI release from `https://pypi.org/pypi/sigima/json`                                                         |
 | `numpy`, `scipy`, `h5py` | Bundled with the pinned Pyodide build (`py.loadPackage`) | `pyodide-lock.json` of the pinned `PYODIDE_VERSION` (from [src/runtime/workerBase.ts](../src/runtime/workerBase.ts)) |
 
