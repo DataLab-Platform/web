@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Added
+## [0.10.0] - 2026-10-20
+
+### Added in 0.10.0
 
 - **Brightness and contrast:** a Fiji-style image processing now combines a live histogram with synchronized minimum, maximum, brightness and contrast controls, deterministic Auto and Reset actions, ROI-aware remapping, and optional live preview. One input window is initialized from the first selected image and applied to the full selection; every result retains its source image's output range.
 - **Optional processing previews:** compatible signal and image processings
@@ -27,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Appending a workspace (API):** `openWorkspaceHdf5(…, replace = false)` and `openWorkspaceCapsule(…, replace = false)` return a `provenance_notice` when the file held provenance, which is not imported (the current record is kept, appended objects never inherit the provenance of another object, and their later processing is recorded); `workspaceHasProvenance(bytes)` tells beforehand. The interface itself always opens workspaces replacing the current one.
 - **User guide:** a _Provenance and capsules_ page follows the usual path (process and save, see where a result comes from, check and verify it, exchange a capsule with DataLab Desktop) and states what provenance does not do. The user guide is now loaded when first opened, which keeps its pages out of the initial download.
 
-### Changed
+### Changed in 0.10.0
 
 - **Processing catalogue:** the pattern of each processing (one or several inputs, operand) and the panel receiving its result now come from the Sigima operation declarations, shared with DataLab Desktop, instead of being guessed from function signatures.
 - **Applications:** each method now shows the inputs it expects and a live status telling whether the current selection can be analyzed, and why not. _Run on selection…_ runs a ready method directly and asks for the input assignment only when it is ambiguous or invalid; the assignment dialog describes each input, flags objects lacking required metadata, and checks the chosen objects before _Continue_. Examples are listed under the methods they are designed for: _Try with this example_ opens the example and runs the method with prefilled parameters. One example may serve several methods, and examples designed for no method are listed as datasets.
@@ -39,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Guidata compatibility:** browser runtimes now require guidata 3.16 and use the native async DataSet backend and JSON Schema exporter introduced in guidata 3.15. The former backend backport has been removed; a focused compatibility patch preserves the `FloatArrayItem` sizing and numeric-parity hints required by browser editors.
 - **Licence:** the BSD 3-Clause licence of DataLab-Web is now stated in a `LICENSE` file at the root of the repository, and included in the application and SDK tarballs of each release.
 
-### Fixed
+### Fixed in 0.10.0
 
 - **Older workspaces in disk storage mode:** verifying an old processing record now gives its normal explicit refusal instead of an error, without loading arrays or running a calculation. Added objects that reuse a deleted object's identifier are not loaded as its former inputs or references.
 - **Capsule exports and revisions:** the dialog keeps an export active through inspection, revision recording and refresh. Tabs cannot interrupt a running operation, and a late initial read no longer hides newly exported revisions when selecting capsules to compare.
@@ -340,7 +342,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/DataLab-Platform/web/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/DataLab-Platform/web/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DataLab-Platform/web/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/DataLab-Platform/web/compare/v0.6.3...v0.7.0
