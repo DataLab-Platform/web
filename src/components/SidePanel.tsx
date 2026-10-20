@@ -180,6 +180,10 @@ export function SidePanel(props: Props) {
   const consumedRequestRef = useRef<number | null>(null);
   const keepTabForRef = useRef<string | null>(null);
   useEffect(() => {
+    // No object shown: the panel is being refreshed (``refreshPanelKind``
+    // clears the selection while it reads the object tree), so keep the tab
+    // and the pending navigation for the object selected next.
+    if (currentId === null) return;
     const previousId = shownIdRef.current;
     shownIdRef.current = currentId;
     if (

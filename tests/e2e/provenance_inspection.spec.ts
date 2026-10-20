@@ -245,6 +245,17 @@ for (const runtimeMode of ["main", "worker"] as const) {
         "This input has changed since the computation",
         { timeout: 30_000 },
       );
+      // Going to an input keeps the Provenance tab, to follow its provenance.
+      await panel.getByRole("button", { name: "Go to object" }).first().click();
+      await expect(page.locator(".object-tree-item.selected")).toContainText(
+        /gaussian/i,
+      );
+      await expect(
+        page.getByRole("tab", { name: "Provenance" }),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(panel).toContainText("sigima.signal.gaussian_filter", {
+        timeout: 30_000,
+      });
     });
   });
 }

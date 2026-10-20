@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -97,9 +97,10 @@ function Panel(props: {
   );
 }
 
-/** Panel whose selection follows "Go to object", like ``App``. */
+/** Panel whose selection follows "Go to object" like ``App``: the panel is
+ *  refreshed, clearing the selection while the object tree is read. */
 function NavigablePanel() {
-  const [currentId, setCurrentId] = useState("s2");
+  const [currentId, setCurrentId] = useState<string | null>("s2");
   return (
     <>
       <button type="button" onClick={() => setCurrentId("s3")}>
@@ -107,7 +108,10 @@ function NavigablePanel() {
       </button>
       <Panel
         currentId={currentId}
-        onSelectObject={(oid) => setCurrentId(oid)}
+        onSelectObject={(oid) => {
+          setCurrentId(null);
+          setTimeout(() => setCurrentId(oid), 0);
+        }}
       />
     </>
   );
@@ -160,6 +164,15 @@ describe("SidePanel tab, as in DataLab desktop", () => {
     expect(selectedTab()).toBe("Results");
   });
 
+  it("keeps the tab when the panel is refreshed on the same object", () => {
+    const view = render(<Panel currentId="a" />);
+    fireEvent.click(screen.getByRole("tab", { name: "Results" }));
+
+    view.rerender(<Panel currentId={null} />);
+    view.rerender(<Panel currentId="a" />);
+    expect(selectedTab()).toBe("Results");
+  });
+
   it("shows Properties when another object is selected", () => {
     const view = render(<Panel currentId="a" />);
     fireEvent.click(screen.getByRole("tab", { name: "Provenance" }));
@@ -175,8 +188,10 @@ describe("SidePanel tab, as in DataLab desktop", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Go to object" }),
     );
+    await waitFor(() =>
+      expect(runtime.describeObjectProvenance).toHaveBeenLastCalledWith("s1"),
+    );
     expect(selectedTab()).toBe("Provenance");
-    expect(runtime.describeObjectProvenance).toHaveBeenLastCalledWith("s1");
 
     fireEvent.click(screen.getByRole("button", { name: "select s3" }));
     expect(selectedTab()).toBe("Properties");
