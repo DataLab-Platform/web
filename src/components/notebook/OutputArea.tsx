@@ -3,12 +3,10 @@
  *
  * Supported MIME types in the MVP:
  *   - text/plain                          → <pre>
- *   - text/html                           → sanitised innerHTML (no
- *                                            DOMPurify dep yet — kept
- *                                            minimal for the MVP; the
- *                                            HTML comes from trusted
- *                                            ``_repr_html_`` of Sigima
- *                                            result wrappers)
+ *   - text/html                           → innerHTML sanitised by
+ *                                            DOMPurify
+ *   - image/svg+xml                       → innerHTML sanitised by
+ *                                            DOMPurify (SVG profile)
  *   - image/png                           → <img src="data:image/png;..."/>
  *   - application/vnd.plotly.v1+json      → react-plotly.js Figure
  *
@@ -16,6 +14,7 @@
  * coloured ``<pre>``.
  */
 
+import DOMPurify from "dompurify";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import Plot from "react-plotly.js";
@@ -25,6 +24,23 @@ import { t } from "../../i18n/translate";
 
 interface OutputAreaProps {
   outputs: CellOutput[];
+}
+
+// Outputs are not only produced by the local kernel: opening a ``.ipynb``
+// restores the outputs it contains, which must therefore be treated as
+// untrusted. ``FORCE_BODY`` keeps the leading ``<style>`` block of Sigima's
+// ``_repr_html_`` tables, which the HTML parser would otherwise drop.
+function sanitizeHtmlOutput(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORCE_BODY: true,
+  });
+}
+
+function sanitizeSvgOutput(svg: string): string {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+  });
 }
 
 export function OutputArea({ outputs }: OutputAreaProps): ReactElement {
@@ -117,26 +133,21 @@ function MimeRenderer({ bundle }: { bundle: MimeBundle }): ReactElement | null {
     );
   }
   if (bundle["image/svg+xml"]) {
-    const svg = bundle["image/svg+xml"] as string;
+    const svg = sanitizeSvgOutput(String(bundle["image/svg+xml"]));
     return (
       <div
         className="nb-output-svg"
         style={{ padding: 4 }}
-        // SVG comes from ``_repr_svg_`` of trusted Python objects.
         dangerouslySetInnerHTML={{ __html: svg }}
       />
     );
   }
   if (bundle["text/html"]) {
-    const html = bundle["text/html"] as string;
+    const html = sanitizeHtmlOutput(String(bundle["text/html"]));
     return (
       <div
         className="nb-output-html"
         style={{ padding: 4 }}
-        // The HTML originates from ``_repr_html_`` of Sigima result
-        // wrappers (TableResultDisplay / GeometryResultDisplay) — i.e.
-        // first-party trusted output. A DOMPurify pass will be added
-        // before any third-party sources are wired in.
         dangerouslySetInnerHTML={{ __html: html }}
       />
     );

@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Saving the workspace:** _File > Save to HDF5 file…_ now asks for the file before preparing the workspace, and when the browser refuses to write the chosen file (for example a policy of a managed computer), the workspace is downloaded instead of the save failing with an unhandled error.
 - **Side panel tabs:** in a narrow side panel, the tabs no longer overflow it (they covered the central area and could shift the layout): inactive tabs show their icon only, with their name as a tooltip.
 - **Capsule size limits:** the workspace file supplied for a capsule that references it is now refused before being read when it exceeds the browser limit (256 MiB), like the capsule itself. Exporting a capsule that the browser could not open again (workspace, archive or manifest over its limits) is refused with the reason instead of producing the file.
+- **Security — opened notebooks:** HTML and SVG outputs stored in an opened `.ipynb` file are now sanitized before being displayed. A crafted notebook could previously run scripts in DataLab-Web as soon as it was opened, without running any cell. Tables and styling of Sigima results are displayed as before.
 
 ## [0.9.0] - 2026-08-11
 
