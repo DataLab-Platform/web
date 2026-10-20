@@ -99,7 +99,11 @@ describe("WorkerRuntimeProxy", () => {
   it("surfaces a worker error event as a boot-failure rejection", async () => {
     const worker = new FakeWorker();
     const proxy = new WorkerRuntimeProxy(worker);
-    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    const ready = proxy.init("C", {
+      group: "G",
+      untitled: "U",
+      translations: {},
+    });
     worker.emitError("Unexpected token (kernelWorker.ts:1)");
     await expect(ready).rejects.toThrow(/Unexpected token/);
   });
@@ -109,14 +113,22 @@ describe("WorkerRuntimeProxy", () => {
     const proxy = new WorkerRuntimeProxy(worker);
     let resolved = false;
     const ready = proxy
-      .init("C", { group: "Group", untitled: "Untitled" })
+      .init("C", {
+        group: "Groupe",
+        untitled: "Sans titre",
+        translations: { "Add metadata": "Ajouter des métadonnées" },
+      })
       .then(() => {
         resolved = true;
       });
     expect(worker.last()).toEqual({
       type: "init",
       lang: "C",
-      labels: { group: "Group", untitled: "Untitled" },
+      labels: {
+        group: "Groupe",
+        untitled: "Sans titre",
+        translations: { "Add metadata": "Ajouter des métadonnées" },
+      },
     });
     expect(resolved).toBe(false);
     worker.emit({ type: "ready", mirror: MIRROR });
@@ -127,7 +139,11 @@ describe("WorkerRuntimeProxy", () => {
   it("rejects init on a boot error", async () => {
     const worker = new FakeWorker();
     const proxy = new WorkerRuntimeProxy(worker);
-    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    const ready = proxy.init("C", {
+      group: "G",
+      untitled: "U",
+      translations: {},
+    });
     worker.emit({ type: "boot-error", error: "micropip failed" });
     await expect(ready).rejects.toThrow("micropip failed");
   });
@@ -339,7 +355,11 @@ describe("WorkerRuntimeProxy", () => {
 
   it("rejects in-flight calls on a worker error after boot", async () => {
     const { worker, proxy, runtime } = setup();
-    const ready = proxy.init("C", { group: "G", untitled: "U" });
+    const ready = proxy.init("C", {
+      group: "G",
+      untitled: "U",
+      translations: {},
+    });
     worker.emit({ type: "ready", mirror: MIRROR });
     await ready;
     const error = vi.spyOn(console, "error").mockImplementation(() => {});

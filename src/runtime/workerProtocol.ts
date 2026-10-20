@@ -56,6 +56,7 @@ export class ScientificRefusalError extends Error {
 }
 import type { MemoryUsage } from "../utils/memory";
 import type { StorageMode } from "./runtime";
+import type { RuntimeLabels } from "./runtimeLabels";
 
 /** Synchronous-accessor snapshot the worker pushes to the proxy's cache. */
 export interface KernelMirror {
@@ -85,7 +86,7 @@ export const INITIAL_MIRROR: KernelMirror = {
 export interface InitRequest {
   type: "init";
   lang: string;
-  labels: { group: string; untitled: string };
+  labels: RuntimeLabels;
 }
 
 /** Invoke ``runtime[method](...args)`` in the worker. */

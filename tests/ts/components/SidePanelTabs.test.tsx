@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DialogProvider } from "../../../src/components/ConfirmDialog";
 import {
   SidePanel,
   type SideTabRequest,
 } from "../../../src/components/SidePanel";
+import { setActiveLocale } from "../../../src/i18n/locale";
 import type {
   ProvenanceActivity,
   ProvenanceDescription,
@@ -195,5 +196,24 @@ describe("SidePanel tab, as in DataLab desktop", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "select s3" }));
     expect(selectedTab()).toBe("Properties");
+  });
+});
+
+describe("SidePanel in French", () => {
+  afterEach(() => setActiveLocale("en", { reload: false }));
+
+  it("translates the Results tab, keeping the menu name emphasized", () => {
+    setActiveLocale("fr", { reload: false });
+    const view = render(<Panel currentId="a" />);
+    fireEvent.click(screen.getByRole("tab", { name: "Résultats" }));
+
+    const empty = view.container.querySelector(".side-panel-empty");
+    expect(empty?.textContent).toBe(
+      "Aucun résultat d'analyse pour l'instant. Utilisez le menu Analyse pour en calculer un.",
+    );
+    expect(empty?.querySelector("em")?.textContent).toBe("Analyse");
+    expect(screen.getByRole("complementary").getAttribute("aria-label")).toBe(
+      "Panneau de l'objet",
+    );
   });
 });

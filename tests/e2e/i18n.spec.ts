@@ -125,4 +125,34 @@ test.describe("Internationalisation (French locale)", () => {
       page.getByRole("menuitem", { name: "Ordonnée à x=……" }),
     ).toBeVisible();
   });
+
+  // 3. DataLab-Web's own Python dialogs (``bootstrap.py``): their strings,
+  // which Sigima's catalog lacks, are translated by the UI catalog pushed into
+  // Pyodide at boot — computed on the main thread in worker mode too.
+  for (const runtimeMode of ["main", "worker"] as const) {
+    test(`translates the dialogs of bootstrap.py (${runtimeMode})`, async ({
+      page,
+    }) => {
+      await page.goto(`/?lang=fr&runtime=${runtimeMode}`);
+      await waitForRuntimeReady(page);
+
+      const strings = (await page.evaluate(() =>
+        (
+          window as unknown as {
+            runtime: { runPython(code: string): Promise<unknown> };
+          }
+        ).runtime.runPython(
+          '[_web("Add metadata"), _web("Invalid pattern:"), ' +
+            "next(v for k, v in _WEB_TRANSLATIONS.items() " +
+            'if k.startswith("Add a new metadata item"))]',
+        ),
+      )) as string[];
+
+      expect(strings[0]).toBe("Ajouter des métadonnées");
+      expect(strings[1]).toBe("Modèle invalide :");
+      // Backslashes and quotes survive the transfer to Python.
+      expect(strings[2]).toContain("<code>([\\d.]+)\\s*ms</code>");
+      expect(strings[2]).toContain("« Flat 5 ms 01 »");
+    });
+  }
 });

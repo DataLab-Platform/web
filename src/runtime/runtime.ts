@@ -56,6 +56,7 @@ import { hashBytes } from "../plugins/trustStore";
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 import { fetchBundledPluginWheels } from "./bundledPlugins";
+import { currentRuntimeLabels, type RuntimeLabels } from "./runtimeLabels";
 import {
   DISK_SWEEP_CALLS,
   MUTATES_HEAVY,
@@ -1731,9 +1732,10 @@ export interface RuntimeLoadOptions {
   loadPyodide?: PyodideLoader;
   /** ``LANG`` for the Pyodide environment; defaults to ``pyodideLang()``. */
   lang?: string;
-  /** Default object/group labels pushed into ``bootstrap.py``; default to
-   *  ``t("Group")`` / ``t("Untitled")`` (English in a DOM-less worker). */
-  labels?: { group: string; untitled: string };
+  /** Locale-dependent strings pushed into ``bootstrap.py``; default to those
+   *  of the active UI locale (English in a DOM-less worker, which therefore
+   *  receives them from the main thread). */
+  labels?: RuntimeLabels;
 }
 
 export class DataLabRuntime {
@@ -1976,20 +1978,32 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   )
   `);
 
-    // Bridge DataLab-Web's own (non-gettext) default labels into Python:
-    // the "Group" prefix for auto-created groups and the "Untitled" macro
-    // /notebook title. Sigima/guidata labels are translated via gettext
-    // (``LANG`` above), but ``bootstrap.py`` is our own code, so the React
-    // side owns these translations and pushes them in here. In worker mode
-    // the DOM-less ``t()`` falls back to English, so the labels are passed
-    // in explicitly (computed on the main thread) to keep i18n correct.
-    const groupLabel = opts.labels?.group ?? t("Group");
-    const untitledLabel = opts.labels?.untitled ?? t("Untitled");
+    // Bridge DataLab-Web's own (non-gettext) strings into Python: the "Group"
+    // prefix for auto-created groups, the "Untitled" macro/notebook title and
+    // the strings of its own dialogs. Sigima/guidata labels are translated via
+    // gettext (``LANG`` above), but ``bootstrap.py`` is our own code, so the
+    // React side owns these translations and pushes them in here. In worker
+    // mode the DOM-less ``t()`` falls back to English, so the labels are
+    // passed in explicitly (computed on the main thread) to keep i18n correct.
+    const labels = opts.labels ?? currentRuntimeLabels();
     await py.runPythonAsync(
-      `set_default_labels(${JSON.stringify(groupLabel)}, ${JSON.stringify(
-        untitledLabel,
+      `set_default_labels(${JSON.stringify(labels.group)}, ${JSON.stringify(
+        labels.untitled,
       )})`,
     );
+    // Passed as an argument, not inlined in source code: Pyodide cannot
+    // tokenize a line as long as a whole catalog (MemoryError).
+    const setWebTranslations = py.globals.get("set_web_translations");
+    if (!setWebTranslations) {
+      throw new Error("bootstrap.py does not define set_web_translations");
+    }
+    try {
+      (setWebTranslations as unknown as (t: Record<string, string>) => void)(
+        labels.translations,
+      );
+    } finally {
+      setWebTranslations.destroy?.();
+    }
     await py.runPythonAsync(
       `set_provenance_edition_version(${JSON.stringify(
         String(import.meta.env.VITE_APP_VERSION ?? "dev"),

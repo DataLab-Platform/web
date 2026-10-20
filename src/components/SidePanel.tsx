@@ -228,10 +228,10 @@ export function SidePanel(props: Props) {
     if (!pipApiSupported()) {
       await notify({
         kind: "warning",
-        title: "Pop-out unavailable",
-        message:
-          "Pop-out requires the Document Picture-in-Picture API " +
-          "(Chrome / Edge 116+).",
+        title: t("Pop-out unavailable"),
+        message: t(
+          "Pop-out requires the Document Picture-in-Picture API (Chrome / Edge 116+).",
+        ),
       });
       return;
     }
@@ -440,24 +440,24 @@ export function SidePanel(props: Props) {
       <>
         <aside
           className="side-panel side-panel-popped-placeholder"
-          aria-label="Object panel (popped out)"
+          aria-label={t("Object panel (popped out)")}
           style={width !== undefined ? { width } : undefined}
         >
           <div className="side-panel-placeholder">
-            <p>Object panel is in a separate window.</p>
+            <p>{t("Object panel is in a separate window.")}</p>
             <button
               type="button"
               className="results-clear-all"
               onClick={handleDock}
             >
-              Dock back here
+              {t("Dock back here")}
             </button>
           </div>
         </aside>
         {createPortal(
           <aside
             className="side-panel side-panel-popped"
-            aria-label="Object panel"
+            aria-label={t("Object panel")}
           >
             {body}
           </aside>,
@@ -470,7 +470,7 @@ export function SidePanel(props: Props) {
   return (
     <aside
       className="side-panel"
-      aria-label="Object panel"
+      aria-label={t("Object panel")}
       style={width !== undefined ? { width } : undefined}
     >
       {body}
@@ -572,12 +572,13 @@ function CreationPanel({
     [runtime, oid, panelKind, onApplied],
   );
 
-  if (loading) return <div className="side-panel-info">Loading…</div>;
+  if (loading) return <div className="side-panel-info">{t("Loading…")}</div>;
   if (!available) {
     return (
       <div className="side-panel-info">
-        This object has no editable creation parameters (it was loaded from a
-        file or created via a processing step).
+        {t(
+          "This object has no editable creation parameters (it was loaded from a file or created via a processing step).",
+        )}
       </div>
     );
   }
@@ -652,7 +653,7 @@ function PropertiesPanel({
     [runtime, oid, onApplied],
   );
 
-  if (loading) return <div className="side-panel-info">Loading…</div>;
+  if (loading) return <div className="side-panel-info">{t("Loading…")}</div>;
   if (error && !snapshot) return <div className="error">{error}</div>;
   if (!snapshot) return null;
   return (
@@ -975,7 +976,7 @@ function EditableForm({
       >
         <span className="editable-form-status" aria-live="polite">
           {busy
-            ? "Applying…"
+            ? t("Applying…")
             : disabled
               ? t("Processing unavailable")
               : resolving
@@ -983,8 +984,8 @@ function EditableForm({
                 : invalid
                   ? t("Invalid parameters")
                   : dirty
-                    ? "● Unsaved changes"
-                    : "All changes applied"}
+                    ? t("● Unsaved changes")
+                    : t("All changes applied")}
         </span>
         <div className="editable-form-buttons">
           <button
@@ -992,18 +993,18 @@ function EditableForm({
             className="editable-form-reset"
             onClick={handleReset}
             disabled={disabled || !dirty || busy || resolving}
-            title="Discard unapplied changes"
+            title={t("Discard unapplied changes")}
           >
-            Reset
+            {t("Reset")}
           </button>
           <button
             type="button"
             className="editable-form-apply"
             onClick={() => void handleApply()}
             disabled={disabled || !dirty || busy || invalid || resolving}
-            title="Apply changes (Ctrl+Enter)"
+            title={t("Apply changes (Ctrl+Enter)")}
           >
-            Apply
+            {t("Apply")}
           </button>
         </div>
       </div>
@@ -1044,9 +1045,15 @@ interface ResultsPanelProps {
 
 function ResultsPanel({ results, onClear }: ResultsPanelProps) {
   if (results.length === 0) {
+    // The menu name keeps its emphasis inside the translated sentence.
+    const [before, after = ""] = t(
+      "No analysis result yet. Use the {menu} menu to compute one.",
+    ).split("{menu}");
     return (
       <div className="side-panel-empty">
-        No analysis result yet. Use the <em>Analysis</em> menu to compute one.
+        {before}
+        <em>{t("Analysis")}</em>
+        {after}
       </div>
     );
   }
@@ -1057,9 +1064,9 @@ function ResultsPanel({ results, onClear }: ResultsPanelProps) {
           className="results-clear-all"
           type="button"
           onClick={() => onClear(null)}
-          title="Remove every analysis result from this signal"
+          title={t("Remove every analysis result from this object")}
         >
-          Clear all results
+          {t("Clear all results")}
         </button>
       </div>
       {results.map((r) => (
@@ -1095,8 +1102,8 @@ function ResultCard({
           type="button"
           className="result-card-remove"
           onClick={onRemove}
-          title="Remove this result"
-          aria-label="Remove this result"
+          title={t("Remove this result")}
+          aria-label={t("Remove this result")}
         >
           ×
         </button>

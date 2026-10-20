@@ -31,7 +31,7 @@ import {
   type KernelRequest,
 } from "./workerProtocol";
 import { pyodideLang } from "../i18n/locale";
-import { t } from "../i18n/translate";
+import { currentRuntimeLabels, type RuntimeLabels } from "./runtimeLabels";
 
 /** The slice of the ``Worker`` API the client needs — narrowed so unit
  *  tests can inject a fake transport without a real Worker. */
@@ -107,10 +107,7 @@ export class WorkerRuntimeProxy {
   }
 
   /** Send the boot request. Resolves once the worker reports ``ready``. */
-  init(
-    lang: string,
-    labels: { group: string; untitled: string },
-  ): Promise<void> {
+  init(lang: string, labels: RuntimeLabels): Promise<void> {
     this.post({ type: "init", lang, labels });
     return this.readyPromise;
   }
@@ -317,7 +314,7 @@ export async function createWorkerRuntime(
   deps?: {
     worker?: WorkerLike;
     lang?: string;
-    labels?: { group: string; untitled: string };
+    labels?: RuntimeLabels;
   },
 ): Promise<RuntimeApi> {
   const worker: WorkerLike =
@@ -329,7 +326,7 @@ export async function createWorkerRuntime(
   // Compute locale-derived values on the main thread (the DOM-less worker
   // cannot) and pass them to the kernel boot.
   const lang = deps?.lang ?? pyodideLang();
-  const labels = deps?.labels ?? { group: t("Group"), untitled: t("Untitled") };
+  const labels = deps?.labels ?? currentRuntimeLabels();
   await proxy.init(lang, labels);
   return proxy.asRuntime();
 }

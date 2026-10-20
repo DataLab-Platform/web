@@ -20,6 +20,7 @@
  * ``new Worker(new URL("./kernelWorker.ts", import.meta.url))``.
  */
 import { DataLabRuntime, type PyodideLoader } from "./runtime";
+import type { RuntimeLabels } from "./runtimeLabels";
 import { PYODIDE_INDEX } from "./workerBase";
 import { collectTransferables, ScientificRefusalError } from "./workerProtocol";
 import type {
@@ -69,10 +70,7 @@ function snapshot(rt: DataLabRuntime): KernelMirror {
   };
 }
 
-async function boot(
-  lang: string,
-  labels: { group: string; untitled: string },
-): Promise<void> {
+async function boot(lang: string, labels: RuntimeLabels): Promise<void> {
   if (runtime || booting) return;
   booting = true;
   try {

@@ -273,6 +273,46 @@ def test_resolve_bridge_callbacks_fills_key_and_preview(fresh_bootstrap):
     assert "Flat 5 ms 01: plugin.org.example.cam.gain = '1'" in resolved["preview"]
 
 
+def test_add_metadata_dialog_is_translated_by_the_ui_catalog(fresh_bootstrap):
+    """The dialog strings, absent from Sigima's catalog, come from the UI."""
+    bs = fresh_bootstrap
+    oids = _frames(bs)
+    bs.set_web_translations(
+        {
+            "Add metadata": "Ajouter des métadonnées",
+            "Metadata key": "Clé de métadonnées",
+            "unchanged": "inchangé",
+            "Invalid pattern:": "Modèle invalide :",
+        }
+    )
+    schemas: list[dict] = []
+    previews: list[str] = []
+
+    async def bridge(kind: str, payload: dict) -> None:
+        schemas.append(payload["schema"])
+        for values in (
+            {"value_pattern": "{title}", "extraction_pattern": r"(\d+) ms"},
+            {"value_pattern": "{missing}", "extraction_pattern": ""},
+        ):
+            refreshed = bs.resolve_bridge_callbacks(
+                "value_pattern", dict(payload["values"], **values)
+            )
+            previews.append(refreshed["preview"])
+        return None
+
+    bs.set_dialog_bridge(bridge)
+    try:
+        assert asyncio.run(bs.add_object_metadata(oids)) is False
+    finally:
+        bs.set_dialog_bridge(None)
+
+    properties = schemas[0]["properties"]
+    assert properties["metadata_key"]["x-guidata-label"] == "Clé de métadonnées"
+    assert schemas[0]["title"] == "Ajouter des métadonnées"
+    assert previews[0].splitlines()[1].endswith(": inchangé")
+    assert previews[1].startswith("Modèle invalide :\n")
+
+
 def test_delete_object_metadata(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = bs.add_signal_from_arrays("S", [0, 1], [0, 0])

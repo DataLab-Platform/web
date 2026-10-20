@@ -161,6 +161,39 @@ def set_default_labels(group: str | None = None, untitled: str | None = None) ->
         _DEFAULT_LABELS["untitled"] = untitled
 
 
+# Translations of the strings of DataLab-Web's own dialogs (e.g. "Add
+# metadata"), which Sigima's gettext catalog does not provide: English source
+# -> active UI locale. Like the default labels above, the React side owns them
+# (``src/locales``) and pushes them in via :func:`set_web_translations` right
+# after this module is first executed. Preserved across HMR re-executions.
+_WEB_TRANSLATIONS: dict[str, str] = globals().get("_WEB_TRANSLATIONS", {})
+
+
+def set_web_translations(translations: dict[str, str]) -> None:
+    """Set the translations of DataLab-Web's own dialog strings.
+
+    Called once from the JS runtime at start-up with the catalog of the active
+    UI locale (empty in English).
+
+    Args:
+        translations: English source string -> translated string.
+    """
+    if hasattr(translations, "to_py"):
+        translations = translations.to_py()
+    _WEB_TRANSLATIONS.clear()
+    _WEB_TRANSLATIONS.update(translations)
+
+
+def _web(text: str) -> str:
+    """Translate a string of DataLab-Web's own dialogs (see ``src/locales``).
+
+    Sigima and guidata strings are translated by their gettext catalogs; this
+    covers the strings those catalogs lack. Each of them must be listed in
+    ``src/locales/_dynamic-keys.json`` (checked by the test suite).
+    """
+    return _WEB_TRANSLATIONS.get(text) or text
+
+
 @dataclass
 class _ObjectEntry:
     """One object stored in the model."""
@@ -1870,8 +1903,8 @@ def _paste_metadata_param() -> Any:
 
     class PasteMetadataParam(
         gds.DataSet,
-        title=_("Paste metadata"),
-        comment=_(
+        title=_web("Paste metadata"),
+        comment=_web(
             "Select what to keep from the clipboard.<br><br>"
             "Result shapes and annotations, if kept, will be merged with "
             "existing ones. <u>All other metadata will be replaced</u>."
@@ -1880,11 +1913,11 @@ def _paste_metadata_param() -> Any:
         """Paste metadata parameters."""
 
         keep_roi = gds.BoolItem(_("Regions of interest"), default=True)
-        keep_geometry = gds.BoolItem(_("Geometry results"), default=False).set_pos(
+        keep_geometry = gds.BoolItem(_web("Geometry results"), default=False).set_pos(
             col=1
         )
-        keep_tables = gds.BoolItem(_("Table results"), default=False).set_pos(col=1)
-        keep_other = gds.BoolItem(_("Other metadata"), default=True)
+        keep_tables = gds.BoolItem(_web("Table results"), default=False).set_pos(col=1)
+        keep_other = gds.BoolItem(_web("Other metadata"), default=True)
 
     return PasteMetadataParam()
 
@@ -1942,15 +1975,15 @@ def _add_metadata_param(objs: list[Any] | None = None) -> Any:
         try:
             values = _build_metadata_values(objs, instance)
         except ValueError as exc:
-            instance.preview = f"Invalid conversion:\n{exc}"
+            instance.preview = _web("Invalid conversion:") + f"\n{exc}"
             return
         except (KeyError, TypeError) as exc:
-            instance.preview = f"Invalid pattern:\n{exc}"
+            instance.preview = _web("Invalid pattern:") + f"\n{exc}"
             return
         lines = []
         for obj, value in zip(objs, values):
             if value is None:
-                lines.append(f"{obj.title}: " + _("unchanged"))
+                lines.append(f"{obj.title}: " + _web("unchanged"))
             else:
                 lines.append(f"{obj.title}: {instance.metadata_key} = {value!r}")
         instance.preview = "\n".join(lines)
@@ -1962,8 +1995,8 @@ def _add_metadata_param(objs: list[Any] | None = None) -> Any:
 
     class AddMetadataParam(
         gds.DataSet,
-        title=_("Add metadata"),
-        comment=_(
+        title=_web("Add metadata"),
+        comment=_web(
             "Add a new metadata item to the selected objects.<br><br>"
             "The metadata key is the same for all objects, but the value "
             "can use a Python format pattern to generate different values."
@@ -1985,55 +2018,55 @@ def _add_metadata_param(objs: list[Any] | None = None) -> Any:
         """Add metadata parameters."""
 
         metadata_key = gds.StringItem(
-            _("Metadata key"),
+            _web("Metadata key"),
             default="custom_key",
             notempty=True,
             regexp=r"^[a-zA-Z_][a-zA-Z0-9_.\-]*$",
-            help=_("The key name for the metadata item"),
+            help=_web("The key name for the metadata item"),
         ).set_prop("display", callback=update_preview)
         known_key = gds.ChoiceItem(
-            _("Known keys"),
-            [("", _("Select a key..."))]
+            _web("Known keys"),
+            [("", _web("Select a key..."))]
             + [(key, f"{key} — {description}") for key, description in known_keys],
             default="",
-            help=_("Copy a key found on the selected objects into the metadata key"),
+            help=_web("Copy a key found on the selected objects into the metadata key"),
         ).set_prop("display", callback=on_known_key_changed)
         value_pattern = gds.StringItem(
-            _("Value pattern"),
+            _web("Value pattern"),
             default="{index}",
-            help=_("Python format string. See description for details."),
+            help=_web("Python format string. See description for details."),
         ).set_prop("display", callback=update_preview)
         extraction_pattern = gds.StringItem(
-            _("Extraction pattern"),
+            _web("Extraction pattern"),
             default="",
-            help=_(
+            help=_web(
                 "Optional regular expression searched in the formatted value: "
                 "its first group, or the whole match, becomes the value"
             ),
         ).set_prop("display", callback=update_preview)
         if_no_match = gds.ChoiceItem(
-            _("If no match"),
+            _web("If no match"),
             [
-                ("skip", _("Leave the object unchanged")),
-                ("error", _("Report an error")),
+                ("skip", _web("Leave the object unchanged")),
+                ("error", _web("Report an error")),
             ],
             default="skip",
         ).set_prop("display", callback=update_preview)
         _prop_conversion = gds.GetAttrProp("conversion")
         conversion = gds.ChoiceItem(
-            _("Conversion"),
+            _web("Conversion"),
             [
-                ("string", _("String")),
-                ("float", _("Float")),
-                ("int", _("Integer")),
-                ("bool", _("Boolean")),
+                ("string", _web("String")),
+                ("float", _web("Float")),
+                ("int", _web("Integer")),
+                ("bool", _web("Boolean")),
             ],
             default="string",
         ).set_prop("display", store=_prop_conversion, callback=update_preview)
         scale = gds.FloatItem(
             _("Scale factor"),
             default=1.0,
-            help=_("Multiplies numeric values, e.g. 0.001 to convert ms to s"),
+            help=_web("Multiplies numeric values, e.g. 0.001 to convert ms to s"),
         ).set_prop(
             "display",
             active=gds.FuncProp(
@@ -2041,7 +2074,7 @@ def _add_metadata_param(objs: list[Any] | None = None) -> Any:
             ),
             callback=update_preview,
         )
-        preview = gds.TextItem(_("Preview"), default="").set_prop(
+        preview = gds.TextItem(_web("Preview"), default="").set_prop(
             "display", readonly=True
         )
 
@@ -2053,7 +2086,6 @@ def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
     value, then the keys expected by application methods (mirrors Qt's
     ``BaseDataPanel.get_known_metadata_keys``)."""
     import dlw_plugins
-    from sigima.config import _
     from sigima.objects.base import ROI_KEY
 
     examples: dict[str, Any] = {}
@@ -2065,7 +2097,7 @@ def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
                 continue
             if isinstance(value, (str, bool, int, float, np.integer, np.floating)):
                 examples[key] = value
-    keys = [(key, _("e.g. %s") % repr(examples[key])) for key in sorted(examples)]
+    keys = [(key, _web("e.g. %s") % repr(examples[key])) for key in sorted(examples)]
     kinds = {"signal" if isinstance(obj, SignalObj) else "image" for obj in objs}
     if len(kinds) == 1:
         keys.extend(
@@ -2161,7 +2193,6 @@ async def add_object_metadata(oids: list[str]) -> bool:
     Returns:
         True if at least one object was modified
     """
-    from sigima.config import _
 
     if hasattr(oids, "to_py"):
         oids = oids.to_py()
@@ -2176,7 +2207,7 @@ async def add_object_metadata(oids: list[str]) -> bool:
             values = _build_metadata_values(objs, param)
             break
         except (ValueError, KeyError, TypeError) as exc:
-            await _async_show_message("error", str(exc), _("Add metadata"))
+            await _async_show_message("error", str(exc), _web("Add metadata"))
     modified = False
     for obj, value in zip(objs, values):
         if value is not None:
