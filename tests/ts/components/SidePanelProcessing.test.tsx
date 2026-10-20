@@ -56,6 +56,12 @@ const info: LastProcessingInfo = {
   values: { method: "mean", window: 3, ui_state: { bins: [1, 2, 3] } },
 };
 
+/** Show the Processing tab, as the user does: selecting an object shows its
+ *  Properties, as in DataLab desktop. */
+async function openProcessingTab(): Promise<void> {
+  fireEvent.click(await screen.findByRole("tab", { name: "Processing" }));
+}
+
 describe("SidePanel processing editor", () => {
   it("resolves feature fields and only reapplies on explicit Apply", async () => {
     let finishCallback!: (values: Record<string, unknown>) => void;
@@ -87,7 +93,7 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={0}
           onObjectChanged={onObjectChanged}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
@@ -174,12 +180,13 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={0}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
       </DialogProvider>,
     );
+    await openProcessingTab();
 
     expect(
       await screen.findByText("Source object(s) no longer exist: source-1"),
@@ -215,12 +222,13 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={0}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
       </DialogProvider>,
     );
+    await openProcessingTab();
 
     await screen.findByRole("button", { name: "Apply" });
     getLastProcessing.mockResolvedValue(missingInfo);
@@ -232,7 +240,7 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={1}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
@@ -312,12 +320,13 @@ describe("SidePanel processing editor", () => {
           panelKind="image"
           refreshNonce={0}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
       </DialogProvider>,
     );
+    await openProcessingTab();
 
     const minimum = await screen.findByRole("spinbutton", {
       name: "Minimum",
@@ -335,7 +344,7 @@ describe("SidePanel processing editor", () => {
           panelKind="image"
           refreshNonce={1}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
@@ -391,12 +400,13 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={0}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
       </DialogProvider>,
     );
+    await openProcessingTab();
 
     const list = await screen.findByRole("list", { name: "Input objects" });
     const items = Array.from(list.querySelectorAll("li")).map(
@@ -437,12 +447,13 @@ describe("SidePanel processing editor", () => {
           panelKind="signal"
           refreshNonce={0}
           onObjectChanged={() => undefined}
-          preferredTab="processing"
+          tabRequest={null}
           results={[]}
           onClearResults={() => undefined}
         />
       </DialogProvider>,
     );
+    await openProcessingTab();
 
     expect(
       await screen.findByText(

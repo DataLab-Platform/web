@@ -128,7 +128,7 @@ import {
   type SaveToDirectoryResult,
   type SaveToDirectorySource,
 } from "./components/SaveToDirectoryDialog";
-import { SidePanel } from "./components/SidePanel";
+import { SidePanel, type SideTabRequest } from "./components/SidePanel";
 import { AIAssistantPanel } from "./components/AIAssistant/AIAssistantPanel";
 import {
   WelcomeView,
@@ -970,9 +970,20 @@ export default function App() {
     fit: InteractiveFitInfo;
     oid: string;
   } | null>(null);
-  const [preferredSideTab, setPreferredSideTab] = useState<
-    "creation" | "properties" | "results"
-  >("properties");
+  const [sideTabRequest, setSideTabRequest] = useState<SideTabRequest | null>(
+    null,
+  );
+  // Show *tab* once for the object just created or analyzed, as DataLab
+  // desktop does; selecting another object then shows Properties again.
+  const requestSideTab = useCallback(
+    (tab: SideTabRequest["tab"], oid: string) =>
+      setSideTabRequest((previous) => ({
+        tab,
+        oid,
+        seq: (previous?.seq ?? 0) + 1,
+      })),
+    [],
+  );
 
   const theme = useTheme().theme;
 
@@ -1447,14 +1458,14 @@ export default function App() {
           stype,
           currentSelectionGroupId(),
         );
-        setPreferredSideTab("creation");
+        requestSideTab("creation", id);
         await refresh(id);
         setSideRefreshNonce((n) => n + 1);
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh, currentSelectionGroupId],
+    [runtime, refresh, currentSelectionGroupId, requestSideTab],
   );
 
   const handleCreateImageTyped = useCallback(
@@ -1466,14 +1477,14 @@ export default function App() {
           stype,
           currentSelectionGroupId(),
         );
-        setPreferredSideTab("creation");
+        requestSideTab("creation", id);
         await refresh(id);
         setSideRefreshNonce((n) => n + 1);
       } finally {
         setBusy(false);
       }
     },
-    [runtime, refresh, currentSelectionGroupId],
+    [runtime, refresh, currentSelectionGroupId, requestSideTab],
   );
 
   const handleSideObjectChanged = useCallback(
@@ -2138,7 +2149,7 @@ export default function App() {
             }
           }
         }
-        setPreferredSideTab("results");
+        if (currentId) requestSideTab("results", currentId);
         setSideRefreshNonce((n) => n + 1);
         // Detection analyses (peak / blob / hough / contour) may have
         // attached new ROIs to the displayed image when ``create_rois``
@@ -2173,6 +2184,7 @@ export default function App() {
       currentId,
       analysisEntries,
       imageAnalysisEntries,
+      requestSideTab,
     ],
   );
 
@@ -2334,11 +2346,11 @@ export default function App() {
       setPendingPlotResults(null);
       if (next.createdIds.length > 0) {
         await refreshPanelKind("signal", next.createdIds[0]);
-        setPreferredSideTab("results");
+        requestSideTab("results", next.createdIds[0]);
         setSideRefreshNonce((n) => n + 1);
       }
     },
-    [refreshPanelKind],
+    [refreshPanelKind, requestSideTab],
   );
 
   const handleSubmitPlotResults = useCallback(
@@ -5182,7 +5194,7 @@ export default function App() {
                 panelKind={treeKind === "image" ? "image" : "signal"}
                 refreshNonce={sideRefreshNonce}
                 onObjectChanged={handleSideObjectChanged}
-                preferredTab={preferredSideTab}
+                tabRequest={sideTabRequest}
                 results={results}
                 onClearResults={handleClearResults}
                 width={sidePanelWidth}

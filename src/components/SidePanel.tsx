@@ -55,6 +55,15 @@ const PROVENANCE_ICON = getRootIconUrl("history.svg");
 type TabId =
   "creation" | "properties" | "processing" | "provenance" | "results";
 
+/** Tab to show once for an object, as DataLab desktop does for the object
+ *  just created (Creation) or analyzed (Results). */
+export interface SideTabRequest {
+  tab: "creation" | "results";
+  oid: string;
+  /** Distinguishes successive requests for the same object and tab. */
+  seq: number;
+}
+
 interface Props {
   runtime: RuntimeApi;
   currentId: string | null;
@@ -68,10 +77,10 @@ interface Props {
   /** Notifies the parent that the current object's data may have
    *  changed so it can refresh the plot / tree. */
   onObjectChanged: (oid: string) => void;
-  /** Tab to focus when ``currentId`` becomes non-null.  The parent
-   *  bumps it after :meth:`createSignalTyped` to surface the Creation
-   *  tab automatically. */
-  preferredTab: TabId;
+  /** Tab to show once when ``currentId`` becomes the requested object.
+   *  Otherwise, as in DataLab desktop, another object shows Properties and
+   *  the same object shown again keeps its tab. */
+  tabRequest: SideTabRequest | null;
   /** Cached analysis results for the current object (drives the
    *  "Results" tab content). */
   results: AnalysisResult[];
@@ -116,13 +125,13 @@ export function SidePanel(props: Props) {
     panelKind,
     refreshNonce,
     onObjectChanged,
-    preferredTab,
+    tabRequest,
     results,
     onClearResults,
     width,
     onSelectObject,
   } = props;
-  const [active, setActive] = useState<TabId>(preferredTab);
+  const [active, setActive] = useState<TabId>("properties");
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   // Tracks the live PiP window plus its ``pagehide`` handler so it can be
   // closed and its listener detached from any code path (dock button or
@@ -163,11 +172,39 @@ export function SidePanel(props: Props) {
     }
   }, [active, hasProcessing]);
 
-  // Re-honour the parent's preferred tab when it bumps after a Create
-  // action (the parent flips ``preferredTab`` to "creation" then).
+  // Choose the tab shown for the current object, as DataLab desktop does:
+  // the tab requested for the object just created or analyzed (once), the
+  // current tab for the same object or when navigating from it to an input
+  // with "Go to object", and Properties for any other object.
+  const shownIdRef = useRef<string | null>(null);
+  const consumedRequestRef = useRef<number | null>(null);
+  const keepTabForRef = useRef<string | null>(null);
   useEffect(() => {
-    setActive(preferredTab);
-  }, [preferredTab, currentId]);
+    const previousId = shownIdRef.current;
+    shownIdRef.current = currentId;
+    if (
+      tabRequest !== null &&
+      tabRequest.oid === currentId &&
+      tabRequest.seq !== consumedRequestRef.current
+    ) {
+      consumedRequestRef.current = tabRequest.seq;
+      keepTabForRef.current = null;
+      setActive(tabRequest.tab);
+      return;
+    }
+    if (currentId === previousId) return;
+    const keepTab = keepTabForRef.current === currentId;
+    keepTabForRef.current = null;
+    if (!keepTab) setActive("properties");
+  }, [currentId, tabRequest]);
+
+  const selectFromProvenance = useCallback(
+    (oid: string, kind: "signal" | "image") => {
+      if (oid !== currentId) keepTabForRef.current = oid;
+      onSelectObject?.(oid, kind);
+    },
+    [currentId, onSelectObject],
+  );
 
   // Cleanup the PiP window when the side panel unmounts. We read the live
   // window from ``pipRef`` (not the captured ``pipWindow`` state) so a
@@ -381,7 +418,7 @@ export function SidePanel(props: Props) {
               runtime={runtime}
               oid={currentId}
               refreshNonce={refreshNonce}
-              onSelectObject={onSelectObject}
+              onSelectObject={onSelectObject ? selectFromProvenance : undefined}
             />
           </Suspense>
         )}
