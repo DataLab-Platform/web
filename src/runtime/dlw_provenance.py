@@ -30,6 +30,11 @@ from typing import Any
 from sigima.objects import ImageObj, SignalObj
 
 try:
+    from sigima.proc import contracts as _contracts
+except ImportError:  # pragma: no cover - released Sigima without contracts
+    _contracts = None
+
+try:
     from datalab_capsule import exchange
     from datalab_capsule.archive import (
         MANIFEST_NAME,
@@ -41,10 +46,9 @@ try:
     from datalab_capsule.hdf5 import has_block as _has_block
     from datalab_capsule.integrity import state_facts
     from datalab_capsule.legacy import legacy_summary
-    from datalab_capsule.recorder import (
-        APPEND_NOTICE,
-        CandidateError,
-        PendingActivity,
+    from datalab_capsule.recorder import (  # pylint: disable=unused-import
+        APPEND_NOTICE,  # re-exported for bootstrap.py
+        CandidateError,  # re-exported for bootstrap.py
         Recorder,
         RecorderHost,
         StateUnavailableError,
@@ -65,7 +69,7 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
     class CandidateError(RuntimeError):  # type: ignore[no-redef]
         """Stand-in when DataLab-Capsule is not installed."""
 
-    class _UnavailableRecorder:
+    class _UnavailableRecorder:  # pylint: disable=too-few-public-methods
         """Stand-in when DataLab-Capsule is not installed: records nothing.
 
         :class:`WebProvenance` delegates to the recorder operations only when
@@ -91,12 +95,6 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
 
     Recorder = _UnavailableRecorder  # type: ignore[assignment,misc]
     RecorderHost = None  # type: ignore[assignment,misc]
-    PendingActivity = None  # type: ignore[assignment,misc]
-
-try:
-    from sigima.proc import contracts as _contracts
-except ImportError:  # pragma: no cover - released Sigima without contracts
-    _contracts = None
 
 _logger = logging.getLogger(__name__)
 
@@ -250,6 +248,7 @@ class WebProvenance(Recorder):
             appended: Objects added by an appended file: those holding an
              identifier already known to the ledger never inherit its records.
         """
+        del current_version  # unused (see *saved_version*)
         if not self.available:
             return
         super().load(block, replaced, saved_version, None, appended=appended)

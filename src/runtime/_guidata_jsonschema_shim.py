@@ -24,9 +24,7 @@ def _install_schema_hints() -> None:
     if getattr(gdjson, "_dlw_schema_hints_installed", False):
         return
 
-    native_array_converter = (  # pylint: disable=protected-access
-        gdjson._float_array_to_property
-    )
+    native_array_converter = gdjson._float_array_to_property  # pylint: disable=protected-access
     native_numeric_converter = gdjson._numeric_to_property  # pylint: disable=protected-access
 
     def convert_array(item: gdi.FloatArrayItem) -> dict[str, Any]:

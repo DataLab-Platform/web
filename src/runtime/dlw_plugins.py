@@ -33,6 +33,7 @@ from typing import Any, Callable
 # CPython import path. The ``global _MAIN`` statement is the registry
 # pattern that lets ``install_main`` swap the live bridge after HMR.
 # pylint: disable=import-error,global-statement,broad-exception-caught
+from datalab import __version__ as datalab_version
 from datalab import registries  # noqa: F401  # used elsewhere in module
 from datalab.plugins import PluginBase, PluginCapability, PluginRegistry  # noqa: F401
 from dlw_wheels import inspect_wheel
@@ -142,8 +143,6 @@ def _host_distributions() -> dict[str, str]:
         name = distribution.metadata.get("Name")
         if name:
             available[name] = distribution.version
-    from datalab import __version__ as datalab_version
-
     available["datalab-platform"] = datalab_version
     return available
 
@@ -405,7 +404,7 @@ def load_plugin_wheel(
                 sys.modules.pop(module_name, None)
         if path in sys.path:
             sys.path.remove(path)
-        zipimport._zip_directory_cache.pop(path, None)  # noqa: SLF001
+        zipimport._zip_directory_cache.pop(path, None)  # noqa: SLF001  # pylint: disable=protected-access
         importlib.invalidate_caches()
         failed = _wheel_failure_record(
             path=path,
@@ -478,7 +477,7 @@ def unload_plugin(name: str, *, force: bool = False) -> dict[str, Any]:
             sys.modules.pop(module_name, None)
         if record.filename in sys.path:
             sys.path.remove(record.filename)
-        zipimport._zip_directory_cache.pop(record.filename, None)  # noqa: SLF001
+        zipimport._zip_directory_cache.pop(record.filename, None)  # noqa: SLF001  # pylint: disable=protected-access
         importlib.invalidate_caches()
     _on_change()
     return {"name": name, "removed": True}

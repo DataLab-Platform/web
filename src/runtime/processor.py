@@ -707,8 +707,8 @@ def _extract_paramclass(func: Callable[..., Any]) -> type[gds.DataSet] | None:
             annot = func_globals.get(annot, annot)
         # An optional parameter set (``SomeParam | None = None``) is still one
         members = typing.get_args(annot)
-        if type(None) in members and typing.get_origin(annot) in _UNION_ORIGINS:
-            others = [member for member in members if member is not type(None)]
+        if types.NoneType in members and typing.get_origin(annot) in _UNION_ORIGINS:
+            others = [member for member in members if member is not types.NoneType]
             if len(others) == 1:
                 annot = others[0]
         if (
@@ -1370,7 +1370,8 @@ def filter_transient_params(
         return params
     transient_names = {
         item.get_name()
-        for item in spec.paramclass._items
+        # The item declarations of the DataSet class, without instantiating it.
+        for item in spec.paramclass._items  # pylint: disable=protected-access
         if item.get_name() and item.get_prop("data", "transient", False)
     }
     return {

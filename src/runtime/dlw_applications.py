@@ -15,6 +15,13 @@ from uuid import uuid4
 
 import dlw_plugins
 import guidata.dataset as gds
+from guidata.dataset import (
+    dataset_to_schema_with_values,
+    resolve_dataset_active,
+    resolve_dataset_callbacks,
+    resolve_dynamic_choices,
+    update_dataset,
+)
 import sigima
 from datalab.plugins.examples import PluginExampleData
 from datalab.plugins.recipe_binding import (
@@ -44,24 +51,32 @@ from sigima.objects.scalar import GeometryResult, TableResult
 class ApplicationModel(Protocol):
     """Object-model operations required by recipe execution."""
 
-    def has(self, oid: str) -> bool: ...
+    def has(self, oid: str) -> bool:
+        """Return True if object *oid* exists."""
 
-    def get(self, oid: str) -> Any: ...
+    def get(self, oid: str) -> Any:
+        """Return the signal or image *oid*."""
 
-    def kind_of(self, oid: str) -> str: ...
+    def kind_of(self, oid: str) -> str:
+        """Return the panel of object *oid* (``"signal"`` or ``"image"``)."""
 
-    def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str: ...
+    def add_object(self, kind: str, obj: Any, group_id: str | None = None) -> str:
+        """Add *obj* to the *kind* panel and return its id."""
 
-    def delete_object(self, oid: str) -> None: ...
+    def delete_object(self, oid: str) -> None:
+        """Delete object *oid*."""
 
-    def create_group(self, kind: str, name: str | None = None) -> str: ...
+    def create_group(self, kind: str, name: str | None = None) -> str:
+        """Create a group in the *kind* panel and return its id."""
 
-    def delete_group(self, kind: str, gid: str) -> None: ...
+    def delete_group(self, kind: str, gid: str) -> None:
+        """Delete group *gid* of the *kind* panel."""
 
-    def panel_tree(self, kind: str) -> dict[str, Any]: ...
+    def panel_tree(self, kind: str) -> dict[str, Any]:
+        """Return the groups and objects of the *kind* panel."""
 
 
-class WorkspaceLoader(Protocol):
+class WorkspaceLoader(Protocol):  # pylint: disable=too-few-public-methods
     """Byte-based HDF5 workspace loader supplied by bootstrap."""
 
     def __call__(
@@ -100,8 +115,9 @@ def install_host(
     ``signal_payload`` and ``image_payload`` encode the transient objects
     shown by instrument windows, like the plots of workspace objects.
     """
-    global _DATALAB_WEB_VERSION, _MODEL, _OBJECT_UUID, _RESET_WORKSPACE
-    global _WORKSPACE_LOADER, _SIGNAL_PAYLOAD, _IMAGE_PAYLOAD
+    # The host is installed once, by the runtime, before any recipe runs.
+    global _DATALAB_WEB_VERSION, _MODEL, _OBJECT_UUID, _RESET_WORKSPACE  # pylint: disable=global-statement
+    global _WORKSPACE_LOADER, _SIGNAL_PAYLOAD, _IMAGE_PAYLOAD  # pylint: disable=global-statement
     required_methods = (
         "has",
         "get",
@@ -320,7 +336,8 @@ def assess_plugin_recipes(
             readiness, ids_by_object = _assess(
                 descriptor, candidates, values_by_recipe.get(descriptor.recipe_id)
             )
-        except Exception as exc:  # noqa: BLE001 - plugin code must not break others
+        except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+            # Plugin code must not break the assessment of the other recipes.
             assessments[descriptor.recipe_id] = {"status": "error", "error": str(exc)}
             continue
         assessments[descriptor.recipe_id] = _readiness_payload(readiness, ids_by_object)
@@ -363,7 +380,6 @@ def get_plugin_recipe_schema(plugin_id: str, recipe_id: str) -> dict[str, Any] |
     descriptor = _recipe(plugin_id, recipe_id)
     if descriptor.parameter_class is None:
         return None
-    from guidata.dataset import dataset_to_schema_with_values
 
     payload = dataset_to_schema_with_values(descriptor.parameter_class())
     payload["title"] = descriptor.title
@@ -379,7 +395,6 @@ def resolve_plugin_recipe_active(
     descriptor = _recipe(plugin_id, recipe_id)
     if descriptor.parameter_class is None:
         return {}
-    from guidata.dataset import resolve_dataset_active, update_dataset
 
     parameters = descriptor.parameter_class()
     normalized = _normalize_mapping(values, "Recipe parameters")
@@ -398,7 +413,6 @@ def resolve_plugin_recipe_choices(
     descriptor = _recipe(plugin_id, recipe_id)
     if descriptor.parameter_class is None:
         raise ValueError(f"Recipe {recipe_id!r} has no parameters")
-    from guidata.dataset import resolve_dynamic_choices, update_dataset
 
     parameters = descriptor.parameter_class()
     normalized = _normalize_mapping(values, "Recipe parameters")
@@ -417,7 +431,6 @@ def resolve_plugin_recipe_callbacks(
     descriptor = _recipe(plugin_id, recipe_id)
     if descriptor.parameter_class is None:
         raise ValueError(f"Recipe {recipe_id!r} has no parameters")
-    from guidata.dataset import resolve_dataset_callbacks, update_dataset
 
     parameters = descriptor.parameter_class()
     normalized = _normalize_mapping(values, "Recipe parameters")
@@ -499,7 +512,6 @@ def _parameters(
         if values:
             raise RecipeValidationError("This recipe does not accept parameters")
         return None
-    from guidata.dataset import update_dataset
 
     parameters = descriptor.parameter_class()
     unknown_values = set(values).difference(
@@ -844,15 +856,12 @@ def _instrument(
     instrument = dlw_plugins.get_plugin_instance(plugin_id).get_instrument(tool_id)
     normalized = _normalize_mapping(values, "Instrument settings")
     if normalized:
-        from guidata.dataset import update_dataset
-
         update_dataset(instrument.settings, normalized)
     return instrument
 
 
 def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
     """Return what an instrument window shows: title, settings, live period."""
-    from guidata.dataset import dataset_to_schema_with_values
 
     plugin = dlw_plugins.get_plugin_instance(plugin_id)
     tool = plugin.get_tool(tool_id)
@@ -929,7 +938,6 @@ def resolve_plugin_instrument_active(
     values: Mapping[str, object] | None = None,
 ) -> dict[str, bool]:
     """Evaluate guidata display-active rules for edited instrument settings."""
-    from guidata.dataset import resolve_dataset_active, update_dataset
 
     instrument = dlw_plugins.get_plugin_instance(plugin_id).get_instrument(tool_id)
     settings = instrument.settings.__class__()

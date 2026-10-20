@@ -31,6 +31,7 @@ when it changes.  We therefore preserve the live :data:`_MODEL` and
 
 from __future__ import annotations
 
+import math
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -1844,7 +1845,7 @@ def copy_object_metadata(oid: str) -> bool:
     """
     import copy
 
-    global _METADATA_CLIPBOARD  # noqa: PLW0603  # singleton clipboard
+    global _METADATA_CLIPBOARD  # pylint: disable=global-statement  # singleton clipboard
     obj = _MODEL.get(oid)
     clipboard = copy.deepcopy(dict(obj.metadata))
     prefix = oid + "_"
@@ -2053,7 +2054,6 @@ def _metadata_key_suggestions(objs: list[Any]) -> list[tuple[str, str]]:
     ``BaseDataPanel.get_known_metadata_keys``)."""
     import dlw_plugins
     from sigima.config import _
-    from sigima.objects import SignalObj
     from sigima.objects.base import ROI_KEY
 
     examples: dict[str, Any] = {}
@@ -2200,10 +2200,10 @@ def delete_object_metadata(oids: list[str], keep_roi: bool = False) -> bool:
     for oid in oids:
         obj = _MODEL.get(oid)
         roi_backup = getattr(obj, "roi", None) if keep_roi else None
-        uuid = obj.metadata.get(_UUID_METADATA_KEY)
+        persistent_uuid = obj.metadata.get(_UUID_METADATA_KEY)
         obj.reset_metadata_to_defaults()
-        if uuid is not None:
-            obj.metadata[_UUID_METADATA_KEY] = uuid
+        if persistent_uuid is not None:
+            obj.metadata[_UUID_METADATA_KEY] = persistent_uuid
         if keep_roi and roi_backup is not None:
             obj.roi = roi_backup
     return True
@@ -2270,9 +2270,9 @@ def import_object_metadata_bytes(oid: str, data: Any) -> None:
         obj = _MODEL.get(oid)
         metadata = read_metadata(path)
         metadata.pop(_UUID_METADATA_KEY, None)
-        uuid = obj.metadata.get(_UUID_METADATA_KEY)
-        if uuid is not None:
-            metadata[_UUID_METADATA_KEY] = uuid
+        persistent_uuid = obj.metadata.get(_UUID_METADATA_KEY)
+        if persistent_uuid is not None:
+            metadata[_UUID_METADATA_KEY] = persistent_uuid
         obj.metadata = metadata
     finally:
         try:
@@ -2310,7 +2310,7 @@ def copy_object_roi(oid: str) -> bool:
     """
     import copy
 
-    global _ROI_CLIPBOARD  # noqa: PLW0603  # singleton clipboard
+    global _ROI_CLIPBOARD  # pylint: disable=global-statement  # singleton clipboard
     from sigima.objects import ImageObj
 
     obj = _MODEL.get(oid)
@@ -2329,7 +2329,6 @@ def _roi_from_clipboard() -> Any:
     if not _ROI_CLIPBOARD:
         return None
     from sigima.objects.image.roi import ImageROI
-    from sigima.objects.signal.roi import SignalROI
 
     roi_cls = ImageROI if _ROI_CLIPBOARD["kind"] == "image" else SignalROI
     return roi_cls.from_dict(copy.deepcopy(_ROI_CLIPBOARD["roi"]))
@@ -6386,14 +6385,14 @@ def _coerce_json_scalar(v: Any) -> Any:
     """Coerce a single table / dataframe cell to a JSON-friendly scalar."""
     if isinstance(v, (bytes, bytearray)):
         return v.decode("utf-8", errors="replace")
-    if isinstance(v, float) and v != v:  # NaN → null for clean JSON
+    if isinstance(v, float) and math.isnan(v):  # NaN → null for clean JSON
         return None
     if hasattr(v, "item"):
         try:
             value = v.item()
         except (TypeError, ValueError):
             return str(v)
-        if isinstance(value, float) and value != value:
+        if isinstance(value, float) and math.isnan(value):
             return None
         return value
     return v
