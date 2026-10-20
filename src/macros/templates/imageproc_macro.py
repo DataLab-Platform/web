@@ -6,7 +6,7 @@ import numpy as np
 size = 256
 y, x = np.mgrid[0:size, 0:size]
 cx, cy = size / 2, size / 2
-img = np.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * 30 ** 2))
+img = np.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * 30**2))
 img += 0.05 * np.random.rand(size, size)
 
 oid = await proxy.add_image("gaussian", img)

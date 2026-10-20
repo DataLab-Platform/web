@@ -219,7 +219,7 @@ def build_report(results_dir: Path) -> str:
         f"- **Seed**: {chain['seed']}",
         f"- **Measured runs (per backend)**: {chain['measured_runs']} (warm-up: {chain['warmup_runs']})",
         f"- **Sigima version pin**: `{chain.get('sigima_version') or 'local / latest available'}`",
-        f"- **Runs collected**: "
+        "- **Runs collected**: "
         + ", ".join(f"{k}={v}" for k, v in n_per_backend.items())
         + "\n",
         "> **Note on single-iteration measurement.** Each backend runs"
