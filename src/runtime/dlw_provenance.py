@@ -65,8 +65,12 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
     class CandidateError(RuntimeError):  # type: ignore[no-redef]
         """Stand-in when DataLab-Capsule is not installed."""
 
-    class Recorder:  # type: ignore[no-redef]
-        """Stand-in when DataLab-Capsule is not installed: records nothing."""
+    class _UnavailableRecorder:
+        """Stand-in when DataLab-Capsule is not installed: records nothing.
+
+        :class:`WebProvenance` delegates to the recorder operations only when
+        DataLab-Capsule is installed (``available``); here they refuse.
+        """
 
         def __init__(self, host: Any, computation: Any) -> None:
             self.host = host
@@ -78,6 +82,14 @@ except ImportError as _exc:  # pragma: no cover - depends on the boot install
             self.file_status: str | None = None
             self.capsule_origin: dict[str, Any] | None = None
 
+        def _unavailable(self, *_args: Any, **_kwargs: Any) -> Any:
+            """Refuse a recorder operation: DataLab-Capsule is not installed."""
+            raise RuntimeError(UNAVAILABLE_REASON)
+
+        reset = save = read = load = producing_call = verify = _unavailable
+        begin = complete = complete_analysis = complete_without_result = _unavailable
+
+    Recorder = _UnavailableRecorder  # type: ignore[assignment,misc]
     RecorderHost = None  # type: ignore[assignment,misc]
     PendingActivity = None  # type: ignore[assignment,misc]
 
