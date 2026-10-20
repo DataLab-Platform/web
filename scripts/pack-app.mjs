@@ -13,6 +13,7 @@
  *     assets/...
  *     ...
  *     DEPLOY.md   ← short hosting guide added by this script
+ *     LICENSE     ← BSD 3-Clause licence of the repository
  *
  * Usage: ``node scripts/pack-app.mjs`` (run automatically by the
  * ``app:pack`` npm script after ``npm run build``).
@@ -20,6 +21,7 @@
 
 import { execFileSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -111,6 +113,7 @@ This bundle implements wire-protocol \`MAJOR\` 1. Use a SDK release
 whose \`SUPPORTED_PROTOCOL_MAJOR\` matches.
 `;
 writeFileSync(join(stage, "DEPLOY.md"), deployDoc);
+copyFileSync(join(ROOT, "LICENSE"), join(stage, "LICENSE"));
 
 // Final tarball.
 const tarball = join(RELEASE, tarballName);

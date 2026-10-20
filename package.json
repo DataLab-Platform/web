@@ -3,6 +3,7 @@
   "version": "0.9.0",
   "private": true,
   "description": "Full-Web version of DataLab — scientific data processing in the browser via Pyodide + Sigima",
+  "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
     "dev": "vite",

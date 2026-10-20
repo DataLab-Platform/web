@@ -133,4 +133,4 @@ DataLab-Web is funded under an [NLnet](https://nlnet.nl/) grant and complies wit
 
 ## License
 
-BSD 3-Clause, same as DataLab and Sigima.
+BSD 3-Clause, same as DataLab and Sigima: see [LICENSE](LICENSE).

@@ -59,10 +59,10 @@ The candidate check of 17 Oct 2026 followed the second line of the table: produc
 
 DataLab-Web is shipped to integrators as **two `.tgz` artefacts** produced by the release pipeline:
 
-| Tarball                                  | Contents                                               | Consumer action                               |
-| ---------------------------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| `datalab-web-<version>.tgz`              | Static bundle (everything under `dist/`) + `DEPLOY.md` | Unpack under any web server                   |
-| `datalab-platform-web-sdk-<version>.tgz` | Host-side TypeScript SDK (`@datalab-platform/web-sdk`) | `npm install ./datalab-platform-web-sdk-…tgz` |
+| Tarball                                  | Contents                                                           | Consumer action                               |
+| ---------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------- |
+| `datalab-web-<version>.tgz`              | Static bundle (everything under `dist/`) + `DEPLOY.md` + `LICENSE` | Unpack under any web server                   |
+| `datalab-platform-web-sdk-<version>.tgz` | Host-side TypeScript SDK (`@datalab-platform/web-sdk`) + `LICENSE` | `npm install ./datalab-platform-web-sdk-…tgz` |
 
 Generate them locally:
 
