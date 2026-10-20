@@ -26,6 +26,7 @@
   "provenance_capture.spec.ts": 222,
   "provenance_difference.spec.ts": 110,
   "provenance_families.spec.ts": 56,
+  "provenance_inspection.spec.ts": 108,
   "provenance_legacy.spec.ts": 119,
   "provenance_qualification.spec.ts": 51,
   "pulse_application_ui.spec.ts": 38,

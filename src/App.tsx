@@ -812,14 +812,6 @@ export default function App() {
   useEffect(() => {
     if (helpView === "console") markConsoleErrorsSeen();
   }, [helpView]);
-  // Persistent error indicator: prefix the tab title with "(!) " when
-  // any browser-console ``warn``/``error`` entry is still unseen.
-  useConsoleErrorTitlePrefix();
-  // Opening the Browser console log dialog acknowledges every buffered
-  // entry, so the menu-bar indicator and the title prefix both clear.
-  useEffect(() => {
-    if (helpView === "console") markConsoleErrorsSeen();
-  }, [helpView]);
   const [userGuideOpen, setUserGuideOpen] = useState(false);
   // Welcome view: shown automatically on first load (and any time the
   // workspace is empty) unless the user has unchecked "Show welcome on
