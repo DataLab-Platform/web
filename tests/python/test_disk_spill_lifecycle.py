@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import io
 import pickle
+from pathlib import Path
 
 import numpy as np
 
@@ -168,3 +169,18 @@ def test_last_processing_input_ids_without_parameters_or_source(fresh_bootstrap)
 
     assert bs.last_processing_input_ids(parameterless) == []
     assert bs.last_processing_input_ids(filtered) == []
+
+
+def test_spill_bookkeeping_survives_a_hot_reload(fresh_bootstrap):
+    """Re-executing ``bootstrap.py`` (Vite HMR) keeps the model and its spills."""
+    bs = fresh_bootstrap
+    spilled = _add_signal(bs, "spilled")
+    paged_in = _add_signal(bs, "paged in")
+    _spill(bs, spilled)
+    assert bs.attach_object_array(paged_in, _spill(bs, paged_in))
+
+    path = Path(bs.__file__)
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), vars(bs))  # noqa: S102
+
+    assert bs.is_object_spilled(spilled)
+    assert bs.settle_object_array(paged_in) == {"state": "released"}

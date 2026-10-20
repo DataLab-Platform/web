@@ -3057,11 +3057,13 @@ def get_data_memory() -> dict[str, int]:
 # counting it) until it is paged back in.
 
 # Maps oid -> {"kind", "attr", "shape", "dtype"} for every spilled object.
-_SPILLED: dict[str, dict[str, Any]] = {}
+# Kept across HMR re-executions like :data:`_MODEL`: the objects it describes
+# still hold their placeholders.
+_SPILLED: dict[str, dict[str, Any]] = globals().get("_SPILLED", {})
 # Maps oid -> data revision (``_DATA_REVISIONS``) of every object paged in by
 # the disk guard, so that :func:`settle_object_array` knows whether the
 # on-disk copy is still current once the call that needed it is over.
-_PAGED_IN_REVISIONS: dict[str, int] = {}
+_PAGED_IN_REVISIONS: dict[str, int] = globals().get("_PAGED_IN_REVISIONS", {})
 
 
 def _heavy_attr(kind: str) -> str:
