@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Security — opened notebooks:** an opened `.ipynb` file can no longer change the look of DataLab-Web, cover it or contact a remote server. Its markdown cells and its HTML and SVG outputs are now displayed in their own isolated block: their styles no longer apply to the rest of the interface, and content positioned over the whole window stays inside the block, so it cannot hide commands or imitate a DataLab-Web dialog. Form fields are removed, and nothing is loaded from the network (remote images, style sheets, fonts or backgrounds), which prevents a notebook from tracking its opening. Images embedded in the notebook and the tables and styling of Sigima results are displayed as before.
 - **Unsaved changes:** several edits did not mark the workspace as modified, so closing or reloading the page discarded them without warning: editing signal or image values in the _Data_ array editor, duplicating objects, moving an object up or down, pasting or importing a region of interest, changing the resampling method of an image, plotting analysis results, committing an interactive fit, importing nodes from an HDF5 file and running a plugin menu action. They now mark the workspace as modified, like the other edits.
 
 ## [0.10.0] - 2026-10-20

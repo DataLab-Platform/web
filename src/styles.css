@@ -6460,61 +6460,13 @@ input {
   background: var(--hover-bg);
 }
 
-/* Notebook: rendered markdown */
+/* Notebook: rendered markdown (content rules: ``MARKDOWN_CSS`` in
+   ``notebook/Cell.tsx``, applied inside the Shadow DOM of the cell) */
 .nb-cell-markdown-rendered {
   padding: 8px 12px;
   font-size: 14px;
   line-height: 1.5;
   cursor: text;
-}
-
-.nb-cell-markdown-rendered h1,
-.nb-cell-markdown-rendered h2,
-.nb-cell-markdown-rendered h3,
-.nb-cell-markdown-rendered h4 {
-  margin: 0.6em 0 0.3em 0;
-}
-
-.nb-cell-markdown-rendered p {
-  margin: 0.4em 0;
-}
-
-.nb-cell-markdown-rendered code {
-  background: var(--panel-alt);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-family: Consolas, monospace;
-  font-size: 0.9em;
-}
-
-.nb-cell-markdown-rendered pre {
-  background: var(--panel-alt);
-  padding: 8px;
-  border-radius: 4px;
-  overflow-x: auto;
-}
-
-.nb-cell-markdown-rendered pre code {
-  background: transparent;
-  padding: 0;
-}
-
-.nb-cell-markdown-rendered table {
-  border-collapse: collapse;
-  margin: 0.6em 0;
-}
-
-.nb-cell-markdown-rendered th,
-.nb-cell-markdown-rendered td {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-}
-
-.nb-cell-markdown-rendered blockquote {
-  border-left: 3px solid var(--accent);
-  margin: 0.6em 0;
-  padding: 0 0.8em;
-  color: var(--text-dim);
 }
 
 /* Browser-stored open menu — extras */

@@ -9,7 +9,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
@@ -31,7 +30,9 @@ import {
   completionKeymap,
 } from "@codemirror/autocomplete";
 import type { CellModel } from "../../notebook/types";
+import { IsolatedMarkup } from "./IsolatedMarkup";
 import { OutputArea } from "./OutputArea";
+import { sanitizeUntrustedHtml } from "./untrustedMarkup";
 import { t } from "../../i18n/translate";
 
 interface CellProps {
@@ -272,26 +273,56 @@ function CodeMirrorEditor({
 }
 
 // ---------------------------------------------------------------------------
-// Markdown rendering — marked + DOMPurify
+// Markdown rendering — marked + untrusted markup isolation
 // ---------------------------------------------------------------------------
 
 // Configure once. Synchronous mode keeps ``parse`` returning string.
 marked.setOptions({ gfm: true, breaks: false });
 
+/** Rendering of markdown cells, applied inside their Shadow DOM. */
+const MARKDOWN_CSS = `
+h1, h2, h3, h4 { margin: 0.6em 0 0.3em 0; }
+p { margin: 0.4em 0; }
+code {
+  background: var(--panel-alt);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: Consolas, monospace;
+  font-size: 0.9em;
+}
+pre {
+  background: var(--panel-alt);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+pre code { background: transparent; padding: 0; }
+table { border-collapse: collapse; margin: 0.6em 0; }
+th, td { border: 1px solid var(--border); padding: 4px 8px; }
+blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 0.6em 0;
+  padding: 0 0.8em;
+  color: var(--text-dim);
+}
+`;
+
 interface MarkdownRenderedProps {
   source: string;
 }
 
+// Markdown cells of an opened ``.ipynb`` may hold any raw HTML: they are
+// rendered like untrusted outputs.
 function MarkdownRendered({ source }: MarkdownRenderedProps) {
-  const html = useMemo(() => {
+  const rendered = useMemo(() => {
     try {
       const raw = marked.parse(source, { async: false }) as string;
-      return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+      return { html: sanitizeUntrustedHtml(raw), error: null };
     } catch (err) {
       console.error("Markdown render failed:", err);
-      return `<pre>${(err as Error).message}</pre>`;
+      return { html: "", error: (err as Error).message };
     }
   }, [source]);
-  // The HTML is sanitised by DOMPurify above.
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  if (rendered.error !== null) return <pre>{rendered.error}</pre>;
+  return <IsolatedMarkup html={rendered.html} css={MARKDOWN_CSS} />;
 }

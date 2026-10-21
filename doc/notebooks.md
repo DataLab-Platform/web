@@ -38,10 +38,7 @@ New notebooks are not persisted until you make the first edit
 
 - **Code cells** — Python source executed by Pyodide. Use
   `Shift+Enter` to run, `Ctrl+Enter` to run-without-advancing.
-- **Markdown cells** — rendered with [marked](https://marked.js.org/)
-  and sanitised with [DOMPurify](https://github.com/cure53/DOMPurify).
-  Double-click a rendered cell to edit it again; commit with
-  `Ctrl+Enter`.
+- **Markdown cells** — rendered with [marked](https://marked.js.org/), sanitised and isolated like rich outputs (see _File compatibility_ below). Double-click a rendered cell to edit it again; commit with `Ctrl+Enter`.
 
 The toolbar exposes **+ Code**, **+ Markdown**, **Convert** (toggles
 the active cell's type), **Delete**, **Run**, **Run All** and
@@ -102,6 +99,8 @@ Jupyter, JupyterLab, VS Code and GitHub. Use:
 The notebook name is preserved through round-trips via a
 `metadata.dlw.name` entry; everything else follows the standard
 schema and renders correctly in any nbformat-aware viewer.
+
+An opened `.ipynb` is treated as untrusted: its markdown cells and the HTML and SVG outputs it stores are sanitised with [DOMPurify](https://github.com/cure53/DOMPurify) (no scripts, no form fields, no remote images, style sheets or fonts — only images embedded in the notebook are shown) and each one is displayed in its own isolated block (a Shadow DOM with paint containment), so its styles and positioned content cannot alter or cover the rest of the interface. Outputs produced by running cells are displayed the same way.
 
 ## Renaming a notebook
 

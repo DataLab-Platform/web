@@ -3,44 +3,30 @@
  *
  * Supported MIME types in the MVP:
  *   - text/plain                          → <pre>
- *   - text/html                           → innerHTML sanitised by
- *                                            DOMPurify
- *   - image/svg+xml                       → innerHTML sanitised by
- *                                            DOMPurify (SVG profile)
+ *   - text/html                           → sanitised, isolated markup
+ *   - image/svg+xml                       → sanitised, isolated markup
+ *                                            (SVG profile)
  *   - image/png                           → <img src="data:image/png;..."/>
  *   - application/vnd.plotly.v1+json      → react-plotly.js Figure
+ *
+ * Opening a ``.ipynb`` restores the outputs it contains, so HTML and SVG
+ * outputs are untrusted: see ``untrustedMarkup.ts`` and ``IsolatedMarkup``.
  *
  * Streams (stdout/stderr) are aggregated and rendered as a single
  * coloured ``<pre>``.
  */
 
-import DOMPurify from "dompurify";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import Plot from "react-plotly.js";
 import type { CellOutput } from "../../notebook/types";
 import type { MimeBundle } from "../../notebook/NotebookRuntime";
 import { t } from "../../i18n/translate";
+import { IsolatedMarkup } from "./IsolatedMarkup";
+import { sanitizeUntrustedHtml, sanitizeUntrustedSvg } from "./untrustedMarkup";
 
 interface OutputAreaProps {
   outputs: CellOutput[];
-}
-
-// Outputs are not only produced by the local kernel: opening a ``.ipynb``
-// restores the outputs it contains, which must therefore be treated as
-// untrusted. ``FORCE_BODY`` keeps the leading ``<style>`` block of Sigima's
-// ``_repr_html_`` tables, which the HTML parser would otherwise drop.
-function sanitizeHtmlOutput(html: string): string {
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    FORCE_BODY: true,
-  });
-}
-
-function sanitizeSvgOutput(svg: string): string {
-  return DOMPurify.sanitize(svg, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-  });
 }
 
 export function OutputArea({ outputs }: OutputAreaProps): ReactElement {
@@ -133,22 +119,20 @@ function MimeRenderer({ bundle }: { bundle: MimeBundle }): ReactElement | null {
     );
   }
   if (bundle["image/svg+xml"]) {
-    const svg = sanitizeSvgOutput(String(bundle["image/svg+xml"]));
     return (
-      <div
+      <IsolatedMarkup
         className="nb-output-svg"
         style={{ padding: 4 }}
-        dangerouslySetInnerHTML={{ __html: svg }}
+        html={sanitizeUntrustedSvg(String(bundle["image/svg+xml"]))}
       />
     );
   }
   if (bundle["text/html"]) {
-    const html = sanitizeHtmlOutput(String(bundle["text/html"]));
     return (
-      <div
+      <IsolatedMarkup
         className="nb-output-html"
         style={{ padding: 4 }}
-        dangerouslySetInnerHTML={{ __html: html }}
+        html={sanitizeUntrustedHtml(String(bundle["text/html"]))}
       />
     );
   }
