@@ -21,7 +21,10 @@ declare global {
  *     Macros and notebooks are NOT silently restored, so the workspace
  *     stays clean (no "(recovered)" title hint),
  *   * the ``beforeunload`` guard fires when (and only when) the
- *     workspace is dirty.
+ *     workspace is dirty,
+ *   * edits that bypass the processing pipeline (array editors,
+ *     duplication, reordering, ROI paste, display settings) raise the
+ *     dirty flag too.
  */
 
 test.describe("Workspace persistence UX", () => {
@@ -109,4 +112,62 @@ test.describe("Workspace persistence UX", () => {
     });
     expect(dirtyDefaultPrevented).toBe(true);
   });
+
+  for (const mode of ["ram", "disk"] as const) {
+    test(`editing, duplicating and reordering objects mark the workspace dirty (${mode})`, async ({
+      page,
+    }) => {
+      await page.goto("/");
+      await waitForRuntimeReady(page);
+      if (mode === "disk") {
+        test.skip(
+          !(await page.evaluate(() => window.runtime.isDiskStorageSupported())),
+          "OPFS is not available in this browser",
+        );
+      }
+
+      // Each call below changes state saved with the workspace: the runtime
+      // must notify a workspace mutation, which raises the dirty flag.
+      const result = await page.evaluate(async (storage) => {
+        const rt = window.runtime;
+        await rt.setStorageMode(storage);
+        const sig = await rt.createSignalTyped("sine");
+        await rt.setSignalRoi(sig, [{ xmin: 1, xmax: 2, title: "r" }]);
+        await rt.copyObjectRoi(sig);
+        const img = await rt.createImageTyped("ramp");
+        const names: string[] = [];
+        const unsubscribe = rt.onWorkspaceMutation((name) => names.push(name));
+        try {
+          const dup = await rt.duplicateObject(sig);
+          await rt.moveObjectInGroup(dup, -1);
+          await rt.setSignalData(sig, [0, 1, 2], [3, 4, 5]);
+          await rt.pasteObjectRoi([dup]);
+          await rt.setImageData(img, [
+            [1, 2],
+            [3, 4],
+          ]);
+          await rt.setResampleMethod(img, "max");
+        } finally {
+          unsubscribe();
+        }
+        const spilled = rt.getSpilledCount();
+        const edited = await rt.getSignalData(sig);
+        await rt.setStorageMode("ram");
+        return { names, spilled, y: Array.from(edited.y) };
+      }, mode);
+      expect(result.names).toEqual([
+        "duplicate_object",
+        "move_object_in_group",
+        "set_signal_xydata",
+        "paste_object_roi",
+        "set_image_data",
+        "set_resample_method",
+      ]);
+      // In disk mode, every object (signal, duplicate, image) is back on
+      // disk with its edited data.
+      expect(result.spilled).toBe(mode === "disk" ? 3 : 0);
+      expect(result.y).toEqual([3, 4, 5]);
+      await expect.poll(() => page.title()).toContain("•");
+    });
+  }
 });

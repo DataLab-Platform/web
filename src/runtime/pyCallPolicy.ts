@@ -22,7 +22,11 @@
  * ``get_*``, schema queries, IO format probes) must NOT appear here.
  * ``open_workspace_from_bytes`` and ``save_workspace_to_bytes`` are
  * intentionally absent — they're the *clean* transitions, handled separately
- * in ``App.tsx``.
+ * in ``App.tsx``. Calls whose caller decides the flag are listed in
+ * {@link DIRTY_SET_BY_CALLER}; calls named like writes that change no
+ * durable state, in {@link NON_DURABLE_WRITE_CALLS}. Checked by
+ * ``tests/ts/runtime/pyCallPolicyAudit.test.ts`` and
+ * ``tests/python/test_py_call_policy_audit.py``.
  */
 export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   // Object model — signals & images
@@ -32,6 +36,9 @@ export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   "create_image_typed",
   "add_signal_from_arrays",
   "add_image_from_array",
+  "duplicate_object",
+  "set_signal_xydata",
+  "set_image_data",
   "set_signal_style",
   "update_signal_creation_params",
   "update_image_creation_params",
@@ -47,6 +54,8 @@ export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   "delete_signal_roi_at",
   "set_image_roi",
   "delete_image_roi_at",
+  "paste_object_roi",
+  "import_object_roi_bytes",
   "create_image_roi_grid",
   "extract_signal_rois",
   "extract_image_rois",
@@ -56,12 +65,14 @@ export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   "rename_object",
   "move_object",
   "move_objects",
+  "move_object_in_group",
   "create_group",
   "rename_group",
   "delete_group",
   "set_plotly_annotations",
   "set_lut_range",
   "set_colormap",
+  "set_resample_method",
   "clear_signal_results",
   "clear_image_results",
   "erase_image_area",
@@ -72,12 +83,18 @@ export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   "reapply_last_processing",
   "run_signal_analysis",
   "run_image_analysis",
+  "plot_results",
+  "commit_interactive_fit",
   "run_plugin_recipe",
   "launch_plugin_tool",
   "acquire_plugin_instrument",
+  // Plugin menu actions run arbitrary plugin code: any successful action is
+  // assumed to change the workspace.
+  "trigger_plugin_action",
   "open_signal_from_bytes",
   "open_image_from_bytes",
   "open_from_directory_chunk",
+  "h5_browser_import",
   "import_signal_csv",
   "commit_text_import",
   "add_object_pickled",
@@ -242,16 +259,22 @@ export const MUTATES_HEAVY: ReadonlySet<string> = new Set<string>([
   "update_signal_creation_params",
 ]);
 
-/** Calls adding, deleting or replacing objects that are not workspace
- *  mutations in the sense of {@link MUTATING_PY_FUNCTIONS}. */
-export const DISK_SWEEP_EXTRA_CALLS: ReadonlySet<string> = new Set<string>([
-  "duplicate_object",
-  "commit_interactive_fit",
-  "plot_results",
-  "h5_browser_import",
+/** Calls adding, deleting or replacing objects whose caller sets the
+ *  workspace dirty flag itself, from what the call returns (an example may
+ *  open as a clean workspace). */
+export const DIRTY_SET_BY_CALLER: ReadonlySet<string> = new Set<string>([
   "open_plugin_example",
-  // Plugin code, invisible to the audit of the Python sources.
-  "trigger_plugin_action",
+]);
+
+/** Calls named like writes (see the audit of ``runtime.ts`` call sites) that
+ *  change no state persisted with the workspace. */
+export const NON_DURABLE_WRITE_CALLS: ReadonlySet<string> = new Set<string>([
+  // Plugin registry state, kept with the installed plugins.
+  "set_plugin_enabled",
+  // Writes a separate JSON review document; the workspace is unchanged.
+  "create_capsule_review",
+  // Opens an acquisition session; ``acquire_plugin_instrument`` adds objects.
+  "open_plugin_instrument",
 ]);
 
 function unionOf(...sets: ReadonlySet<string>[]): ReadonlySet<string> {
@@ -271,7 +294,7 @@ export const DISK_SWEEP_CALLS: ReadonlySet<string> = unionOf(
   MUTATING_PY_FUNCTIONS,
   REPLACES_MODEL,
   DELETES_OBJECTS,
-  DISK_SWEEP_EXTRA_CALLS,
+  DIRTY_SET_BY_CALLER,
 );
 
 /** What the disk guard pages in before a call. */

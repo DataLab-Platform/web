@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Unsaved changes:** several edits did not mark the workspace as modified, so closing or reloading the page discarded them without warning: editing signal or image values in the _Data_ array editor, duplicating objects, moving an object up or down, pasting or importing a region of interest, changing the resampling method of an image, plotting analysis results, committing an interactive fit, importing nodes from an HDF5 file and running a plugin menu action. They now mark the workspace as modified, like the other edits.
+
 ## [0.10.0] - 2026-10-20
 
 ### Added in 0.10.0

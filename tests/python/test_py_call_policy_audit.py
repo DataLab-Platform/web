@@ -1,12 +1,14 @@
 # Copyright (c) DataLab Platform Developers, BSD 3-Clause License
 # See LICENSE file for details
-"""Audit of the disk-guard policy against the Python functions it covers.
+"""Audit of the Python call policy against the Python functions it covers.
 
 In on-disk storage mode, ``runtime.ts`` reconciles the OPFS store with the
 model after the calls listed in ``DISK_SWEEP_CALLS`` (``pyCallPolicy.ts``):
 on-disk copies of deleted objects are removed and objects left in memory are
 spilled. A call that adds, deletes or replaces objects without being listed
-leaks memory or disk space, or pages a stale copy in later.
+leaks memory or disk space, or pages a stale copy in later. Such a call must
+also mark the workspace dirty (``MUTATING_PY_FUNCTIONS``), otherwise its
+objects can be lost without any unsaved-changes warning.
 
 This test finds, from the source code, every Python function called by
 ``runtime.ts`` that adds, deletes or replaces objects of the model (directly
@@ -240,4 +242,27 @@ def test_model_mutations_are_followed_by_a_disk_sweep():
     assert not missing, (
         "These Python functions add, delete or replace objects but are not "
         f"listed in DISK_SWEEP_CALLS (src/runtime/pyCallPolicy.ts): {missing}"
+    )
+
+
+def test_model_mutations_mark_the_workspace_dirty():
+    """A call adding, deleting or replacing objects must raise the dirty flag,
+    unless it is a clean transition (``REPLACES_MODEL``) or its caller decides
+    (``DIRTY_SET_BY_CALLER``)."""
+    index = _ModuleIndex()
+    mutating = index.mutating()
+    handled = (
+        policy_set("MUTATING_PY_FUNCTIONS")
+        | policy_set("REPLACES_MODEL")
+        | policy_set("DIRTY_SET_BY_CALLER")
+    )
+    missing = sorted(
+        name
+        for name in called_python_functions()
+        if index.locate(name) in mutating and name not in handled
+    )
+    assert not missing, (
+        "These Python functions add, delete or replace objects but do not mark "
+        "the workspace dirty: add them to MUTATING_PY_FUNCTIONS "
+        f"(src/runtime/pyCallPolicy.ts): {missing}"
     )

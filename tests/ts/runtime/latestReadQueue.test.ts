@@ -19,6 +19,7 @@ interface RuntimeInternals {
   } | null;
   spilledOids: Set<string>;
   _latestReadGenerations: Map<string, number>;
+  mutationListeners: Set<(name: string) => void>;
   callPy<T>(name: string, kwargs?: Record<string, unknown>): Promise<T>;
   callPyLatest<T>(
     key: string,
@@ -54,6 +55,7 @@ function makeRuntime(
   runtime.opfsStore = null;
   runtime.spilledOids = new Set();
   runtime._latestReadGenerations = new Map();
+  runtime.mutationListeners = new Set();
   return runtime;
 }
 
@@ -174,12 +176,17 @@ describe("DataLabRuntime latest-read queue", () => {
       if (name === "detach_object_array") return newBytes;
       if (name === "settle_object_array") return { state: "released" };
       if (name === "set_signal_xydata") return null;
+      if (name === "disk_sweep_state") {
+        return { spilled: ["signal-1"], resident: [] };
+      }
       return null;
     });
     const put = vi.fn(async () => {});
     runtime.storageMode = "disk";
     runtime.opfsStore = { get: async () => new Uint8Array([1]), put };
     runtime.spilledOids.add("signal-1");
+    const notified: string[] = [];
+    runtime.mutationListeners.add((name) => notified.push(name));
 
     await runtime.callPy("set_signal_xydata", { oid: "signal-1" });
 
@@ -189,6 +196,7 @@ describe("DataLabRuntime latest-read queue", () => {
     );
     expect(put).toHaveBeenCalledWith("signal-1", newBytes);
     expect(runtime.spilledOids.has("signal-1")).toBe(true);
+    expect(notified).toEqual(["set_signal_xydata"]);
   });
 
   it("releases paged-in objects when the call fails", async () => {
@@ -197,6 +205,9 @@ describe("DataLabRuntime latest-read queue", () => {
       calls.push(name);
       if (name === "settle_object_array") return { state: "released" };
       if (name === "set_signal_xydata") throw new Error("failed");
+      if (name === "disk_sweep_state") {
+        return { spilled: ["signal-1"], resident: [] };
+      }
       return null;
     });
     runtime.storageMode = "disk";

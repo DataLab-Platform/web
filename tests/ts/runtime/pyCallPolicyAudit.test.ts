@@ -1,12 +1,15 @@
 /**
- * Audit of the disk-guard page-in policy against the call sites of
- * ``runtime.ts``.
+ * Audit of the Python call policy against the call sites of ``runtime.ts``.
  *
  * In on-disk storage mode, the disk guard pages in the objects named by the
  * kwargs of a call before running it (``pyCallPolicy.ts``). A call naming an
  * object through an unknown key would run on its 1-element placeholder (a
  * blank view, a dialog initialized from zeros, a wrong recipe assessment), so
  * every identifier-like key passed to ``callPy`` must be classified.
+ *
+ * The workspace dirty flag is raised after the calls listed in
+ * ``MUTATING_PY_FUNCTIONS``: a call named like a write must be classified
+ * too, otherwise its changes can be lost without any unsaved-changes warning.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,10 +17,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  DIRTY_SET_BY_CALLER,
+  MUTATES_HEAVY,
+  MUTATING_PY_FUNCTIONS,
+  NON_DURABLE_WRITE_CALLS,
   NON_OBJECT_ID_KEYS,
   PAGE_IN_ID_KEYS,
   PAGE_IN_ID_LIST_KEYS,
   PAGE_IN_ID_MAPPING_KEYS,
+  REPLACES_MODEL,
   pageInPlan,
   referencedOids,
 } from "../../../src/runtime/pyCallPolicy";
@@ -92,7 +100,7 @@ function literalKeys(body: string): string[] {
 }
 
 /** Return ``{ name, keys }`` for every ``callPy`` / ``callPyLatest`` call
- *  of ``runtime.ts`` passing an object literal as kwargs. */
+ *  of ``runtime.ts``; *keys* is empty unless kwargs are an object literal. */
 function callSites(): Array<{ name: string; keys: string[] }> {
   const source = readFileSync(RUNTIME_TS, "utf8");
   const sites: Array<{ name: string; keys: string[] }> = [];
@@ -104,12 +112,18 @@ function callSites(): Array<{ name: string; keys: string[] }> {
     const literals = Array.from(args.matchAll(/"([^"]*)"/g), (m) => m[1]);
     const name = match[1] ? literals[1] : literals[0];
     const brace = args.indexOf("{");
-    if (brace < 0) continue;
-    const keys = literalKeys(args.slice(brace + 1, closingIndex(args, brace)));
+    const keys =
+      brace < 0
+        ? []
+        : literalKeys(args.slice(brace + 1, closingIndex(args, brace)));
     sites.push({ name, keys });
   }
   return sites;
 }
+
+/** Python functions whose name announces a change of state. */
+const WRITE_LIKE =
+  /^(set|update|add|delete|remove|create|import|commit|apply|move|rename|clear|reset|replace|paste|duplicate|erase|distribute|plot|trigger|run|launch|acquire|reorder|extract|open)_/;
 
 describe("disk-guard page-in policy", () => {
   it("finds the call sites of runtime.ts", () => {
@@ -183,5 +197,51 @@ describe("disk-guard page-in policy", () => {
       kind: "ids",
       oids: ["S"],
     });
+  });
+});
+
+describe("workspace dirty policy", () => {
+  const called = new Set(callSites().map((site) => site.name));
+
+  it("classifies every write-like call to Python", () => {
+    const classified = new Set([
+      ...MUTATING_PY_FUNCTIONS,
+      ...REPLACES_MODEL,
+      ...DIRTY_SET_BY_CALLER,
+      ...NON_DURABLE_WRITE_CALLS,
+    ]);
+    const unclassified = [...called]
+      .filter((name) => WRITE_LIKE.test(name) && !classified.has(name))
+      .sort();
+    expect(
+      unclassified,
+      "Add these calls to MUTATING_PY_FUNCTIONS, or to NON_DURABLE_WRITE_CALLS " +
+        "if they change no state saved with the workspace " +
+        "(src/runtime/pyCallPolicy.ts)",
+    ).toEqual([]);
+  });
+
+  it("marks the workspace dirty after an in-place data change", () => {
+    const missing = [...MUTATES_HEAVY].filter(
+      (name) => !MUTATING_PY_FUNCTIONS.has(name),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("does not classify a call twice", () => {
+    const exclusive = [
+      MUTATING_PY_FUNCTIONS,
+      DIRTY_SET_BY_CALLER,
+      NON_DURABLE_WRITE_CALLS,
+    ];
+    const names = exclusive.flatMap((set) => [...set]);
+    expect(names.length).toBe(new Set(names).size);
+  });
+
+  it("only exempts calls made by runtime.ts", () => {
+    const stale = [...DIRTY_SET_BY_CALLER, ...NON_DURABLE_WRITE_CALLS].filter(
+      (name) => !called.has(name),
+    );
+    expect(stale).toEqual([]);
   });
 });
