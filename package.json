@@ -51,8 +51,8 @@
     "idb": "^8.0.4",
     "marked": "^18.1.1",
     "plotly.js-dist-min": "^4.1.2",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-plotly.js": "^4.1.0"
   },
   "devDependencies": {
