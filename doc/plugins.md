@@ -1,5 +1,7 @@
 # Authoring DataLab-Web plugins
 
+Shared Desktop plugins target Python 3.10 or later. Web plugins still target the Python 3.12 interpreter provided by Pyodide; DataLab-Web's CPython test minimum remains Python 3.11.
+
 DataLab-Web supports portable DataLab plugin classes inside Pyodide. A plugin
 may be loaded as a consented single Python source file or installed as a
 managed pure-Python wheel. Plugin code shares the main Python interpreter and
