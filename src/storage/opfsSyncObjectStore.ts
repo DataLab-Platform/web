@@ -99,13 +99,28 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
     return fh.createSyncAccessHandle();
   }
 
-  /** Persist *bytes* for *oid*, overwriting any previous payload in place. */
+  /**
+   * Persist *bytes* for *oid*, overwriting any previous payload in place.
+   *
+   * A write may transfer fewer bytes than requested: the remaining bytes are
+   * written in turn, and a write that transfers nothing throws, so that the
+   * caller never takes an incomplete copy for a stored payload.
+   */
   async put(oid: string, bytes: Uint8Array): Promise<void> {
     const h = await this.handle(oid);
     try {
       // In-place write, then shrink the file to the exact payload length so
       // a smaller re-spill never leaves stale trailing bytes.
-      h.write(bytes, { at: 0 });
+      let written = 0;
+      while (written < bytes.byteLength) {
+        const count = h.write(bytes.subarray(written), { at: written });
+        if (!(count > 0)) {
+          throw new Error(
+            `Incomplete OPFS write for ${oid}: ${written} of ${bytes.byteLength} bytes`,
+          );
+        }
+        written += count;
+      }
       h.truncate(bytes.byteLength);
       h.flush();
     } finally {
@@ -114,13 +129,26 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
     this.sizes.set(oid, bytes.byteLength);
   }
 
-  /** Read back the payload for *oid*. Throws if it is absent. */
+  /**
+   * Read back the payload for *oid*. Throws if it is absent, or if fewer
+   * bytes than the file size can be read (a read may transfer fewer bytes
+   * than requested: the remaining bytes are read in turn).
+   */
   async get(oid: string): Promise<Uint8Array> {
     const h = await this.handle(oid);
     try {
       const size = h.getSize();
       const out = new Uint8Array(size);
-      h.read(out, { at: 0 });
+      let read = 0;
+      while (read < size) {
+        const count = h.read(out.subarray(read), { at: read });
+        if (!(count > 0)) {
+          throw new Error(
+            `Incomplete OPFS read for ${oid}: ${read} of ${size} bytes`,
+          );
+        }
+        read += count;
+      }
       return out;
     } finally {
       h.close();
