@@ -160,6 +160,94 @@ def test_open_file_cleans_up_when_tree_fails(h5_bytes, monkeypatch):
         h5b.close_all()
 
 
+@pytest.fixture
+def large_h5(tmp_path):
+    """Return the path of a file with large datasets of various kinds."""
+    path = tmp_path / "large.h5"
+    table = np.zeros(5000, dtype=[("x", "f8"), ("y", "f8")])
+    mixed = np.zeros(3000, dtype=[("label", "S8"), ("value", "f8")])
+    mixed["label"] = b"abc"
+    with h5py.File(path, "w") as f:
+        f["small"] = np.arange(10.0)
+        f["vector"] = np.arange(1_000_000.0)
+        f["column"] = np.zeros((50_000, 1))
+        f["image"] = np.zeros((300, 400), dtype=np.uint16)
+        f["cube"] = np.zeros((20, 30, 40))
+        f["text"] = np.array([b"line"] * 1000)
+        f["table"] = table
+        f["mixed"] = mixed
+        f["label"] = "hello"
+        f["value"] = 3.5
+    return path
+
+
+def _nodes_by_path(result: dict) -> dict[str, dict]:
+    """Return the nodes of an ``open_file`` result by path."""
+    nodes = {}
+    stack = [result["root"]]
+    while stack:
+        node = stack.pop()
+        nodes[node["id"]] = node
+        stack.extend(node["children"])
+    return nodes
+
+
+def test_open_file_reads_only_samples(large_h5, monkeypatch):
+    """Opening a file reads a bounded sample of each dataset, not its data.
+
+    Regression: every dataset was read entirely while building the tree, even
+    datasets that cannot be imported (e.g. 3D cubes).
+    """
+    reads: dict[str, int] = {}
+    getitem = h5py.Dataset.__getitem__
+
+    def spy(self, *args, **kwargs):
+        result = getitem(self, *args, **kwargs)
+        reads[self.name] = reads.get(self.name, 0) + int(np.size(result))
+        return result
+
+    monkeypatch.setattr(h5py.Dataset, "__getitem__", spy)
+    result = h5b.open_file("large.h5", large_h5.read_bytes())
+    try:
+        assert reads and max(reads.values()) <= h5b._SAMPLE_MAX_ITEMS
+        reads.clear()
+        h5b.import_nodes(result["file_id"], ["/vector"])
+        assert reads == {"/vector": 1_000_000}
+    finally:
+        h5b.close_all()
+
+
+def test_sampled_classification_matches_full_read(large_h5, monkeypatch):
+    """The nodes classified from samples are those classified from full reads
+    (kind, icon, shape, type and support; only the text preview may differ)."""
+    sampled = h5b.open_file("large.h5", large_h5.read_bytes())
+    h5b.close_all()
+    monkeypatch.setattr(h5b, "_read_sample", h5b._safe_read)
+    full = h5b.open_file("large.h5", large_h5.read_bytes())
+    h5b.close_all()
+    sampled_nodes, full_nodes = _nodes_by_path(sampled), _nodes_by_path(full)
+    assert sampled_nodes.keys() == full_nodes.keys()
+    for path, node in full_nodes.items():
+        for key in ("kind", "icon_name", "shape_str", "dtype_str", "is_supported"):
+            assert sampled_nodes[path][key] == node[key], (path, key)
+    kinds = {path: node["kind"] for path, node in sampled_nodes.items()}
+    assert kinds == {
+        "/": "group",
+        "/small": "signal",
+        "/vector": "signal",
+        "/column": "signal",
+        "/image": "image",
+        "/cube": "unknown",
+        "/text": "text",
+        "/table": "signal",
+        "/mixed": "compound",
+        "/label": "text",
+        "/value": "scalar",
+    }
+    assert sampled_nodes["/table"]["shape_str"] == "5000 x 2"
+    assert sampled_nodes["/image"]["shape_str"] == "300 x 400"
+
+
 def test_close_file_clears_state(opened):
     file_id = opened["file_id"]
     assert file_id in h5b.STATE

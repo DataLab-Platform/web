@@ -82,12 +82,15 @@ def _safe_decode_bytes(data: Any, fallback: str = "<binary data>") -> str:
         return fallback
 
 
-def _safe_read(dset: Any) -> Any:
-    """Read *dset* with encoding fallbacks; return ``None`` on failure."""
+def _safe_read(dset: Any, selection: Any = ()) -> Any:
+    """Read *selection* of *dset* with encoding fallbacks; ``None`` on failure."""
     try:
-        return dset[()]
+        return dset[selection]
     except UnicodeDecodeError:
-        for strat in (lambda d: d.asstr()[()], lambda d: d.astype("S")[()]):
+        for strat in (
+            lambda d: d.asstr()[selection],
+            lambda d: d.astype("S")[selection],
+        ):
             try:
                 return strat(dset)
             except Exception:  # noqa: BLE001
@@ -95,6 +98,24 @@ def _safe_read(dset: Any) -> Any:
         return None
     except (TypeError, ValueError, OSError):
         return None
+
+
+#: Maximum number of elements read to classify and describe a dataset while
+#: opening a file: the full data is read only on preview or import
+_SAMPLE_MAX_ITEMS = 100
+
+
+def _read_sample(dset: Any) -> Any:
+    """Read a scalar *dset*, or the leading elements of an array *dset*.
+
+    At most about :data:`_SAMPLE_MAX_ITEMS` elements are read, whatever the size
+    of the dataset (the same number along each axis).
+    """
+    shape = dset.shape
+    if not shape:  # scalar (``()``) or null dataspace (``None``)
+        return _safe_read(dset)
+    per_axis = max(1, int(_SAMPLE_MAX_ITEMS ** (1.0 / len(shape))))
+    return _safe_read(dset, tuple(slice(0, min(size, per_axis)) for size in shape))
 
 
 def _is_supported_num_dtype(arr: Any) -> bool:
@@ -241,28 +262,34 @@ class _NodeInfo:
     kind: str  # "group" | "scalar" | "text" | "array" | "compound" | "image" | "signal"
 
 
-def _classify_dataset(dset: Any) -> tuple[str, np.ndarray | Any]:
-    """Return ``(kind, data)`` for a non-Group dataset.
+def _classify_dataset(dset: Any) -> tuple[str, Any, tuple[int, ...]]:
+    """Return ``(kind, data, shape)`` for a non-Group dataset.
 
     ``kind`` is one of ``"scalar"``, ``"text"``, ``"array"``, ``"compound"``
     or ``"unknown"`` (matches Qt's GenericScalarNode / GenericTextNode /
     GenericArrayNode / GenericCompoundNode taxonomy).
+
+    Only a sample of the dataset is read (see :func:`_read_sample`): ``data``
+    is that sample (its numeric part for compound arrays), used to describe the
+    node, and ``shape`` is the shape of the whole (numeric) dataset. Mixed
+    compound datasets are checked on their first records only.
     """
-    data = _safe_read(dset)
+    data = _read_sample(dset)
+    shape = tuple(dset.shape or ())
     if data is None:
         try:
             if dset.dtype.names is not None:
-                return "compound", None
+                return "compound", None, shape
             if dset.dtype.kind in ("S", "a", "U"):
-                return "text", None
+                return "text", None, shape
         except Exception:  # noqa: BLE001
-            return "unknown", None
-        return "unknown", None
+            return "unknown", None, shape
+        return "unknown", None, shape
 
     if isinstance(data, np.generic) and _is_supported_num_dtype(data):
-        return "scalar", data
+        return "scalar", data, shape
     if isinstance(data, bytes) or _is_supported_str_dtype(data):
-        return "text", data
+        return "text", data, shape
 
     if isinstance(data, np.ndarray):
         if data.dtype.names is not None:
@@ -272,21 +299,19 @@ def _classify_dataset(dset: Any) -> tuple[str, np.ndarray | Any]:
                 and _is_supported_num_dtype(numeric)
                 and numeric.ndim in (1, 2)
             ):
-                return "array", numeric
-            return "compound", data
+                # Several numeric fields are stacked along a last axis
+                return "array", numeric, shape + numeric.shape[data.ndim :]
+            return "compound", data, shape
         if data.dtype.kind in ("S", "a", "U"):
-            return "text", data
+            return "text", data, shape
         if _is_supported_num_dtype(data) and data.ndim in (1, 2):
-            return "array", data
+            return "array", data, shape
 
-    return "unknown", data
+    return "unknown", data, shape
 
 
-def _shape_str(arr: Any) -> str:
-    try:
-        return " x ".join(str(s) for s in arr.shape)
-    except Exception:  # noqa: BLE001
-        return ""
+def _shape_str(shape: tuple[int, ...]) -> str:
+    return " x ".join(str(s) for s in shape)
 
 
 def _dtype_str(dset: Any, kind: str, data: Any) -> str:
@@ -410,7 +435,7 @@ def _build_node(
                 print(f"[h5browser] skip {child_path!r}: {type(exc).__name__}: {exc}")
         return info
 
-    kind, data = _classify_dataset(dset)
+    kind, data, data_shape = _classify_dataset(dset)
     name = osp.basename(h5path)
 
     shape = ""
@@ -420,10 +445,10 @@ def _build_node(
 
     if kind == "array":
         is_array = True
-        shape = _shape_str(data)
-        supported = data is not None and data.size > 1
+        shape = _shape_str(data_shape)
+        supported = int(np.prod(data_shape)) > 1
         is_supported = bool(supported)
-        if supported and _array_is_signal(data.shape):
+        if supported and _array_is_signal(data_shape):
             icon = "signal.svg"
             kind = "signal"
         elif supported:
@@ -434,7 +459,7 @@ def _build_node(
     elif kind == "compound":
         is_array = True
         if data is not None:
-            shape = _shape_str(data)
+            shape = _shape_str(data_shape)
         icon = "h5array.svg"
     elif kind == "scalar":
         icon = "h5scalar.svg"
