@@ -339,8 +339,18 @@ def _broken_link(group: Any, name: str) -> str:
     return "object cannot be opened"
 
 
-def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeInfo:
-    """Recursively build one :class:`_NodeInfo`."""
+def _build_node(
+    file_id: str,
+    h5path: str,
+    dset: Any,
+    _depth: int = 0,
+    _ancestors: tuple[Any, ...] = (),
+) -> _NodeInfo:
+    """Recursively build one :class:`_NodeInfo`.
+
+    *_ancestors* are the groups containing *dset*: a link back to one of them
+    (or to *dset*) closes a cycle and is skipped.
+    """
     metadata = _collect_attrs(dset)
 
     if isinstance(dset, h5py.Group):
@@ -368,6 +378,7 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
                 f"{h5path!r}: not descending further"
             )
             return info
+        ancestors = (*_ancestors, dset)
         for child_name in dset:
             child_path = f"{h5path.rstrip('/')}/{child_name}"
             child_dset = dset.get(child_name)
@@ -379,9 +390,21 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
                     f"[h5browser] skip {child_path!r}: {_broken_link(dset, child_name)}"
                 )
                 continue
+            if isinstance(child_dset, h5py.Group):
+                # Identity comparison (file and object): a group reached again
+                # through a hard, soft or external link would be walked forever
+                looped = next((grp for grp in ancestors if grp == child_dset), None)
+                if looped is not None:
+                    print(
+                        f"[h5browser] skip {child_path!r}: link back to its parent "
+                        f"group {looped.name!r}"
+                    )
+                    continue
             try:
                 info.children.append(
-                    _build_node(file_id, child_dset.name, child_dset, _depth + 1)
+                    _build_node(
+                        file_id, child_dset.name, child_dset, _depth + 1, ancestors
+                    )
                 )
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
                 print(f"[h5browser] skip {child_path!r}: {type(exc).__name__}: {exc}")

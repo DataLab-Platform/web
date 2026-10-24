@@ -67,6 +67,45 @@ def test_open_invalid_file_raises():
         h5b.open_file("bogus.h5", b"definitely not an HDF5 file")
 
 
+def test_open_file_skips_link_cycles(tmp_path, capsys):
+    """Links back to a parent group are skipped, other aliases are kept.
+
+    Regression: a group linked into itself was walked down to the depth limit,
+    producing 100 phantom levels (``/entry/self/self/...``).
+    """
+    path = tmp_path / "cycles.h5"
+    with h5py.File(path, "w") as f:
+        entry = f.create_group("entry")
+        entry["signal"] = np.arange(10.0)
+        entry["self"] = entry  # hard link to itself
+        inner = entry.create_group("inner")
+        inner["up"] = entry  # hard link to its parent (two-group cycle)
+        inner["root"] = h5py.SoftLink("/")  # soft link to the root group
+        f["alias"] = entry["signal"]  # dataset alias, not a cycle
+        f["entry_alias"] = inner  # group alias, not a cycle
+    result = h5b.open_file("cycles.h5", path.read_bytes())
+    try:
+        # The group alias keeps its own path to the parent group of the aliased
+        # group (which is not one of its own parents)
+        assert set(h5b.STATE[result["file_id"]].nodes_by_path) == {
+            "/",
+            "/entry",
+            "/entry/signal",
+            "/entry/inner",
+            "/alias",
+            "/entry_alias",
+            "/entry_alias/up",
+            "/entry_alias/up/signal",
+        }
+    finally:
+        h5b.close_all()
+    output = capsys.readouterr().out
+    assert "'/entry/self': link back to its parent group '/entry'" in output
+    assert "'/entry/inner/up': link back to its parent group '/entry'" in output
+    assert "'/entry/inner/root': link back to its parent group '/'" in output
+    assert "max depth" not in output
+
+
 def test_open_file_skips_broken_links(tmp_path, capsys):
     """Broken soft or external links (e.g. synchrotron master files without
     their detector files) are skipped: the rest of the file stays browsable.
