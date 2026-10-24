@@ -3143,13 +3143,16 @@ def detach_object_array(oid: str) -> bytes:
     return payload
 
 
-def attach_object_array(oid: str, payload: bytes) -> bool:
+def attach_object_array(oid: str, payload: bytes, on_disk: bool = True) -> bool:
     """Restore *oid*'s heavy array from ``.npy`` *payload* (page-in).
 
     Args:
         oid: object identifier in :data:`_MODEL`.
         payload: the ``.npy`` bytes previously returned by
          :func:`detach_object_array` (read back from OPFS by JS).
+        on_disk: whether the on-disk copy of the object is *payload* (page-in).
+         False when *payload* could not be persisted: the object then has no
+         current on-disk copy, and is serialized again before being released.
 
     Returns:
         ``True`` when the array was restored, ``False`` when *oid* was not
@@ -3174,7 +3177,10 @@ def attach_object_array(oid: str, payload: bytes) -> bool:
     arr = np.load(io.BytesIO(data), allow_pickle=False)
     setattr(entry.obj, _SPILLED[oid]["attr"], arr)
     _SPILLED.pop(oid, None)
-    _PAGED_IN_REVISIONS[oid] = _DATA_REVISIONS.get(oid, 0)
+    if on_disk:
+        _PAGED_IN_REVISIONS[oid] = _DATA_REVISIONS.get(oid, 0)
+    else:
+        _PAGED_IN_REVISIONS.pop(oid, None)
     return True
 
 

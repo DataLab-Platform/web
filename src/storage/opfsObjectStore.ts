@@ -116,9 +116,12 @@ export class OpfsObjectStore implements ObjectByteStore {
           ? bytes.buffer
           : bytes.slice().buffer) as ArrayBuffer,
       );
-    } finally {
-      await writable.close();
+    } catch (err) {
+      // Discard the partial write: closing would commit it over the file
+      await writable.abort().catch(() => undefined);
+      throw err;
     }
+    await writable.close();
     this.sizes.set(oid, bytes.byteLength);
   }
 

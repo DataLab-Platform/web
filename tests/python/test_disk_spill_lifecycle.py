@@ -49,6 +49,28 @@ def test_settle_releases_data_left_unchanged(fresh_bootstrap):
     assert bs._MODEL.get(oid).xydata.shape == (2, 200)
 
 
+def test_unpersisted_payload_is_attached_back(fresh_bootstrap):
+    """A payload that could not be persisted is attached back as the only copy.
+
+    The runtime attaches back the bytes of a failed OPFS write: the object must
+    be resident with its data, not spilled, and never released afterwards
+    without being serialized again (its on-disk copy is not current).
+    """
+    bs = fresh_bootstrap
+    oid = _add_signal(bs)
+    expected = bs._MODEL.get(oid).xydata.copy()
+    payload = _spill(bs, oid)
+    assert bs.is_object_spilled(oid)
+
+    assert bs.attach_object_array(oid, payload, on_disk=False)
+
+    assert not bs.is_object_spilled(oid)
+    np.testing.assert_array_equal(bs._MODEL.get(oid).xydata, expected)
+    settled = bs.settle_object_array(oid)
+    assert settled["state"] == "rewritten"
+    np.testing.assert_array_equal(_decode(settled["payload"]), expected)
+
+
 def test_settle_rewrites_data_changed_by_the_call(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = _add_signal(bs)
