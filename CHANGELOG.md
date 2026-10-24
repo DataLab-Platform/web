@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 
 - **Data locality:** the README now states precisely what stays local: processing never requires sending data anywhere, and the network services that can be enabled (AI assistant provider, capsule registry) are named.
+- **Image regions of interest and coordinates:** image computations now follow Sigima 1.4 (development snapshot until its release). A region of interest selects the pixels whose centers lie inside its shape, boundary included: a rectangle whose bounds lie on pixel centers now includes one more row and column, and polygon vertices are no longer rounded to whole pixels. ROI grids are made of whole pixels, the center of an image (e.g. the default center of a radial profile) is the center of its pixel grid, and flips and rotations move regions of interest, annotations and analysis results with the pixels. Regions of interest saved earlier are not converted: they select pixels according to these rules when they are used again.
 
 ## [0.10.0] - 2026-10-20
 
