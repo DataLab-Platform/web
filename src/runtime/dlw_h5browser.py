@@ -553,37 +553,107 @@ def _data_to_xy(data: np.ndarray):
     return x, y, dx, dy
 
 
-def _build_native_signal(node_data: np.ndarray, title: str):
-    """Convert *node_data* into a :class:`SignalObj` (or ``None``)."""
+def _to_signal_values(data: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Return signal values as float64, or as complex128 for complex data.
+
+    Returns ``(values, inexact)``: *inexact* is True when integer values cannot
+    all be represented exactly as float64 (beyond 2**53).
+    """
+    data = np.asarray(data)
+    if np.iscomplexobj(data):
+        return data.astype(np.complex128, copy=False), False
+    return data.astype(np.float64, copy=False), _int_exceeds(data, np.float64)
+
+
+def _int_exceeds(data: np.ndarray, dtype: Any) -> bool:
+    """Return True if integer *data* cannot all be represented exactly as
+    floating-point *dtype*."""
+    if data.dtype.kind not in "iu" or data.size == 0:
+        return False
+    magnitude = max(abs(int(data.min())), abs(int(data.max())))
+    return magnitude > 2 ** (np.finfo(dtype).nmant + 1)
+
+
+# The conversion of image data follows Sigima >= 1.4
+# (``sigima.io.common.converters.convert_array_to_valid_dtype``), which DataLab
+# desktop uses: replace it by Sigima's converter once DataLab-Web requires
+# Sigima >= 1.4 (Sigima 1.3 rounds large integers to float32).
+_INT_CODES = ("u1", "i1", "u2", "i2", "u4", "i4", "u8", "i8")
+_FLOAT_CODES = {"f": ("f2", "f4", "f8"), "c": ("c8", "c16")}
+
+
+def _to_image_data(data: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Convert *data* to a data type of image objects without losing values.
+
+    Integers use the smallest supported integer type holding all values, or else
+    the smallest supported floating-point type (at least as large as the input)
+    representing them exactly; other types use the smallest supported type of
+    the same kind at least as large (e.g. ``complex64`` to ``complex128``).
+
+    Returns ``(data, inexact)``: *inexact* is True when no supported type
+    represents all integer values exactly (beyond 2**53).
+    """
+    from sigima.objects import ImageObj
+
+    data = np.asarray(data)
+    valid = [np.dtype(dtype) for dtype in ImageObj.VALID_DTYPES]
+    if data.dtype in valid:
+        return data, False
+    kind = data.dtype.kind
+    if kind in "iu":
+        amin, amax = (int(data.min()), int(data.max())) if data.size else (0, 0)
+        for code in _INT_CODES:
+            info = np.iinfo(code)
+            if np.dtype(code) in valid and info.min <= amin and amax <= info.max:
+                return data.astype(code), False
+        floats = [np.dtype(code) for code in _FLOAT_CODES["f"]]
+        floats = [dtype for dtype in floats if dtype in valid]
+        for dtype in floats:
+            if dtype.itemsize >= data.dtype.itemsize and not _int_exceeds(data, dtype):
+                return data.astype(dtype), False
+        return data.astype(floats[-1]), True
+    if kind in _FLOAT_CODES:
+        same_kind = [np.dtype(code) for code in _FLOAT_CODES[kind]]
+        same_kind = [dtype for dtype in same_kind if dtype in valid]
+        for dtype in same_kind:
+            if dtype.itemsize >= data.dtype.itemsize:
+                return data.astype(dtype), False
+        return data.astype(same_kind[-1]), False
+    return data, False
+
+
+def _build_native_signal(node_data: np.ndarray, title: str) -> tuple[Any, bool]:
+    """Convert *node_data* into a :class:`SignalObj`.
+
+    Returns ``(signal_obj, inexact)``, see :func:`_to_signal_values`.
+
+    Raises:
+        ValueError: if a 2D table has complex X values or uncertainties
+    """
     from sigima.objects import create_signal
 
     obj = create_signal(title)
-    data = node_data
-    if data.dtype not in (float, np.complex128):
-        data = np.asarray(data, dtype=float)
+    data, inexact = _to_signal_values(node_data)
     if data.ndim == 1:
         obj.set_xydata(np.arange(data.size), data)
     else:
         x, y, dx, dy = _data_to_xy(data)
+        if any(np.iscomplexobj(array) for array in (x, dx, dy)):
+            raise ValueError("complex X values or uncertainties are not supported")
         obj.set_xydata(x, y, dx, dy)
-    return obj
+    return obj, inexact
 
 
 def _build_native_image(node_data: np.ndarray, title: str) -> tuple[Any, bool]:
     """Convert *node_data* into a :class:`ImageObj`.
 
-    Returns ``(image_obj, uint32_clipped)``.
+    Returns ``(image_obj, inexact)``, see :func:`_to_image_data`.
     """
     from sigima.objects import create_image
 
-    uint32_clipped = False
-    data = node_data
-    if data.dtype == np.uint32:
-        uint32_clipped = bool(data.max() > np.iinfo(np.int32).max)
-        data = np.asarray(data.clip(0, np.iinfo(np.int32).max), dtype=np.int32)
     obj = create_image(title)
-    obj.data = data
-    return obj, uint32_clipped
+    obj.data, inexact = _to_image_data(node_data)
+    return obj, inexact
 
 
 # ---------------------------------------------------------------------------
@@ -748,20 +818,22 @@ def preview(file_id: str, node_id: str) -> dict[str, Any]:
             return {"kind": "unsupported"}
         raw = numeric
     try:
+        # Complex values cannot be sent to the JavaScript preview: like PlotPy
+        # curves and images, the preview shows their real part
         if info.kind == "signal":
-            obj = _build_native_signal(raw, info.name)
+            obj, _inexact = _build_native_signal(raw, info.name)
             return {
                 "kind": "signal",
                 "title": obj.title,
                 "x": obj.x.tolist(),
-                "y": obj.y.tolist(),
+                "y": np.real(obj.y).tolist(),
             }
         # image
-        img, _u32 = _build_native_image(raw, info.name)
+        img, _inexact = _build_native_image(raw, info.name)
         return {
             "kind": "image",
             "title": img.title,
-            "data": img.data.tolist(),
+            "data": np.real(img.data).tolist(),
             "width": int(img.data.shape[1]),
             "height": int(img.data.shape[0]),
         }
@@ -793,7 +865,9 @@ def array_data(file_id: str, node_id: str) -> dict[str, Any]:
 def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
     """Import every node id in *node_ids* into the live model.
 
-    Returns a dict ``{"oids": [...], "uint32_clipped": bool}``.  Caller
+    Returns a dict ``{"objects": [...], "inexact_values": bool, "group_id": ...}``,
+    *inexact_values* being True when integer values could not all be
+    represented exactly (beyond 2**53). Caller
     (``bootstrap.py``) is responsible for actually attaching the objects
     to the live :data:`_MODEL`; this function returns the constructed
     native objects, paired with their target panel kind, so we do not
@@ -806,7 +880,7 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
         raise KeyError(f"Unknown HDF5 browser file: {file_id!r}")
     entry = STATE[file_id]
     built: list[tuple[str, Any]] = []
-    uint32_clipped = False
+    inexact_values = False
     for nid in node_ids:
         if nid not in entry.nodes_by_path:
             raise KeyError(f"Unknown HDF5 node: {nid!r}")
@@ -824,16 +898,15 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
             raw = numeric
         try:
             if info.kind == "signal":
-                obj = _build_native_signal(raw, info.name)
+                obj, inexact = _build_native_signal(raw, info.name)
                 kind = "signal"
             else:
-                obj, clipped = _build_native_image(raw, info.name)
-                if clipped:
-                    uint32_clipped = True
+                obj, inexact = _build_native_image(raw, info.name)
                 kind = "image"
         except Exception as exc:  # noqa: BLE001
             print(f"[h5browser] failed to build object for {nid!r}: {exc}")
             continue
+        inexact_values = inexact_values or inexact
         # Attach origin metadata (mirrors Qt BaseNode.__process_metadata).
         try:
             obj.set_metadata_option("HDF5Path", entry.filename)
@@ -842,4 +915,4 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
         except Exception:  # noqa: BLE001
             pass
         built.append((kind, obj))
-    return {"objects": built, "uint32_clipped": uint32_clipped, "group_id": group_id}
+    return {"objects": built, "inexact_values": inexact_values, "group_id": group_id}

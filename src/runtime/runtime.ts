@@ -1299,7 +1299,9 @@ export interface H5BrowserArray {
 /** Result of importing selected HDF5 nodes into the live model. */
 export interface H5BrowserImportResult {
   oids: string[];
-  uint32_clipped: boolean;
+  /** True when integer values could not all be represented exactly
+   *  (beyond 2**53). */
+  inexact_values: boolean;
 }
 
 /**

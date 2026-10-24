@@ -7474,13 +7474,14 @@ def h5_browser_import(
 ) -> dict[str, Any]:
     """Import every node in *node_ids* into the live model.
 
-    Returns ``{"oids": [...], "uint32_clipped": bool}``.
+    Returns ``{"oids": [...], "inexact_values": bool}``, *inexact_values*
+    being True when integer values could not all be represented exactly.
     """
     result = _h5br.import_nodes(file_id, node_ids, group_id=group_id)
     oids: list[str] = []
     for kind, obj in result["objects"]:
         oids.append(_MODEL.add_object(kind, obj, group_id=result["group_id"]))
-    return {"oids": oids, "uint32_clipped": bool(result["uint32_clipped"])}
+    return {"oids": oids, "inexact_values": bool(result["inexact_values"])}
 
 
 # ---------------------------------------------------------------------------

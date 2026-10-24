@@ -3677,11 +3677,12 @@ export default function App() {
                 Array.from(supported),
                 null,
               );
-              if (result.uint32_clipped) {
+              if (result.inexact_values) {
                 await notify({
                   kind: "warning",
-                  message:
-                    "Some uint32 image data was clipped to int32 range during import.",
+                  message: t(
+                    "Some integer values could not be represented exactly and were rounded during import.",
+                  ),
                 });
               }
               setWorkspaceVersion((v) => v + 1);
@@ -3915,13 +3916,14 @@ export default function App() {
   );
 
   const handleH5BrowserImport = useCallback(
-    async (oids: string[], uint32Clipped: boolean) => {
+    async (oids: string[], inexactValues: boolean) => {
       setH5BrowserFiles(null);
-      if (uint32Clipped) {
+      if (inexactValues) {
         await notify({
           kind: "warning",
-          message:
-            "Some uint32 image data was clipped to int32 range during import.",
+          message: t(
+            "Some integer values could not be represented exactly and were rounded during import.",
+          ),
         });
       }
       await refreshImportedObjects(oids);

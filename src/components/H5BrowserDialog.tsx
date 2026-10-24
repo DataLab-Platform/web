@@ -43,7 +43,7 @@ interface Props {
   initial?: H5BrowserFile[];
   /** Called with the list of object ids created in the model when the
    *  user clicks OK. */
-  onImport: (oids: string[], uint32Clipped: boolean) => void;
+  onImport: (oids: string[], inexactValues: boolean) => void;
   onCancel: () => void;
 }
 
@@ -362,7 +362,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
     setBusy(true);
     setError(null);
     const allOids: string[] = [];
-    let uintClipped = false;
+    let inexactValues = false;
     // Flatten (file, node) pairs so the progress bar reflects per-node
     // granularity. Each node is imported individually to keep the bar
     // responsive and cancellation reactive between nodes.
@@ -381,7 +381,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
           setLabel(`${i + 1} / ${tasks.length} — ${nodeId}`);
           const result = await runtime.importH5BrowserNodes(fileId, [nodeId]);
           allOids.push(...result.oids);
-          if (result.uint32_clipped) uintClipped = true;
+          if (result.inexact_values) inexactValues = true;
         },
       });
       if (cancelled && allOids.length === 0) {
@@ -394,7 +394,7 @@ export function H5BrowserDialog({ initial, onImport, onCancel }: Props) {
       await Promise.all(
         ids.map((fid) => runtime.closeH5Browser(fid).catch(() => {})),
       );
-      onImport(allOids, uintClipped);
+      onImport(allOids, inexactValues);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);

@@ -352,7 +352,73 @@ def test_import_nodes_builds_objects(opened):
     result = h5b.import_nodes(file_id, ["/sig", "/img"])
     kinds = sorted(kind for kind, _obj in result["objects"])
     assert kinds == ["image", "signal"]
-    assert result["uint32_clipped"] is False
+    assert result["inexact_values"] is False
+
+
+@pytest.fixture
+def typed_h5(tmp_path):
+    """Open a file with datasets of various numeric types (closed afterwards)."""
+    path = tmp_path / "types.h5"
+    with h5py.File(path, "w") as f:
+        f["c64_signal"] = np.array([1 + 2j, 3 + 4j, 5 - 6j], dtype=np.complex64)
+        f["c64_image"] = np.full((4, 4), 1 - 2j, dtype=np.complex64)
+        f["u32_image"] = np.array(
+            [[1, 2**32 - 1, 5], [2**31, 7, 8], [9, 10, 11]], dtype=np.uint32
+        )
+        f["u16_image"] = np.arange(65527, 65536, dtype=np.uint16).reshape(3, 3)
+        f["i64_image"] = np.array([[0, 2**60 + 1, 2], [3, 4, 5], [6, 7, 8]], np.int64)
+        f["i64_signal"] = np.array([0, 2**60 + 1, 3], dtype=np.int64)
+        f["f32_signal"] = np.array([0.5, 1.5, 2.5], dtype=np.float32)
+    result = h5b.open_file("types.h5", path.read_bytes())
+    try:
+        yield result["file_id"]
+    finally:
+        h5b.close_all()
+
+
+def _import_one(file_id: str, node_id: str):
+    """Import one node and return ``(object, inexact_values)``."""
+    result = h5b.import_nodes(file_id, [node_id])
+    ((_kind, obj),) = result["objects"]
+    return obj, result["inexact_values"]
+
+
+def test_import_complex64_keeps_imaginary_part(typed_h5):
+    """Regression: complex64 signals lost their imaginary part."""
+    signal, inexact = _import_one(typed_h5, "/c64_signal")
+    assert signal.y.dtype == np.complex128 and not inexact
+    np.testing.assert_array_equal(signal.y, [1 + 2j, 3 + 4j, 5 - 6j])
+    image, inexact = _import_one(typed_h5, "/c64_image")
+    assert image.data.dtype == np.complex128 and not inexact
+    assert image.data[0, 0] == 1 - 2j
+
+
+def test_import_integers_without_clipping(typed_h5):
+    """Regression: uint32 images were clipped to the int32 range."""
+    image, inexact = _import_one(typed_h5, "/u32_image")
+    assert image.data.dtype == np.float64 and not inexact
+    assert image.data[0, 1] == 2**32 - 1 and image.data[1, 0] == 2**31
+    image, inexact = _import_one(typed_h5, "/u16_image")
+    assert image.data.dtype == np.uint16 and not inexact
+    signal, inexact = _import_one(typed_h5, "/f32_signal")
+    assert signal.y.dtype == np.float64 and not inexact
+
+
+@pytest.mark.parametrize("node_id", ["/i64_image", "/i64_signal"])
+def test_import_flags_inexact_integers(typed_h5, node_id):
+    """Integers beyond 2**53 are converted to float64 and reported."""
+    obj, inexact = _import_one(typed_h5, node_id)
+    assert inexact
+    values = obj.data if node_id.endswith("image") else obj.y
+    assert values.dtype == np.float64
+
+
+def test_preview_complex_and_large_integers(typed_h5):
+    """Previews show the real part of complex data and exact integers."""
+    prev = h5b.preview(typed_h5, "/c64_signal")
+    assert prev["kind"] == "signal" and prev["y"] == [1.0, 3.0, 5.0]
+    prev = h5b.preview(typed_h5, "/u32_image")
+    assert prev["kind"] == "image" and prev["data"][0][1] == 2**32 - 1
 
 
 def test_import_nodes_unknown_id_raises(opened):
