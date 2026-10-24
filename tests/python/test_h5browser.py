@@ -67,6 +67,60 @@ def test_open_invalid_file_raises():
         h5b.open_file("bogus.h5", b"definitely not an HDF5 file")
 
 
+def test_open_file_skips_broken_links(tmp_path, capsys):
+    """Broken soft or external links (e.g. synchrotron master files without
+    their detector files) are skipped: the rest of the file stays browsable.
+
+    Regression: ``open_file`` raised ``AttributeError`` on the first broken link.
+    """
+    path = tmp_path / "broken.h5"
+    with h5py.File(path, "w") as f:
+        f["ok"] = np.arange(10.0)
+        f["broken"] = h5py.SoftLink("/missing")
+        grp = f.create_group("entry")
+        grp["frames"] = h5py.ExternalLink("missing_detector.h5", "/frames")
+        grp["signal"] = np.linspace(0.0, 1.0, 8)
+    result = h5b.open_file("broken.h5", path.read_bytes())
+    try:
+        nodes = h5b.STATE[result["file_id"]].nodes_by_path
+        assert {"/ok", "/entry", "/entry/signal"} <= set(nodes)
+        assert not {"/broken", "/entry/frames"} & set(nodes)
+        imported = h5b.import_nodes(result["file_id"], ["/ok", "/entry/signal"])
+        assert len(imported["objects"]) == 2
+    finally:
+        h5b.close_all()
+    output = capsys.readouterr().out
+    assert "'/broken': broken soft link to '/missing'" in output
+    assert "broken external link to 'missing_detector.h5:/frames'" in output
+
+
+def test_open_file_cleans_up_when_tree_fails(h5_bytes, monkeypatch):
+    """A failure while building the tree closes the file and removes its
+    temporary copy; the next file opens normally."""
+    tempdirs = []
+    mkdtemp = h5b.tempfile.mkdtemp
+
+    def spy_mkdtemp(*args, **kwargs):
+        tempdirs.append(mkdtemp(*args, **kwargs))
+        return tempdirs[-1]
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("tree failure")
+
+    monkeypatch.setattr(h5b.tempfile, "mkdtemp", spy_mkdtemp)
+    with monkeypatch.context() as patch:
+        patch.setattr(h5b, "_build_node", fail)
+        with pytest.raises(RuntimeError, match="tree failure"):
+            h5b.open_file("sample.h5", h5_bytes)
+    assert len(tempdirs) == 1 and not h5b.osp.exists(tempdirs[0])
+    assert not h5b.STATE
+    result = h5b.open_file("sample.h5", h5_bytes)
+    try:
+        assert result["file_id"] in h5b.STATE
+    finally:
+        h5b.close_all()
+
+
 def test_close_file_clears_state(opened):
     file_id = opened["file_id"]
     assert file_id in h5b.STATE

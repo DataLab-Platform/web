@@ -326,6 +326,19 @@ def _array_is_signal(shape: tuple[int, ...]) -> bool:
 _MAX_H5_DEPTH = 100
 
 
+def _broken_link(group: Any, name: str) -> str:
+    """Describe the broken link *name* of *group* (for diagnostics)."""
+    try:
+        link = group.get(name, getlink=True)
+    except Exception:  # noqa: BLE001
+        return "object cannot be opened"
+    if isinstance(link, h5py.ExternalLink):
+        return f"broken external link to '{link.filename}:{link.path}'"
+    if isinstance(link, h5py.SoftLink):
+        return f"broken soft link to '{link.path}'"
+    return "object cannot be opened"
+
+
 def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeInfo:
     """Recursively build one :class:`_NodeInfo`."""
     metadata = _collect_attrs(dset)
@@ -355,15 +368,23 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
                 f"{h5path!r}: not descending further"
             )
             return info
-        for child_dset in dset.values():
+        for child_name in dset:
+            child_path = f"{h5path.rstrip('/')}/{child_name}"
+            child_dset = dset.get(child_name)
+            if child_dset is None:
+                # Broken link: soft link to a missing object, or external link
+                # to a missing file (e.g. detector data of synchrotron master
+                # files). The rest of the file stays browsable.
+                print(
+                    f"[h5browser] skip {child_path!r}: {_broken_link(dset, child_name)}"
+                )
+                continue
             try:
                 info.children.append(
                     _build_node(file_id, child_dset.name, child_dset, _depth + 1)
                 )
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
-                print(
-                    f"[h5browser] skip {child_dset.name!r}: {type(exc).__name__}: {exc}"
-                )
+                print(f"[h5browser] skip {child_path!r}: {type(exc).__name__}: {exc}")
         return info
 
     kind, data = _classify_dataset(dset)
@@ -576,14 +597,19 @@ def open_file(filename: str, data: Any) -> dict[str, Any]:
     try:
         h5 = h5py.File(path, "r")
     except Exception as exc:  # noqa: BLE001
-        try:
-            os.remove(path)
-            os.rmdir(tmpdir)
-        except OSError:
-            pass
+        _remove_temp_file(path)
         raise ValueError(f"Cannot open {base!r} as an HDF5 file: {exc}") from exc
     file_id = uuid.uuid4().hex[:8]
-    root_info = _build_node(file_id, "/", h5)
+    try:
+        root_info = _build_node(file_id, "/", h5)
+    except BaseException:
+        # Never leave the file open nor its temporary copy behind
+        try:
+            h5.close()
+        except Exception:  # noqa: BLE001
+            pass
+        _remove_temp_file(path)
+        raise
     # Override root display name to file basename (mirrors Qt RootNode).
     root_info.name = osp.basename(filename) or osp.basename(path)
     root_info.icon_name = "h5file.svg"
@@ -601,6 +627,18 @@ def open_file(filename: str, data: Any) -> dict[str, Any]:
     return {"file_id": file_id, "filename": filename, "root": _info_to_dict(root_info)}
 
 
+def _remove_temp_file(path: str) -> None:
+    """Remove the temporary copy *path* of a browsed file and its directory."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    try:
+        os.rmdir(osp.dirname(path))
+    except OSError:
+        pass
+
+
 def close_file(file_id: str) -> None:
     """Close *file_id* and free its resources."""
     entry = STATE.pop(file_id, None)
@@ -610,14 +648,7 @@ def close_file(file_id: str) -> None:
         entry.h5.close()
     except Exception:  # noqa: BLE001
         pass
-    try:
-        os.remove(entry.temp_path)
-    except OSError:
-        pass
-    try:
-        os.rmdir(osp.dirname(entry.temp_path))
-    except OSError:
-        pass
+    _remove_temp_file(entry.temp_path)
 
 
 def close_all() -> None:
