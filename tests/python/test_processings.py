@@ -547,14 +547,17 @@ def test_radial_profile_callback_recomputes_centre(fresh_bootstrap):
     data[10:16, 4:10] = 1000.0
     src = bs.add_image_from_array("img", data, width=48, height=64)
     # "center" mode resets x0/y0 to the geometric centre even from stale 0,0.
+    # Pixels are centred on their coordinates (0 to 47 along X, 0 to 63 along
+    # Y): the centre of the image lies halfway between its first and last pixel
+    # centres, so that a radial profile of a symmetric image is symmetric.
     centred = bs.resolve_feature_callbacks(
         "image:radial_profile",
         "center",
         {"center": "center", "x0": 0.0, "y0": 0.0},
         src,
     )
-    assert centred["x0"] == pytest.approx(24.0)
-    assert centred["y0"] == pytest.approx(32.0)
+    assert centred["x0"] == pytest.approx(23.5)
+    assert centred["y0"] == pytest.approx(31.5)
     # "centroid" mode computes the intensity centroid (near the blob).
     centroid = bs.resolve_feature_callbacks(
         "image:radial_profile",
