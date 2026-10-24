@@ -24,8 +24,10 @@
 
 export interface DataLabWebClientOptions {
   /** Origin of the DataLab-Web iframe. Required so we don't leak
-   *  request payloads to the wrong document. Use the iframe's
-   *  ``src`` origin (e.g. ``"https://datalab.example.com"``). */
+   *  request payloads to the wrong document, nor accept responses and
+   *  events from another document loaded in the iframe. Use the iframe's
+   *  ``src`` origin (e.g. ``"https://datalab.example.com"``); ``"*"``
+   *  accepts any origin and is intended for local development only. */
   targetOrigin: string;
   /** Default request timeout in ms. ``0`` disables. Defaults to 30 s. */
   defaultTimeoutMs?: number;
@@ -492,6 +494,9 @@ export class DataLabWebClient {
 
   private handleMessage = (event: MessageEvent) => {
     if (event.source !== this.iframe.contentWindow) return;
+    // The iframe window keeps its identity when it navigates: also check that
+    // the message comes from the expected origin (any origin with "*")
+    if (this.targetOrigin !== "*" && event.origin !== this.targetOrigin) return;
     const data = event.data as RpcResponse | RpcEvent | null;
     if (!data || typeof data !== "object") return;
     if (data.type === "response") {

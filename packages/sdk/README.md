@@ -34,6 +34,8 @@ const data = await client.getSignalXY(ids[0]);
 
 The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` in its URL (or `?allowedOrigins=*` for development) so the bridge accepts incoming messages.
 
+`targetOrigin` must be the origin of the iframe document: the client only accepts responses and events coming from the iframe window **and** from that origin, so that another document loaded in the iframe (after a navigation) cannot answer in its place. `targetOrigin: "*"` accepts any origin and is intended for local development only. Likewise, the bridge sends its responses and events to each host window with the origin of its requests.
+
 ## Wire-protocol versioning
 
 `client.ready()` negotiates a wire-protocol version with the iframe (semver `MAJOR.MINOR`). It rejects if the iframe reports a MAJOR incompatible with the SDK (`SUPPORTED_PROTOCOL_MAJOR`).

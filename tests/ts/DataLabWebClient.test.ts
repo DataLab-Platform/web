@@ -140,6 +140,57 @@ describe("DataLabWebClient", () => {
     expect(cb).toHaveBeenCalledWith({ oid: "x" });
   });
 
+  it("ignores messages of the iframe window from another origin", async () => {
+    // The iframe window keeps its identity when it navigates to another
+    // document: its messages must also come from the expected origin.
+    const promise = client.call("a");
+    const id = (
+      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+    ).id;
+    const cb = vi.fn();
+    client.on("model-changed", cb);
+    for (const data of [
+      { id, type: "response", result: "spoofed" },
+      { type: "event", name: "model-changed", payload: { panel: "x" } },
+    ]) {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data,
+          source: iframe.contentWindow as unknown as MessageEventSource,
+          origin: "https://different.example",
+        }),
+      );
+    }
+    expect(cb).not.toHaveBeenCalled();
+
+    reply(iframe, { id, type: "response", result: "ok" });
+    await expect(promise).resolves.toBe("ok");
+  });
+
+  it("accepts any origin when targetOrigin is the wildcard", async () => {
+    const anyIframe = makeFakeIframe();
+    const anyClient = new DataLabWebClient(
+      anyIframe as unknown as HTMLIFrameElement,
+      { targetOrigin: "*" },
+    );
+    try {
+      const promise = anyClient.call("a");
+      const id = (
+        anyIframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+      ).id;
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { id, type: "response", result: "ok" },
+          source: anyIframe.contentWindow as unknown as MessageEventSource,
+          origin: "http://localhost:5173",
+        }),
+      );
+      await expect(promise).resolves.toBe("ok");
+    } finally {
+      anyClient.dispose();
+    }
+  });
+
   it("dispose() rejects pending calls and stops listening", async () => {
     const promise = client.call("never");
     client.dispose();

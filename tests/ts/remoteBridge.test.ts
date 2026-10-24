@@ -297,4 +297,64 @@ describe("activateRemoteBridge", () => {
     win.removeEventListener(REMOTE_MODEL_CHANGED_EVENT, onCustom);
     handle?.dispose();
   });
+
+  it("sends events to each peer with the origin of its requests", async () => {
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource:
+        "?allowedOrigins=https://a.example.com,https://b.example.com",
+      win,
+    });
+    const peerA: MockPeer = { postMessage: vi.fn() };
+    const peerB: MockPeer = { postMessage: vi.fn() };
+    for (const [peer, origin, id] of [
+      [peerA, "https://a.example.com", 1],
+      [peerB, "https://b.example.com", 2],
+    ] as const) {
+      win.dispatchEvent(
+        fakeMessageEvent({
+          origin,
+          source: peer,
+          data: { id, type: "request", method: "get_version" },
+        }),
+      );
+    }
+    await new Promise((r) => setTimeout(r, 0));
+
+    handle?.emit("ready", { ok: true });
+
+    // Regression: events were posted with the "*" target origin, so a peer
+    // window that navigated to another document still received them.
+    for (const [peer, origin] of [
+      [peerA, "https://a.example.com"],
+      [peerB, "https://b.example.com"],
+    ] as const) {
+      const targets = peer.postMessage.mock.calls.map((c) => c[1]);
+      expect(targets).toEqual([origin, origin]);
+      expect(peer.postMessage.mock.calls[1][0]).toMatchObject({
+        type: "event",
+        name: "ready",
+      });
+    }
+    handle?.dispose();
+  });
+
+  it("targets opaque origins only through the wildcard", async () => {
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=*",
+      win,
+    });
+    const peer: MockPeer = { postMessage: vi.fn() };
+    win.dispatchEvent(
+      fakeMessageEvent({
+        origin: "null",
+        source: peer,
+        data: { id: 3, type: "request", method: "get_version" },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    handle?.emit("ready");
+
+    expect(peer.postMessage.mock.calls.map((c) => c[1])).toEqual(["*", "*"]);
+    handle?.dispose();
+  });
 });
