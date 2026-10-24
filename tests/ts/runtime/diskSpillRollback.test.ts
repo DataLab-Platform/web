@@ -103,6 +103,25 @@ describe("disk spill — a failed OPFS write never loses the data", () => {
     expect(store.delete).toHaveBeenCalledWith("A");
   });
 
+  it("attaches the bytes back when only part of them could be written", async () => {
+    // The synchronous OPFS store rejects a write transferring fewer bytes than
+    // requested, instead of reporting the object as stored.
+    const incomplete = async () => {
+      throw new Error("Incomplete OPFS write for A: 2 of 4 bytes");
+    };
+    const { runtime, py, attachCalls } = makeRuntime(incomplete);
+
+    await expect(runtime.spillDirect("A")).rejects.toThrow(
+      "Incomplete OPFS write",
+    );
+
+    expect(attachCalls()).toEqual([
+      { oid: "A", payload: PAYLOAD, on_disk: false },
+    ]);
+    expect(py.spilled).toEqual(new Set());
+    expect(runtime.spilledOids).toEqual(new Set());
+  });
+
   it("attaches the changed data back when its rewrite cannot be written", async () => {
     const { runtime, py, attachCalls } = makeRuntime(quotaExceeded);
 
