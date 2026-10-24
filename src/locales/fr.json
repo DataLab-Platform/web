@@ -1196,6 +1196,7 @@
   "Sobel filter (vertical)": "Filtre de Sobel (vertical)",
   "Software": "Logiciel",
   "Solid": "Continu",
+  "Some integer values could not be represented exactly and were rounded during import.": "Certaines valeurs entières ne pouvaient pas être représentées exactement et ont été arrondies lors de l'import.",
   "Some selected objects have regions of interest. Do you want to delete them as well?": "Certains objets sélectionnés ont des régions d'intérêt. Souhaitez-vous les supprimer également ?",
   "Source": "Source",
   "Source {index}": "Source {index}",

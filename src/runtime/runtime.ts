@@ -1299,7 +1299,9 @@ export interface H5BrowserArray {
 /** Result of importing selected HDF5 nodes into the live model. */
 export interface H5BrowserImportResult {
   oids: string[];
-  uint32_clipped: boolean;
+  /** True when integer values could not all be represented exactly
+   *  (beyond 2**53). */
+  inexact_values: boolean;
 }
 
 /**
@@ -2322,16 +2324,43 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     return pagedIn;
   }
 
-  /** Spill object *oid* to disk, serialising it afresh (direct, unqueued). */
+  /** Spill object *oid* to disk, serialising it afresh (direct, unqueued).
+   *
+   *  The Python side drops the array when it serialises it: if the bytes
+   *  cannot be persisted (quota exceeded, write error...), they are attached
+   *  back before the error is propagated, so that the object stays resident
+   *  with its data and both registries agree it is not spilled. */
   private async spillDirect(oid: string): Promise<boolean> {
     if (this.spilledOids.has(oid)) return false;
     const bytes = (await this.invokePy("detach_object_array", {
       oid,
     })) as Uint8Array | null;
     if (!bytes || bytes.byteLength === 0) return false;
-    await this.requireStore().put(oid, bytes);
+    await this.persistOrRestore(oid, bytes);
     this.spilledOids.add(oid);
     return true;
+  }
+
+  /** Persist the *bytes* just detached from object *oid*, or attach them
+   *  back to the object if they cannot be persisted (and rethrow). A copy
+   *  left partially written on disk is deleted (best effort): the object is
+   *  no longer spilled, so it would never be read anyway. */
+  private async persistOrRestore(
+    oid: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
+    const store = this.requireStore();
+    try {
+      await store.put(oid, bytes);
+    } catch (err) {
+      await this.invokePy("attach_object_array", {
+        oid,
+        payload: bytes,
+        on_disk: false,
+      });
+      await store.delete(oid).catch(() => undefined);
+      throw err;
+    }
   }
 
   /** Return a paged-in object to disk once the call that needed it is over
@@ -2352,7 +2381,9 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       return;
     }
     if (settled.state === "rewritten") {
-      await this.requireStore().put(oid, settled.payload as Uint8Array);
+      // The changed data is attached back if it cannot replace the on-disk
+      // copy: the object then stays resident (see ``persistOrRestore``)
+      await this.persistOrRestore(oid, settled.payload as Uint8Array);
     }
     this.spilledOids.add(oid);
   }

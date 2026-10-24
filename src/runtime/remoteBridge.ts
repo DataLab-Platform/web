@@ -132,6 +132,15 @@ function isOriginAllowed(origin: string, allowed: readonly string[]): boolean {
   return allowed.includes(origin);
 }
 
+/** Target origin of the messages sent to a peer whose requests come from
+ *  *origin*: that origin, so that a peer window that navigated to another
+ *  document does not receive them, or ``"*"`` for an opaque origin
+ *  (``"null"``, e.g. a sandboxed iframe or a ``file:`` page), which only
+ *  the ``"*"`` wildcard allows. */
+function peerTargetOrigin(origin: string): string {
+  return origin === "" || origin === "null" ? "*" : origin;
+}
+
 /**
  * Walk an arbitrary value and collect every ``ArrayBuffer`` reachable
  * through ``TypedArray.buffer``, so binary payloads transfer zero-copy.
@@ -163,7 +172,9 @@ export function activateRemoteBridge(
   const allowedOrigins = parseAllowedOrigins(source);
   if (allowedOrigins.length === 0) return null;
 
-  const peers = new Set<MessageEventSource>();
+  // Peer windows, with the origin of their last request: messages are only
+  // delivered to a peer still showing that origin
+  const peers = new Map<MessageEventSource, string>();
   const queuedEvents: RpcEvent[] = [];
 
   // ``post`` is defined further down; declare a forward reference so
@@ -179,8 +190,8 @@ export function activateRemoteBridge(
   const flushEvents = () => {
     if (!post || queuedEvents.length === 0 || peers.size === 0) return;
     const drained = queuedEvents.splice(0);
-    for (const peer of peers) {
-      for (const evt of drained) post(peer, "*", evt);
+    for (const [peer, origin] of peers) {
+      for (const evt of drained) post(peer, origin, evt);
     }
   };
 
@@ -228,7 +239,7 @@ export function activateRemoteBridge(
 
   post = (target: MessageEventSource, origin: string, msg: OutboundMessage) => {
     const transfer = collectTransferables(msg);
-    const targetOrigin = origin === "" ? "*" : origin;
+    const targetOrigin = peerTargetOrigin(origin);
     try {
       // ``MessageEventSource`` has a narrower type than ``Window`` but
       // ``postMessage`` is structurally compatible at runtime.
@@ -256,7 +267,7 @@ export function activateRemoteBridge(
     }
     const source = event.source;
     if (!source) return;
-    peers.add(source);
+    peers.set(source, event.origin);
 
     const fn = bridge[data.method];
     let response: RpcResponse;
@@ -301,12 +312,7 @@ export function activateRemoteBridge(
     },
     emit(name, payload) {
       const evt: RpcEvent = { type: "event", name, payload };
-      for (const peer of peers) {
-        // Origin is unknown here (we only know ``event.origin`` per peer),
-        // so we re-broadcast with ``"*"`` — restricted in practice because
-        // ``peers`` only contains sources whose origin was whitelisted.
-        post(peer, "*", evt);
-      }
+      for (const [peer, origin] of peers) post(peer, origin, evt);
     },
   };
 }

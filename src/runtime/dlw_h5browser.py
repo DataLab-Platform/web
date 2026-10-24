@@ -82,12 +82,15 @@ def _safe_decode_bytes(data: Any, fallback: str = "<binary data>") -> str:
         return fallback
 
 
-def _safe_read(dset: Any) -> Any:
-    """Read *dset* with encoding fallbacks; return ``None`` on failure."""
+def _safe_read(dset: Any, selection: Any = ()) -> Any:
+    """Read *selection* of *dset* with encoding fallbacks; ``None`` on failure."""
     try:
-        return dset[()]
+        return dset[selection]
     except UnicodeDecodeError:
-        for strat in (lambda d: d.asstr()[()], lambda d: d.astype("S")[()]):
+        for strat in (
+            lambda d: d.asstr()[selection],
+            lambda d: d.astype("S")[selection],
+        ):
             try:
                 return strat(dset)
             except Exception:  # noqa: BLE001
@@ -95,6 +98,24 @@ def _safe_read(dset: Any) -> Any:
         return None
     except (TypeError, ValueError, OSError):
         return None
+
+
+#: Maximum number of elements read to classify and describe a dataset while
+#: opening a file: the full data is read only on preview or import
+_SAMPLE_MAX_ITEMS = 100
+
+
+def _read_sample(dset: Any) -> Any:
+    """Read a scalar *dset*, or the leading elements of an array *dset*.
+
+    At most about :data:`_SAMPLE_MAX_ITEMS` elements are read, whatever the size
+    of the dataset (the same number along each axis).
+    """
+    shape = dset.shape
+    if not shape:  # scalar (``()``) or null dataspace (``None``)
+        return _safe_read(dset)
+    per_axis = max(1, int(_SAMPLE_MAX_ITEMS ** (1.0 / len(shape))))
+    return _safe_read(dset, tuple(slice(0, min(size, per_axis)) for size in shape))
 
 
 def _is_supported_num_dtype(arr: Any) -> bool:
@@ -241,28 +262,34 @@ class _NodeInfo:
     kind: str  # "group" | "scalar" | "text" | "array" | "compound" | "image" | "signal"
 
 
-def _classify_dataset(dset: Any) -> tuple[str, np.ndarray | Any]:
-    """Return ``(kind, data)`` for a non-Group dataset.
+def _classify_dataset(dset: Any) -> tuple[str, Any, tuple[int, ...]]:
+    """Return ``(kind, data, shape)`` for a non-Group dataset.
 
     ``kind`` is one of ``"scalar"``, ``"text"``, ``"array"``, ``"compound"``
     or ``"unknown"`` (matches Qt's GenericScalarNode / GenericTextNode /
     GenericArrayNode / GenericCompoundNode taxonomy).
+
+    Only a sample of the dataset is read (see :func:`_read_sample`): ``data``
+    is that sample (its numeric part for compound arrays), used to describe the
+    node, and ``shape`` is the shape of the whole (numeric) dataset. Mixed
+    compound datasets are checked on their first records only.
     """
-    data = _safe_read(dset)
+    data = _read_sample(dset)
+    shape = tuple(dset.shape or ())
     if data is None:
         try:
             if dset.dtype.names is not None:
-                return "compound", None
+                return "compound", None, shape
             if dset.dtype.kind in ("S", "a", "U"):
-                return "text", None
+                return "text", None, shape
         except Exception:  # noqa: BLE001
-            return "unknown", None
-        return "unknown", None
+            return "unknown", None, shape
+        return "unknown", None, shape
 
     if isinstance(data, np.generic) and _is_supported_num_dtype(data):
-        return "scalar", data
+        return "scalar", data, shape
     if isinstance(data, bytes) or _is_supported_str_dtype(data):
-        return "text", data
+        return "text", data, shape
 
     if isinstance(data, np.ndarray):
         if data.dtype.names is not None:
@@ -272,21 +299,19 @@ def _classify_dataset(dset: Any) -> tuple[str, np.ndarray | Any]:
                 and _is_supported_num_dtype(numeric)
                 and numeric.ndim in (1, 2)
             ):
-                return "array", numeric
-            return "compound", data
+                # Several numeric fields are stacked along a last axis
+                return "array", numeric, shape + numeric.shape[data.ndim :]
+            return "compound", data, shape
         if data.dtype.kind in ("S", "a", "U"):
-            return "text", data
+            return "text", data, shape
         if _is_supported_num_dtype(data) and data.ndim in (1, 2):
-            return "array", data
+            return "array", data, shape
 
-    return "unknown", data
+    return "unknown", data, shape
 
 
-def _shape_str(arr: Any) -> str:
-    try:
-        return " x ".join(str(s) for s in arr.shape)
-    except Exception:  # noqa: BLE001
-        return ""
+def _shape_str(shape: tuple[int, ...]) -> str:
+    return " x ".join(str(s) for s in shape)
 
 
 def _dtype_str(dset: Any, kind: str, data: Any) -> str:
@@ -326,8 +351,31 @@ def _array_is_signal(shape: tuple[int, ...]) -> bool:
 _MAX_H5_DEPTH = 100
 
 
-def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeInfo:
-    """Recursively build one :class:`_NodeInfo`."""
+def _broken_link(group: Any, name: str) -> str:
+    """Describe the broken link *name* of *group* (for diagnostics)."""
+    try:
+        link = group.get(name, getlink=True)
+    except Exception:  # noqa: BLE001
+        return "object cannot be opened"
+    if isinstance(link, h5py.ExternalLink):
+        return f"broken external link to '{link.filename}:{link.path}'"
+    if isinstance(link, h5py.SoftLink):
+        return f"broken soft link to '{link.path}'"
+    return "object cannot be opened"
+
+
+def _build_node(
+    file_id: str,
+    h5path: str,
+    dset: Any,
+    _depth: int = 0,
+    _ancestors: tuple[Any, ...] = (),
+) -> _NodeInfo:
+    """Recursively build one :class:`_NodeInfo`.
+
+    *_ancestors* are the groups containing *dset*: a link back to one of them
+    (or to *dset*) closes a cycle and is skipped.
+    """
     metadata = _collect_attrs(dset)
 
     if isinstance(dset, h5py.Group):
@@ -355,18 +403,39 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
                 f"{h5path!r}: not descending further"
             )
             return info
-        for child_dset in dset.values():
+        ancestors = (*_ancestors, dset)
+        for child_name in dset:
+            child_path = f"{h5path.rstrip('/')}/{child_name}"
+            child_dset = dset.get(child_name)
+            if child_dset is None:
+                # Broken link: soft link to a missing object, or external link
+                # to a missing file (e.g. detector data of synchrotron master
+                # files). The rest of the file stays browsable.
+                print(
+                    f"[h5browser] skip {child_path!r}: {_broken_link(dset, child_name)}"
+                )
+                continue
+            if isinstance(child_dset, h5py.Group):
+                # Identity comparison (file and object): a group reached again
+                # through a hard, soft or external link would be walked forever
+                looped = next((grp for grp in ancestors if grp == child_dset), None)
+                if looped is not None:
+                    print(
+                        f"[h5browser] skip {child_path!r}: link back to its parent "
+                        f"group {looped.name!r}"
+                    )
+                    continue
             try:
                 info.children.append(
-                    _build_node(file_id, child_dset.name, child_dset, _depth + 1)
+                    _build_node(
+                        file_id, child_dset.name, child_dset, _depth + 1, ancestors
+                    )
                 )
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
-                print(
-                    f"[h5browser] skip {child_dset.name!r}: {type(exc).__name__}: {exc}"
-                )
+                print(f"[h5browser] skip {child_path!r}: {type(exc).__name__}: {exc}")
         return info
 
-    kind, data = _classify_dataset(dset)
+    kind, data, data_shape = _classify_dataset(dset)
     name = osp.basename(h5path)
 
     shape = ""
@@ -376,10 +445,10 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
 
     if kind == "array":
         is_array = True
-        shape = _shape_str(data)
-        supported = data is not None and data.size > 1
+        shape = _shape_str(data_shape)
+        supported = int(np.prod(data_shape)) > 1
         is_supported = bool(supported)
-        if supported and _array_is_signal(data.shape):
+        if supported and _array_is_signal(data_shape):
             icon = "signal.svg"
             kind = "signal"
         elif supported:
@@ -390,7 +459,7 @@ def _build_node(file_id: str, h5path: str, dset: Any, _depth: int = 0) -> _NodeI
     elif kind == "compound":
         is_array = True
         if data is not None:
-            shape = _shape_str(data)
+            shape = _shape_str(data_shape)
         icon = "h5array.svg"
     elif kind == "scalar":
         icon = "h5scalar.svg"
@@ -484,37 +553,107 @@ def _data_to_xy(data: np.ndarray):
     return x, y, dx, dy
 
 
-def _build_native_signal(node_data: np.ndarray, title: str):
-    """Convert *node_data* into a :class:`SignalObj` (or ``None``)."""
+def _to_signal_values(data: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Return signal values as float64, or as complex128 for complex data.
+
+    Returns ``(values, inexact)``: *inexact* is True when integer values cannot
+    all be represented exactly as float64 (beyond 2**53).
+    """
+    data = np.asarray(data)
+    if np.iscomplexobj(data):
+        return data.astype(np.complex128, copy=False), False
+    return data.astype(np.float64, copy=False), _int_exceeds(data, np.float64)
+
+
+def _int_exceeds(data: np.ndarray, dtype: Any) -> bool:
+    """Return True if integer *data* cannot all be represented exactly as
+    floating-point *dtype*."""
+    if data.dtype.kind not in "iu" or data.size == 0:
+        return False
+    magnitude = max(abs(int(data.min())), abs(int(data.max())))
+    return magnitude > 2 ** (np.finfo(dtype).nmant + 1)
+
+
+# The conversion of image data follows Sigima >= 1.4
+# (``sigima.io.common.converters.convert_array_to_valid_dtype``), which DataLab
+# desktop uses: replace it by Sigima's converter once DataLab-Web requires
+# Sigima >= 1.4 (Sigima 1.3 rounds large integers to float32).
+_INT_CODES = ("u1", "i1", "u2", "i2", "u4", "i4", "u8", "i8")
+_FLOAT_CODES = {"f": ("f2", "f4", "f8"), "c": ("c8", "c16")}
+
+
+def _to_image_data(data: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Convert *data* to a data type of image objects without losing values.
+
+    Integers use the smallest supported integer type holding all values, or else
+    the smallest supported floating-point type (at least as large as the input)
+    representing them exactly; other types use the smallest supported type of
+    the same kind at least as large (e.g. ``complex64`` to ``complex128``).
+
+    Returns ``(data, inexact)``: *inexact* is True when no supported type
+    represents all integer values exactly (beyond 2**53).
+    """
+    from sigima.objects import ImageObj
+
+    data = np.asarray(data)
+    valid = [np.dtype(dtype) for dtype in ImageObj.VALID_DTYPES]
+    if data.dtype in valid:
+        return data, False
+    kind = data.dtype.kind
+    if kind in "iu":
+        amin, amax = (int(data.min()), int(data.max())) if data.size else (0, 0)
+        for code in _INT_CODES:
+            info = np.iinfo(code)
+            if np.dtype(code) in valid and info.min <= amin and amax <= info.max:
+                return data.astype(code), False
+        floats = [np.dtype(code) for code in _FLOAT_CODES["f"]]
+        floats = [dtype for dtype in floats if dtype in valid]
+        for dtype in floats:
+            if dtype.itemsize >= data.dtype.itemsize and not _int_exceeds(data, dtype):
+                return data.astype(dtype), False
+        return data.astype(floats[-1]), True
+    if kind in _FLOAT_CODES:
+        same_kind = [np.dtype(code) for code in _FLOAT_CODES[kind]]
+        same_kind = [dtype for dtype in same_kind if dtype in valid]
+        for dtype in same_kind:
+            if dtype.itemsize >= data.dtype.itemsize:
+                return data.astype(dtype), False
+        return data.astype(same_kind[-1]), False
+    return data, False
+
+
+def _build_native_signal(node_data: np.ndarray, title: str) -> tuple[Any, bool]:
+    """Convert *node_data* into a :class:`SignalObj`.
+
+    Returns ``(signal_obj, inexact)``, see :func:`_to_signal_values`.
+
+    Raises:
+        ValueError: if a 2D table has complex X values or uncertainties
+    """
     from sigima.objects import create_signal
 
     obj = create_signal(title)
-    data = node_data
-    if data.dtype not in (float, np.complex128):
-        data = np.asarray(data, dtype=float)
+    data, inexact = _to_signal_values(node_data)
     if data.ndim == 1:
         obj.set_xydata(np.arange(data.size), data)
     else:
         x, y, dx, dy = _data_to_xy(data)
+        if any(np.iscomplexobj(array) for array in (x, dx, dy)):
+            raise ValueError("complex X values or uncertainties are not supported")
         obj.set_xydata(x, y, dx, dy)
-    return obj
+    return obj, inexact
 
 
 def _build_native_image(node_data: np.ndarray, title: str) -> tuple[Any, bool]:
     """Convert *node_data* into a :class:`ImageObj`.
 
-    Returns ``(image_obj, uint32_clipped)``.
+    Returns ``(image_obj, inexact)``, see :func:`_to_image_data`.
     """
     from sigima.objects import create_image
 
-    uint32_clipped = False
-    data = node_data
-    if data.dtype == np.uint32:
-        uint32_clipped = bool(data.max() > np.iinfo(np.int32).max)
-        data = np.asarray(data.clip(0, np.iinfo(np.int32).max), dtype=np.int32)
     obj = create_image(title)
-    obj.data = data
-    return obj, uint32_clipped
+    obj.data, inexact = _to_image_data(node_data)
+    return obj, inexact
 
 
 # ---------------------------------------------------------------------------
@@ -576,14 +715,19 @@ def open_file(filename: str, data: Any) -> dict[str, Any]:
     try:
         h5 = h5py.File(path, "r")
     except Exception as exc:  # noqa: BLE001
-        try:
-            os.remove(path)
-            os.rmdir(tmpdir)
-        except OSError:
-            pass
+        _remove_temp_file(path)
         raise ValueError(f"Cannot open {base!r} as an HDF5 file: {exc}") from exc
     file_id = uuid.uuid4().hex[:8]
-    root_info = _build_node(file_id, "/", h5)
+    try:
+        root_info = _build_node(file_id, "/", h5)
+    except BaseException:
+        # Never leave the file open nor its temporary copy behind
+        try:
+            h5.close()
+        except Exception:  # noqa: BLE001
+            pass
+        _remove_temp_file(path)
+        raise
     # Override root display name to file basename (mirrors Qt RootNode).
     root_info.name = osp.basename(filename) or osp.basename(path)
     root_info.icon_name = "h5file.svg"
@@ -601,6 +745,18 @@ def open_file(filename: str, data: Any) -> dict[str, Any]:
     return {"file_id": file_id, "filename": filename, "root": _info_to_dict(root_info)}
 
 
+def _remove_temp_file(path: str) -> None:
+    """Remove the temporary copy *path* of a browsed file and its directory."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+    try:
+        os.rmdir(osp.dirname(path))
+    except OSError:
+        pass
+
+
 def close_file(file_id: str) -> None:
     """Close *file_id* and free its resources."""
     entry = STATE.pop(file_id, None)
@@ -610,14 +766,7 @@ def close_file(file_id: str) -> None:
         entry.h5.close()
     except Exception:  # noqa: BLE001
         pass
-    try:
-        os.remove(entry.temp_path)
-    except OSError:
-        pass
-    try:
-        os.rmdir(osp.dirname(entry.temp_path))
-    except OSError:
-        pass
+    _remove_temp_file(entry.temp_path)
 
 
 def close_all() -> None:
@@ -669,20 +818,22 @@ def preview(file_id: str, node_id: str) -> dict[str, Any]:
             return {"kind": "unsupported"}
         raw = numeric
     try:
+        # Complex values cannot be sent to the JavaScript preview: like PlotPy
+        # curves and images, the preview shows their real part
         if info.kind == "signal":
-            obj = _build_native_signal(raw, info.name)
+            obj, _inexact = _build_native_signal(raw, info.name)
             return {
                 "kind": "signal",
                 "title": obj.title,
                 "x": obj.x.tolist(),
-                "y": obj.y.tolist(),
+                "y": np.real(obj.y).tolist(),
             }
         # image
-        img, _u32 = _build_native_image(raw, info.name)
+        img, _inexact = _build_native_image(raw, info.name)
         return {
             "kind": "image",
             "title": img.title,
-            "data": img.data.tolist(),
+            "data": np.real(img.data).tolist(),
             "width": int(img.data.shape[1]),
             "height": int(img.data.shape[0]),
         }
@@ -714,7 +865,9 @@ def array_data(file_id: str, node_id: str) -> dict[str, Any]:
 def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
     """Import every node id in *node_ids* into the live model.
 
-    Returns a dict ``{"oids": [...], "uint32_clipped": bool}``.  Caller
+    Returns a dict ``{"objects": [...], "inexact_values": bool, "group_id": ...}``,
+    *inexact_values* being True when integer values could not all be
+    represented exactly (beyond 2**53). Caller
     (``bootstrap.py``) is responsible for actually attaching the objects
     to the live :data:`_MODEL`; this function returns the constructed
     native objects, paired with their target panel kind, so we do not
@@ -727,7 +880,7 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
         raise KeyError(f"Unknown HDF5 browser file: {file_id!r}")
     entry = STATE[file_id]
     built: list[tuple[str, Any]] = []
-    uint32_clipped = False
+    inexact_values = False
     for nid in node_ids:
         if nid not in entry.nodes_by_path:
             raise KeyError(f"Unknown HDF5 node: {nid!r}")
@@ -745,16 +898,15 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
             raw = numeric
         try:
             if info.kind == "signal":
-                obj = _build_native_signal(raw, info.name)
+                obj, inexact = _build_native_signal(raw, info.name)
                 kind = "signal"
             else:
-                obj, clipped = _build_native_image(raw, info.name)
-                if clipped:
-                    uint32_clipped = True
+                obj, inexact = _build_native_image(raw, info.name)
                 kind = "image"
         except Exception as exc:  # noqa: BLE001
             print(f"[h5browser] failed to build object for {nid!r}: {exc}")
             continue
+        inexact_values = inexact_values or inexact
         # Attach origin metadata (mirrors Qt BaseNode.__process_metadata).
         try:
             obj.set_metadata_option("HDF5Path", entry.filename)
@@ -763,4 +915,4 @@ def import_nodes(file_id: str, node_ids: Any, group_id: str | None = None):
         except Exception:  # noqa: BLE001
             pass
         built.append((kind, obj))
-    return {"objects": built, "uint32_clipped": uint32_clipped, "group_id": group_id}
+    return {"objects": built, "inexact_values": inexact_values, "group_id": group_id}

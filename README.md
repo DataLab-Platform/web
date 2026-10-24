@@ -10,7 +10,7 @@ DataLab Web embeds the [Sigima](https://github.com/DataLab-Platform/Sigima) comp
 
 **👉 <https://datalab-platform.com/web/>**
 
-The latest release is deployed automatically to GitHub Pages. Open the link in any modern browser (Chrome, Edge, Firefox, Safari) and the full DataLab application — Sigima, NumPy, SciPy, scikit-image, h5py — runs locally inside the browser tab. No server, no account, no upload: your data never leaves your machine.
+The latest release is deployed automatically to GitHub Pages. Open the link in any modern browser (Chrome, Edge, Firefox, Safari) and the full DataLab application — Sigima, NumPy, SciPy, scikit-image, h5py — runs locally inside the browser tab. No server, no account, no upload: processing your data never requires sending it anywhere. Network services are used only when you enable them: the AI assistant sends your requests (and the context you share) to the provider you configure, and capsules and their reviews are sent to a capsule registry only when you configure one and publish them.
 
 > First load downloads Pyodide and installs Sigima via `micropip` (~30–60 s). Subsequent loads are cached by the browser. On Microsoft Edge the first load may be much slower — see [doc/troubleshooting.md](doc/troubleshooting.md) for the one-line fix.
 
