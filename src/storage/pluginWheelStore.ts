@@ -87,8 +87,9 @@ function parseIndex(text: string): PluginWheelIndex | null {
 /**
  * OPFS owner for user plugin wheel bytes and their committed metadata.
  *
- * The directory is deliberately distinct from `dlw-object-store`, whose
- * workspace clear operation must never remove installed plugins.
+ * The directory is deliberately distinct from those of the on-disk object
+ * stores, whose workspace clear operation must never remove installed
+ * plugins.
  */
 export class PluginWheelStore {
   private dir: FileSystemDirectoryHandle | null = null;

@@ -15,10 +15,15 @@
  * spill/page-in machinery in ``runtime.ts`` is backend-agnostic.
  *
  * Layout is identical to the async store (a *directory of objects*: one
- * file per object id under {@link STORE_DIR}), so the two are interchangeable
- * and even read each other's files.
+ * file per object id in the directory of the store's session, see
+ * :mod:`opfsSession`), so the two are interchangeable.
  */
-import { STORE_DIR, fileName, type ObjectByteStore } from "./opfsObjectStore";
+import { fileName, type ObjectByteStore } from "./opfsObjectStore";
+import {
+  openSessionDirectory,
+  resetSessionDirectory,
+  type SessionDirectory,
+} from "./opfsSession";
 
 /** Minimal shape of the synchronous access handle (Worker-only API). The
  *  read/write buffers are narrowed to ``Uint8Array`` (all we pass) to avoid
@@ -43,7 +48,7 @@ type SyncCapableFileHandle = FileSystemFileHandle & {
  * Worker-only. Call {@link init} once before use (idempotent).
  */
 export class OpfsSyncObjectStore implements ObjectByteStore {
-  private root: FileSystemDirectoryHandle | null = null;
+  private session: SessionDirectory | null = null;
   private dir: FileSystemDirectoryHandle | null = null;
   private readonly sizes = new Map<string, number>();
   private initialised = false;
@@ -72,8 +77,10 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
     if (!OpfsSyncObjectStore.isSupported()) {
       throw new Error("synchronous OPFS access handles are unavailable here");
     }
-    this.root = await navigator.storage.getDirectory();
-    this.dir = await this.root.getDirectoryHandle(STORE_DIR, { create: true });
+    this.session = await openSessionDirectory(
+      await navigator.storage.getDirectory(),
+    );
+    this.dir = this.session.dir;
     this.initialised = true;
   }
 
@@ -142,16 +149,11 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
     this.sizes.delete(oid);
   }
 
-  /** Remove every stored payload and reset the directory. */
+  /** Remove every payload of this store (and only those). */
   async clear(): Promise<void> {
-    if (!this.root) return;
-    try {
-      await this.root.removeEntry(STORE_DIR, { recursive: true });
-    } catch {
-      // Directory may not exist yet.
-    }
+    if (!this.session) return;
     this.sizes.clear();
-    this.dir = await this.root.getDirectoryHandle(STORE_DIR, { create: true });
+    this.dir = await resetSessionDirectory(this.session);
   }
 
   /** Total on-disk byte size of all payloads written through this instance. */

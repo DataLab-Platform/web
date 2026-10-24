@@ -19,14 +19,20 @@
  *     bounded writes/deletes and per-file locking — unlike a single
  *     workspace file that would serialise every access behind one lock.
  *
+ * Each store keeps its files in the directory of its own session (see
+ * :mod:`opfsSession`), so that the stores of several tabs never share or
+ * clear each other's files.
+ *
  * The store is deliberately dependency-free and UI-agnostic: it deals in
  * opaque ``Uint8Array`` payloads keyed by object id. The runtime decides
  * *what* those bytes are (``.npy`` encodings produced by
  * ``bootstrap.detach_object_array``).
  */
-
-/** Directory name under the OPFS root holding the spilled object files. */
-export const STORE_DIR = "dlw-object-store";
+import {
+  openSessionDirectory,
+  resetSessionDirectory,
+  type SessionDirectory,
+} from "./opfsSession";
 
 /** Per-object filename for object id *oid*. */
 export function fileName(oid: string): string {
@@ -61,11 +67,11 @@ export interface ObjectByteStore {
  * A directory-of-objects byte store on top of OPFS.
  *
  * All methods are asynchronous. Instances are cheap; call {@link init}
- * once before use (idempotent). Not safe for concurrent use across
- * threads on the same directory (one owner per OPFS subtree).
+ * once before use (idempotent). Each instance owns its session directory
+ * (one owner per OPFS subtree).
  */
 export class OpfsObjectStore implements ObjectByteStore {
-  private root: FileSystemDirectoryHandle | null = null;
+  private session: SessionDirectory | null = null;
   private dir: FileSystemDirectoryHandle | null = null;
   /** Tracks the on-disk byte size of each stored object (for totals). */
   private readonly sizes = new Map<string, number>();
@@ -82,14 +88,16 @@ export class OpfsObjectStore implements ObjectByteStore {
     );
   }
 
-  /** Open (creating if needed) the dedicated store directory. Idempotent. */
+  /** Create the session directory of the store. Idempotent. */
   async init(): Promise<void> {
     if (this.initialised) return;
     if (!OpfsObjectStore.isSupported()) {
       throw new Error("OPFS is not available in this browser/context");
     }
-    this.root = await navigator.storage.getDirectory();
-    this.dir = await this.root.getDirectoryHandle(STORE_DIR, { create: true });
+    this.session = await openSessionDirectory(
+      await navigator.storage.getDirectory(),
+    );
+    this.dir = this.session.dir;
     this.initialised = true;
   }
 
@@ -156,16 +164,11 @@ export class OpfsObjectStore implements ObjectByteStore {
     this.sizes.delete(oid);
   }
 
-  /** Remove every stored payload and reset the directory. */
+  /** Remove every payload of this store (and only those). */
   async clear(): Promise<void> {
-    if (!this.root) return;
-    try {
-      await this.root.removeEntry(STORE_DIR, { recursive: true });
-    } catch {
-      // Directory may not exist yet.
-    }
+    if (!this.session) return;
     this.sizes.clear();
-    this.dir = await this.root.getDirectoryHandle(STORE_DIR, { create: true });
+    this.dir = await resetSessionDirectory(this.session);
   }
 
   /** Total on-disk byte size of all payloads written through this instance. */
