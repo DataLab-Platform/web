@@ -1385,7 +1385,7 @@ def _bind_source_obj(instance: Any, source_obj: Any | None) -> None:
     Mirrors DataLab desktop, where the processor calls
     ``param.update_from_obj(obj)`` before showing the dialog so parameters
     that derive defaults from the source object (e.g.
-    ``RadialProfileParam`` pre-filling ``x0``/``y0`` with the image centre
+    ``RadialProfileParam`` pre-filling ``xc``/``yc`` with the image centre
     and recomputing them in its ``choice_callback``) behave correctly.
     No-op for parameter classes without ``update_from_obj``.
     """
@@ -1451,7 +1451,7 @@ def resolve_callbacks(
 
     Returns the post-callback values for every item so the frontend can
     refresh read-only computed fields (e.g. ``ArithmeticParam.operation``,
-    or ``RadialProfileParam``'s ``x0``/``y0`` recomputed from the chosen
+    or ``RadialProfileParam``'s ``xc``/``yc`` recomputed from the chosen
     centre mode).
     """
     spec = catalog[feature_id]

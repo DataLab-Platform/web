@@ -525,20 +525,20 @@ def test_radial_profile_schema_binds_source_object(fresh_bootstrap):
     # Off-centre bright blob so the centroid is well-defined and non-zero.
     data[10:16, 4:10] = 1000.0
     src = bs.add_image_from_array("img", data, width=48, height=64)
-    # Without binding: the callback no-ops, so x0/y0 stay at their defaults.
+    # Without binding: the callback no-ops, so xc/yc stay at their defaults.
     bare = bs.get_feature_schema("image:radial_profile")
-    assert bare["values"]["x0"] == 0.0
-    assert bare["values"]["y0"] == 0.0
+    assert bare["values"]["xc"] == 0.0
+    assert bare["values"]["yc"] == 0.0
     # With binding: the default "centroid" mode resolves to the blob centroid.
     bound = bs.get_feature_schema("image:radial_profile", src)
-    assert bound["values"]["x0"] > 0.0
-    assert bound["values"]["y0"] > 0.0
-    assert bound["values"]["x0"] < 24.0  # left of the geometric centre
-    assert bound["values"]["y0"] < 32.0  # above the geometric centre
+    assert bound["values"]["xc"] > 0.0
+    assert bound["values"]["yc"] > 0.0
+    assert bound["values"]["xc"] < 24.0  # left of the geometric centre
+    assert bound["values"]["yc"] < 32.0  # above the geometric centre
 
 
 def test_radial_profile_callback_recomputes_centre(fresh_bootstrap):
-    """Switching the centre mode recomputes ``x0``/``y0`` via the bound
+    """Switching the centre mode recomputes ``xc``/``yc`` via the bound
     source object, mirroring ``RadialProfileParam.choice_callback``.
     """
     bs = fresh_bootstrap
@@ -546,24 +546,24 @@ def test_radial_profile_callback_recomputes_centre(fresh_bootstrap):
     # Off-centre bright blob so the centroid differs from the geometric centre.
     data[10:16, 4:10] = 1000.0
     src = bs.add_image_from_array("img", data, width=48, height=64)
-    # "center" mode resets x0/y0 to the geometric centre even from stale 0,0.
+    # "center" mode resets xc/yc to the geometric centre even from stale 0,0.
     # Pixels are centred on their coordinates (0 to 47 along X, 0 to 63 along
     # Y): the centre of the image lies halfway between its first and last pixel
     # centres, so that a radial profile of a symmetric image is symmetric.
     centred = bs.resolve_feature_callbacks(
         "image:radial_profile",
         "center",
-        {"center": "center", "x0": 0.0, "y0": 0.0},
+        {"center": "center", "xc": 0.0, "yc": 0.0},
         src,
     )
-    assert centred["x0"] == pytest.approx(23.5)
-    assert centred["y0"] == pytest.approx(31.5)
+    assert centred["xc"] == pytest.approx(23.5)
+    assert centred["yc"] == pytest.approx(31.5)
     # "centroid" mode computes the intensity centroid (near the blob).
     centroid = bs.resolve_feature_callbacks(
         "image:radial_profile",
         "center",
-        {"center": "centroid", "x0": 0.0, "y0": 0.0},
+        {"center": "centroid", "xc": 0.0, "yc": 0.0},
         src,
     )
-    assert centroid["x0"] < 24.0
-    assert centroid["y0"] < 32.0
+    assert centroid["xc"] < 24.0
+    assert centroid["yc"] < 32.0

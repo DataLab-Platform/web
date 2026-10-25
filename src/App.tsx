@@ -2052,8 +2052,8 @@ export default function App() {
   const handleExtractProfile = useCallback(
     async (params: {
       direction: "horizontal" | "vertical";
-      row: number;
-      col: number;
+      x: number;
+      y: number;
     }) => {
       if (!runtime || !currentId) return;
       const feature = features.find((f) => f.id === "image:line_profile");
@@ -2064,8 +2064,8 @@ export default function App() {
       const values: Record<string, unknown> = {
         ...(schema?.values ?? {}),
         direction: params.direction,
-        row: params.row,
-        col: params.col,
+        x: params.x,
+        y: params.y,
       };
       await runFeature(feature, [currentId], null, values, effectiveGroupIds());
     },

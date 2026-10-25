@@ -4852,7 +4852,7 @@ def get_feature_schema(
     When *source_oid* is given, the source object is bound to the parameter
     instance (via ``update_from_obj``) before serialisation so params that
     derive defaults from the source (e.g. ``RadialProfileParam`` pre-filling
-    ``x0``/``y0`` with the image centre) match DataLab desktop.
+    ``xc``/``yc`` with the image centre) match DataLab desktop.
     """
     source_obj = _MODEL.get(source_oid) if source_oid else None
     return _proc.get_schema(_full_catalog_with_plugins(), feature_id, source_obj)
@@ -4881,7 +4881,7 @@ def resolve_feature_callbacks(
 
     Returns the recomputed values for every parameter so the frontend can
     refresh read-only computed fields (e.g. ``ArithmeticParam.operation``,
-    or ``RadialProfileParam``'s ``x0``/``y0`` recomputed from the chosen
+    or ``RadialProfileParam``'s ``xc``/``yc`` recomputed from the chosen
     centre mode when *source_oid* is provided).
     """
     source_obj = _MODEL.get(source_oid) if source_oid else None

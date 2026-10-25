@@ -207,7 +207,7 @@ def test_image_to_signal_preview_matches_published_processing(fresh_bootstrap):
     source_id = bs.add_image_from_array("raw", data, width=14, height=9)
     image_tree_before = bs.get_panel_tree("image")
     signal_tree_before = bs.get_panel_tree("signal")
-    params = {"direction": "horizontal", "row": 4, "col": 0}
+    params = {"direction": "horizontal", "y": 4.0, "x": 0.0}
 
     temporary = bs.preview_feature(
         "image:line_profile",

@@ -41,6 +41,7 @@ import {
 } from "../utils/imageRaster";
 import { toBins, binSearchCell } from "../utils/imageCoords";
 import { relayoutViewRange } from "../utils/plotlyRelayout";
+import { pixelCenters } from "../utils/pixelCenters";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import type {
   AnalysisResult,
@@ -125,13 +126,15 @@ interface ImagePlotProps {
   onResampleChange?: (method: ResampleMethod) => void;
   /** Called when the user clicks one of the "extract profile" buttons next
    *  to a frozen cross-section preview.  ``direction`` selects the horizontal
-   *  (top preview, fixed ``row``) or vertical (right preview, fixed ``col``)
-   *  slice.  The host wires this to the Sigima ``line_profile`` feature so a
-   *  new signal is created, mirroring DataLab desktop's "Process signal". */
+   *  (top preview, fixed ``y``) or vertical (right preview, fixed ``x``)
+   *  slice; ``x``/``y`` are the physical coordinates of the center of the
+   *  pixel under the cursor (Sigima convention).  The host wires this to the
+   *  Sigima ``line_profile`` feature so a new signal is created, mirroring
+   *  DataLab desktop's "Process signal". */
   onExtractProfile?: (params: {
     direction: "horizontal" | "vertical";
-    row: number;
-    col: number;
+    x: number;
+    y: number;
   }) => void;
 }
 
@@ -1650,8 +1653,8 @@ export function ImagePlot({
                   onClick={() =>
                     onExtractProfile({
                       direction: "horizontal",
-                      row: profileData.row,
-                      col: profileData.col,
+                      x: pixelCenters(data, "x")[profileData.col],
+                      y: pixelCenters(data, "y")[profileData.row],
                     })
                   }
                 >
@@ -1715,8 +1718,8 @@ export function ImagePlot({
                   onClick={() =>
                     onExtractProfile({
                       direction: "vertical",
-                      row: profileData.row,
-                      col: profileData.col,
+                      x: pixelCenters(data, "x")[profileData.col],
+                      y: pixelCenters(data, "y")[profileData.row],
                     })
                   }
                 >
