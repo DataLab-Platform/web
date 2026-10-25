@@ -54,6 +54,8 @@ const FAMILIES = [
 
 interface Replay {
   operation: string;
+  /** Contract version recorded by the activity. */
+  contractVersion: number | null;
   verdict: string;
   eligibility: string;
   maxAbsError: number | null;
@@ -79,7 +81,7 @@ async function runFamilies(
       interface Activity {
         activity_id: string;
         edition: string;
-        call: { operation: { id: string } | null };
+        call: { operation: { id: string; contract_version: number } | null };
         outputs: unknown[];
       }
       interface Runtime {
@@ -209,6 +211,7 @@ async function runFamilies(
           const report = await runtime.replayActivity(activity.activity_id);
           replays.push({
             operation: activity.call.operation?.id ?? "",
+            contractVersion: activity.call.operation?.contract_version ?? null,
             verdict: report.verdict,
             eligibility: report.eligibility,
             maxAbsError: report.observed?.max_abs_error ?? null,
@@ -295,10 +298,25 @@ test.describe.serial("cross-edition families", () => {
       const bytes = Array.from(
         readFileSync(path.join(FIXTURES, `${edition}_families.h5`)),
       );
+      // Contract versions of this runtime, as recorded by a fresh run: an
+      // activity recorded before a change of the result of its operation has
+      // an older version, and is refused instead of being replayed.
+      const fresh = await runFamilies(reader, null);
+      requireProvenance(fresh.available);
+      const local = new Map(
+        fresh.replays.map((r) => [r.operation, r.contractVersion]),
+      );
       const run = await runFamilies(reader, bytes);
       requireProvenance(run.available);
       expectFamilies(run, edition);
       for (const replay of run.replays) {
+        if (replay.contractVersion !== local.get(replay.operation)) {
+          expect(replay.eligibility, replay.operation).toBe(
+            "unsupported_contract",
+          );
+          expect(replay.verdict, replay.operation).toBe("not_verified");
+          continue;
+        }
         expect(replay.eligibility, replay.operation).toBe("ready");
         expect(["exact", "within_tolerance"], replay.operation).toContain(
           replay.verdict,
