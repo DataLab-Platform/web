@@ -6,7 +6,9 @@ import type { ProcessingPreviewResult } from "../runtime/runtime";
 import { buildCurveTrace, getCurveStyle } from "../runtime/plotStyles";
 import { buildColorscale } from "../utils/colormap";
 import { toBins } from "../utils/imageCoords";
+import { isMagnified } from "../utils/imageLod";
 import {
+  CRISP_PIXELS_CLASS,
   normalizeResampleMethod,
   rasterLayoutImage,
   rasterizeImage,
@@ -149,8 +151,13 @@ function ImagePreviewPlot({ result }: { result: ImagePreviewResult }) {
       ];
   const extent = imageExtent(data);
   const images = raster && !nonUniform ? [rasterLayoutImage(raster)] : [];
+  // The preview does not track the plot size: nearest-pixel scaling is only
+  // safe for magnified bitmaps (blocks of at least two pixels per side).
+  const crispPixels =
+    raster !== null && !nonUniform && isMagnified(raster.plan);
   return (
     <Plot
+      className={crispPixels ? CRISP_PIXELS_CLASS : undefined}
       data={traces as Data[]}
       layout={{
         ...theme,

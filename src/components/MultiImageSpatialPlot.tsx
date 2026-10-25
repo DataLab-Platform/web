@@ -42,8 +42,10 @@ import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { buildColorscale } from "../utils/colormap";
 import { aspectFitRanges, type ViewRange } from "../utils/imageLod";
 import {
+  CRISP_PIXELS_CLASS,
   type ImageRasterResult,
   RASTER_DEBOUNCE_MS,
+  showsCrispPixels,
   normalizeResampleMethod,
   rasterLayoutImage,
   rasterizeImage,
@@ -254,6 +256,19 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     }
     return out;
   }, [uniqueImages, rasters]);
+  // Nearest-pixel scaling only when every visible bitmap is enlarged on
+  // screen (typically when zoomed into one image): a reduced bitmap would be
+  // aliased by it.
+  const crispPixels = useMemo(() => {
+    const shown = Object.values(rasters);
+    const dpr = window.devicePixelRatio || 1;
+    return (
+      shown.length > 0 &&
+      shown.every((raster) =>
+        showsCrispPixels(raster, displayRange, plotPx, dpr),
+      )
+    );
+  }, [rasters, displayRange, plotPx]);
 
   // ------------------------------------------------------------------
   // Custom hover: ``image`` traces emit no ``plotly_hover`` events, so
@@ -520,7 +535,9 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
         </div>
       )}
       <div
-        className="multi-image-spatial-wrap"
+        className={`multi-image-spatial-wrap${
+          crispPixels ? ` ${CRISP_PIXELS_CLASS}` : ""
+        }`}
         onMouseDownCapture={handlePanMouseDown}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}

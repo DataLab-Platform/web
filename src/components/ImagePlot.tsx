@@ -34,8 +34,10 @@ import {
   shouldUseLod,
 } from "../utils/imageLod";
 import {
+  CRISP_PIXELS_CLASS,
   type ImageRasterResult,
   RASTER_DEBOUNCE_MS,
+  showsCrispPixels,
   normalizeResampleMethod,
   rasterLayoutImage,
   rasterizeImage,
@@ -769,6 +771,20 @@ export function ImagePlot({
         ? [rasterLayoutImage(bitmap)]
         : [],
     [bitmap, data.is_uniform_coords],
+  );
+  // Zoomed in, the bitmap is magnified into sharp pixel blocks; the browser
+  // must not smooth what remains of its enlargement on screen.
+  const crispPixels = useMemo(
+    () =>
+      bitmap !== null &&
+      data.is_uniform_coords !== false &&
+      showsCrispPixels(
+        bitmap,
+        displayRange,
+        plotPx,
+        window.devicePixelRatio || 1,
+      ),
+    [bitmap, data.is_uniform_coords, displayRange, plotPx],
   );
 
   const layout = useMemo(() => {
@@ -1522,7 +1538,7 @@ export function ImagePlot({
             ? " profiles-frozen"
             : " profiles-live"
           : ""
-      }`}
+      }${crispPixels ? ` ${CRISP_PIXELS_CLASS}` : ""}`}
       style={{ position: "relative", width: "100%", height: "100%" }}
       onMouseDownCapture={handleHostMouseDownCapture}
       onMouseMove={handleWrapperMouseMove}

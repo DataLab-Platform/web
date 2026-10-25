@@ -12,8 +12,9 @@
  *  2. The full-resolution data is untouched — ``getImageData`` still returns
  *     the 2048² grid with exact pixel values, which is what profiles,
  *     statistics and the hover read-out consume.
- *  3. Zooming to a few pixels re-rasterises them 1:1 (crisp): the new PNG is
- *     tiny and ``dx`` collapses back to the native spacing.
+ *  3. Zooming to a few pixels re-rasterises them: every visible pixel is
+ *     painted (stride 1) and magnified by an integer factor into sharp blocks
+ *     (nearest pixel), drawn on screen without smoothing.
  *
  * These assertions are DOM/trace-level (PNG dimensions, trace spacing) rather
  * than ``window.runtime`` no-ops, per the testing strategy.
@@ -193,12 +194,112 @@ test.describe("Image LOD display", () => {
       .toBeLessThan(zoomedOut.dx);
 
     const zoomedIn = await readImageTrace(page);
-    // Native spacing restored (stride ≈ 1) and a smaller PNG — pixels 1:1.
-    expect(zoomedIn.dx).toBeLessThanOrEqual(1.5);
-    expect(zoomedIn.pngWidth).toBeGreaterThan(0);
-    expect(zoomedIn.pngWidth).toBeLessThan(zoomedOut.pngWidth);
+    // Every visible pixel painted (stride 1, one cell per unit-spaced pixel)
+    // and magnified by an integer factor into sharp blocks.
+    expect(Number.isInteger(zoomedIn.sizex)).toBe(true);
+    expect(Number.isInteger(zoomedIn.sizey)).toBe(true);
+    const zoomX = zoomedIn.pngWidth / zoomedIn.sizex;
+    const zoomY = zoomedIn.pngHeight / zoomedIn.sizey;
+    expect(Number.isInteger(zoomX) && zoomX >= 2).toBe(true);
+    expect(Number.isInteger(zoomY) && zoomY >= 2).toBe(true);
     // The windowed bitmap starts on a pixel edge (center ± 0.5).
     expect(Number.isInteger(zoomedIn.x + 0.5)).toBe(true);
     expect(Number.isInteger(zoomedIn.y + 0.5)).toBe(true);
+  });
+
+  test("draws zoomed-in pixels as sharp blocks (nearest pixel)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await waitForRuntimeReady(page);
+    await page.getByRole("tab", { name: "Images" }).click();
+    // 8×8 checkerboard: any smoothing would show colours between the two.
+    await page.evaluate(() => {
+      const runtime = (
+        window as unknown as {
+          runtime: { runPython: (c: string) => Promise<unknown> };
+        }
+      ).runtime;
+      return runtime.runPython(
+        `import numpy as np\n` +
+          `add_image_from_array("crisp_probe", ` +
+          `(np.indices((8, 8)).sum(axis=0) % 2).astype(float))`,
+      );
+    });
+    await page.getByRole("tab", { name: "Signals" }).click();
+    await page.waitForTimeout(150);
+    await page.getByRole("tab", { name: "Images" }).click();
+    await page
+      .locator(".object-tree-item")
+      .filter({ hasText: "crisp_probe" })
+      .first()
+      .click();
+    await expect
+      .poll(async () => (await readImageTrace(page)).pngWidth, {
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(8);
+
+    // The 8 pixels are magnified by an integer factor in the bitmap itself
+    // (so exported images are sharp too), without blending.
+    const trace = await readImageTrace(page);
+    expect(trace.sizex).toBe(8);
+    const zoom = trace.pngWidth / 8;
+    expect(Number.isInteger(zoom) && zoom >= 2).toBe(true);
+    const bitmapColours = await page.evaluate(async (source) => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const data = context.getImageData(0, 0, canvas.width, canvas.height);
+      const colours = new Set<number>();
+      for (let p = 0; p < data.data.length; p += 4) {
+        colours.add(
+          (data.data[p] << 16) | (data.data[p + 1] << 8) | data.data[p + 2],
+        );
+      }
+      return colours.size;
+    }, trace.source);
+    expect(bitmapColours).toBe(2);
+
+    // On screen, the enlarged bitmap is drawn with nearest-pixel scaling:
+    // a row across the image holds only the two checkerboard colours.
+    const bitmap = page
+      .locator(".image-plot-host .layer-subplot .imagelayer image")
+      .first();
+    expect(
+      await bitmap.evaluate((node) => getComputedStyle(node).imageRendering),
+    ).toBe("pixelated");
+    const box = await bitmap.boundingBox();
+    if (!box) throw new Error("bitmap not rendered");
+    const row = await page.screenshot({
+      clip: {
+        x: Math.ceil(box.x) + 1,
+        y: Math.round(box.y + box.height * (3.5 / 8)),
+        width: Math.floor(box.width) - 3,
+        height: 1,
+      },
+    });
+    const screenColours = await page.evaluate(async (png) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const data = context.getImageData(0, 0, canvas.width, 1).data;
+      const colours = new Set<number>();
+      for (let p = 0; p < data.length; p += 4) {
+        colours.add((data[p] << 16) | (data[p + 1] << 8) | data[p + 2]);
+      }
+      return colours.size;
+    }, row.toString("base64"));
+    expect(screenColours).toBe(2);
   });
 });

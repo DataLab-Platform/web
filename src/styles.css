@@ -5552,6 +5552,19 @@ input {
   cursor: pointer;
 }
 
+/* Nearest-pixel scaling of the image bitmaps (Plotly layout images), set by
+   the image views only while a bitmap is enlarged on screen: zoomed-in pixels
+   stay sharp squares, like DataLab desktop.  Never set on reduced bitmaps,
+   which nearest-pixel downscaling would alias.  Same declarations as Plotly's
+   own pixelated image style, most widely supported last. */
+.image-crisp-pixels .layer-subplot .imagelayer image {
+  image-rendering: optimizeSpeed;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
 /* Small "Extract" button overlaid on each frozen profile preview; mirrors
    DataLab desktop's "Process signal" button next to the cross-section
    panels. */

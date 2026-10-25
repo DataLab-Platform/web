@@ -34,6 +34,7 @@ beforeEach(() => {
       height,
     }),
     putImageData: () => {},
+    drawImage: () => {},
   })) as unknown as HTMLCanvasElement["getContext"];
   HTMLCanvasElement.prototype.toDataURL = vi.fn(
     () => "data:image/png;base64,STUB",
@@ -320,6 +321,45 @@ describe("ImagePlot pixel-center convention", () => {
     // The outer half of the first pixel belongs to the image.
     hoverAt(-0.4, -0.4);
     expect(hoverText()).toMatch(/z: 0(\.0+)?$/);
+  });
+
+  it("draws zoomed-in pixels sharp (nearest pixel)", () => {
+    vi.useFakeTimers();
+    const toDataURL = vi.mocked(HTMLCanvasElement.prototype.toDataURL);
+    render(plotElement({ data: RAMP }));
+    act(() => vi.advanceTimersByTime(200));
+    // 4 pixels over the default 1024-pixel plot area: the bitmap is
+    // magnified ×256 and drawn with nearest-pixel scaling.
+    const encoded = toDataURL.mock.contexts.at(-1) as HTMLCanvasElement;
+    expect([encoded.width, encoded.height]).toEqual([1024, 1024]);
+    expect(
+      document
+        .querySelector(".image-plot-host")
+        ?.classList.contains("image-crisp-pixels"),
+    ).toBe(true);
+  });
+
+  it("keeps the smooth rendering of decimated images", () => {
+    vi.useFakeTimers();
+    // 1100² image (LOD) shown whole over 1024 pixels: decimated ×2.
+    const row = new Float32Array(1100);
+    const large: ImageData = {
+      ...RAMP,
+      id: "large",
+      width: 1100,
+      height: 1100,
+      data: Array.from({ length: 1100 }, () => row),
+    };
+    render(plotElement({ data: large }));
+    act(() => vi.advanceTimersByTime(200));
+    expect(
+      (currentPlot().layout as unknown as { images: unknown[] }).images,
+    ).toHaveLength(1);
+    expect(
+      document
+        .querySelector(".image-plot-host")
+        ?.classList.contains("image-crisp-pixels"),
+    ).toBe(false);
   });
 
   it("computes stats over the pixels the rectangle covers", () => {
