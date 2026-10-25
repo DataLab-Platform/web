@@ -1089,7 +1089,9 @@ export interface ImageData {
    *  typed-array rows directly as ``z``. */
   data: Float32Array[] | number[][];
   dtype: string;
-  /** Pixel origin (top-left corner) and pixel spacing. */
+  /** Center of the first pixel (Sigima convention) and pixel spacing: pixel
+   *  ``(i, j)`` is centered on ``(x0 + i·dx, y0 + j·dy)``, so the image spans
+   *  ``[x0 - dx/2, x0 + (width - ½)·dx]``. */
   x0: number;
   y0: number;
   dx: number;

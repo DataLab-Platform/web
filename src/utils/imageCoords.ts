@@ -44,33 +44,3 @@ export function toBins(centers: ArrayLike<number>): number[] {
   edges[n] = centers[n - 1] + (centers[n - 1] - centers[n - 2]) / 2;
   return edges;
 }
-
-/**
- * Find the index of the cell containing value ``v`` given monotonically
- * increasing bin ``edges`` (length ``n + 1`` for ``n`` cells).
- *
- * Returns the cell index in ``[0, n - 1]``, or ``-1`` when ``v`` falls
- * outside ``[edges[0], edges[n]]``. Cells are half-open ``[edge[i],
- * edge[i + 1])`` except the last, which is closed on both ends so the exact
- * right boundary maps to the final cell.
- *
- * @param edges Bin edges in increasing order (length ``n + 1``).
- * @param v Value to locate.
- * @returns Cell index, or ``-1`` if out of range.
- */
-export function binSearchCell(edges: ArrayLike<number>, v: number): number {
-  const n = edges.length - 1;
-  if (n < 1) return -1;
-  if (v < edges[0] || v > edges[n]) return -1;
-  // Binary search for the last edge ``<= v``.
-  let lo = 0;
-  let hi = n;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (edges[mid] <= v) lo = mid;
-    else hi = mid - 1;
-  }
-  // ``lo`` is the largest index with ``edges[lo] <= v``; clamp to last cell
-  // so the closed right boundary belongs to cell ``n - 1``.
-  return Math.min(lo, n - 1);
-}

@@ -23,6 +23,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { paintImageData } from "../utils/colormap";
+import { axisToPhysical } from "../utils/pixelCenters";
 import type { ImageData } from "../runtime/runtime";
 
 /** Maximum number of images rendered in the grid.  Each image's pixels
@@ -160,19 +161,10 @@ function MiniImageImpl({ image }: { image: ImageData }) {
       setHover(null);
       return;
     }
-    // Non-uniform images carry explicit pixel-center coordinates; report
-    // those exactly instead of the default ``x0 + (i+0.5)·dx`` grid (which
-    // would otherwise collapse to raw pixel indices).
-    const xc = image.xcoords;
-    const yc = image.ycoords;
-    const x =
-      image.is_uniform_coords === false && xc?.length
-        ? xc[i]
-        : image.x0 + (i + 0.5) * image.dx;
-    const y =
-      image.is_uniform_coords === false && yc?.length
-        ? yc[j]
-        : image.y0 + (j + 0.5) * image.dy;
+    // Physical coordinates of the hovered pixel center (explicit coordinates
+    // for non-uniform images).
+    const x = axisToPhysical(image, "x", i);
+    const y = axisToPhysical(image, "y", j);
     const data = image.data;
     let z: number;
     if (Array.isArray(data) && data[0] instanceof Float32Array) {

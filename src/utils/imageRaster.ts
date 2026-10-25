@@ -16,10 +16,13 @@ import {
 /** Delay before encoding a new bitmap after a range or LUT change. */
 export const RASTER_DEBOUNCE_MS = 80;
 
+/** Placement of a rasterised bitmap in physical coordinates: ``(x, y)`` is its
+ *  upper-left corner (the outer edge of its first pixel), ``dx``/``dy`` the
+ *  physical size of one bitmap cell and ``cw``/``ch`` its size in cells. */
 export interface ImageRasterPlacement {
-  x0: number;
+  x: number;
   dx: number;
-  y0: number;
+  y: number;
   dy: number;
   cw: number;
   ch: number;
@@ -144,17 +147,40 @@ export function rasterizeImage(
   };
 }
 
+/** Plotly ``layout.images`` entry drawing a rasterised bitmap below the data
+ *  at its physical placement.  A layout image (unlike an ``image`` trace)
+ *  imposes no axis constraint, so both axes stay free to pan. */
+export function rasterLayoutImage(raster: ImageRasterResult) {
+  const { placement } = raster;
+  return {
+    source: raster.source,
+    xref: "x" as const,
+    yref: "y" as const,
+    x: placement.x,
+    y: placement.y,
+    sizex: placement.cw * placement.dx,
+    sizey: placement.ch * placement.dy,
+    xanchor: "left" as const,
+    yanchor: "top" as const,
+    sizing: "stretch" as const,
+    layer: "below" as const,
+  };
+}
+
 function intersectsView(
   geometry: ImageGeometry,
   view: ViewRange | null,
 ): boolean {
   if (view === null) return true;
-  const x1 = geometry.x0 + geometry.width * geometry.dx;
-  const y1 = geometry.y0 + geometry.height * geometry.dy;
-  const imageX0 = Math.min(geometry.x0, x1);
-  const imageX1 = Math.max(geometry.x0, x1);
-  const imageY0 = Math.min(geometry.y0, y1);
-  const imageY1 = Math.max(geometry.y0, y1);
+  // Outer edges of the first and last pixels (``x0``/``y0`` are pixel centers).
+  const xa = geometry.x0 - 0.5 * geometry.dx;
+  const xb = xa + geometry.width * geometry.dx;
+  const ya = geometry.y0 - 0.5 * geometry.dy;
+  const yb = ya + geometry.height * geometry.dy;
+  const imageX0 = Math.min(xa, xb);
+  const imageX1 = Math.max(xa, xb);
+  const imageY0 = Math.min(ya, yb);
+  const imageY1 = Math.max(ya, yb);
   const viewX0 = Math.min(...view.x);
   const viewX1 = Math.max(...view.x);
   const viewY0 = Math.min(...view.y);

@@ -156,21 +156,26 @@ def test_get_image_data_bytes_encoding_round_trips(fresh_bootstrap):
 def test_get_image_data_max_size_decimates_and_adjusts_spacing(fresh_bootstrap):
     """``max_size`` decimates the image and rescales ``dx``/``dy``.
 
-    The downsampled view must keep the same physical extent so the
-    multi-image grid renders at the correct world coordinates.  LUT
-    extrema are computed on the *full* image so the colour scale stays
-    representative.
+    The downsampled view must keep the same physical extent, up to the outer
+    edges of the pixels (``x0``/``y0`` are pixel centers), so the multi-image
+    views render it at the correct world coordinates.  LUT extrema are
+    computed on the *full* image so the colour scale stays representative.
     """
     bs = fresh_bootstrap
-    arr = np.arange(40000, dtype=float).reshape(200, 200)
+    arr = np.arange(201 * 199, dtype=float).reshape(201, 199)
     oid = bs.add_image_from_array("big", arr)
+    obj = bs._MODEL.get(oid)
+    obj.set_uniform_coords(0.5, 2.0, x0=10.0, y0=-3.0)
     full = bs.get_image_data(oid)
     small = bs.get_image_data(oid, max_size=50)
     assert max(small["width"], small["height"]) <= 50
-    # Physical extent preserved within one stride.
-    assert small["width"] * small["dx"] == pytest.approx(
-        full["width"] * full["dx"], rel=0.05
-    )
+    # Physical extent preserved exactly, from the outer edge of the first
+    # pixel to the outer edge of the last one.
+    for x0, dx, size in (("x0", "dx", "width"), ("y0", "dy", "height")):
+        assert small[x0] - small[dx] / 2 == pytest.approx(full[x0] - full[dx] / 2)
+        assert small[x0] + (small[size] - 0.5) * small[dx] == pytest.approx(
+            full[x0] + (full[size] - 0.5) * full[dx]
+        )
     # LUT extrema unchanged (computed before decimation).
     assert small["data_min"] == full["data_min"]
     assert small["data_max"] == full["data_max"]

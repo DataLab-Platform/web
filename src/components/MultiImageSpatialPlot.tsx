@@ -45,9 +45,11 @@ import {
   type ImageRasterResult,
   RASTER_DEBOUNCE_MS,
   normalizeResampleMethod,
+  rasterLayoutImage,
   rasterizeImage,
 } from "../utils/imageRaster";
 import { relayoutViewRange } from "../utils/plotlyRelayout";
+import { imageExtent, pixelIndexAt } from "../utils/pixelCenters";
 import { usePersistedBool, IMAGE_GRID_PREF_KEY } from "../utils/persisted";
 import { t } from "../i18n/translate";
 import type { ImageData } from "../runtime/runtime";
@@ -91,35 +93,6 @@ const SpatialHoverOverlay = memo(
   }),
 );
 
-/** Physical extent of an image in data coordinates. */
-interface Extent {
-  xLo: number;
-  xHi: number;
-  yLo: number;
-  yHi: number;
-}
-
-function imageExtent(img: ImageData): Extent {
-  if (img.is_uniform_coords === false && img.xcoords?.length) {
-    const xc = img.xcoords;
-    const yc = img.ycoords ?? [];
-    return {
-      xLo: Math.min(xc[0], xc[xc.length - 1]),
-      xHi: Math.max(xc[0], xc[xc.length - 1]),
-      yLo: Math.min(yc[0] ?? 0, yc[yc.length - 1] ?? 0),
-      yHi: Math.max(yc[0] ?? 0, yc[yc.length - 1] ?? 0),
-    };
-  }
-  const x1 = img.x0 + img.width * img.dx;
-  const y1 = img.y0 + img.height * img.dy;
-  return {
-    xLo: Math.min(img.x0, x1),
-    xHi: Math.max(img.x0, x1),
-    yLo: Math.min(img.y0, y1),
-    yHi: Math.max(img.y0, y1),
-  };
-}
-
 function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
   const plotlyTheme = usePlotlyTheme();
 
@@ -142,10 +115,10 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
     let yMax = -Infinity;
     for (const img of uniqueImages) {
       const e = imageExtent(img);
-      xMin = Math.min(xMin, e.xLo);
-      xMax = Math.max(xMax, e.xHi);
-      yMin = Math.min(yMin, e.yLo);
-      yMax = Math.max(yMax, e.yHi);
+      xMin = Math.min(xMin, e.xMin);
+      xMax = Math.max(xMax, e.xMax);
+      yMin = Math.min(yMin, e.yMin);
+      yMax = Math.max(yMax, e.yMax);
     }
     const mx = (xMax - xMin) * 0.02 || 1;
     const my = (yMax - yMin) * 0.02 || 1;
@@ -269,27 +242,15 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
   }, [uniqueImages]);
 
   // Uniform-image bitmaps drawn as ``layout.images`` backgrounds, positioned
-  // by each image's physical ``x0``/``y0``/``dx``/``dy`` in data coordinates.
+  // by each image's physical ``x0``/``y0``/``dx``/``dy`` in data coordinates
+  // (``x0``/``y0`` being the center of the first pixel).
   const layoutImages = useMemo(() => {
     const out: unknown[] = [];
     for (const img of uniqueImages) {
       if (img.is_uniform_coords === false) continue;
       const raster = rasters[img.id];
       if (!raster) continue;
-      const placement = raster.placement;
-      out.push({
-        source: raster.source,
-        xref: "x" as const,
-        yref: "y" as const,
-        x: placement.x0,
-        y: placement.y0,
-        sizex: placement.cw * placement.dx,
-        sizey: placement.ch * placement.dy,
-        xanchor: "left" as const,
-        yanchor: "top" as const,
-        sizing: "stretch" as const,
-        layer: "below" as const,
-      });
+      out.push(rasterLayoutImage(raster));
     }
     return out;
   }, [uniqueImages, rasters]);
@@ -479,13 +440,9 @@ function MultiImageSpatialPlotImpl({ images, totalSelected }: Props) {
       // Topmost image (last drawn) wins.
       for (let k = uniqueImages.length - 1; k >= 0; k -= 1) {
         const img = uniqueImages[k];
-        const e = imageExtent(img);
-        if (dataX < e.xLo || dataX > e.xHi || dataY < e.yLo || dataY > e.yHi) {
-          continue;
-        }
-        const i = Math.floor((dataX - img.x0) / img.dx);
-        const j = Math.floor((dataY - img.y0) / img.dy);
-        if (i < 0 || i >= img.width || j < 0 || j >= img.height) continue;
+        const i = pixelIndexAt(img, "x", dataX);
+        const j = pixelIndexAt(img, "y", dataY);
+        if (i < 0 || j < 0) continue;
         const d = img.data;
         let z: number;
         if (Array.isArray(d) && d[0] instanceof Float32Array) {
