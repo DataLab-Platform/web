@@ -3689,6 +3689,16 @@ def _image_data_payload(
     lut_min, lut_max = display["lut_default"]
     data = _maybe_downsample(raw, max_size)
     is_uniform = bool(getattr(obj, "is_uniform_coords", True))
+    # Decimated previews keep the physical extent of the image: each shipped
+    # pixel stands for a block of source pixels, so the spacing grows by the
+    # size ratio and the first center moves by half the spacing increase
+    # (``x0``/``y0`` are pixel centers).
+    dx = float(getattr(obj, "dx", 1.0) or 1.0)
+    dy = float(getattr(obj, "dy", 1.0) or 1.0)
+    preview_dx = dx * (raw.shape[1] / data.shape[1])
+    preview_dy = dy * (raw.shape[0] / data.shape[0])
+    x0 = float(getattr(obj, "x0", 0.0) or 0.0) + 0.5 * (preview_dx - dx)
+    y0 = float(getattr(obj, "y0", 0.0) or 0.0) + 0.5 * (preview_dy - dy)
     xcoords: list[float] = []
     ycoords: list[float] = []
     if not is_uniform:
@@ -3705,10 +3715,10 @@ def _image_data_payload(
         "width": int(data.shape[1]),
         "height": int(data.shape[0]),
         "dtype": str(data.dtype),
-        "x0": float(getattr(obj, "x0", 0.0) or 0.0),
-        "y0": float(getattr(obj, "y0", 0.0) or 0.0),
-        "dx": float(getattr(obj, "dx", 1.0) or 1.0) * (raw.shape[1] / data.shape[1]),
-        "dy": float(getattr(obj, "dy", 1.0) or 1.0) * (raw.shape[0] / data.shape[0]),
+        "x0": x0,
+        "y0": y0,
+        "dx": preview_dx,
+        "dy": preview_dy,
         "is_uniform_coords": is_uniform,
         "xcoords": xcoords,
         "ycoords": ycoords,

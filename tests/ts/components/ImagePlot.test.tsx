@@ -13,12 +13,14 @@ import { ThemeProvider } from "../../../src/utils/theme";
 
 const plotState = vi.hoisted(() => ({
   props: null as Record<string, unknown> | null,
+  all: [] as Record<string, unknown>[],
   renderCount: 0,
 }));
 
 vi.mock("react-plotly.js", () => ({
   default: (props: Record<string, unknown>) => {
     plotState.props = props;
+    plotState.all.push(props);
     plotState.renderCount += 1;
     return <div data-testid="plot" />;
   },
@@ -41,7 +43,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   plotState.props = null;
+  plotState.all = [];
   plotState.renderCount = 0;
 });
 
@@ -195,5 +199,175 @@ describe("ImagePlot title editing", () => {
 
     expect(document.querySelector(".image-hover-tooltip")).not.toBeNull();
     expect(plotState.renderCount).toBe(renderCount);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pixel-center convention: ``x0``/``y0`` are the centers of the first pixel
+// (Sigima), so pixel ``i`` covers ``[x0 + (i - ½)·dx, x0 + (i + ½)·dx)``.
+// ---------------------------------------------------------------------------
+
+/** 4×4 ramp ``z = 4·j + i`` with pixel centers at 0, 1, 2, 3 (web#69). */
+const RAMP: ImageData = {
+  ...IMAGE,
+  id: "ramp",
+  width: 4,
+  height: 4,
+  data: [
+    [0, 1, 2, 3],
+    [4, 5, 6, 7],
+    [8, 9, 10, 11],
+    [12, 13, 14, 15],
+  ],
+  data_max: 15,
+};
+
+/** 4×3 non-uniform image (pixel centers in ``xcoords``/``ycoords``). */
+const NON_UNIFORM: ImageData = {
+  ...RAMP,
+  id: "non-uniform",
+  height: 3,
+  data: RAMP.data.slice(0, 3),
+  data_max: 11,
+  is_uniform_coords: false,
+  xcoords: [0, 1.5, 4, 9],
+  ycoords: [0, 2, 5],
+};
+
+/** Main image plot props (the cross-section plots have no
+ *  ``onInitialized`` handler). */
+function mainPlot() {
+  const main = plotState.all.filter(
+    (props) => typeof props.onInitialized === "function",
+  );
+  return main.at(-1) as ReturnType<typeof currentPlot>;
+}
+
+/** Connect a fake Plotly graph div whose data coordinates are the client
+ *  coordinates divided by 10, then hover the image at ``(x, y)``. */
+function hoverAt(x: number, y: number) {
+  const graphDiv = Object.assign(document.createElement("div"), {
+    _fullLayout: {
+      xaxis: { p2c: (v: number) => v / 10, _offset: 0, _length: 100 },
+      yaxis: { p2c: (v: number) => v / 10, _offset: 0, _length: 100 },
+    },
+    on: vi.fn(),
+  });
+  vi.spyOn(graphDiv, "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    right: 100,
+    bottom: 100,
+    width: 100,
+    height: 100,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  act(() => mainPlot().onInitialized({}, graphDiv));
+  fireEvent.mouseMove(document.querySelector(".image-plot-host")!, {
+    clientX: x * 10,
+    clientY: y * 10,
+    buttons: 0,
+  });
+}
+
+function hoverText(): string {
+  return document.querySelector(".image-hover-tooltip")?.textContent ?? "";
+}
+
+describe("ImagePlot pixel-center convention", () => {
+  it("centers the pixels of the bitmap on x0 + i·dx", () => {
+    vi.useFakeTimers();
+    render(plotElement({ data: RAMP }));
+    act(() => vi.advanceTimersByTime(200));
+    const layout = currentPlot().layout as unknown as {
+      images: Array<Record<string, number>>;
+    };
+    expect(layout.images).toHaveLength(1);
+    expect(layout.images[0]).toMatchObject({
+      x: -0.5,
+      y: -0.5,
+      sizex: 4,
+      sizey: 4,
+    });
+  });
+
+  it("places a calibrated image from the outer edge of its first pixel", () => {
+    vi.useFakeTimers();
+    const calibrated = { ...RAMP, x0: 10, y0: -3, dx: 0.5, dy: 2 };
+    render(plotElement({ data: calibrated }));
+    act(() => vi.advanceTimersByTime(200));
+    const layout = currentPlot().layout as unknown as {
+      images: Array<Record<string, number>>;
+    };
+    expect(layout.images[0]).toMatchObject({
+      x: 9.75,
+      y: -4,
+      sizex: 2,
+      sizey: 8,
+    });
+  });
+
+  it("reads the value of the pixel whose center is the closest", () => {
+    renderPlot({ data: RAMP });
+    hoverAt(0.4, 0.4);
+    expect(hoverText()).toMatch(/z: 0(\.0+)?$/);
+    hoverAt(0.6, 0.4);
+    expect(hoverText()).toMatch(/z: 1(\.0+)?$/);
+    hoverAt(0.6, 0.6);
+    expect(hoverText()).toMatch(/z: 5(\.0+)?$/);
+    // The outer half of the first pixel belongs to the image.
+    hoverAt(-0.4, -0.4);
+    expect(hoverText()).toMatch(/z: 0(\.0+)?$/);
+  });
+
+  it("computes stats over the pixels the rectangle covers", () => {
+    renderPlot({ data: RAMP });
+    fireEvent.click(screen.getByRole("button", { name: "Stats area" }));
+    // [0.6, 1.4]² lies inside pixel (1, 1), which spans [0.5, 1.5]².
+    act(() =>
+      currentPlot().onRelayout({
+        shapes: [{ type: "rect", x0: 0.6, x1: 1.4, y0: 0.6, y1: 1.4 }],
+      }),
+    );
+    const stats = document.querySelector(".image-stats-overlay-body");
+    expect(stats?.textContent).toMatch(/n: 1(?!\d)/);
+    expect(stats?.textContent).toMatch(/mean: 5/);
+    // [0.2, 1.7] × [0.6, 1.4] covers columns 0 to 2 of row 1.
+    act(() =>
+      currentPlot().onRelayout({
+        shapes: [{ type: "rect", x0: 0.2, x1: 1.7, y0: 0.6, y1: 1.4 }],
+      }),
+    );
+    expect(
+      document.querySelector(".image-stats-overlay-body")?.textContent,
+    ).toMatch(/n: 3(?!\d)/);
+  });
+
+  it("draws cross-sections of non-uniform images on their pixel centers", () => {
+    renderPlot({ data: NON_UNIFORM });
+    fireEvent.click(screen.getByRole("button", { name: "Cross profiles" }));
+    // Pixel (2, 1): x in [2.75, 6.5), y in [1, 3.5).
+    hoverAt(4.2, 2.1);
+    // The horizontal cross-section is the plot whose X axis is aligned with
+    // the image (fixed range, no tick labels).
+    type ProfileProps = {
+      data: Array<Record<string, unknown>>;
+      layout: { xaxis: { range?: number[]; showticklabels?: boolean } };
+    };
+    const xProfile = (plotState.all as ProfileProps[])
+      .filter(
+        (props) =>
+          !("onInitialized" in props) &&
+          props.layout.xaxis.range !== undefined &&
+          props.layout.xaxis.showticklabels === false,
+      )
+      .at(-1);
+    expect(xProfile).toBeDefined();
+    const trace = xProfile!.data[0];
+    expect(trace.x).toEqual([0, 1.5, 4, 9]);
+    expect(trace.y).toEqual([4, 5, 6, 7]);
+    expect(xProfile!.layout.xaxis.range).toEqual([-0.75, 11.5]);
   });
 });

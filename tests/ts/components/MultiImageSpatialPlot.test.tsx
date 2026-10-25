@@ -145,19 +145,59 @@ describe("MultiImageSpatialPlot", () => {
     await waitFor(() => expect(readLayout(container).images).toHaveLength(2));
     const imgs = readLayout(container).images ?? [];
     expect(imgs).toHaveLength(2);
-    expect(imgs.map((m) => m.x).sort((p, q) => p - q)).toEqual([0, 10]);
-    expect(imgs.map((m) => m.y).sort((p, q) => p - q)).toEqual([0, 5]);
+    // ``x0``/``y0`` are the centers of the first pixel: each bitmap starts
+    // half a pixel before them.
+    expect(imgs.map((m) => m.x).sort((p, q) => p - q)).toEqual([-0.5, 9.5]);
+    expect(imgs.map((m) => m.y).sort((p, q) => p - q)).toEqual([-0.5, 4.5]);
   });
 
   it("spans the axis range across all images (Y reversed)", () => {
     const images = [makeImage("a", 0, 0), makeImage("b", 10, 5)];
     const { container } = renderSpatial(images, 2);
     const { xaxis, yaxis } = readLayout(container);
-    // X spans 0 .. 12 (10 + width*dx) plus margin.
-    expect(xaxis.range[0]).toBeLessThanOrEqual(0);
-    expect(xaxis.range[1]).toBeGreaterThanOrEqual(12);
+    // X spans -0.5 .. 11.5 (outer pixel edges) plus margin.
+    expect(xaxis.range[0]).toBeLessThanOrEqual(-0.5);
+    expect(xaxis.range[1]).toBeGreaterThanOrEqual(11.5);
     // Y axis is reversed for image orientation: range[0] > range[1].
     expect(yaxis.range[0]).toBeGreaterThan(yaxis.range[1]);
+  });
+
+  it("reads the value of the pixel whose center is the closest", () => {
+    const images = [makeImage("a", 0, 0)];
+    const { container } = renderSpatial(images, 1);
+    const graphDiv = Object.assign(document.createElement("div"), {
+      _fullLayout: {
+        xaxis: { p2c: (v: number) => v / 10, _offset: 0, _length: 100 },
+        yaxis: { p2c: (v: number) => v / 10, _offset: 0, _length: 100 },
+      },
+    });
+    vi.spyOn(graphDiv, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      width: 100,
+      height: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const plot = plotState.props as {
+      onInitialized: (figure: unknown, graphDiv: unknown) => void;
+    };
+    act(() => plot.onInitialized({}, graphDiv));
+    const hoverAt = (x: number, y: number) => {
+      fireEvent.mouseMove(
+        container.querySelector(".multi-image-spatial-wrap")!,
+        { clientX: x * 10, clientY: y * 10, buttons: 0 },
+      );
+      return container.querySelector(".multi-image-hover")?.textContent ?? "";
+    };
+    // Pixel (1, 0) spans [0.5, 1.5) × [-0.5, 0.5).
+    expect(hoverAt(0.6, 0.4)).toMatch(/z: 1(\.0+)?$/);
+    expect(hoverAt(0.4, 0.6)).toMatch(/z: 2(\.0+)?$/);
+    // The outer half of the first pixel belongs to the image.
+    expect(hoverAt(-0.4, -0.4)).toMatch(/z: 0(\.0+)?$/);
   });
 
   it("shows the '+N more' banner when the selection exceeds the shown set", () => {
@@ -247,10 +287,10 @@ describe("MultiImageSpatialPlot", () => {
 
     const initial = readLayout(container).images!;
     expect(initial.map(({ x, y }) => [x, y])).toEqual([
-      [0, 0],
-      [2048, 0],
-      [0, 2048],
-      [2048, 2048],
+      [-0.5, -0.5],
+      [2047.5, -0.5],
+      [-0.5, 2047.5],
+      [2047.5, 2047.5],
     ]);
     expect(initial.map(({ source }) => source)).toEqual([
       "data:image/png;base64,STUB1",
@@ -272,18 +312,19 @@ describe("MultiImageSpatialPlot", () => {
     const plot = plotState.props as {
       onRelayout: (event: Record<string, unknown>) => void;
     };
+    // Pixels 10…25 of the top-right image (centers 2058…2073), rows 0…15.
     act(() =>
       plot.onRelayout({
-        "xaxis.range[0]": 2058,
-        "xaxis.range[1]": 2074,
-        "yaxis.range[0]": 16,
-        "yaxis.range[1]": 0,
+        "xaxis.range[0]": 2057.5,
+        "xaxis.range[1]": 2073.5,
+        "yaxis.range[0]": 15.5,
+        "yaxis.range[1]": -0.5,
       }),
     );
     await waitFor(() => expect(readLayout(container).images).toHaveLength(1));
     const zoomed = readLayout(container).images![0];
-    expect(zoomed.x).toBe(2058);
-    expect(zoomed.y).toBe(0);
+    expect(zoomed.x).toBe(2057.5);
+    expect(zoomed.y).toBe(-0.5);
     expect(zoomed.sizex).toBe(16);
     expect(zoomed.sizey).toBe(16);
     expect(rasterSizes.at(-1)).toEqual({ width: 16, height: 16 });

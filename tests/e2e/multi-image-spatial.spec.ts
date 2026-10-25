@@ -259,11 +259,13 @@ test("spatial multi-image: four 2048² images use viewport LOD and exact zoom", 
   const initial = await readSpatialBitmaps(page);
   // Primary image first, then the remaining selected images. Layout-image
   // array order is the z-order used by Plotly (later entries draw on top).
+  // Each bitmap starts at the outer edge of its first pixel, half a pixel
+  // before ``x0``/``y0`` (pixel centers), decimated previews included.
   expect(initial.map(({ x, y }) => [x, y])).toEqual([
-    [LOD_SIDE, LOD_SIDE],
-    [0, 0],
-    [LOD_SIDE, 0],
-    [0, LOD_SIDE],
+    [LOD_SIDE - 0.5, LOD_SIDE - 0.5],
+    [-0.5, -0.5],
+    [LOD_SIDE - 0.5, -0.5],
+    [-0.5, LOD_SIDE - 0.5],
   ]);
   expect(
     initial.every(({ width, height }) => width <= 512 && height <= 512),

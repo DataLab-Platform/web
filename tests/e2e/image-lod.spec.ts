@@ -142,8 +142,10 @@ test.describe("Image LOD display", () => {
     // The PNG is decimated to ~viewport size, far below the 2048² source.
     expect(zoomedOut.pngWidth).toBeGreaterThan(0);
     expect(zoomedOut.pngWidth).toBeLessThan(SIDE);
-    expect(zoomedOut.x).toBe(0);
-    expect(zoomedOut.y).toBe(0);
+    // ``x0 = y0 = 0`` is the center of the first pixel: the bitmap starts at
+    // its outer edge, half a pixel before.
+    expect(zoomedOut.x).toBe(-0.5);
+    expect(zoomedOut.y).toBe(-0.5);
     expect(zoomedOut.sizex).toBeGreaterThanOrEqual(SIDE);
     expect(zoomedOut.sizey).toBeGreaterThanOrEqual(SIDE);
     // Stride > 1 → each display cell spans several native pixels.
@@ -195,7 +197,8 @@ test.describe("Image LOD display", () => {
     expect(zoomedIn.dx).toBeLessThanOrEqual(1.5);
     expect(zoomedIn.pngWidth).toBeGreaterThan(0);
     expect(zoomedIn.pngWidth).toBeLessThan(zoomedOut.pngWidth);
-    expect(Number.isInteger(zoomedIn.x)).toBe(true);
-    expect(Number.isInteger(zoomedIn.y)).toBe(true);
+    // The windowed bitmap starts on a pixel edge (center ± 0.5).
+    expect(Number.isInteger(zoomedIn.x + 0.5)).toBe(true);
+    expect(Number.isInteger(zoomedIn.y + 0.5)).toBe(true);
   });
 });

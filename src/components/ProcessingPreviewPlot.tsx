@@ -6,7 +6,12 @@ import type { ProcessingPreviewResult } from "../runtime/runtime";
 import { buildCurveTrace, getCurveStyle } from "../runtime/plotStyles";
 import { buildColorscale } from "../utils/colormap";
 import { toBins } from "../utils/imageCoords";
-import { rasterizeImage, normalizeResampleMethod } from "../utils/imageRaster";
+import {
+  normalizeResampleMethod,
+  rasterLayoutImage,
+  rasterizeImage,
+} from "../utils/imageRaster";
+import { imageExtent } from "../utils/pixelCenters";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { reduceSignalForPlot } from "../utils/signalLod";
 
@@ -142,26 +147,8 @@ function ImagePreviewPlot({ result }: { result: ImagePreviewResult }) {
           },
         },
       ];
-  const xEnd = data.x0 + data.width * data.dx;
-  const yEnd = data.y0 + data.height * data.dy;
-  const images =
-    raster && !nonUniform
-      ? [
-          {
-            source: raster.source,
-            xref: "x" as const,
-            yref: "y" as const,
-            x: raster.placement.x0,
-            y: raster.placement.y0,
-            sizex: raster.placement.cw * raster.placement.dx,
-            sizey: raster.placement.ch * raster.placement.dy,
-            xanchor: "left" as const,
-            yanchor: "top" as const,
-            sizing: "stretch" as const,
-            layer: "below" as const,
-          },
-        ]
-      : [];
+  const extent = imageExtent(data);
+  const images = raster && !nonUniform ? [rasterLayoutImage(raster)] : [];
   return (
     <Plot
       data={traces as Data[]}
@@ -175,13 +162,13 @@ function ImagePreviewPlot({ result }: { result: ImagePreviewResult }) {
         xaxis: {
           ...theme.xaxis,
           title: { text: axisTitle(data.xlabel, data.xunit) },
-          range: nonUniform ? undefined : [data.x0, xEnd],
+          range: nonUniform ? undefined : [extent.xMin, extent.xMax],
           autorange: nonUniform ? true : false,
         },
         yaxis: {
           ...theme.yaxis,
           title: { text: axisTitle(data.ylabel, data.yunit) },
-          range: nonUniform ? undefined : [yEnd, data.y0],
+          range: nonUniform ? undefined : [extent.yMax, extent.yMin],
           autorange: nonUniform ? "reversed" : false,
         },
       }}

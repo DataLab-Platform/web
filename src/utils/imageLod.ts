@@ -19,10 +19,10 @@
  * ``data.data`` and are never affected by the LOD path.
  */
 
-/** Uniform-image geometry: pixel (i, j) covers physical X in
- *  ``[x0 + i*dx, x0 + (i+1)*dx)`` and Y in ``[y0 + j*dy, y0 + (j+1)*dy)``.
- *  ``x0``/``y0`` are the upper-left corner of the first pixel (the Plotly
- *  ``image``-trace convention, with no half-pixel offset). */
+/** Uniform-image geometry, following the Sigima convention: ``x0``/``y0`` are
+ *  the physical coordinates of the **center** of the first pixel, so pixel
+ *  (i, j) is centered on ``(x0 + i*dx, y0 + j*dy)`` and covers physical X in
+ *  ``[x0 + (i - ½)*dx, x0 + (i + ½)*dx)`` (same for Y). */
 export interface ImageGeometry {
   width: number;
   height: number;
@@ -100,10 +100,12 @@ export function visibleWindow(
   if (view === null) {
     return { i0: 0, i1: width, j0: 0, j1: height };
   }
-  const xa = (view.x[0] - x0) / dx;
-  const xb = (view.x[1] - x0) / dx;
-  const ya = (view.y[0] - y0) / dy;
-  const yb = (view.y[1] - y0) / dy;
+  // Fractional indices measured from the outer edge of the first pixel, so
+  // that pixel ``i`` spans ``[i, i + 1)``.
+  const xa = (view.x[0] - x0) / dx + 0.5;
+  const xb = (view.x[1] - x0) / dx + 0.5;
+  const ya = (view.y[0] - y0) / dy + 0.5;
+  const yb = (view.y[1] - y0) / dy + 0.5;
   let i0 = Math.floor(Math.min(xa, xb));
   let i1 = Math.ceil(Math.max(xa, xb));
   let j0 = Math.floor(Math.min(ya, yb));
@@ -157,12 +159,12 @@ export function rasterPlan(
 }
 
 /**
- * Physical placement of the rasterised bitmap as a Plotly ``image`` trace.
+ * Physical placement of the rasterised bitmap as a Plotly layout image.
  *
  * Each output cell spans ``strideX × strideY`` source pixels, so the cell
- * size is ``dx*strideX`` / ``dy*strideY`` and the origin is the upper-left
- * corner of the first source pixel of the window — no half-pixel offset, as
- * the Plotly ``image`` trace expects.
+ * size is ``dx*strideX`` / ``dy*strideY``, and the bitmap's upper-left corner
+ * ``(x, y)`` is the outer edge of the first source pixel of the window — half a
+ * pixel before its center.
  *
  * @param plan Rasterisation plan from :func:`rasterPlan`.
  * @param geom Uniform-image geometry.
@@ -170,11 +172,11 @@ export function rasterPlan(
 export function windowPlacement(
   plan: RasterPlan,
   geom: ImageGeometry,
-): { x0: number; dx: number; y0: number; dy: number } {
+): { x: number; dx: number; y: number; dy: number } {
   return {
-    x0: geom.x0 + plan.i0 * geom.dx,
+    x: geom.x0 + (plan.i0 - 0.5) * geom.dx,
     dx: geom.dx * plan.strideX,
-    y0: geom.y0 + plan.j0 * geom.dy,
+    y: geom.y0 + (plan.j0 - 0.5) * geom.dy,
     dy: geom.dy * plan.strideY,
   };
 }

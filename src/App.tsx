@@ -164,6 +164,7 @@ import {
   writeBytesToHandle,
 } from "./utils/saveFile";
 import { formatBytes } from "./utils/memory";
+import { imageCenter, imageExtent } from "./utils/pixelCenters";
 import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
@@ -254,6 +255,39 @@ interface PendingPlotResults {
   index: number;
   /** Ids of every result signal created so far across categories. */
   createdIds: string[];
+}
+
+/** Default image rectangle (new ROI or area to erase): a quarter of the
+ *  image extent, centered on its pixel grid. */
+function defaultImageRectangle(img: ImageData): ImageRoiSegment {
+  const { xMin, xMax, yMin, yMax } = imageExtent(img);
+  const center = imageCenter(img);
+  const sx = (xMax - xMin) / 4 || 1;
+  const sy = (yMax - yMin) / 4 || 1;
+  return {
+    geometry: "rectangle",
+    title: "",
+    inverse: false,
+    x0: center.x - sx / 2,
+    y0: center.y - sy / 2,
+    dx: sx,
+    dy: sy,
+  };
+}
+
+/** Default image circle ROI, centered on the pixel grid of the image. */
+function defaultImageCircle(img: ImageData): ImageRoiSegment {
+  const { xMin, xMax, yMin, yMax } = imageExtent(img);
+  const center = imageCenter(img);
+  const r = Math.min(xMax - xMin, yMax - yMin) / 4 || 1;
+  return {
+    geometry: "circle",
+    title: "",
+    inverse: false,
+    xc: center.x,
+    yc: center.y,
+    r,
+  };
 }
 
 /** Build the (hand-made, fully localised) DataSet schema for one
@@ -3143,21 +3177,9 @@ export default function App() {
 
   const handleImageAddRectangle = useCallback(async () => {
     if (!runtime || !currentId || !imageData) return;
-    const sx = (imageData.width * imageData.dx) / 4 || 1;
-    const sy = (imageData.height * imageData.dy) / 4 || 1;
-    const x0 = imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
-    const y0 = imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
     const next: ImageRoiSegment[] = [
       ...imageRoi,
-      {
-        geometry: "rectangle",
-        title: "",
-        inverse: false,
-        x0,
-        y0,
-        dx: sx,
-        dy: sy,
-      },
+      defaultImageRectangle(imageData),
     ];
     setImageRoi(next);
     setRoiDrawGeometry(null);
@@ -3168,16 +3190,9 @@ export default function App() {
 
   const handleImageAddCircle = useCallback(async () => {
     if (!runtime || !currentId || !imageData) return;
-    const r =
-      Math.min(
-        imageData.width * imageData.dx,
-        imageData.height * imageData.dy,
-      ) / 4 || 1;
-    const xc = imageData.x0 + (imageData.width * imageData.dx) / 2;
-    const yc = imageData.y0 + (imageData.height * imageData.dy) / 2;
     const next: ImageRoiSegment[] = [
       ...imageRoi,
-      { geometry: "circle", title: "", inverse: false, xc, yc, r },
+      defaultImageCircle(imageData),
     ];
     setImageRoi(next);
     setRoiDrawGeometry(null);
@@ -3375,21 +3390,7 @@ export default function App() {
    *  Mirrors DataLab desktop's ``compute_erase``. */
   const handleOpenErase = useCallback(() => {
     if (!runtime || !currentId || !imageData) return;
-    const sx = (imageData.width * imageData.dx) / 4 || 1;
-    const sy = (imageData.height * imageData.dy) / 4 || 1;
-    const x0 = imageData.x0 + (imageData.width * imageData.dx) / 2 - sx / 2;
-    const y0 = imageData.y0 + (imageData.height * imageData.dy) / 2 - sy / 2;
-    setEraseRegions([
-      {
-        geometry: "rectangle",
-        title: "",
-        inverse: false,
-        x0,
-        y0,
-        dx: sx,
-        dy: sy,
-      },
-    ]);
+    setEraseRegions([defaultImageRectangle(imageData)]);
     setSelectedRoiIndex(0);
     setActiveRoiVertex(null);
     setRoiDrawGeometry("rectangle");
@@ -5218,12 +5219,7 @@ export default function App() {
                   imageRoi={imageEraseMode ? eraseRegions : imageRoi}
                   bounds={
                     treeKind === "image" && imageData
-                      ? {
-                          xMin: imageData.x0,
-                          xMax: imageData.x0 + imageData.width * imageData.dx,
-                          yMin: imageData.y0,
-                          yMax: imageData.y0 + imageData.height * imageData.dy,
-                        }
+                      ? imageExtent(imageData)
                       : {
                           xMin: data?.x[0] ?? 0,
                           xMax: data?.x[(data?.x.length ?? 1) - 1] ?? 1,
