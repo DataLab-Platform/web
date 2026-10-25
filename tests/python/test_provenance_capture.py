@@ -20,6 +20,7 @@ else:
 
 import sigima.objects  # noqa: E402
 from sigima.config import options  # noqa: E402
+from sigima.proc.contracts import build_contract_registry  # noqa: E402
 from test_provenance_workspace import fresh_runtime  # noqa: E402
 
 X = np.array([0.0, 0.25, 0.5, 0.75])
@@ -263,7 +264,7 @@ def run_families(bs) -> None:
     bs.apply_feature("add_gaussian_noise", oids[:1], params={"seed": 7, "sigma": 0.5})
     asyncio.run(bs.run_signal_analysis(oids[0], "stats"))
     image = add_image(bs)
-    profile = {"direction": "horizontal", "row": 1}
+    profile = {"direction": "horizontal", "y": 1}
     bs.apply_feature("image:line_profile", [image], params=profile)
     asyncio.run(bs.run_image_analysis(image, "centroid"))
     kernel = add_image(bs, "K")
@@ -566,6 +567,13 @@ FAMILIES_REFERENCE = [
     "sigima.image.peak_detection",
 ]
 
+#: Local contract versions: a reference file written before a change of the result
+#: of an operation records an older version, refused instead of being replayed
+LOCAL_VERSIONS = {
+    contract.operation_id: contract.contract_version
+    for contract in build_contract_registry().contracts
+}
+
 
 @pytest.mark.parametrize("edition", ["web", "desktop"])
 def test_families_reference_files(edition: str):
@@ -573,7 +581,8 @@ def test_families_reference_files(edition: str):
 
     The same scenario is written by DataLab Desktop (``desktop_families.h5``)
     and from Pyodide (``web_families.h5``, see ``provenance_families.spec.ts``):
-    every activity is identified and replayed under the declared rule.
+    every activity is identified and replayed under the declared rule, unless
+    it was recorded with an older contract version (refused).
     """
     name = f"{edition}_families.h5"
     bs = fresh_runtime()
@@ -584,5 +593,10 @@ def test_families_reference_files(edition: str):
     assert activities[-1]["outputs"] == []  # nothing detected on the ramp
     for activity in activities:
         report = bs.replay_activity(activity["activity_id"])
+        operation = activity["call"]["operation"]
+        if operation["contract_version"] != LOCAL_VERSIONS[operation["id"]]:
+            assert report["eligibility"] == "unsupported_contract", report
+            assert report["verdict"] == "not_verified", report
+            continue
         assert report["eligibility"] == "ready", report
         assert report["verdict"] in ("exact", "within_tolerance"), report

@@ -206,13 +206,13 @@ def test_image_to_signal_conversion():
     """Conversion image -> signal: restored and applied again."""
     writer = fresh_runtime()
     image = writer.add_image_from_array("I", np.outer(np.hanning(32), np.hanning(32)))
-    params = {"center": "user", "x0": 16, "y0": 16}
+    params = {"center": "user", "xc": 16, "yc": 16}
     (profile,) = writer.apply_feature("image:radial_profile", [image], params=params)
     reader, oid_of = reopen(writer)
     record = reader.get_last_processing(oid_of(profile))
-    assert (record["values"]["x0"], record["values"]["y0"]) == (16, 16)
+    assert (record["values"]["xc"], record["values"]["yc"]) == (16, 16)
     reader.reapply_last_processing(
-        oid_of(profile), dict(record["values"], x0=10, y0=10)
+        oid_of(profile), dict(record["values"], xc=10, yc=10)
     )
     activity = reader._PROVENANCE.ledger.activities[-1]
     assert inputs_of(reader, activity) == [("source", uuid_of(reader, oid_of(image)))]

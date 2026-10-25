@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { ProfileDefinitionDialog } from "../../../src/components/ProfileDefinitionDialog";
+import {
+  ProfileDefinitionDialog,
+  buildShape,
+  shapeToValues,
+} from "../../../src/components/ProfileDefinitionDialog";
+import { pixelCenters } from "../../../src/utils/pixelCenters";
 import type {
   FeatureDescriptor,
   ImageData,
@@ -107,18 +112,16 @@ function renderDialog(
         payload={{
           schema: {
             type: "object",
-            required: ["row"],
+            required: ["y"],
             properties: {
-              row: {
-                type: "integer",
-                minimum: 0,
-                maximum: 1,
-                "x-guidata-kind": "int",
-                "x-guidata-label": "Row",
+              y: {
+                type: "number",
+                "x-guidata-kind": "float",
+                "x-guidata-label": "Y",
               },
             },
           },
-          values: { row: 0, direction: "horizontal" },
+          values: { y: 0, direction: "horizontal" },
         }}
         imageData={imageData}
         onSubmit={onSubmit}
@@ -137,7 +140,7 @@ describe("ProfileDefinitionDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Profile definition" }),
     ).toBeTruthy();
-    expect(screen.getByRole("slider")).toBeTruthy();
+    expect(screen.getByRole("spinbutton")).toBeTruthy();
     await waitFor(() =>
       expect(screen.getAllByTestId("profile-plot")).toHaveLength(2),
     );
@@ -152,7 +155,7 @@ describe("ProfileDefinitionDialog", () => {
       expect(previewFeature).toHaveBeenCalledWith(
         "image:line_profile",
         "image-1",
-        { row: 0, direction: "horizontal" },
+        { y: 0, direction: "horizontal" },
         expect.any(String),
       ),
     );
@@ -170,7 +173,7 @@ describe("ProfileDefinitionDialog", () => {
     renderDialog(runtime, () => undefined, false);
 
     expect(screen.getAllByTestId("profile-plot")).toHaveLength(1);
-    expect(screen.getByRole("slider")).toBeTruthy();
+    expect(screen.getByRole("spinbutton")).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: "Preview" })).toBeNull();
     expect(previewFeature).not.toHaveBeenCalled();
   });
@@ -186,9 +189,82 @@ describe("ProfileDefinitionDialog", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
-        { row: 0, direction: "horizontal" },
+        { y: 0, direction: "horizontal" },
         expect.any(String),
       ),
     );
+  });
+});
+
+describe("profile geometry (physical coordinates)", () => {
+  // Calibrated image: pixel centers at x = -10, -9.5, -9 and y = 5, 7
+  const calibrated: ImageData = {
+    ...imageData,
+    width: 3,
+    height: 2,
+    data: [
+      [0, 1, 2],
+      [3, 4, 5],
+    ],
+    x0: -10,
+    y0: 5,
+    dx: 0.5,
+    dy: 2,
+  };
+
+  it("uses the pixel centers of Sigima (origin at the first center)", () => {
+    expect(pixelCenters(calibrated, "x")).toEqual([-10, -9.5, -9]);
+    expect(pixelCenters(calibrated, "y")).toEqual([5, 7]);
+    const nonUniform: ImageData = {
+      ...calibrated,
+      is_uniform_coords: false,
+      xcoords: [0, 1, 4],
+      ycoords: [10, 30],
+    };
+    expect(pixelCenters(nonUniform, "x")).toEqual([0, 1, 4]);
+  });
+
+  it("draws the shape from the physical parameters", () => {
+    const line = buildShape(
+      "line_profile",
+      { direction: "horizontal", y: 6.5 },
+      calibrated,
+    );
+    expect(line).toMatchObject({ x0: -10.25, x1: -8.75, y0: 6.5, y1: 6.5 });
+    // Undefined bounds of the average profile stand for the image edges
+    const rect = buildShape(
+      "average_profile",
+      { direction: "vertical", x1: -9.6, y1: null, x2: null, y2: null },
+      calibrated,
+    );
+    expect(rect).toMatchObject({ x0: -9.6, y0: 4, x1: -8.75, y1: 8 });
+  });
+
+  it("commits the drawn shape as physical parameters", () => {
+    expect(
+      shapeToValues(
+        "line_profile",
+        { direction: "vertical", x: -10 },
+        calibrated,
+        { x0: -9.4, x1: -9.4 },
+      ),
+    ).toEqual({ direction: "vertical", x: -9.4 });
+    // Points beyond the image are brought back to the outermost pixel centers
+    expect(
+      shapeToValues(
+        "segment_profile",
+        { x1: -10, y1: 5, x2: -9, y2: 7 },
+        calibrated,
+        { x0: -20, y0: 6, x1: 3, y1: 50 },
+      ),
+    ).toEqual({ x1: -10, y1: 6, x2: -9, y2: 7 });
+    expect(
+      shapeToValues(
+        "average_profile",
+        { direction: "horizontal", x1: null, y1: null, x2: null, y2: null },
+        calibrated,
+        { x0: -9, y0: 7.5, x1: -9.8, y1: 4.5 },
+      ),
+    ).toEqual({ direction: "horizontal", x1: -9.8, y1: 4.5, x2: -9, y2: 7.5 });
   });
 });

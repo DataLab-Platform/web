@@ -170,7 +170,7 @@ async function runFamilies(
           });
           await runtime.applyFeature("image:line_profile", [image], null, {
             direction: "horizontal",
-            row: 1,
+            y: 1,
           });
           await runtime.runImageAnalysis(image, "centroid");
           const kernel = await runtime.addImageFromArray({

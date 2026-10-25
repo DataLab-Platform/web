@@ -14,8 +14,9 @@
  *
  * * editing values in the form moves the shape;
  * * dragging the shape on the plot updates the matching values
- *   (``row``/``col`` for ``line_profile``, ``row1``/``col1``/``row2``/
- *   ``col2`` for ``segment_profile`` and ``average_profile``).
+ *   (``y``/``x`` for ``line_profile``, ``x1``/``y1``/``x2``/``y2`` for
+ *   ``segment_profile`` and ``average_profile``), in the physical
+ *   coordinates of the image, as Sigima expects them.
  *
  * On ``OK`` the dialog returns the same ``Record<string, unknown>`` of
  * values that :class:`DataSetDialog` would, so the surrounding
@@ -38,6 +39,7 @@ import {
   ProcessingPreview,
   type ProcessingPreviewHandle,
 } from "./ProcessingPreview";
+import { pixelCenters } from "../utils/pixelCenters";
 
 export type ProfileFeatureId =
   "line_profile" | "segment_profile" | "average_profile";
@@ -70,20 +72,38 @@ interface Props {
 }
 
 // ---------------------------------------------------------------------------
-// Pixel ⇄ physical coordinate conversion
+// Image geometry (Sigima convention: ``x0``/``y0`` are the center of the
+// first pixel, ``xcoords``/``ycoords`` the pixel centers of non-uniform images)
 // ---------------------------------------------------------------------------
 
-const pixToX = (img: ImageData, col: number) => img.x0 + (col + 0.5) * img.dx;
-const pixToY = (img: ImageData, row: number) => img.y0 + (row + 0.5) * img.dy;
-const xToPix = (img: ImageData, x: number) =>
-  Math.max(0, Math.min(img.width - 1, Math.round((x - img.x0) / img.dx - 0.5)));
-const yToPix = (img: ImageData, y: number) =>
-  Math.max(
-    0,
-    Math.min(img.height - 1, Math.round((y - img.y0) / img.dy - 0.5)),
-  );
+/** Range of the pixel centers and outer edges of the pixels along an axis. */
+function axisExtent(img: ImageData, axis: "x" | "y") {
+  const c = pixelCenters(img, axis);
+  const first = c[0];
+  const last = c[c.length - 1];
+  const step = axis === "x" ? img.dx : img.dy;
+  const h0 = c.length > 1 ? (c[1] - c[0]) / 2 : step / 2;
+  const h1 = c.length > 1 ? (c[c.length - 1] - c[c.length - 2]) / 2 : step / 2;
+  return {
+    cmin: Math.min(first, last),
+    cmax: Math.max(first, last),
+    emin: Math.min(first - h0, last + h1),
+    emax: Math.max(first - h0, last + h1),
+  };
+}
+
+/** Bring a coordinate back to the range of the pixel centers. */
+const clipToCenters = (img: ImageData, axis: "x" | "y", v: number) => {
+  const { cmin, cmax } = axisExtent(img, axis);
+  return Math.max(cmin, Math.min(cmax, v));
+};
+
+/** Numeric value of an optional parameter (``None`` → *fallback*). */
+const num = (v: unknown, fallback: number) =>
+  v === null || v === undefined || v === "" ? fallback : Number(v);
+
 // ---------------------------------------------------------------------------
-// Profile shape derivation
+// Profile shape derivation (profile parameters are physical coordinates)
 // ---------------------------------------------------------------------------
 
 type PlotlyShape = Record<string, unknown>;
@@ -98,75 +118,64 @@ const SHAPE_RECT = {
   editable: true,
 } as const;
 
-function buildShape(
+export function buildShape(
   feature: ProfileFeatureId,
   values: Record<string, unknown>,
   img: ImageData,
 ): PlotlyShape | null {
-  const xMin = img.x0;
-  const xMax = img.x0 + img.width * img.dx;
-  const yMin = img.y0;
-  const yMax = img.y0 + img.height * img.dy;
+  const xe = axisExtent(img, "x");
+  const ye = axisExtent(img, "y");
+  const xMid = (xe.cmin + xe.cmax) / 2;
+  const yMid = (ye.cmin + ye.cmax) / 2;
   if (feature === "line_profile") {
     const direction = String(values.direction ?? "horizontal");
     if (direction === "horizontal") {
-      const row = Number(values.row ?? 0);
-      const y = pixToY(img, row);
+      const y = num(values.y, yMid);
       return {
         type: "line",
         xref: "x",
         yref: "y",
-        x0: xMin,
-        x1: xMax,
+        x0: xe.emin,
+        x1: xe.emax,
         y0: y,
         y1: y,
         ...SHAPE_LINE,
       };
     }
-    const col = Number(values.col ?? 0);
-    const x = pixToX(img, col);
+    const x = num(values.x, xMid);
     return {
       type: "line",
       xref: "x",
       yref: "y",
       x0: x,
       x1: x,
-      y0: yMin,
-      y1: yMax,
+      y0: ye.emin,
+      y1: ye.emax,
       ...SHAPE_LINE,
     };
   }
   if (feature === "segment_profile") {
-    const r1 = Number(values.row1 ?? 0);
-    const c1 = Number(values.col1 ?? 0);
-    const r2 = Number(values.row2 ?? 0);
-    const c2 = Number(values.col2 ?? 0);
     return {
       type: "line",
       xref: "x",
       yref: "y",
-      x0: pixToX(img, c1),
-      y0: pixToY(img, r1),
-      x1: pixToX(img, c2),
-      y1: pixToY(img, r2),
+      x0: num(values.x1, xe.cmin),
+      y0: num(values.y1, yMid),
+      x1: num(values.x2, xe.cmax),
+      y1: num(values.y2, yMid),
       ...SHAPE_LINE,
     };
   }
   if (feature === "average_profile") {
-    const r1 = Number(values.row1 ?? 0);
-    const c1 = Number(values.col1 ?? 0);
-    let r2 = Number(values.row2 ?? -1);
-    let c2 = Number(values.col2 ?? -1);
-    if (r2 < 0) r2 = img.height - 1;
-    if (c2 < 0) c2 = img.width - 1;
+    // Undefined bounds (``None``) stand for the edges of the image
     return {
       type: "rect",
       xref: "x",
       yref: "y",
-      x0: pixToX(img, c1) - img.dx / 2,
-      y0: pixToY(img, r1) - img.dy / 2,
-      x1: pixToX(img, c2) + img.dx / 2,
-      y1: pixToY(img, r2) + img.dy / 2,
+      x0: num(values.x1, xe.emin),
+      y0: num(values.y1, ye.emin),
+      x1: num(values.x2, xe.emax),
+      y1: num(values.y2, ye.emax),
       ...SHAPE_RECT,
     };
   }
@@ -177,7 +186,7 @@ function buildShape(
 // Shape ⇄ values (relayout handler)
 // ---------------------------------------------------------------------------
 
-function shapeToValues(
+export function shapeToValues(
   feature: ProfileFeatureId,
   values: Record<string, unknown>,
   img: ImageData,
@@ -200,34 +209,31 @@ function shapeToValues(
     if (direction === "horizontal") {
       // Use the average of y0/y1 (Plotly returns identical values for a
       // horizontal line, but be defensive).
-      const row = yToPix(img, (y0 + y1) / 2);
-      if (row === values.row) return null;
-      return { ...values, row };
+      const y = clipToCenters(img, "y", (y0 + y1) / 2);
+      if (y === values.y) return null;
+      return { ...values, y };
     }
-    const col = xToPix(img, (x0 + x1) / 2);
-    if (col === values.col) return null;
-    return { ...values, col };
+    const x = clipToCenters(img, "x", (x0 + x1) / 2);
+    if (x === values.x) return null;
+    return { ...values, x };
   }
   if (feature === "segment_profile") {
-    const row1 = yToPix(img, y0);
-    const col1 = xToPix(img, x0);
-    const row2 = yToPix(img, y1);
-    const col2 = xToPix(img, x1);
-    return { ...values, row1, col1, row2, col2 };
-  }
-  if (feature === "average_profile") {
-    // The shape is rendered with a half-pixel padding on each side; undo
-    // it before re-quantising back to pixel indices.
-    const row1 = yToPix(img, y0 + img.dy / 2);
-    const col1 = xToPix(img, x0 + img.dx / 2);
-    const row2 = yToPix(img, y1 - img.dy / 2);
-    const col2 = xToPix(img, x1 - img.dx / 2);
+    // Points beyond the image are brought back to the outermost pixels
     return {
       ...values,
-      row1: Math.min(row1, row2),
-      col1: Math.min(col1, col2),
-      row2: Math.max(row1, row2),
-      col2: Math.max(col1, col2),
+      x1: clipToCenters(img, "x", x0),
+      y1: clipToCenters(img, "y", y0),
+      x2: clipToCenters(img, "x", x1),
+      y2: clipToCenters(img, "y", y1),
+    };
+  }
+  if (feature === "average_profile") {
+    return {
+      ...values,
+      x1: Math.min(x0, x1),
+      y1: Math.min(y0, y1),
+      x2: Math.max(x0, x1),
+      y2: Math.max(y0, y1),
     };
   }
   return null;
@@ -296,16 +302,8 @@ export function ProfileDefinitionDialog(props: Props) {
     string | undefined;
 
   const traces = useMemo(() => {
-    const w = imageData.width;
-    const h = imageData.height;
-    const xs = Array.from(
-      { length: w },
-      (_, i) => imageData.x0 + (i + 0.5) * imageData.dx,
-    );
-    const ys = Array.from(
-      { length: h },
-      (_, j) => imageData.y0 + (j + 0.5) * imageData.dy,
-    );
+    const xs = pixelCenters(imageData, "x");
+    const ys = pixelCenters(imageData, "y");
     return [
       {
         type: "heatmap" as const,
