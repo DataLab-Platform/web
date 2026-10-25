@@ -64,6 +64,7 @@ beforeEach(() => {
       };
     },
     putImageData: () => {},
+    drawImage: () => {},
   })) as unknown as HTMLCanvasElement["getContext"];
   HTMLCanvasElement.prototype.toDataURL = vi.fn(
     () => `data:image/png;base64,STUB${++dataUrlCounter}`,
@@ -149,6 +150,13 @@ describe("MultiImageSpatialPlot", () => {
     // half a pixel before them.
     expect(imgs.map((m) => m.x).sort((p, q) => p - q)).toEqual([-0.5, 9.5]);
     expect(imgs.map((m) => m.y).sort((p, q) => p - q)).toEqual([-0.5, 4.5]);
+    // 2×2 images spread over the plot: their pixels are magnified and drawn
+    // with nearest-pixel scaling.
+    expect(
+      container
+        .querySelector(".multi-image-spatial-wrap")
+        ?.classList.contains("image-crisp-pixels"),
+    ).toBe(true);
   });
 
   it("spans the axis range across all images (Y reversed)", () => {
@@ -308,6 +316,9 @@ describe("MultiImageSpatialPlot", () => {
         0,
       ),
     ).toBeLessThan(1024 * 1024);
+    const wrap = () => container.querySelector(".multi-image-spatial-wrap");
+    // Decimated bitmaps keep the smooth rendering.
+    expect(wrap()?.classList.contains("image-crisp-pixels")).toBe(false);
 
     const plot = plotState.props as {
       onRelayout: (event: Record<string, unknown>) => void;
@@ -328,5 +339,7 @@ describe("MultiImageSpatialPlot", () => {
     expect(zoomed.sizex).toBe(16);
     expect(zoomed.sizey).toBe(16);
     expect(rasterSizes.at(-1)).toEqual({ width: 16, height: 16 });
+    // Zoomed in, the 16 visible pixels are magnified into sharp blocks.
+    expect(wrap()?.classList.contains("image-crisp-pixels")).toBe(true);
   });
 });

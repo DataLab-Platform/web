@@ -10,9 +10,11 @@
  *
  * The functions below are **pure** (no DOM, no Plotly) so they can be unit
  * tested exhaustively.  They compute, from the current axis ranges and the
- * on-screen plot size, *which* source pixels are visible and at *what* stride
- * they should be rasterised, plus the exact image-trace placement so the
- * decimated bitmap lands on the same physical coordinates as the full image.
+ * on-screen plot size, *which* source pixels are visible, at *what* stride
+ * they should be rasterised — or by what integer factor they should be
+ * magnified when zoomed in, so that they stay crisp — plus the exact
+ * placement so the bitmap lands on the same physical coordinates as the
+ * full image.
  *
  * Invariant: these helpers only drive the **display bitmap**.  Profiles,
  * statistics, histograms and hover read-outs always read the full-resolution
@@ -48,18 +50,30 @@ export interface PixelWindow {
   j1: number;
 }
 
-/** Rasterisation plan: which window, at what stride, producing a
- *  ``cw × ch`` output bitmap. */
+/** Rasterisation plan: which window, at what stride, painted as a ``cw × ch``
+ *  bitmap, then magnified by integer factors when zoomed in. */
 export interface RasterPlan {
   /** Top-left source pixel of the window. */
   i0: number;
   j0: number;
-  /** Output bitmap dimensions (pixels actually rasterised). */
+  /** Painted bitmap dimensions (cells actually rasterised). */
   cw: number;
   ch: number;
   /** Number of source pixels aggregated per output cell along each axis. */
   strideX: number;
   strideY: number;
+  /** Integer magnification of each painted cell into ``zoomX × zoomY``
+   *  bitmap pixels (nearest pixel), so that the browser never has to upscale
+   *  — and smooth — a zoomed-in image.  ``1`` when not zoomed in. */
+  zoomX: number;
+  zoomY: number;
+}
+
+/** Whether a plan magnifies its painted cells (zoomed in). */
+export function isMagnified(
+  plan: Pick<RasterPlan, "zoomX" | "zoomY">,
+): boolean {
+  return plan.zoomX > 1 || plan.zoomY > 1;
 }
 
 /** How source pixels are aggregated into one output cell when downsampling
@@ -126,13 +140,16 @@ export function visibleWindow(
 }
 
 /**
- * Decide the rasterisation stride and output bitmap size for a window.
+ * Decide the rasterisation stride, magnification and bitmap size for a window.
  *
- * When the window is smaller than the available display resolution (the user
- * is zoomed in) the stride is 1 and the output matches the window 1:1 — every
- * source pixel is shown.  When the window is larger (zoomed out) the stride is
- * the smallest integer that brings the output at or below the display
- * resolution, capped at ``maxDim``.
+ * When the window is larger than the available display resolution (zoomed
+ * out) the stride is the smallest integer that brings the output at or below
+ * the display resolution, capped at ``maxDim``.  Otherwise the stride is 1 —
+ * every source pixel is painted — and when each source pixel covers at least
+ * two device pixels (zoomed in), the painted cells are magnified by the
+ * largest integer factor that keeps the bitmap within the display
+ * resolution, so each pixel is drawn as a sharp block (nearest pixel, like
+ * DataLab desktop) instead of being upscaled — and smoothed — by the browser.
  *
  * @param win Visible pixel window.
  * @param plotW On-screen plot-area width in CSS pixels.
@@ -155,22 +172,26 @@ export function rasterPlan(
   const strideY = ny > availY ? Math.ceil(ny / availY) : 1;
   const cw = Math.ceil(nx / strideX);
   const ch = Math.ceil(ny / strideY);
-  return { i0: win.i0, j0: win.j0, cw, ch, strideX, strideY };
+  // ``avail`` is capped at ``maxDim``, so ``cw * zoomX <= maxDim``.
+  const zoomX = strideX === 1 ? Math.max(1, Math.floor(availX / cw)) : 1;
+  const zoomY = strideY === 1 ? Math.max(1, Math.floor(availY / ch)) : 1;
+  return { i0: win.i0, j0: win.j0, cw, ch, strideX, strideY, zoomX, zoomY };
 }
 
 /**
  * Physical placement of the rasterised bitmap as a Plotly layout image.
  *
- * Each output cell spans ``strideX × strideY`` source pixels, so the cell
- * size is ``dx*strideX`` / ``dy*strideY``, and the bitmap's upper-left corner
- * ``(x, y)`` is the outer edge of the first source pixel of the window — half a
- * pixel before its center.
+ * Each painted cell spans ``strideX × strideY`` source pixels, so the cell
+ * size is ``dx*strideX`` / ``dy*strideY`` (magnification only splits a cell
+ * into more bitmap pixels, the cell keeps its physical size), and the
+ * bitmap's upper-left corner ``(x, y)`` is the outer edge of the first source
+ * pixel of the window — half a pixel before its center.
  *
  * @param plan Rasterisation plan from :func:`rasterPlan`.
  * @param geom Uniform-image geometry.
  */
 export function windowPlacement(
-  plan: RasterPlan,
+  plan: Pick<RasterPlan, "i0" | "j0" | "strideX" | "strideY">,
   geom: ImageGeometry,
 ): { x: number; dx: number; y: number; dy: number } {
   return {
