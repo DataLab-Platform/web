@@ -166,9 +166,11 @@ export const PAGE_IN_ID_MAPPING_KEYS: readonly string[] = ["bindings"];
 export const NON_OBJECT_ID_KEYS: readonly string[] = [
   // Groups: group-wise processing always lists the selected objects in
   // ``source_ids`` too, and moving objects between groups reads no data.
+  // Instrument acquisitions only append objects to ``current_group_id``.
   "group_id",
   "group_ids",
   "target_group_id",
+  "current_group_id",
   // Provenance: consulting reads the ledger only; ``replay_activity`` pages
   // in the objects of its activity through ``PAGE_IN_RESOLVERS``.
   "activity_id",
