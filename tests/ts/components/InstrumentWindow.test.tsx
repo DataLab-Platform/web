@@ -38,6 +38,7 @@ const SESSION: PluginInstrumentSession = {
   tool_id: "simulator",
   title: "Camera simulator",
   live_interval_ms: 20,
+  new_group: true,
   settings: {
     schema: {
       type: "object",
@@ -62,8 +63,12 @@ const FRAME: PluginInstrumentFrame = {
   value_range: [0, 4095],
 };
 
+const NEW_GROUP_KEY =
+  "datalab-web.instrument-new-group.org.example.camera/simulator";
+
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.removeItem(NEW_GROUP_KEY);
   runtimeMock.openPluginInstrument.mockResolvedValue(SESSION);
   runtimeMock.previewPluginInstrument.mockResolvedValue(FRAME);
   runtimeMock.resolvePluginInstrumentActive.mockResolvedValue({});
@@ -80,6 +85,7 @@ function renderWindow(props: Partial<Parameters<typeof InstrumentWindow>[0]>) {
     <InstrumentWindow
       pluginId="org.example.camera"
       toolId="simulator"
+      currentGroupId={() => "g0"}
       onAcquired={() => {}}
       onClose={() => {}}
       {...props}
@@ -113,12 +119,64 @@ describe("InstrumentWindow", () => {
       "org.example.camera",
       "simulator",
       { exposure: 10 },
+      true,
+      null,
     );
     expect(
       await screen.findByText(
         "2 objects added to group 'Camera acquisition 001'",
       ),
     ).toBeTruthy();
+  });
+
+  it("acquires into the current group when 'New group' is off", async () => {
+    renderWindow({});
+    await screen.findByTestId("instrument-plot");
+    const newGroup = screen.getByRole("checkbox", {
+      name: "New group",
+    }) as HTMLInputElement;
+    expect(newGroup.checked).toBe(true);
+
+    fireEvent.click(newGroup);
+    expect(newGroup.checked).toBe(false);
+    expect(window.localStorage.getItem(NEW_GROUP_KEY)).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Acquire" }));
+    await waitFor(() =>
+      expect(runtimeMock.acquirePluginInstrument).toHaveBeenCalledWith(
+        "org.example.camera",
+        "simulator",
+        { exposure: 10 },
+        false,
+        "g0",
+      ),
+    );
+  });
+
+  it("starts 'New group' from the instrument, then from the user's choice", async () => {
+    runtimeMock.openPluginInstrument.mockResolvedValue({
+      ...SESSION,
+      new_group: false,
+    });
+    const { unmount } = renderWindow({});
+    await screen.findByTestId("instrument-plot");
+    const newGroup = screen.getByRole("checkbox", {
+      name: "New group",
+    }) as HTMLInputElement;
+    expect(newGroup.checked).toBe(false);
+    fireEvent.click(newGroup);
+    unmount();
+
+    renderWindow({});
+    await screen.findByTestId("instrument-plot");
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("checkbox", {
+            name: "New group",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(true),
+    );
   });
 
   it("refreshes the view continuously in live mode", async () => {

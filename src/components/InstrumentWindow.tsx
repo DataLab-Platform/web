@@ -22,9 +22,26 @@ const InstrumentPlot = lazy(() => import("./InstrumentPlot"));
 /** Delay between a settings change and the refresh of the view. */
 const REFRESH_DELAY_MS = 150;
 
+/** Storage key of the "New group" option chosen for an instrument. */
+function newGroupStorageKey(pluginId: string, toolId: string): string {
+  return `datalab-web.instrument-new-group.${pluginId}/${toolId}`;
+}
+
+/** Return the "New group" option chosen for an instrument, or null. */
+function readNewGroup(key: string): boolean | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw === null ? null : raw === "true";
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   pluginId: string;
   toolId: string;
+  /** Return the current group of the workspace, if any. */
+  currentGroupId: () => string | null;
   onAcquired: (result: PluginInstrumentAcquisition) => void | Promise<void>;
   onClose: () => void;
 }
@@ -36,11 +53,13 @@ function errorMessage(reason: unknown): string {
 /**
  * Window of a plugin instrument: live view on the left, settings on the
  * right. The view is refreshed when settings change, and periodically in
- * live mode; each acquisition is added to the workspace in a new group.
+ * live mode; each acquisition is added to the workspace in a new group or,
+ * when the "New group" option is off, in the current group.
  */
 export function InstrumentWindow({
   pluginId,
   toolId,
+  currentGroupId,
   onAcquired,
   onClose,
 }: Props) {
@@ -50,6 +69,7 @@ export function InstrumentWindow({
   const [valid, setValid] = useState(true);
   const [frame, setFrame] = useState<PluginInstrumentFrame | null>(null);
   const [live, setLive] = useState(false);
+  const [newGroup, setNewGroup] = useState(true);
   const [acquiring, setAcquiring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -76,6 +96,10 @@ export function InstrumentWindow({
         if (cancelled) return;
         setSession(opened);
         setValues(opened.settings.values);
+        setNewGroup(
+          readNewGroup(newGroupStorageKey(pluginId, toolId)) ??
+            opened.new_group,
+        );
       })
       .catch((reason) => {
         if (!cancelled) setError(errorMessage(reason));
@@ -136,6 +160,18 @@ export function InstrumentWindow({
     return () => window.clearInterval(timer);
   }, [live, refresh, session, valid]);
 
+  const changeNewGroup = (next: boolean) => {
+    setNewGroup(next);
+    try {
+      window.localStorage.setItem(
+        newGroupStorageKey(pluginId, toolId),
+        String(next),
+      );
+    } catch {
+      /* ignore quota / disabled storage */
+    }
+  };
+
   const acquire = async () => {
     if (!runtime || !session) return;
     setAcquiring(true);
@@ -146,6 +182,8 @@ export function InstrumentWindow({
         pluginId,
         toolId,
         settingsValues(),
+        newGroup,
+        newGroup ? null : currentGroupId(),
       );
       await onAcquired(result);
       if (mountedRef.current) {
@@ -227,15 +265,31 @@ export function InstrumentWindow({
                 <img src={getRootIconUrl("refresh-auto.svg")} alt="" />
                 {t("Live")}
               </button>
-              <button
-                type="button"
-                onClick={() => void acquire()}
-                disabled={!session || !valid || acquiring}
-                title={t("Add an acquisition to the workspace, in a new group")}
-              >
-                <img src={getRootIconUrl("record.svg")} alt="" />
-                {acquiring ? t("Acquiring…") : t("Acquire")}
-              </button>
+              <div className="instrument-acquire">
+                <label
+                  className="instrument-new-group"
+                  title={t(
+                    "Add each acquisition to a new group, otherwise to the current group of the panel",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={newGroup}
+                    onChange={(event) => changeNewGroup(event.target.checked)}
+                    disabled={!session}
+                  />
+                  {t("New group")}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void acquire()}
+                  disabled={!session || !valid || acquiring}
+                  title={t("Add an acquisition to the workspace")}
+                >
+                  <img src={getRootIconUrl("record.svg")} alt="" />
+                  {acquiring ? t("Acquiring…") : t("Acquire")}
+                </button>
+              </div>
             </div>
           </section>
         </div>

@@ -1568,6 +1568,15 @@ export default function App() {
     return selectedGroupIds.filter((gid) => present.has(gid));
   }, [selectedGroupIds, tree]);
 
+  /** Current group of the active panel, where instrument acquisitions go
+   *  when their "New group" option is off: the selected group, otherwise
+   *  the group of the current object (none in an empty panel). */
+  const instrumentCurrentGroupId = useCallback(
+    (): string | null =>
+      effectiveGroupIds()[0] ?? currentSelectionGroupId() ?? null,
+    [effectiveGroupIds, currentSelectionGroupId],
+  );
+
   const runFeature = useCallback(
     async (
       feature: FeatureDescriptor,
@@ -5569,6 +5578,7 @@ export default function App() {
             key={`${instrumentTool.pluginId}:${instrumentTool.toolId}`}
             pluginId={instrumentTool.pluginId}
             toolId={instrumentTool.toolId}
+            currentGroupId={instrumentCurrentGroupId}
             onAcquired={handleInstrumentAcquired}
             onClose={() => setInstrumentTool(null)}
           />

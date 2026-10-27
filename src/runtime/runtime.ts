@@ -697,6 +697,8 @@ export interface PluginInstrumentSession {
   title: string;
   settings: SchemaWithValues;
   live_interval_ms: number;
+  /** Default state of the "New group" option, set by the instrument. */
+  new_group: boolean;
 }
 
 /** Live frame of an instrument: signals drawn together, or one image. */
@@ -3845,16 +3847,22 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     };
   }
 
-  /** Add an acquisition of a plugin instrument to the workspace. */
+  /** Add an acquisition of a plugin instrument to the workspace: to the
+   *  current group *currentGroupId* when *newGroup* is false and this group
+   *  belongs to the panel of the acquired objects, otherwise to a new group. */
   async acquirePluginInstrument(
     pluginId: string,
     toolId: string,
     values: Record<string, unknown>,
+    newGroup = true,
+    currentGroupId: string | null = null,
   ): Promise<PluginInstrumentAcquisition> {
     return (await this.callPy("acquire_plugin_instrument", {
       plugin_id: pluginId,
       tool_id: toolId,
       values,
+      new_group: newGroup,
+      current_group_id: currentGroupId,
     })) as PluginInstrumentAcquisition;
   }
 

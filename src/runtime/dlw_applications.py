@@ -861,7 +861,8 @@ def _instrument(
 
 
 def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
-    """Return what an instrument window shows: title, settings, live period."""
+    """Return what an instrument window shows: title, settings, live period, and
+    default state of its **New group** option."""
 
     plugin = dlw_plugins.get_plugin_instance(plugin_id)
     tool = plugin.get_tool(tool_id)
@@ -875,6 +876,7 @@ def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
         "title": title,
         "settings": settings,
         "live_interval_ms": int(instrument.live_interval_ms),
+        "new_group": bool(instrument.new_group),
     }
 
 
@@ -909,12 +911,29 @@ def acquire_plugin_instrument(
     plugin_id: str,
     tool_id: str,
     values: Mapping[str, object] | None = None,
+    new_group: bool = True,
+    current_group_id: str | None = None,
 ) -> dict[str, Any]:
-    """Add an instrument acquisition to the workspace, in a new group."""
+    """Add an instrument acquisition to the workspace.
+
+    The objects are added to the current group *current_group_id* if
+    *new_group* is False and this group belongs to their panel, otherwise to a
+    new group titled after the acquisition.
+    """
     model, _object_uuid = _require_host()
     acquisition = _instrument(plugin_id, tool_id, values).acquire()
     kind = _output_kind(acquisition.objects[0])
-    group_id = model.create_group(kind, acquisition.group_title)
+    group_titles: dict[str, str] = {}
+    if not new_group and current_group_id:
+        group_titles = {
+            group["gid"]: group["name"] for group in model.panel_tree(kind)["groups"]
+        }
+    created = current_group_id not in group_titles
+    if created:
+        group_id = model.create_group(kind, acquisition.group_title)
+        group_title = acquisition.group_title
+    else:
+        group_id, group_title = current_group_id, group_titles[current_group_id]
     added: list[str] = []
     try:
         for obj in acquisition.objects:
@@ -922,12 +941,13 @@ def acquire_plugin_instrument(
     except Exception as exc:
         for oid in reversed(added):
             model.delete_object(oid)
-        model.delete_group(kind, group_id)
+        if created:
+            model.delete_group(kind, group_id)
         raise RecipeCommitError(str(exc)) from exc
     return {
         "panel": kind,
         "group_id": group_id,
-        "group_title": acquisition.group_title,
+        "group_title": group_title,
         "object_ids": added,
     }
 

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Instrument window — New group option:** a **New group** option, next to **Acquire**, lets you choose whether each acquisition goes to a new group, as before, or to the current group of the panel. With the option off, the next acquisitions accumulate in the group of the previous one, until you select another group; a new group is still created when the panel has no current group. Each instrument sets the default state of the option, and your choice is remembered for each instrument.
+
 ### Fixed
 
 - **Security — opened notebooks:** an opened `.ipynb` file can no longer change the look of DataLab-Web, cover it or contact a remote server. Its markdown cells and its HTML and SVG outputs are now displayed in their own isolated block: their styles no longer apply to the rest of the interface, and content positioned over the whole window stays inside the block, so it cannot hide commands or imitate a DataLab-Web dialog. Form fields are removed, and nothing is loaded from the network (remote images, style sheets, fonts or backgrounds), which prevents a notebook from tracking its opening. Images embedded in the notebook and the tables and styling of Sigima results are displayed as before.

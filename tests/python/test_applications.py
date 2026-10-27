@@ -786,3 +786,61 @@ def test_instrument_previews_acquires_and_resolves_active_settings(
     assert dlw_applications.resolve_plugin_instrument_active(
         PLUGIN_ID, "generator", {"shutter": True}
     )["rate"]
+
+
+def _signal_groups(bootstrap) -> dict[str, list[str]]:
+    """Return the object ids of each group of the signal panel."""
+    return {
+        group["gid"]: [obj["id"] for obj in group["objects"]]
+        for group in bootstrap._MODEL.panel_tree("signal")["groups"]
+    }
+
+
+def test_instrument_acquires_into_current_group(tools_env) -> None:
+    """With "New group" off, acquisitions go to the current group of their
+    panel; a new group is created without a current group of this panel."""
+    bootstrap, record = tools_env
+    opened = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    assert opened["new_group"] is True
+    record.instance.get_instrument("generator").new_group = False
+    assert (
+        dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")["new_group"]
+        is False
+    )
+
+    # No current group: a new group is created
+    first = dlw_applications.acquire_plugin_instrument(
+        PLUGIN_ID, "generator", {"count": 2}, new_group=False
+    )
+    assert first["group_title"] == "Generator acquisition"
+    groups = _signal_groups(bootstrap)
+    assert groups[first["group_id"]] == first["object_ids"]
+
+    # Current group: the objects are added to it
+    second = dlw_applications.acquire_plugin_instrument(
+        PLUGIN_ID,
+        "generator",
+        {"count": 1},
+        new_group=False,
+        current_group_id=first["group_id"],
+    )
+    assert second["group_id"] == first["group_id"]
+    assert second["group_title"] == "Generator acquisition"
+    assert _signal_groups(bootstrap) == {
+        **groups,
+        first["group_id"]: first["object_ids"] + second["object_ids"],
+    }
+
+    # A group of another panel, or "New group" on: a new group is created
+    image_group = bootstrap._MODEL.create_group("image", "Images")
+    for kwargs in (
+        {"new_group": False, "current_group_id": image_group},
+        {"new_group": True, "current_group_id": first["group_id"]},
+    ):
+        acquired = dlw_applications.acquire_plugin_instrument(
+            PLUGIN_ID, "generator", {"count": 1}, **kwargs
+        )
+        assert acquired["group_id"] not in groups
+        assert _signal_groups(bootstrap)[acquired["group_id"]] == acquired["object_ids"]
+    assert len(_signal_groups(bootstrap)) == len(groups) + 2
+    assert len(_signal_groups(bootstrap)[first["group_id"]]) == 3

@@ -3681,6 +3681,17 @@ input {
   background: color-mix(in srgb, var(--accent) 16%, var(--panel));
 }
 
+.instrument-acquire,
+.instrument-new-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.instrument-acquire {
+  gap: 12px;
+}
+
 @media (max-width: 760px) {
   .instrument-window-body {
     grid-template-columns: minmax(0, 1fr);
