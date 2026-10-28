@@ -18,6 +18,14 @@
   --accent-hover: #1177bb;
   --hover-bg: #353537;
   --danger: #c4302b;
+  /* Object tree: selection and object references (short ids, links),
+     chosen for a contrast of at least 4.5:1 in every row state. */
+  --object-meta: #aeb8c4;
+  --object-ref-link: #8ed4ff;
+  --object-selection-bg: #204a70;
+  --object-selection-text: #f0f0f0;
+  --object-selection-meta: #cbd5e1;
+  --object-selection-link: #8ed4ff;
   color-scheme: dark;
   font-family:
     "Segoe UI",
@@ -38,6 +46,12 @@
   --accent-hover: #1177bb;
   --hover-bg: #d8d8db;
   --danger: #c4302b;
+  --object-meta: #59636e;
+  --object-ref-link: #004b99;
+  --object-selection-bg: #cce8ff;
+  --object-selection-text: #202020;
+  --object-selection-meta: #4a5563;
+  --object-selection-link: #004b99;
   color-scheme: light;
 }
 
@@ -1660,7 +1674,13 @@ input {
 }
 
 .object-tree-group-header.selected {
-  background: rgba(14, 99, 156, 0.45);
+  background: var(--object-selection-bg);
+  color: var(--object-selection-text);
+}
+
+.object-tree-group-header.selected .object-tree-toggle,
+.object-tree-group-header.selected .object-tree-count {
+  color: var(--object-selection-meta);
 }
 
 .object-tree-toggle {
@@ -1774,16 +1794,21 @@ input {
   color: #fff;
 }
 
-.object-tree-item.selected {
-  background: rgba(14, 99, 156, 0.45);
-}
-
+.object-tree-item.selected,
 .object-tree-item.current {
-  background: var(--accent);
+  background: var(--object-selection-bg);
+  color: var(--object-selection-text);
 }
 
+/* The current object shares the selection background (links and ids stay
+   readable) and is told apart by a bar on its left edge. */
+.object-tree-item.current {
+  box-shadow: inset 3px 0 0 var(--object-selection-link);
+}
+
+.object-tree-item.selected .object-tree-meta,
 .object-tree-item.current .object-tree-meta {
-  color: #cce6ff;
+  color: var(--object-selection-meta);
 }
 
 /* Drag-and-drop visual feedback. */
@@ -1826,37 +1851,45 @@ input {
 
 .object-tree-meta {
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--object-meta);
 }
 
 /* Hex short-ID hyperlinks rendered inside computation titles by
    :class:`TitleWithLinks`. Stripped of all button chrome so they read
-   as inline text, then nudged towards the accent palette so users can
-   spot them at a glance. */
+   as inline text; a link color distinct from the title and a permanent
+   underline keep them recognizable as links in every row state. */
 .title-oid-link {
   appearance: none;
   background: none;
   border: none;
   padding: 0;
   margin: 0;
-  color: var(--accent);
+  color: var(--object-ref-link);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: inherit;
   cursor: pointer;
-  text-decoration: none;
-}
-
-.title-oid-link:hover,
-.title-oid-link:focus-visible {
   text-decoration: underline;
-  outline: none;
+  text-underline-offset: 2px;
 }
 
-/* When the host row is selected (white-on-accent), restore enough
-   contrast for the hex link to remain readable. */
+.object-tree-group-header.selected .title-oid-link,
+.object-tree-item.selected .title-oid-link,
 .object-tree-item.current .title-oid-link {
-  color: inherit;
-  text-decoration: underline;
+  color: var(--object-selection-link);
+}
+
+/* Override the global ``button:hover`` accent background, which made
+   the link vanish under the pointer. */
+.title-oid-link:hover:not(:disabled) {
+  background: none;
+  border-color: transparent;
+  text-decoration-thickness: 2px;
+}
+
+.title-oid-link:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 
 .object-tree-empty-group {
