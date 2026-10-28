@@ -8,6 +8,7 @@
  */
 
 import { lazy, Suspense, useEffect, useState } from "react";
+import { isNonExecutingMacroCall } from "../../aiassistant/tools";
 import type { Tool } from "../../aiassistant/types";
 import { t } from "../../i18n/translate";
 
@@ -59,6 +60,7 @@ export function ToolConfirmDialog({ request }: Props) {
   }
   const hasCompactArgs = Object.keys(compactArgs).length > 0;
   const compactArgsText = JSON.stringify(compactArgs, null, 2);
+  const noExec = isNonExecutingMacroCall(request.tool.name, request.args);
   const handleApprove = () => request.resolve({ approve: true, remember });
   const handleReject = () =>
     request.resolve({ approve: false, remember: false });
@@ -82,6 +84,16 @@ export function ToolConfirmDialog({ request }: Props) {
             "The assistant wants to run the following mutating tool. Review the arguments and approve or reject.",
           )}
         </p>
+        {noExec && (
+          <p
+            className="ai-tool-confirm-noexec"
+            style={{ fontSize: 13, fontWeight: 600 }}
+          >
+            {t(
+              "This macro will not be executed: approving only offers it for saving to the Macros panel.",
+            )}
+          </p>
+        )}
         <div
           style={{
             border: "1px solid var(--border)",
@@ -185,8 +197,16 @@ export function ToolConfirmDialog({ request }: Props) {
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
           />
-          {t("Auto-approve")} <code>{request.tool.name}</code>{" "}
-          {t("for the rest of this conversation")}
+          {noExec ? (
+            t(
+              "Auto-approve macros offered without being run for the rest of this conversation",
+            )
+          ) : (
+            <>
+              {t("Auto-approve")} <code>{request.tool.name}</code>{" "}
+              {t("for the rest of this conversation")}
+            </>
+          )}
         </label>
         <div className="actions" style={{ marginTop: 14 }}>
           <button type="button" onClick={handleReject}>

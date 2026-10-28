@@ -436,8 +436,33 @@ const CAPTURE_VIEW_TOOL: Tool = {
   },
 };
 
+/** Name of the macro tool — shared with the UI, which surfaces its
+ *  ``_macro`` echo as a "Save to Macros" button. */
+export const MACRO_TOOL_NAME = "create_and_run_macro";
+
+/** True when *args* request a macro that is offered for saving but not
+ *  executed (``autorun: false``). */
+export function isNonExecutingMacroCall(
+  toolName: string,
+  args: Record<string, unknown>,
+): boolean {
+  return toolName === MACRO_TOOL_NAME && args.autorun === false;
+}
+
+/** Key under which the "Auto-approve" choice of a tool call is
+ *  remembered. A macro offered without being executed gets its own key,
+ *  so approving it never auto-approves a macro that actually runs. */
+export function approvalKey(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  return isNonExecutingMacroCall(toolName, args)
+    ? `${toolName}:noexec`
+    : toolName;
+}
+
 const CREATE_AND_RUN_MACRO_TOOL: Tool = {
-  name: "create_and_run_macro",
+  name: MACRO_TOOL_NAME,
   description:
     "Run an arbitrary Python script (a 'macro') against the workspace. " +
     "The script executes in a sandboxed Pyodide worker and has access " +
@@ -447,10 +472,14 @@ const CREATE_AND_RUN_MACRO_TOOL: Tool = {
     "'Save to Macros' button on the result \u2014 always pick a short, " +
     "descriptive title (passed via the 'name' field, e.g. 'Generate " +
     "super-Gaussian') so the saved macro is easy to recognise. " +
-    "Returns the captured stdout/stderr. Use this only when the " +
-    "existing tools cannot express the required operation \u2014 e.g. " +
-    "complex multi-step workflows, custom NumPy code, or features not " +
-    "yet exposed as a dedicated tool.",
+    "Returns the captured stdout/stderr. Set 'autorun' to false when " +
+    "the user asks you to write (not run) a macro: the code is then " +
+    "only checked and offered to the user through the 'Save to Macros' " +
+    "button, without being executed. Use this tool for workflows that " +
+    "the other tools cannot express \u2014 e.g. complex multi-step " +
+    "workflows, custom NumPy code, signal shapes not supported by " +
+    "'create_synthetic_signal', or features not yet exposed as a " +
+    "dedicated tool.",
   parameters: {
     type: "object",
     properties: {
@@ -467,6 +496,13 @@ const CREATE_AND_RUN_MACRO_TOOL: Tool = {
           "to 'AI Assistant macro' but you should always provide a " +
           "specific name.",
       },
+      autorun: {
+        type: "boolean",
+        description:
+          "Run the macro (default true). Set to false to only check " +
+          "the code and offer it to the user for saving to the Macros " +
+          "panel, without executing it.",
+      },
     },
     required: ["code"],
     additionalProperties: false,
@@ -478,12 +514,26 @@ const CREATE_AND_RUN_MACRO_TOOL: Tool = {
       typeof args.name === "string" && args.name.trim()
         ? args.name.trim()
         : "AI Assistant macro";
-    const out = await runtime.runMacroCode(code, name);
     // Echo the source under ``_macro`` so the AI Assistant transcript
     // can offer a "Save to Macros" button on user demand. The leading
     // underscore is a hint that the field is UI-only — the LLM should
     // ignore it (it's not part of the macro's actual stdout/stderr).
-    return { ...out, _macro: { name, code } };
+    const macro = { name, code };
+    if (args.autorun === false) {
+      const lint = await runtime.lintMacro(code);
+      return {
+        autorun: false,
+        note:
+          "Macro not executed. The user can save it to the Macros " +
+          "panel with the 'Save to Macros' button.",
+        syntax_error: lint.syntax_error,
+        unknown_methods: lint.unknown_methods,
+        missing_await: lint.missing_await,
+        _macro: macro,
+      };
+    }
+    const out = await runtime.runMacroCode(code, name);
+    return { ...out, _macro: macro };
   },
 };
 
@@ -495,7 +545,7 @@ const GET_MACRO_CONSOLE_OUTPUT_TOOL: Tool = {
     "run yet). Useful when the previous tool result was truncated.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
   readonly: true,
-  handler: async (runtime) => runtime.lastMacroOutput,
+  handler: async (runtime) => runtime.getLastMacroOutput(),
 };
 
 /** Default tool registry shipped in v1. */

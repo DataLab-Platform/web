@@ -1564,6 +1564,14 @@ export interface MacroLintProxyCall extends MacroLintLocation {
 }
 
 /** Result of statically linting a macro source. */
+/** Captured output of a macro run by :meth:`DataLabRuntime.runMacroCode`. */
+export interface MacroRunOutput {
+  stdout: string;
+  stderr: string;
+  status: "ok" | "error" | "stopped";
+  error?: string;
+}
+
 export interface MacroLintResult {
   ok: boolean;
   syntax_error: { line: number; col: number; message: string } | null;
@@ -4756,16 +4764,10 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   // amortise the Pyodide worker cold-start across calls).
   // ---------------------------------------------------------------------
 
-  /** Last buffered output from :meth:`runMacroCode` (or ``null`` if no
-   *  macro has run yet through this runtime). Surfaced to the LLM via
-   *  the ``get_macro_console_output`` tool — useful when the previous
-   *  call truncated its output. */
-  lastMacroOutput: {
-    stdout: string;
-    stderr: string;
-    status: "ok" | "error" | "stopped";
-    error?: string;
-  } | null = null;
+  /** Last buffered output from :meth:`runMacroCode`, read through
+   *  :meth:`getLastMacroOutput` (a public *field* would not cross the
+   *  worker boundary: the worker-backed façade only forwards methods). */
+  private _lastMacroOutput: MacroRunOutput | null = null;
 
   private _macroRuntime: import("./MacroRuntime").MacroRuntime | null = null;
 
@@ -4778,20 +4780,24 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     return this._macroRuntime;
   }
 
+  /** Return the buffered output of the last macro run through
+   *  :meth:`runMacroCode` (or ``null`` if no macro has run yet through
+   *  this runtime). Surfaced to the LLM via the
+   *  ``get_macro_console_output`` tool — useful when the previous call
+   *  truncated its output. */
+  async getLastMacroOutput(): Promise<MacroRunOutput | null> {
+    return this._lastMacroOutput;
+  }
+
   /** Run *code* as a transient macro and resolve once it completes
    *  with the captured stdout/stderr.  The macro is NOT persisted in
-   *  the workspace's macro panel — use :meth:`saveMacro` to register
-   *  it on user demand. Output is also stashed in
-   *  :prop:`lastMacroOutput` for the ``get_macro_console_output`` tool. */
+   *  the workspace's macro panel: the AI Assistant UI saves it on user
+   *  demand through the Macros panel. Output is also kept for
+   *  :meth:`getLastMacroOutput`. */
   async runMacroCode(
     code: string,
     name = "AI Assistant macro",
-  ): Promise<{
-    stdout: string;
-    stderr: string;
-    status: "ok" | "error" | "stopped";
-    error?: string;
-  }> {
+  ): Promise<MacroRunOutput> {
     const macro = await this.ensureMacroRuntime();
     return new Promise((resolve, reject) => {
       let stdout = "";
@@ -4804,32 +4810,12 @@ await micropip.install(${JSON.stringify(bootRequirements)})
           },
           onFinished: (status, error) => {
             const out = { stdout, stderr, status, error };
-            this.lastMacroOutput = out;
+            this._lastMacroOutput = out;
             resolve(out);
           },
         })
         .catch(reject);
     });
-  }
-
-  /** Persist *code* in the workspace's macro panel under *name* and
-   *  notify open MacroPanel instances so the new entry shows up
-   *  immediately. Used by the AI Assistant's "Save to Macros" button
-   *  (the user explicitly opts in — macros run via
-   *  :meth:`runMacroCode` are otherwise transient). */
-  async saveMacro(
-    name: string,
-    code: string,
-  ): Promise<{ id: string; title: string }> {
-    const rec = await this.createMacro(name, code);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("dlw:macros-changed", {
-          detail: { id: rec.id, title: rec.title },
-        }),
-      );
-    }
-    return { id: rec.id, title: rec.title };
   }
 
   async listPlugins(): Promise<PluginRecord[]> {

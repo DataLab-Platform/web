@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  approvalKey,
   BUILTIN_TOOLS,
   callTool,
   indexTools,
+  isNonExecutingMacroCall,
 } from "../../../src/aiassistant/tools";
 import type { DataLabRuntime } from "../../../src/runtime/runtime";
 
@@ -172,5 +174,93 @@ describe("aiassistant/tools", () => {
     });
     expect(result.ok).toBe(true);
     expect((result.data as { new_id: string }).new_id).toBe("img-7");
+  });
+
+  it("runs create_and_run_macro by default and echoes the macro source", async () => {
+    const tool = indexTools(BUILTIN_TOOLS).get("create_and_run_macro")!;
+    const runMacroCode = vi.fn(async () => ({
+      stdout: "hi\n",
+      stderr: "",
+      status: "ok" as const,
+    }));
+    const lintMacro = vi.fn();
+    const runtime = fakeRuntime({ runMacroCode, lintMacro });
+    const result = await callTool(tool, runtime, {
+      code: "print('hi')",
+      name: "Say hi",
+    });
+    expect(runMacroCode).toHaveBeenCalledWith("print('hi')", "Say hi");
+    expect(lintMacro).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      stdout: "hi\n",
+      status: "ok",
+      _macro: { name: "Say hi", code: "print('hi')" },
+    });
+  });
+
+  it("only checks and offers the macro when autorun is false", async () => {
+    const tool = indexTools(BUILTIN_TOOLS).get("create_and_run_macro")!;
+    const runMacroCode = vi.fn();
+    const lintMacro = vi.fn(async () => ({
+      ok: false,
+      syntax_error: { line: 1, col: 5, message: "invalid syntax" },
+      unknown_methods: [],
+      missing_await: [],
+      proxy_calls: [],
+    }));
+    const runtime = fakeRuntime({ runMacroCode, lintMacro });
+    const result = await callTool(tool, runtime, {
+      code: "x = (",
+      name: "Broken",
+      autorun: false,
+    });
+    expect(runMacroCode).not.toHaveBeenCalled();
+    expect(lintMacro).toHaveBeenCalledWith("x = (");
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      autorun: false,
+      syntax_error: { line: 1, message: "invalid syntax" },
+      _macro: { name: "Broken", code: "x = (" },
+    });
+  });
+
+  it("declares a documented autorun parameter on create_and_run_macro", () => {
+    const tool = indexTools(BUILTIN_TOOLS).get("create_and_run_macro")!;
+    const props = tool.parameters.properties as Record<
+      string,
+      { type: string; description?: string }
+    >;
+    expect(props.autorun?.type).toBe("boolean");
+    expect(props.autorun?.description).toMatch(/without executing/i);
+  });
+
+  it("reads get_macro_console_output through getLastMacroOutput", async () => {
+    const tool = indexTools(BUILTIN_TOOLS).get("get_macro_console_output")!;
+    const out = { stdout: "done\n", stderr: "", status: "ok" as const };
+    const getLastMacroOutput = vi.fn(async () => out);
+    const result = await callTool(
+      tool,
+      fakeRuntime({ getLastMacroOutput }),
+      {},
+    );
+    expect(getLastMacroOutput).toHaveBeenCalledOnce();
+    expect(result.data).toEqual(out);
+  });
+
+  it("remembers approvals of non-executing macros under their own key", () => {
+    expect(
+      isNonExecutingMacroCall("create_and_run_macro", { autorun: false }),
+    ).toBe(true);
+    expect(isNonExecutingMacroCall("create_and_run_macro", {})).toBe(false);
+    expect(
+      isNonExecutingMacroCall("apply_processing", { autorun: false }),
+    ).toBe(false);
+    expect(approvalKey("create_and_run_macro", { autorun: false })).not.toBe(
+      approvalKey("create_and_run_macro", { autorun: true }),
+    );
+    expect(approvalKey("create_and_run_macro", {})).toBe(
+      "create_and_run_macro",
+    );
   });
 });

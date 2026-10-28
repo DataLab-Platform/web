@@ -145,8 +145,9 @@ interface MacroState extends MacroMeta {
 
 /**
  * Imperative handle exposed by :class:`MacroPanel` so external UI
- * (notebook → macro conversion, future menu actions) can inject a
- * ready-made macro into the panel without having to be visible.
+ * (notebook → macro conversion, the AI Assistant's "Save to Macros"
+ * buttons) can inject a ready-made macro into the panel without having
+ * to be visible.
  */
 export interface MacroPanelHandle {
   /** Persist a fresh macro and open it as the active tab. */
@@ -320,10 +321,10 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     // ---------------------------------------------------------------------
 
     // Ids of macros the user has actually touched this session (edited,
-    // renamed, imported, duplicated, opened from Recent… or created by
-    // the AI assistant). Only these are mirrored into the IndexedDB
-    // recent cache, so pristine auto-created sample macros never
-    // pollute it (option C).
+    // renamed, imported, duplicated, opened from Recent…, converted from
+    // a notebook or saved from the AI assistant). Only these are mirrored
+    // into the IndexedDB recent cache, so pristine auto-created sample
+    // macros never pollute it (option C).
     const touchedIdsRef = useRef<Set<string>>(new Set());
 
     const persistMirror = useCallback((next: MacroState[]) => {
@@ -340,54 +341,6 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         }).catch(() => undefined);
       }
     }, []);
-
-    // ---------------------------------------------------------------------
-    // External macro events: re-load when something outside the panel
-    // (currently the AI Assistant's ``create_and_run_macro`` tool)
-    // creates a macro behind our back. We refresh the full list rather
-    // than blindly appending to keep title/code in sync if Python
-    // mutated existing entries too.
-    // ---------------------------------------------------------------------
-    useEffect(() => {
-      if (!loaded) return;
-      const handler = async (event: Event) => {
-        try {
-          const metas = await runtime.listMacros();
-          const full = await Promise.all(
-            metas.map((m) => runtime.getMacro(m.id)),
-          );
-          setMacros(
-            full.map((m) => ({ id: m.id, title: m.title, code: m.code })),
-          );
-          // Open and focus the freshly created macro if the event
-          // carries an id; otherwise leave the active tab alone.
-          const detail = (event as CustomEvent).detail as
-            { id?: string } | undefined;
-          const newId = detail?.id;
-          if (newId && full.some((m) => m.id === newId)) {
-            // Macros created behind our back (AI assistant) carry real
-            // content — surface them through the "Recent…" menu too.
-            touchedIdsRef.current.add(newId);
-            const created = full.find((m) => m.id === newId);
-            if (created) {
-              void recordRecent("macro", {
-                id: created.id,
-                title: created.title,
-                content: created.code,
-              }).catch(() => undefined);
-            }
-            setOpenIds((prev) =>
-              prev.includes(newId) ? prev : [...prev, newId],
-            );
-            setActiveId(newId);
-          }
-        } catch (err) {
-          console.error("Failed to refresh macros after external change:", err);
-        }
-      };
-      window.addEventListener("dlw:macros-changed", handler);
-      return () => window.removeEventListener("dlw:macros-changed", handler);
-    }, [loaded, runtime]);
 
     useEffect(() => {
       if (!loaded) return;

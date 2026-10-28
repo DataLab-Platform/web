@@ -565,6 +565,18 @@ export default function App() {
       setCentralView("macro");
     }
   }, [macroFloating, setMacroFloating]);
+  // "Save to Macros" in the AI Assistant: the Macros panel saves the
+  // macro (whatever the runtime mode) and shows it. A floating Macros
+  // panel is already visible, so only the docked one gets focus.
+  const saveMacroFromAssistant = useCallback(
+    async (title: string, code: string) => {
+      const panel = macroPanelRef.current;
+      if (!panel) throw new Error("Macros panel is not available yet");
+      await panel.importMacro(title, code);
+      if (!macroFloating) setCentralView("macro");
+    },
+    [macroFloating],
+  );
   // Stable DOM containers for the Notebook / Macro panels.  They are
   // moved between the central area and the FloatingDockStack via
   // ``appendChild`` rather than being unmounted / remounted, so the
@@ -5296,6 +5308,7 @@ export default function App() {
               >
                 <AIAssistantPanel
                   runtime={runtime}
+                  onSaveMacro={saveMacroFromAssistant}
                   onMinimize={() => setAIPanelCollapsed(true)}
                   onClose={() => setAIPanelVisible(false)}
                 />
