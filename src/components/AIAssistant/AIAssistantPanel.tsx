@@ -19,7 +19,15 @@ import {
   saveSettings,
 } from "../../aiassistant/settings";
 import { SYSTEM_PROMPT } from "../../aiassistant/systemPrompt";
-import { BUILTIN_TOOLS } from "../../aiassistant/tools";
+import {
+  approvalKey,
+  BUILTIN_TOOLS,
+  MACRO_TOOL_NAME,
+} from "../../aiassistant/tools";
+import {
+  deriveMacroTitle,
+  extractMacroCodeBlocks,
+} from "../../aiassistant/macroCodeBlocks";
 import type {
   ChatMessage,
   ProviderSettings,
@@ -48,6 +56,10 @@ import { t } from "../../i18n/translate";
 
 interface Props {
   runtime: RuntimeApi;
+  /** Save a macro proposed by the assistant to the Macros panel (and
+   *  show it). Called by the "Save to Macros" buttons; a rejection is
+   *  reported on the button so the user can retry. */
+  onSaveMacro: (title: string, code: string) => Promise<void>;
   /** Optional callback to collapse the panel into the floating pill. */
   onMinimize?: () => void;
   /** Optional callback to fully hide the panel (same as the View menu
@@ -126,7 +138,12 @@ function CloseIcon() {
   );
 }
 
-export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
+export function AIAssistantPanel({
+  runtime,
+  onSaveMacro,
+  onMinimize,
+  onClose,
+}: Props) {
   const [settings, setSettings] = useState<ProviderSettings>(() =>
     loadSettings(),
   );
@@ -158,7 +175,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     inputHistoryRef.current = new InputHistory();
   }
 
-  // Per-conversation auto-approve memory keyed by tool name.
+  // Per-conversation auto-approve memory, keyed by :func:`approvalKey`
+  // (the tool name, refined for macros offered without being run).
   const autoApprovedRef = useRef<Set<string>>(new Set());
   // ``settings`` getter for the controller — wrapped through a ref so a
   // mid-conversation settings update is picked up by the next request
@@ -203,7 +221,8 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
   const confirmTool = useCallback(
     (tool: Tool, args: Record<string, unknown>): Promise<boolean> =>
       new Promise<boolean>((resolve) => {
-        if (autoApprovedRef.current.has(tool.name)) {
+        const key = approvalKey(tool.name, args);
+        if (autoApprovedRef.current.has(key)) {
           resolve(true);
           return;
         }
@@ -212,7 +231,7 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           args,
           resolve: ({ approve, remember }) => {
             if (approve && remember) {
-              autoApprovedRef.current.add(tool.name);
+              autoApprovedRef.current.add(key);
             }
             setPendingConfirm(null);
             resolve(approve);
@@ -265,6 +284,17 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [transcript, busy, pendingConfirm, streamingText]);
+
+  // For each transcript entry, the text of the user request it answers
+  // (latest user message at or before it) — names the macros saved from
+  // assistant replies.
+  const requestTexts = useMemo(() => {
+    let last: string | null = null;
+    return transcript.map(({ message }) => {
+      if (message.role === "user") last = messageText(message);
+      return last;
+    });
+  }, [transcript]);
 
   // On mount: try to restore the most-recent conversation. Runs at most
   // once even under React 18 strict-mode double invocation.
@@ -532,7 +562,12 @@ export function AIAssistantPanel({ runtime, onMinimize, onClose }: Props) {
           </div>
         )}
         {transcript.map((entry, idx) => (
-          <TranscriptItem key={idx} entry={entry} runtime={runtime} />
+          <TranscriptItem
+            key={idx}
+            entry={entry}
+            requestText={requestTexts[idx]}
+            onSaveMacro={onSaveMacro}
+          />
         ))}
         {streamingText && (
           <div
@@ -726,12 +761,22 @@ function formatUsageTooltip(turn: TokenUsage, cumulative: TokenUsage): string {
   return parts.length ? parts.join("\n") : t("No usage reported");
 }
 
+/** Plain text of a chat message (text parts of multimodal content). */
+function messageText(message: ChatMessage): string {
+  const { content } = message;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((p) => (p.type === "text" ? p.text : "")).join(" ");
+}
+
 function TranscriptItem({
   entry,
-  runtime,
+  requestText,
+  onSaveMacro,
 }: {
   entry: TranscriptEntry;
-  runtime: RuntimeApi;
+  requestText: string | null;
+  onSaveMacro: (title: string, code: string) => Promise<void>;
 }) {
   const { message } = entry;
   if (message.role === "user") {
@@ -793,7 +838,14 @@ function TranscriptItem({
         }}
       >
         {message.content && message.content.trim() ? (
-          <MarkdownView text={message.content} />
+          <>
+            <MarkdownView text={message.content} />
+            <CodeBlockSaveButtons
+              text={message.content}
+              requestText={requestText}
+              onSaveMacro={onSaveMacro}
+            />
+          </>
         ) : null}
         {message.tool_calls && message.tool_calls.length > 0 && (
           <div
@@ -835,7 +887,7 @@ function TranscriptItem({
         // Macros echo their source under ``_macro`` so the UI can
         // surface a "Save to Macros" button on user demand.
         if (
-          message.name === "create_and_run_macro" &&
+          message.name === MACRO_TOOL_NAME &&
           parsed.result &&
           typeof parsed.result === "object"
         ) {
@@ -862,11 +914,125 @@ function TranscriptItem({
         preview={preview}
         fullText={fullText}
         macroToSave={macroToSave}
-        runtime={runtime}
+        onSaveMacro={onSaveMacro}
       />
     );
   }
   return null;
+}
+
+/** "Save to Macros" buttons under the Python code blocks of an
+ *  assistant reply (fallback when the model writes the macro in its
+ *  reply instead of proposing it through ``create_and_run_macro``). */
+function CodeBlockSaveButtons({
+  text,
+  requestText,
+  onSaveMacro,
+}: {
+  text: string;
+  requestText: string | null;
+  onSaveMacro: (title: string, code: string) => Promise<void>;
+}) {
+  const blocks = useMemo(() => extractMacroCodeBlocks(text), [text]);
+  if (blocks.length === 0) return null;
+  const title = deriveMacroTitle(requestText);
+  return (
+    <div
+      className="ai-codeblock-save"
+      style={{
+        marginTop: 6,
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        fontSize: 11,
+      }}
+    >
+      {blocks.map((code, i) => (
+        <SaveMacroButton
+          key={i}
+          title={title}
+          code={code}
+          onSaveMacro={onSaveMacro}
+          label={
+            blocks.length > 1
+              ? t("💾 Save code block {index} to Macros", { index: i + 1 })
+              : undefined
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Button saving one macro to the Macros panel, with its progress. */
+function SaveMacroButton({
+  title,
+  code,
+  onSaveMacro,
+  label,
+}: {
+  title: string;
+  code: string;
+  onSaveMacro: (title: string, code: string) => Promise<void>;
+  /** Idle label; defaults to "💾 Save to Macros". */
+  label?: string;
+}) {
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const handleSave = useCallback(async () => {
+    if (saveState === "saving" || saveState === "saved") return;
+    setSaveState("saving");
+    try {
+      await onSaveMacro(title, code);
+      setSaveState("saved");
+    } catch (err) {
+      console.error("Failed to save macro:", err);
+      setSaveState("error");
+    }
+  }, [code, onSaveMacro, saveState, title]);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={saveState === "saving" || saveState === "saved"}
+        style={{
+          fontSize: 11,
+          fontFamily: "inherit",
+          padding: "2px 8px",
+          cursor:
+            saveState === "saving" || saveState === "saved"
+              ? "default"
+              : "pointer",
+        }}
+      >
+        {saveState === "saved"
+          ? t("Saved ✓")
+          : saveState === "saving"
+            ? t("Saving…")
+            : saveState === "error"
+              ? t("Retry save")
+              : (label ?? t("💾 Save to Macros"))}
+      </button>
+      {saveState === "saved" && (
+        <span style={{ color: "var(--text-dim)" }}>
+          {t("as “{title}”", { title })}
+        </span>
+      )}
+      {saveState === "error" && (
+        <span style={{ color: "var(--error, #c33)" }}>
+          {t("save failed (see console)")}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function ToolTranscriptBubble({
@@ -874,30 +1040,14 @@ function ToolTranscriptBubble({
   preview,
   fullText,
   macroToSave,
-  runtime,
+  onSaveMacro,
 }: {
   name: string;
   preview: string;
   fullText: string;
   macroToSave: { name: string; code: string } | null;
-  runtime: RuntimeApi;
+  onSaveMacro: (title: string, code: string) => Promise<void>;
 }) {
-  const [saveState, setSaveState] = useState<
-    "idle" | "saving" | "saved" | "error"
-  >("idle");
-  const [savedTitle, setSavedTitle] = useState<string | null>(null);
-  const handleSave = useCallback(async () => {
-    if (!macroToSave || saveState === "saving" || saveState === "saved") return;
-    setSaveState("saving");
-    try {
-      const rec = await runtime.saveMacro(macroToSave.name, macroToSave.code);
-      setSavedTitle(rec.title);
-      setSaveState("saved");
-    } catch (err) {
-      console.error("Failed to save macro:", err);
-      setSaveState("error");
-    }
-  }, [macroToSave, runtime, saveState]);
   return (
     <div
       className="ai-bubble ai-bubble-tool"
@@ -939,46 +1089,12 @@ function ToolTranscriptBubble({
         </pre>
       </details>
       {macroToSave && (
-        <div
-          style={{
-            marginTop: 6,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saveState === "saving" || saveState === "saved"}
-            style={{
-              fontSize: 11,
-              fontFamily: "inherit",
-              padding: "2px 8px",
-              cursor:
-                saveState === "saving" || saveState === "saved"
-                  ? "default"
-                  : "pointer",
-            }}
-          >
-            {saveState === "saved"
-              ? t("Saved ✓")
-              : saveState === "saving"
-                ? t("Saving…")
-                : saveState === "error"
-                  ? t("Retry save")
-                  : t("💾 Save to Macros")}
-          </button>
-          {saveState === "saved" && savedTitle && (
-            <span style={{ color: "var(--text-dim)" }}>
-              {t("as “{title}”", { title: savedTitle })}
-            </span>
-          )}
-          {saveState === "error" && (
-            <span style={{ color: "var(--error, #c33)" }}>
-              {t("save failed (see console)")}
-            </span>
-          )}
+        <div style={{ marginTop: 6 }}>
+          <SaveMacroButton
+            title={macroToSave.name}
+            code={macroToSave.code}
+            onSaveMacro={onSaveMacro}
+          />
         </div>
       )}
     </div>
