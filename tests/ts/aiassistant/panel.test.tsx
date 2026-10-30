@@ -397,6 +397,47 @@ describe("AIAssistantPanel — Save to Macros", () => {
     );
   });
 
+  it("gives distinct titles to the macros of a reply with several blocks", async () => {
+    const SECOND_CODE = "print('second')";
+    vi.stubGlobal(
+      "fetch",
+      mockOpenAI([
+        {
+          content: [
+            "```python",
+            MACRO_CODE,
+            "```",
+            "",
+            "```python",
+            SECOND_CODE,
+            "```",
+          ].join("\n"),
+          toolCalls: [],
+        },
+      ]),
+    );
+    const onSaveMacro = vi.fn(async () => undefined);
+    render(
+      <AIAssistantPanel runtime={fakeRuntime()} onSaveMacro={onSaveMacro} />,
+      { wrapper: ThemeProvider },
+    );
+    await send("Plot two curves");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Save code block 1/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Save code block 2/i }));
+    await waitFor(() => {
+      expect(onSaveMacro).toHaveBeenCalledWith(
+        "Plot two curves (1)",
+        MACRO_CODE,
+      );
+      expect(onSaveMacro).toHaveBeenCalledWith(
+        "Plot two curves (2)",
+        SECOND_CODE,
+      );
+    });
+  });
+
   it("never auto-approves a macro run after remembering a macro offered without running it", async () => {
     vi.stubGlobal(
       "fetch",

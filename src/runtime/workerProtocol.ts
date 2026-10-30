@@ -13,9 +13,10 @@
  *   1. **Request/reply** — the proxy posts a {@link CallRequest} and the
  *      worker answers with a matching {@link ResultEvent} (``ok``/``error``).
  *   2. **Worker-initiated events** — workspace mutations
- *      ({@link MutationEvent}) and Python dialog requests
+ *      ({@link MutationEvent}), on-disk storage errors
+ *      ({@link StorageErrorEvent}) and Python dialog requests
  *      ({@link DialogRequestEvent}) are pushed up so the main thread can
- *      flip its "dirty" flag and render dialogs.
+ *      flip its "dirty" flag, report storage errors and render dialogs.
  *   3. **State mirror** — the four synchronous accessors of
  *      {@link RuntimeApi} (``getStorageMode`` / ``getDiskStoreBytes`` /
  *      ``getSpilledCount`` / ``getMemoryUsage``) cannot do a round-trip, so
@@ -147,6 +148,13 @@ export interface MutationEvent {
   name: string;
 }
 
+/** An on-disk storage error following a successful call. Mirrors
+ *  ``DataLabRuntime.onStorageError``. */
+export interface StorageErrorEvent {
+  type: "storage-error";
+  message: string;
+}
+
 /** Python requested a dialog; the main thread renders it and answers with a
  *  {@link DialogResponseRequest}. */
 export interface DialogRequestEvent {
@@ -168,6 +176,7 @@ export type KernelEvent =
   | BootErrorEvent
   | ResultEvent
   | MutationEvent
+  | StorageErrorEvent
   | DialogRequestEvent
   | MirrorEvent;
 
@@ -189,6 +198,7 @@ export const SYNC_MIRROR_METHODS = [
 export const CALLBACK_METHODS = [
   "setDialogHandler",
   "onWorkspaceMutation",
+  "onStorageError",
 ] as const;
 
 /**

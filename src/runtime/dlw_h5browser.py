@@ -426,10 +426,10 @@ def _build_node(
                     )
                     continue
             try:
+                # Path in the opened file: ``child_dset.name`` is the path of an
+                # object reached through an external link in its own file
                 info.children.append(
-                    _build_node(
-                        file_id, child_dset.name, child_dset, _depth + 1, ancestors
-                    )
+                    _build_node(file_id, child_path, child_dset, _depth + 1, ancestors)
                 )
             except (UnicodeDecodeError, TypeError, ValueError, KeyError) as exc:
                 print(f"[h5browser] skip {child_path!r}: {type(exc).__name__}: {exc}")

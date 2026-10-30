@@ -1759,6 +1759,7 @@ export class DataLabRuntime {
   ) {}
 
   private mutationListeners: Set<(name: string) => void> = new Set();
+  private storageErrorListeners: Set<(message: string) => void> = new Set();
 
   /**
    * Subscribe to durable-workspace mutations. The callback fires *after*
@@ -1772,6 +1773,31 @@ export class DataLabRuntime {
     return () => {
       this.mutationListeners.delete(listener);
     };
+  }
+
+  /**
+   * Subscribe to the on-disk storage errors following a successful call.
+   *
+   * Such a call is not failed (it would be applied twice if retried): the
+   * objects that could not be stored on disk stay in memory with their data.
+   * An error is reported once, until the store works again. Returns an
+   * unsubscribe function; listeners must not throw.
+   */
+  onStorageError(listener: (message: string) => void): () => void {
+    this.storageErrorListeners.add(listener);
+    return () => {
+      this.storageErrorListeners.delete(listener);
+    };
+  }
+
+  private emitStorageError(message: string): void {
+    for (const cb of this.storageErrorListeners) {
+      try {
+        cb(message);
+      } catch (err) {
+        console.warn("[runtime] storage-error listener threw", err);
+      }
+    }
   }
 
   private emitWorkspaceMutation(name: string): void {
@@ -2160,6 +2186,9 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   /** JS mirror of bootstrap's ``_SPILLED`` set — object ids whose heavy
    *  array currently lives on disk rather than in the WASM heap. */
   private readonly spilledOids = new Set<string>();
+  /** Whether the on-disk store failed after the last call that used it: a
+   *  storage error is reported once, until the store works again. */
+  private storageFailing = false;
   /** Cache of {@link getCapsuleSizeLimit} (undefined until read). */
   private capsuleSizeLimit: number | null | undefined;
 
@@ -2422,25 +2451,61 @@ await micropip.install(${JSON.stringify(bootRequirements)})
   }
 
   /** Return paged-in objects to disk and reconcile the on-disk store with
-   *  the model after a call adding, deleting or replacing objects. */
+   *  the model after a call adding, deleting or replacing objects.
+   *
+   *  Never throws: the call has already succeeded, so a storage failure must
+   *  not report it as failed (it would be applied twice if retried). Each step
+   *  is attempted even if a previous one failed. An object whose data cannot
+   *  be written stays resident with its data (see ``persistOrRestore``), and
+   *  a later sweep tries again to store it on disk. Failures are logged, and
+   *  reported to the {@link onStorageError} listeners. */
   private async diskGuardAfter(
     name: string,
     kwargs: Record<string, unknown>,
     pagedIn: string[],
   ): Promise<void> {
+    let used = false;
+    let failure: unknown;
+    const attempt = async <R>(
+      step: () => Promise<R>,
+    ): Promise<R | undefined> => {
+      used = true;
+      try {
+        return await step();
+      } catch (err) {
+        console.error(`[runtime] on-disk storage after ${name} failed`, err);
+        if (failure === undefined) failure = err;
+        return undefined;
+      }
+    };
     const rewrite = MUTATES_HEAVY.has(name);
-    for (const oid of pagedIn) await this.settleDirect(oid, rewrite);
+    for (const oid of pagedIn) {
+      await attempt(() => this.settleDirect(oid, rewrite));
+    }
     if (REPLACES_MODEL.has(name) && kwargs.replace !== false) {
       // A replaced model forgets the old store at once; an appended file
       // keeps the current objects and their on-disk copies.
       this.spilledOids.clear();
-      await this.requireStore().clear();
+      await attempt(() => this.requireStore().clear());
     }
-    const swept = DISK_SWEEP_CALLS.has(name) && (await this.diskSweepDirect());
+    const swept =
+      DISK_SWEEP_CALLS.has(name) &&
+      (await attempt(() => this.diskSweepDirect())) === true;
     // Reclaim heap pages freed by the placeholders so later allocations
     // reuse them instead of growing the heap.
     if (pagedIn.length || swept) {
-      await this.invokePy("collect_garbage");
+      await attempt(() => this.invokePy("collect_garbage"));
+    }
+    if (!used) return;
+    if (failure === undefined) {
+      this.storageFailing = false;
+    } else if (!this.storageFailing) {
+      this.storageFailing = true;
+      // ``DOMException`` (quota exceeded...) is not an ``Error`` everywhere
+      const message = (failure as { message?: unknown } | null)?.message;
+      this.emitStorageError(
+        typeof message === "string" ? message : String(failure),
+      );
     }
   }
 
@@ -2542,7 +2607,9 @@ await micropip.install(${JSON.stringify(bootRequirements)})
    * metadata in the heap); ``"ram"`` pages every spilled array back in
    * and clears the on-disk store. Both transitions are queued so they
    * never interleave with in-flight Python calls. No-op when already in
-   * the requested mode.
+   * the requested mode. A switch to ``"disk"`` that fails (store
+   * unavailable, write error) leaves the runtime in ``"ram"`` mode with
+   * every array resident (see {@link revertSpillAllDirect}).
    */
   async setStorageMode(mode: StorageMode): Promise<void> {
     if (mode === this.storageMode) return;
@@ -2557,13 +2624,22 @@ await micropip.install(${JSON.stringify(bootRequirements)})
           // Prefer the synchronous-handle store when the runtime runs in a
           // worker (4–7× faster spills, see ``opfs_sync_spike``); fall back
           // to the async ``createWritable`` store on the main thread.
-          this.opfsStore = OpfsSyncObjectStore.isSupported()
+          const store = OpfsSyncObjectStore.isSupported()
             ? new OpfsSyncObjectStore()
             : new OpfsObjectStore();
-          await this.opfsStore.init();
+          // Kept only once initialised, so that a failed initialisation
+          // (e.g. storage denied) may be retried by the next switch.
+          await store.init();
+          this.opfsStore = store;
+        }
+        try {
+          await this.spillAllResidentDirect();
+        } catch (err) {
+          await this.revertSpillAllDirect();
+          throw err;
         }
         this.storageMode = "disk";
-        await this.spillAllResidentDirect();
+        this.storageFailing = false;
       } else {
         await this.pageInAllDirect();
         this.storageMode = "ram";
@@ -2573,6 +2649,22 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     const next = this._queue.then(run, run);
     this._queue = next.catch(() => undefined);
     return next as Promise<void>;
+  }
+
+  /** Undo a switch to the on-disk mode that could not spill every object
+   *  (direct, unqueued): the objects already spilled are paged back in and
+   *  the store is emptied, so that the runtime stays in RAM mode. If they
+   *  cannot all be read back, the runtime switches to the on-disk mode
+   *  anyway: the objects left on disk need it to be paged in. */
+  private async revertSpillAllDirect(): Promise<void> {
+    try {
+      await this.pageInAllDirect();
+    } catch (err) {
+      console.error("[runtime] cannot page spilled objects back in", err);
+      this.storageMode = "disk";
+      return;
+    }
+    await this.opfsStore?.clear().catch(() => undefined);
   }
 
   /** Total bytes currently spilled to the OPFS store (0 in RAM mode). */

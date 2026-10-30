@@ -950,7 +950,8 @@ function CodeBlockSaveButtons({
       {blocks.map((code, i) => (
         <SaveMacroButton
           key={i}
-          title={title}
+          // Distinct titles for the macros of a reply with several blocks
+          title={blocks.length > 1 ? `${title} (${i + 1})` : title}
           code={code}
           onSaveMacro={onSaveMacro}
           label={
