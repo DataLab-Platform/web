@@ -133,6 +133,34 @@ def test_open_file_skips_broken_links(tmp_path, capsys):
     assert "broken external link to 'missing_detector.h5:/frames'" in output
 
 
+def test_tree_keeps_paths_of_external_datasets(tmp_path):
+    """Datasets reached through an external link get their path in the opened
+    file, and that path reads their own data.
+
+    Regression: they got their path in their own file, which may designate
+    another dataset of the opened file (whose data was then read instead).
+    """
+    with h5py.File(tmp_path / "detector.h5", "w") as f:
+        f["/entry/data/data"] = np.full((4, 5), 7.0)
+    with h5py.File(tmp_path / "master.h5", "w") as f:
+        f["/entry/data/data"] = np.zeros(3)
+        f["/entry/data/data_000001"] = h5py.ExternalLink(
+            "detector.h5", "/entry/data/data"
+        )
+    with h5py.File(tmp_path / "master.h5", "r") as f:
+        nodes = {}
+        h5b._flatten(h5b._build_node("fid", "/", f), nodes)
+        assert {"/entry/data/data", "/entry/data/data_000001"} <= set(nodes)
+        external = nodes["/entry/data/data_000001"]
+        assert (external.name, external.h5path) == (
+            "data_000001",
+            "/entry/data/data_000001",
+        )
+        assert external.kind == "image"
+        np.testing.assert_array_equal(f[external.h5path][()], np.full((4, 5), 7.0))
+        assert nodes["/entry/data/data"].kind == "signal"
+
+
 def test_open_file_cleans_up_when_tree_fails(h5_bytes, monkeypatch):
     """A failure while building the tree closes the file and removes its
     temporary copy; the next file opens normally."""
