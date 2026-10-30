@@ -256,6 +256,15 @@ describe("OpfsSyncObjectStore", () => {
     );
   });
 
+  it("fails to read an absent payload without creating it", async () => {
+    // Regression: reading an absent payload created an empty file and
+    // returned no bytes, which were then taken for the object data.
+    const store = new OpfsSyncObjectStore();
+    await store.init();
+    await expect(store.get("missing")).rejects.toThrow();
+    expect(await store.has("missing")).toBe(false);
+  });
+
   it("clears every stored payload", async () => {
     const store = new OpfsSyncObjectStore();
     await store.init();

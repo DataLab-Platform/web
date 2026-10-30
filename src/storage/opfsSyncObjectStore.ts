@@ -91,10 +91,13 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
     return this.dir;
   }
 
-  private async handle(oid: string): Promise<SyncAccessHandle> {
+  private async handle(
+    oid: string,
+    create: boolean,
+  ): Promise<SyncAccessHandle> {
     const dir = this.requireDir();
     const fh = (await dir.getFileHandle(fileName(oid), {
-      create: true,
+      create,
     })) as SyncCapableFileHandle;
     return fh.createSyncAccessHandle();
   }
@@ -107,7 +110,7 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
    * caller never takes an incomplete copy for a stored payload.
    */
   async put(oid: string, bytes: Uint8Array): Promise<void> {
-    const h = await this.handle(oid);
+    const h = await this.handle(oid, true);
     try {
       // In-place write, then shrink the file to the exact payload length so
       // a smaller re-spill never leaves stale trailing bytes.
@@ -130,12 +133,13 @@ export class OpfsSyncObjectStore implements ObjectByteStore {
   }
 
   /**
-   * Read back the payload for *oid*. Throws if it is absent, or if fewer
-   * bytes than the file size can be read (a read may transfer fewer bytes
-   * than requested: the remaining bytes are read in turn).
+   * Read back the payload for *oid*. Throws if it is absent (without creating
+   * an empty file), or if fewer bytes than the file size can be read (a read
+   * may transfer fewer bytes than requested: the remaining bytes are read in
+   * turn).
    */
   async get(oid: string): Promise<Uint8Array> {
-    const h = await this.handle(oid);
+    const h = await this.handle(oid, false);
     try {
       const size = h.getSize();
       const out = new Uint8Array(size);
