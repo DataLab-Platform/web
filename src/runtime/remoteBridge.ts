@@ -21,6 +21,7 @@
  *
  * Responses with binary payloads (e.g. ``Float64Array``) attach those
  * buffers as ``Transferable`` to ``postMessage`` for zero-copy transfer.
+ * Events, sent to every peer, are cloned instead.
  */
 
 import { buildProxyBridge, type BridgeMethod } from "./proxyBridge";
@@ -184,14 +185,18 @@ export function activateRemoteBridge(
         target: MessageEventSource,
         origin: string,
         msg: OutboundMessage,
+        transferBuffers?: boolean,
       ) => void)
     | null = null;
 
+  // Events are cloned, never transferred: they go to every peer (a buffer
+  // transferred to the first one would arrive empty at the others), and
+  // their payload belongs to the caller, whose buffers must stay usable.
   const flushEvents = () => {
     if (!post || queuedEvents.length === 0 || peers.size === 0) return;
     const drained = queuedEvents.splice(0);
     for (const [peer, origin] of peers) {
-      for (const evt of drained) post(peer, origin, evt);
+      for (const evt of drained) post(peer, origin, evt, false);
     }
   };
 
@@ -237,8 +242,13 @@ export function activateRemoteBridge(
     get_protocol_version: async () => RPC_PROTOCOL_VERSION,
   };
 
-  post = (target: MessageEventSource, origin: string, msg: OutboundMessage) => {
-    const transfer = collectTransferables(msg);
+  post = (
+    target: MessageEventSource,
+    origin: string,
+    msg: OutboundMessage,
+    transferBuffers = true,
+  ) => {
+    const transfer = transferBuffers ? collectTransferables(msg) : [];
     const targetOrigin = peerTargetOrigin(origin);
     try {
       // ``MessageEventSource`` has a narrower type than ``Window`` but
@@ -312,7 +322,7 @@ export function activateRemoteBridge(
     },
     emit(name, payload) {
       const evt: RpcEvent = { type: "event", name, payload };
-      for (const [peer, origin] of peers) post(peer, origin, evt);
+      for (const [peer, origin] of peers) post(peer, origin, evt, false);
     },
   };
 }

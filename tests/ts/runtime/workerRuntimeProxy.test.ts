@@ -286,6 +286,17 @@ describe("WorkerRuntimeProxy", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("fans on-disk storage errors out to subscribers", () => {
+    const { worker, runtime } = setup();
+    const listener = vi.fn();
+    const unsubscribe = runtime.onStorageError(listener);
+    worker.emit({ type: "storage-error", message: "quota exceeded" });
+    expect(listener).toHaveBeenCalledWith("quota exceeded");
+    unsubscribe();
+    worker.emit({ type: "storage-error", message: "write error" });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("bridges a dialog request to the registered handler and answers", async () => {
     const { worker, runtime } = setup();
     const handler = vi.fn(async () => ({ ok: true, value: 42 }));
