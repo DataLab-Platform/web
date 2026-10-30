@@ -338,6 +338,42 @@ describe("activateRemoteBridge", () => {
     handle?.dispose();
   });
 
+  it("clones the binary payloads of events instead of transferring them", async () => {
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource:
+        "?allowedOrigins=https://a.example.com,https://b.example.com",
+      win,
+    });
+    const peerA: MockPeer = { postMessage: vi.fn() };
+    const peerB: MockPeer = { postMessage: vi.fn() };
+    for (const [peer, origin, id] of [
+      [peerA, "https://a.example.com", 1],
+      [peerB, "https://b.example.com", 2],
+    ] as const) {
+      win.dispatchEvent(
+        fakeMessageEvent({
+          origin,
+          source: peer,
+          data: { id, type: "request", method: "get_version" },
+        }),
+      );
+    }
+    await new Promise((r) => setTimeout(r, 0));
+
+    const data = new Float64Array([1, 2, 3]);
+    handle?.emit("frame", { data });
+
+    // Regression: the buffers were transferred to each peer in turn, so that
+    // the second peer received detached (empty) buffers.
+    for (const peer of [peerA, peerB]) {
+      const [msg, , transfer] = peer.postMessage.mock.calls[1];
+      expect(msg).toMatchObject({ type: "event", name: "frame" });
+      expect(msg.payload.data).toBe(data);
+      expect(transfer).toBeUndefined();
+    }
+    handle?.dispose();
+  });
+
   it("targets opaque origins only through the wildcard", async () => {
     const handle = activateRemoteBridge(runtime, {
       allowedOriginsSource: "?allowedOrigins=*",
