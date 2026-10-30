@@ -84,6 +84,8 @@ async function boot(lang: string, labels: RuntimeLabels): Promise<void> {
     );
     // Forward workspace mutations so the main thread can flip its dirty flag.
     rt.onWorkspaceMutation((name) => post({ type: "mutation", name }));
+    // Forward on-disk storage errors, which the main thread reports.
+    rt.onStorageError((message) => post({ type: "storage-error", message }));
     // Route Python dialog requests up to the main thread, which owns the UI.
     rt.setDialogHandler(
       (kind, payload) =>

@@ -13,9 +13,9 @@
  *
  *   * **Synchronous accessors** (``getStorageMode`` etc.) are served from a
  *     locally-cached {@link KernelMirror} that the worker pushes on change.
- *   * **Callback registrars** (``setDialogHandler``, ``onWorkspaceMutation``)
- *     keep the JS callback on the main thread and bridge the worker's events
- *     to it — a function can't cross ``postMessage``.
+ *   * **Callback registrars** (``setDialogHandler``, ``onWorkspaceMutation``,
+ *     ``onStorageError``) keep the JS callback on the main thread and bridge
+ *     the worker's events to it — a function can't cross ``postMessage``.
  *   * Every other method is forwarded generically through a ``Proxy`` trap,
  *     so the ~150-method surface needs no hand-written forwarders and any
  *     new ``RuntimeApi`` method works automatically.
@@ -65,6 +65,7 @@ export class WorkerRuntimeProxy {
   private readonly pending = new Map<number, PendingCall>();
   private mirror: KernelMirror = INITIAL_MIRROR;
   private readonly mutationListeners = new Set<(name: string) => void>();
+  private readonly storageErrorListeners = new Set<(message: string) => void>();
   private dialogHandler:
     ((kind: string, payload: unknown) => Promise<unknown>) | null = null;
 
@@ -173,14 +174,18 @@ export class WorkerRuntimeProxy {
         }
         if (prop === "onWorkspaceMutation") {
           return (listener: (name: string) => void) =>
-            this.addMutationListener(listener);
+            this.addListener(this.mutationListeners, listener);
+        }
+        if (prop === "onStorageError") {
+          return (listener: (message: string) => void) =>
+            this.addListener(this.storageErrorListeners, listener);
         }
         // Generic async forward for every other method.
         return (...args: unknown[]) => this.call(prop, args);
       },
     };
     // The Proxy structurally satisfies RuntimeApi: every access yields a
-    // function with the right shape (sync accessors, the two callback
+    // function with the right shape (sync accessors, the callback
     // registrars, or a generic async forward).
     return new Proxy({}, handler) as unknown as RuntimeApi;
   }
@@ -219,11 +224,29 @@ export class WorkerRuntimeProxy {
     });
   }
 
-  private addMutationListener(listener: (name: string) => void): () => void {
-    this.mutationListeners.add(listener);
+  private addListener<T>(
+    listeners: Set<(value: T) => void>,
+    listener: (value: T) => void,
+  ): () => void {
+    listeners.add(listener);
     return () => {
-      this.mutationListeners.delete(listener);
+      listeners.delete(listener);
     };
+  }
+
+  /** Call every listener of *listeners* with *value*, logging their errors. */
+  private notify<T>(
+    listeners: Set<(value: T) => void>,
+    value: T,
+    kind: string,
+  ): void {
+    for (const cb of listeners) {
+      try {
+        cb(value);
+      } catch (err) {
+        console.warn(`[workerRuntime] ${kind} listener threw`, err);
+      }
+    }
   }
 
   private handleEvent(event: KernelEvent): void {
@@ -255,13 +278,10 @@ export class WorkerRuntimeProxy {
         break;
       }
       case "mutation":
-        for (const cb of this.mutationListeners) {
-          try {
-            cb(event.name);
-          } catch (err) {
-            console.warn("[workerRuntime] mutation listener threw", err);
-          }
-        }
+        this.notify(this.mutationListeners, event.name, "mutation");
+        break;
+      case "storage-error":
+        this.notify(this.storageErrorListeners, event.message, "storage-error");
         break;
       case "dialog-request":
         void this.handleDialogRequest(event.id, event.kind, event.payload);

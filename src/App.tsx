@@ -1151,6 +1151,23 @@ export default function App() {
     return unsubscribe;
   }, [runtime, markDirty]);
 
+  // In on-disk storage mode, objects that could not be stored on disk after
+  // an operation (storage quota exceeded, write error) stay in memory: the
+  // operation succeeded, the storage error is reported once.
+  useEffect(() => {
+    if (!runtime) return;
+    return runtime.onStorageError((message) => {
+      void notify({
+        kind: "warning",
+        title: t("Data storage"),
+        message: t(
+          "Some data could not be stored on disk and is kept in memory: {message}",
+          { message },
+        ),
+      });
+    });
+  }, [runtime, notify]);
+
   // Sync the "Paste metadata" availability from the Python clipboard
   // once the runtime is ready. The Python ``_METADATA_CLIPBOARD`` is
   // preserved across HMR reloads, so the React flag (which resets to
@@ -2282,6 +2299,9 @@ export default function App() {
           : t("On-disk storage disabled. Object data is kept in memory."),
       });
     } catch (err) {
+      // The runtime normally stays in its previous mode, but reports the
+      // mode it actually ended in (see ``setStorageMode``).
+      setStoreOnDisk(runtime.getStorageMode() === "disk");
       const message = err instanceof Error ? err.message : String(err);
       await notify({
         kind: "error",
