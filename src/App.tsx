@@ -165,6 +165,7 @@ import {
 } from "./utils/saveFile";
 import { formatBytes } from "./utils/memory";
 import { imageCenter, imageExtent } from "./utils/pixelCenters";
+import { PendingHandle } from "./utils/pendingHandle";
 import { listRecent } from "./storage/recentStore";
 import type {
   AnalysisResult,
@@ -188,6 +189,9 @@ import type {
 const MacroPanel = lazy(() =>
   import("./components/MacroPanel").then((m) => ({ default: m.MacroPanel })),
 );
+// Maximum wait for the Macros panel when a macro is sent to it: once its
+// chunk is loaded, the panel restores its macros before accepting new ones.
+const MACRO_PANEL_TIMEOUT_MS = 60_000;
 const NotebookPanel = lazy(() =>
   import("./components/notebook/NotebookPanel").then((m) => ({
     default: m.NotebookPanel,
@@ -484,7 +488,9 @@ export default function App() {
   treeKindRef.current = treeKind;
   const [centralView, setCentralView] = useState<CentralView>("plot");
   const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
-  const macroPanelRef = useRef<MacroPanelHandle | null>(null);
+  const [macroPanel] = useState(
+    () => new PendingHandle<MacroPanelHandle>("Macros panel"),
+  );
   const [leftPanelWidth, setLeftPanelWidth, persistLeftPanelWidth] =
     usePersistedSize("datalab-web.leftPanelWidth", 280);
   const [sidePanelWidth, setSidePanelWidth, persistSidePanelWidth] =
@@ -567,15 +573,16 @@ export default function App() {
   }, [macroFloating, setMacroFloating]);
   // "Save to Macros" in the AI Assistant: the Macros panel saves the
   // macro (whatever the runtime mode) and shows it. A floating Macros
-  // panel is already visible, so only the docked one gets focus.
+  // panel is already visible, so only the docked one gets focus. A
+  // conversation restored after a reload shows its button before the
+  // panel is ready: an early click waits for it.
   const saveMacroFromAssistant = useCallback(
     async (title: string, code: string) => {
-      const panel = macroPanelRef.current;
-      if (!panel) throw new Error("Macros panel is not available yet");
+      const panel = await macroPanel.wait(MACRO_PANEL_TIMEOUT_MS);
       await panel.importMacro(title, code);
       if (!macroFloating) setCentralView("macro");
     },
-    [macroFloating],
+    [macroFloating, macroPanel],
   );
   // Stable DOM containers for the Notebook / Macro panels.  They are
   // moved between the central area and the FloatingDockStack via
@@ -4804,7 +4811,9 @@ export default function App() {
                   // it was floating, then focus the central tab).
                   if (macroFloating) setMacroFloating(false);
                   setCentralView("macro");
-                  void macroPanelRef.current?.importMacro(title, code);
+                  void macroPanel
+                    .wait(MACRO_PANEL_TIMEOUT_MS)
+                    .then((panel) => panel.importMacro(title, code));
                 }}
               />
             </Suspense>,
@@ -4816,7 +4825,7 @@ export default function App() {
             <Suspense fallback={null}>
               <MacroPanel
                 key={`macro-${workspaceVersion}`}
-                ref={macroPanelRef}
+                ref={macroPanel.ref}
                 runtime={runtime}
                 onCountChanged={setMacroCount}
                 placement={macroFloating ? "floating" : "tab"}

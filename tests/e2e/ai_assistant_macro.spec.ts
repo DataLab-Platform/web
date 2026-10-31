@@ -18,6 +18,7 @@ import { waitForRuntimeReady } from "./fixtures";
  *     the Macros panel,
  *   * the same works after a page reload, from the conversation restored
  *     from the browser history (the demo scenario of the original report),
+ *     even when clicked before the Macros panel is loaded,
  *   * a Python code block written in a reply can be saved too.
  */
 
@@ -114,14 +115,33 @@ test.describe.serial("AI Assistant — Save to Macros (worker mode)", () => {
   });
 
   test("saves the macro of a conversation restored after a reload", async () => {
-    await page.reload();
-    await waitForRuntimeReady(page);
-    // Macros live in the (unsaved) workspace: the reload dropped the one
-    // saved above, while the conversation is restored from IndexedDB.
-    await expect(page.getByText("Here is the macro.")).toBeVisible();
-    await page.getByRole("button", { name: /Save to Macros/ }).click();
+    // The Macros panel is loaded on demand, whereas the restored
+    // conversation shows its "Save to Macros" button at once: hold the
+    // panel's module until the click, so that the save has to wait for
+    // the panel to load, then to restore its macros.
+    let releasePanel!: () => void;
+    const panelHeld = new Promise<void>((resolve) => {
+      releasePanel = resolve;
+    });
+    const panelModule = /\/src\/components\/MacroPanel\.tsx(?:\?|$)/;
+    await page.route(panelModule, async (route) => {
+      await panelHeld;
+      await route.continue();
+    });
+    try {
+      await page.reload();
+      await waitForRuntimeReady(page);
+      // Macros live in the (unsaved) workspace: the reload dropped the one
+      // saved above, while the conversation is restored from IndexedDB.
+      await expect(page.getByText("Here is the macro.")).toBeVisible();
+      await expect(page.locator(".macro-tab")).toHaveCount(0);
+      await page.getByRole("button", { name: /Save to Macros/ }).click();
+    } finally {
+      releasePanel();
+    }
     await expect(activeMacroTitle(page)).toBeVisible();
     await expect(activeMacroTitle(page)).toHaveText(TOOL_MACRO_TITLE);
+    await page.unroute(panelModule);
   });
 
   test("saves a Python code block written in a reply", async () => {
