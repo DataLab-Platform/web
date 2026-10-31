@@ -148,6 +148,10 @@ interface MacroState extends MacroMeta {
  * (notebook → macro conversion, the AI Assistant's "Save to Macros"
  * buttons) can inject a ready-made macro into the panel without having
  * to be visible.
+ *
+ * The handle is exposed only once the panel has restored the macros of the
+ * workspace, which would otherwise drop a macro imported earlier: callers
+ * wait for it (see :class:`PendingHandle`).
  */
 export interface MacroPanelHandle {
   /** Persist a fresh macro and open it as the active tab. */
@@ -792,7 +796,11 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       [runtime, openMacro, persistMirror],
     );
 
-    useImperativeHandle(ref, () => ({ importMacro }), [importMacro]);
+    // Exposed once the initial load has restored the macros (see
+    // ``MacroPanelHandle``): ``ref`` is attached when ``loaded`` turns true.
+    useImperativeHandle(loaded ? ref : null, () => ({ importMacro }), [
+      importMacro,
+    ]);
 
     // Close Recent… menu on outside click.
     useEffect(() => {
