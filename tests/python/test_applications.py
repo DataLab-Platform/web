@@ -788,6 +788,97 @@ def test_instrument_previews_acquires_and_resolves_active_settings(
     )["rate"]
 
 
+def test_instrument_session_opens_after_settings_and_closes_on_replacement(
+    tools_env, monkeypatch
+) -> None:
+    """Old window cleanup cannot close the replacement window's instrument."""
+    _bootstrap, record = tools_env
+    calls = []
+    monkeypatch.setattr(
+        SignalGenerator,
+        "open",
+        lambda self: calls.append(("open", self.settings.amplitude)),
+    )
+    monkeypatch.setattr(SignalGenerator, "close", lambda self: calls.append(("close",)))
+
+    first = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    dlw_applications.preview_plugin_instrument(
+        PLUGIN_ID, "generator", {"amplitude": 0.5}
+    )
+    dlw_applications.preview_plugin_instrument(PLUGIN_ID, "generator")
+    assert calls == [("open", 0.5)]
+
+    second = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    assert calls == [("open", 0.5), ("close",)]
+    dlw_applications.preview_plugin_instrument(
+        PLUGIN_ID, "generator", {"amplitude": 0.75}
+    )
+    assert not dlw_applications.close_plugin_instrument(first["session_id"])
+    assert calls == [("open", 0.5), ("close",), ("open", 0.75)]
+    assert dlw_applications.close_plugin_instrument(second["session_id"])
+    assert calls[-1] == ("close",)
+    assert record.instance.get_instrument("generator").settings.amplitude == 0.75
+
+
+def test_instrument_open_failure_is_retried_and_closed(tools_env, monkeypatch) -> None:
+    """A failed open does not preview, but is retried and eventually released."""
+    calls = []
+
+    def open_instrument(_instrument):
+        calls.append("open")
+        if calls.count("open") == 1:
+            raise ValueError("Instrument unavailable")
+
+    monkeypatch.setattr(SignalGenerator, "open", open_instrument)
+    monkeypatch.setattr(SignalGenerator, "close", lambda self: calls.append("close"))
+    session = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    with pytest.raises(ValueError, match="Instrument unavailable"):
+        dlw_applications.preview_plugin_instrument(PLUGIN_ID, "generator")
+    assert calls == ["open"]
+
+    frame = dlw_applications.preview_plugin_instrument(PLUGIN_ID, "generator")
+    assert frame["summary"] == "Live frame"
+    assert calls == ["open", "open"]
+    assert dlw_applications.close_plugin_instrument(session["session_id"])
+    assert calls == ["open", "open", "close"]
+
+
+def test_instrument_is_closed_on_plugin_unregister(tools_env, monkeypatch) -> None:
+    """Unloading an active plugin releases its instrument before forgetting it."""
+    _bootstrap, record = tools_env
+    calls = []
+    monkeypatch.setattr(SignalGenerator, "close", lambda self: calls.append("close"))
+    record.instance.register(object())
+    session = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    dlw_applications.preview_plugin_instrument(PLUGIN_ID, "generator")
+    record.instance.unregister()
+    assert calls == ["close"]
+    assert not dlw_applications.close_plugin_instrument(session["session_id"])
+
+
+def test_instrument_close_after_failed_open_and_close_error(
+    tools_env, monkeypatch
+) -> None:
+    """A failed open is still closed, and close failures reach the caller."""
+    calls = []
+
+    def fail_open(_instrument):
+        raise ValueError("Instrument unavailable")
+
+    def fail_close(_instrument):
+        calls.append("close")
+        raise RuntimeError("Closing failed")
+
+    monkeypatch.setattr(SignalGenerator, "open", fail_open)
+    monkeypatch.setattr(SignalGenerator, "close", fail_close)
+    session = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
+    with pytest.raises(ValueError, match="Instrument unavailable"):
+        dlw_applications.preview_plugin_instrument(PLUGIN_ID, "generator")
+    with pytest.raises(RuntimeError, match="Closing failed"):
+        dlw_applications.close_plugin_instrument(session["session_id"])
+    assert calls == ["close"]
+
+
 def _signal_groups(bootstrap) -> dict[str, list[str]]:
     """Return the object ids of each group of the signal panel."""
     return {

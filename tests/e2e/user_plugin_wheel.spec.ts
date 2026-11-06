@@ -71,13 +71,16 @@ function buildStoredZip(files: Record<string, string>): Buffer {
 function buildPluginWheel(): Buffer {
   const webPlugin = `
 import numpy as np
+import guidata.dataset as gds
 
 from datalab.plugins import PluginBase, PluginCapability, PluginInfo
+from datalab.plugins.instruments import InstrumentAcquisition, InstrumentFrame, PluginInstrument
 from datalab.plugins.recipes import (
     RecipeDescriptor,
     RecipeObjectOutput,
     RecipeOutcome,
 )
+from datalab.plugins.tools import PluginTool
 from sigima.objects import create_signal
 
 PLUGIN_ID = "${PLUGIN_ID}"
@@ -103,6 +106,39 @@ GENERATE_CURVE = RecipeDescriptor(
 )
 
 
+class LifecycleSettings(gds.DataSet):
+    amplitude = gds.FloatItem("Amplitude", default=1.0)
+
+
+counts = {"open": 0, "close": 0}
+
+
+class LifecycleInstrument(PluginInstrument):
+    def __init__(self):
+        super().__init__(LifecycleSettings())
+
+    def open(self):
+        super().open()
+        counts["open"] += 1
+
+    def close(self):
+        super().close()
+        counts["close"] += 1
+
+    def preview(self):
+        signal = create_signal(
+            "Instrument frame",
+            np.asarray([0.0, 1.0]),
+            np.asarray([0.0, self.settings.amplitude]),
+        )
+        return InstrumentFrame(
+            (signal,), f"Opened {counts['open']}; closed {counts['close']}"
+        )
+
+    def acquire(self):
+        return InstrumentAcquisition("Instrument acquisition", self.preview().objects)
+
+
 class LocalWheelApplication(PluginBase):
     PLUGIN_INFO = PluginInfo(
         id=PLUGIN_ID,
@@ -112,9 +148,20 @@ class LocalWheelApplication(PluginBase):
         capabilities=(PluginCapability.APPLICATION,),
     )
     RECIPES = (GENERATE_CURVE,)
+    TOOLS = (
+        PluginTool(
+            id="lifecycle",
+            title="Lifecycle instrument...",
+            instrument="instrument",
+            object_type="signal",
+        ),
+    )
 
     def create_actions(self):
         pass
+
+    def instrument(self):
+        return LifecycleInstrument()
 `;
 
   return buildStoredZip({
@@ -125,7 +172,7 @@ class LocalWheelApplication(PluginBase):
       "Name: local-wheel-application",
       "Version: 1.0.0",
       "Requires-Python: >=3.11",
-      "Requires-Dist: datalab-platform>=1.3",
+      "Requires-Dist: datalab-platform>=1.4",
       "",
     ].join("\n"),
     [`${DIST_INFO}/WHEEL`]: [
@@ -167,6 +214,19 @@ async function closeDialog(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Close" }).last().click();
 }
 
+async function lifecycleCounts(
+  page: Page,
+): Promise<{ open: number; close: number }> {
+  return page.evaluate(async () => {
+    await window.runtime.listPlugins();
+    const counts = await window.runtime.runPython(
+      "import json; from local_wheel_application.web import counts; json.dumps(counts)",
+    );
+    if (typeof counts !== "string") throw new Error("Missing lifecycle counts");
+    return JSON.parse(counts) as { open: number; close: number };
+  });
+}
+
 test("local plugin wheel persists and follows its managed lifecycle", async ({
   page,
 }) => {
@@ -194,7 +254,7 @@ test("local plugin wheel persists and follows its managed lifecycle", async ({
     ),
   ).toBeVisible();
   await page.getByText("Dependencies", { exact: true }).click();
-  await expect(page.getByText("datalab-platform>=1.3")).toBeVisible();
+  await expect(page.getByText("datalab-platform>=1.4")).toBeVisible();
   await expect(page.getByText(/not sandboxed/)).toBeVisible();
   await page.getByRole("button", { name: "Trust & install" }).click();
 
@@ -247,6 +307,29 @@ test("local plugin wheel persists and follows its managed lifecycle", async ({
   await expect(
     page.locator(".object-tree-item").filter({ hasText: "Local wheel curve" }),
   ).toBeVisible();
+
+  for (let expectedOpen = 1; expectedOpen <= 2; expectedOpen += 1) {
+    await openPluginsMenu(page);
+    await page
+      .locator(".menu-item-submenu")
+      .filter({ hasText: "Local Wheel Application" })
+      .hover();
+    await page.getByRole("menuitem", { name: "Lifecycle instrument" }).click();
+    const instrument = page.getByRole("dialog", {
+      name: "Lifecycle instrument",
+    });
+    await expect(instrument.locator(".instrument-summary")).toHaveText(
+      /^Opened \d+; closed \d+$/,
+      { timeout: 60_000 },
+    );
+    const beforeClose = await lifecycleCounts(page);
+    expect(beforeClose.open).toBe(expectedOpen);
+    await instrument.getByRole("button", { name: "Close" }).click();
+    await expect(instrument).toBeHidden();
+    await expect
+      .poll(async () => (await lifecycleCounts(page)).close)
+      .toBe(beforeClose.close + 1);
+  }
 
   await openPluginManager(page);
   pluginRow = page

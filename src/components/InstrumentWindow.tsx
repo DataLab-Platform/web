@@ -90,8 +90,8 @@ export function InstrumentWindow({
   useEffect(() => {
     if (!runtime) return;
     let cancelled = false;
-    runtime
-      .openPluginInstrument(pluginId, toolId)
+    const opening = runtime.openPluginInstrument(pluginId, toolId);
+    opening
       .then((opened) => {
         if (cancelled) return;
         setSession(opened);
@@ -106,6 +106,13 @@ export function InstrumentWindow({
       });
     return () => {
       cancelled = true;
+      void opening.then(
+        (opened) =>
+          runtime.closePluginInstrument(opened.session_id).catch((reason) => {
+            console.error("[instrument] closing failed", reason);
+          }),
+        () => undefined,
+      );
     };
   }, [pluginId, runtime, toolId]);
 

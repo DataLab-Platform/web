@@ -642,6 +642,13 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
             return
         from datalab import registries
 
+        for instrument in self._instruments.values():
+            try:
+                instrument._close_host_session()
+            except Exception:  # pylint: disable=broad-except
+                logging.getLogger(__name__).exception(
+                    "Error while closing instrument of plugin %s", self.plugin_id
+                )
         PluginRegistry.unregister_plugin(self)
         self._is_registered = False
         self.unregister_hooks()

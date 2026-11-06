@@ -27,6 +27,7 @@ from datalab.plugins import (
     PluginInfo,
     PluginRegistry,
 )
+from dlw_wheels import WheelInspectionError
 
 VALID_PLUGIN = '''
 from datalab.plugins import PluginBase, PluginInfo
@@ -82,7 +83,7 @@ def plugins_env(tmp_path, monkeypatch):
         PluginRegistry.get_plugins()[:] = saved_plugin_instances
 
 
-def _make_entry_point_wheel() -> bytes:
+def _make_entry_point_wheel(requirement: str | None = None) -> bytes:
     """Build a wheel whose Desktop target must never be imported by Web."""
     dist_info = "portable_plugin-1.0.0.dist-info"
     buffer = io.BytesIO()
@@ -118,7 +119,8 @@ class PortableWheelPlugin(PluginBase):
             "Metadata-Version: 2.3\n"
             "Name: portable-plugin\n"
             "Version: 1.0.0\n"
-            "Requires-Python: >=3.11\n",
+            "Requires-Python: >=3.11\n"
+            + (f"Requires-Dist: {requirement}\n" if requirement else ""),
         )
         archive.writestr(
             f"{dist_info}/WHEEL",
@@ -133,6 +135,41 @@ class PortableWheelPlugin(PluginBase):
         )
         archive.writestr(f"{dist_info}/top_level.txt", "portable_plugin\n")
     return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("requirement", "accepted"),
+    [
+        ("datalab-platform>=1.3", True),
+        ("datalab-platform>=1.4", True),
+        ("datalab-platform>=1.5", False),
+        ("datalab-platform<1.4", False),
+    ],
+)
+def test_wheel_host_version_uses_the_portable_runtime(
+    plugins_env, tmp_path, requirement: str, accepted: bool
+) -> None:
+    """Inspection and loading use the shim version, not CPython's distribution."""
+    data = _make_entry_point_wheel(requirement)
+    filename = "portable_plugin-1.0.0-py3-none-any.whl"
+    path = tmp_path / filename
+    path.write_bytes(data)
+    if accepted:
+        manifest = plugins_env.inspect_plugin_wheel(str(path), filename)
+        assert manifest["distribution"] == "portable-plugin"
+    else:
+        with pytest.raises(WheelInspectionError, match="datalab-platform"):
+            plugins_env.inspect_plugin_wheel(str(path), filename)
+    (record,) = plugins_env.load_plugin_wheel(
+        str(path),
+        filename=filename,
+        source="user-wheel",
+        sha256=hashlib.sha256(data).hexdigest(),
+        trust="unverified",
+    )
+    assert record["loaded"] is accepted
+    if not accepted:
+        assert "datalab-platform" in record["error"]
 
 
 def test_load_valid_plugin_source(plugins_env):
