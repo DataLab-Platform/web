@@ -6,11 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Added
+## [0.11.0] - 2026-11-07
+
+### Added in 0.11.0
 
 - **Instrument window — New group option:** a **New group** option, next to **Acquire**, lets you choose whether each acquisition goes to a new group, as before, or to the current group of the panel. With the option off, the next acquisitions accumulate in the group of the previous one, until you select another group; a new group is still created when the panel has no current group. Each instrument sets the default state of the option, and your choice is remembered for each instrument.
 
-### Fixed
+### Fixed in 0.11.0
 
 - **Plugin instruments:** instrument plugins can now prepare and release their resources through `open()` and `close()`. A failed opening is reported and retried on the next request; closing a window or unloading its plugin releases the instrument.
 - **Security — opened notebooks:** an opened `.ipynb` file can no longer change the look of DataLab-Web, cover it or contact a remote server. Its markdown cells and its HTML and SVG outputs are now displayed in their own isolated block: their styles no longer apply to the rest of the interface, and content positioned over the whole window stays inside the block, so it cannot hide commands or imitate a DataLab-Web dialog. Form fields are removed, and nothing is loaded from the network (remote images, style sheets, fonts or backgrounds), which prevents a notebook from tracking its opening. Images embedded in the notebook and the tables and styling of Sigima results are displayed as before.
@@ -32,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **AI Assistant — macros written as text:** asked to write a macro, the assistant could answer with the code in its reply, without any **Save to Macros** button, in particular for curves its creation tools cannot produce (super-Gaussian, Lorentzian, polynomial…), which it was told to create without a macro. The assistant now proposes such macros through its macro tool, without running them unless asked (the approval dialog says so, and approving such a macro never auto-approves a macro that runs), and a **Save to Macros** button is also offered under each Python code block of its replies; the macros saved from a reply with several code blocks are numbered after the request they answer (e.g. _Plot two curves (2)_), so they can be told apart in the Macros panel.
 - **AI Assistant — macro output:** the assistant received an empty result when reading back the output of the last macro it ran.
 
-### Changed
+### Changed in 0.11.0
 
 - **Bundled applications:** Camera and Pulse have been updated to 0.2.1. Application links pinned to version 0.2.0 must be updated to 0.2.1 because links require an exact plugin version.
 - **Plugin compatibility:** portable plugin wheels requiring DataLab 1.4 can now be installed when their other dependencies are available. The host remains a browser subset and does not provide Qt-dependent Desktop APIs.
@@ -378,7 +380,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/DataLab-Platform/web/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/DataLab-Platform/web/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/DataLab-Platform/web/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/DataLab-Platform/web/compare/v0.7.0...v0.8.0
