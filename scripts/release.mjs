@@ -203,17 +203,17 @@ const tag = `v${appVersion}`;
 const changelogUpdated = promoteChangelog(appVersion, allowEmptyChangelog);
 
 // 6b. Fail early (before tagging) if the release pipeline would later be unable
-//     to extract a non-empty notes section for this version. This mirrors the
-//     CI step `node scripts/extract-changelog.mjs <tag> -o release-notes.md`,
-//     so a missing/empty section surfaces locally instead of breaking the
-//     GitHub Release job after the tag is already pushed.
+//     to find a non-empty notes section for this version: the release workflow
+//     (release-actions check-tag) refuses a final tag without its section of
+//     CHANGELOG.md, so a missing/empty section surfaces locally instead of
+//     after the tag is already pushed.
 if (changelogUpdated && !allowEmptyChangelog) {
   const md = readFileSync(CHANGELOG, "utf8");
   const section = extractSection(md, appVersion);
   if (section == null || section.trim() === "") {
     fail(
       `CHANGELOG.md: no release-notes section could be extracted for ${tag}.\n` +
-        "The GitHub Release job (scripts/extract-changelog.mjs) would fail.\n" +
+        "The release workflow would refuse the tag.\n" +
         "Add entries under [Unreleased] before releasing, or re-run with\n" +
         "--allow-empty-changelog for a tag-only / infrastructure release.",
     );
