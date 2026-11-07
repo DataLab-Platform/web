@@ -31,20 +31,21 @@ export function resolveSigimaInstallSpec(
   );
 }
 
+// Branch at module scope so Vite removes override values from release bundles.
 const RELEASE_BUILD = import.meta.env.MODE === "release";
 
 /** Sigima requirement installed by the main runtime and all workers. */
-export const SIGIMA_INSTALL_SPEC = resolveSigimaInstallSpec(
-  import.meta.env.VITE_SIGIMA_INSTALL_SPEC,
-  RELEASE_BUILD,
-);
+export const SIGIMA_INSTALL_SPEC = RELEASE_BUILD
+  ? SIGIMA_PUBLISHED_REQUIREMENT
+  : resolveSigimaInstallSpec(import.meta.env.VITE_SIGIMA_INSTALL_SPEC);
 
 /** guidata requirement installed by the main runtime and all workers. */
-export const GUIDATA_INSTALL_SPEC = resolveInstallSpec(
-  GUIDATA_PUBLISHED_REQUIREMENT,
-  import.meta.env.VITE_GUIDATA_INSTALL_SPEC,
-  RELEASE_BUILD,
-);
+export const GUIDATA_INSTALL_SPEC = RELEASE_BUILD
+  ? GUIDATA_PUBLISHED_REQUIREMENT
+  : resolveInstallSpec(
+      GUIDATA_PUBLISHED_REQUIREMENT,
+      import.meta.env.VITE_GUIDATA_INSTALL_SPEC,
+    );
 
 /** Published DataLab-Capsule requirement, or ``null`` while unpublished. */
 export const CAPSULE_PUBLISHED_REQUIREMENT: string | null =
@@ -64,7 +65,8 @@ export function resolveCapsuleInstallSpec(
 }
 
 /** DataLab-Capsule requirement installed by the main/kernel runtime only. */
-export const DATALAB_CAPSULE_INSTALL_SPEC = resolveCapsuleInstallSpec(
-  import.meta.env.VITE_DATALAB_CAPSULE_INSTALL_SPEC,
-  RELEASE_BUILD,
-);
+export const DATALAB_CAPSULE_INSTALL_SPEC = RELEASE_BUILD
+  ? (CAPSULE_PUBLISHED_REQUIREMENT ?? "")
+  : resolveCapsuleInstallSpec(
+      import.meta.env.VITE_DATALAB_CAPSULE_INSTALL_SPEC,
+    );

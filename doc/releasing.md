@@ -14,6 +14,8 @@ node scripts/release.mjs major   # breaking: 0.1.0 → 1.0.0
 
 The push remains manual, providing a final checkpoint before the release workflow starts.
 
+For AI-assisted changes, the release commit requires explicit human review and the `Assisted-by: <Model> <Version>` trailer. The helper does not add that trailer, so do not use it unchanged to create an AI-assisted commit or tag.
+
 ## Sigima release qualification
 
 [`sigima-dependency.json`](../sigima-dependency.json) separates the exact
@@ -21,7 +23,7 @@ published requirement from the temporary integration snapshot. Before
 preparing a DataLab-Web release:
 
 1. Confirm that `publishedRequirement` is an exact pin such as
-   `sigima==1.3.0` and is available on PyPI.
+   `sigima==1.4.0` and is available on PyPI.
 2. Run pytest and Playwright without a sibling Sigima `PYTHONPATH`, local wheel
    or `VITE_SIGIMA_INSTALL_SPEC`.
 3. Confirm the live Pyodide runtime reports that exact Sigima version.
@@ -37,7 +39,7 @@ accidental `VITE_SIGIMA_INSTALL_SPEC` from the developer's ignored `.env`.
 
 The guard applies the same rule to [`guidata-dependency.json`](../guidata-dependency.json): a non-null guidata `developmentRef` blocks the release until a guidata version providing the required changes is published and `publishedRequirement` requires it (for example `guidata>=X.Y.Z`). Release builds also ignore `VITE_GUIDATA_INSTALL_SPEC`.
 
-It also covers [`datalab-capsule-dependency.json`](../datalab-capsule-dependency.json). During development, DataLab-Capsule may stay unpublished (`publishedRequirement: null`, provenance then follows `developmentRef` or stays off). A release requires an exact published pin such as `datalab-capsule==0.1.0` and `developmentRef: null`; the release workflow then runs pytest and Playwright with that published version and provenance required, and release builds ignore `VITE_DATALAB_CAPSULE_INSTALL_SPEC`.
+It also covers [`datalab-capsule-dependency.json`](../datalab-capsule-dependency.json). During development, DataLab-Capsule may stay unpublished (`publishedRequirement: null`, provenance then follows `developmentRef` or stays off). A release requires an exact published pin such as `datalab-capsule==0.2.0` and `developmentRef: null`; the release workflow then runs pytest and Playwright with that published version and provenance required, and release builds ignore `VITE_DATALAB_CAPSULE_INSTALL_SPEC`. Release builds also eliminate the three development override values from their JavaScript and source maps, so local wheel paths and URLs are not distributed in the bundle.
 
 > **What `git push --tags` triggers** — the [`Release tarballs`](../.github/workflows/release.yml) workflow runs, in order: Sigima, guidata and DataLab-Capsule release guard and version coherence check (tag ↔ both `package.json` files) → `pytest tests/python` (3.11 + 3.12) and Playwright E2E against the published pins, provenance required (in parallel) → lint + Vitest + build + pack the two `.tgz` → publish a GitHub Release with the tarballs and auto-generated notes → deploy `dist/` to GitHub Pages. Any failing gate aborts the release **and** the deploy.
 

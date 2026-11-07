@@ -143,7 +143,9 @@ A tool is opened in one of two ways:
 - **Launcher** (`launcher="method_name"`): DataLab calls the plugin method, and awaits it when it is a coroutine, so it can open dialogs with `edit_async()`. `self.get_selected_objects()` returns the objects selected when the tool was launched; objects the tool adds are refreshed and selected afterwards.
 - **Instrument** (`instrument="method_name"`): the method returns a `datalab.plugins.instruments.PluginInstrument`, which holds its settings in a guidata `DataSet` and implements `preview()` (an `InstrumentFrame`: signals drawn together, or one image, with a summary and an optional fixed range) and `acquire()` (an `InstrumentAcquisition`: a group title and the acquired objects). DataLab draws the window itself: a live view on the left, the settings form on the right, a _Live_ toggle refreshing the view every `live_interval_ms`, a _New group_ option and an _Acquire_ button. Each acquisition goes to a new group or, when the user turns _New group_ off, to the current group of the panel (a new group is still created when the panel has no current group). The `new_group` class attribute of the instrument sets the default state of the option (`True` by default); the choice of the user is remembered for each instrument and prevails. The instrument instance lives as long as the plugin is registered, so settings are kept between openings. The plugin writes no user interface code, so the same instrument runs on DataLab Desktop and DataLab-Web.
 
-`datalab.plugins.tools`, `datalab.plugins.instruments` and `datalab.plugins.resources` are copied from DataLab Desktop into the host shim, like `datalab.plugins.recipe_binding`.
+An instrument can override `open()` and `close()` to prepare and release resources. DataLab-Web opens it with the edited settings before the first preview or acquisition, retries a failed opening on the next request, and closes it when the window closes or the plugin is unloaded. Calls are serialized, but a slow call may block the browser when the runtime runs on the main thread. Abrupt page termination cannot guarantee that `close()` runs.
+
+`datalab.plugins.tools`, `datalab.plugins.resources` and `datalab.plugins.recipe_binding` are copied from DataLab Desktop into the host shim. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
 
 The wheel rules below come from `datalab.plugins.wheels`, also copied verbatim from DataLab Desktop and used by the plugin catalog, so a wheel is judged the same way everywhere; `dlw_wheels.py` only applies them to the `datalab.web_plugins` group. A Python test compares the copy with a sibling DataLab checkout when one is available.
 
@@ -177,21 +179,9 @@ Bundling proves distribution, not compatibility. A bundled artifact receives
 the registry trust state `verified` only after its visible outputs and Pyodide
 resource budget have passed the project-specific qualification gate.
 
-The Camera gate in `tests/e2e/camera_bundle.spec.ts` runs the packaged campaign
-through the real worker-hosted Pyodide runtime. It requires a visible Plotly
-response trace, decoded non-blank PRNU-map pixels, and the anchored metrics
-table in the Results panel. It also limits incremental WASM-heap growth to
-64 MiB and retained output arrays to three times the input arrays. The status
-qualifies DataLab-Web 0.8.0, Pyodide 0.26.4, Camera 0.2.0, and relative-DN
-recipe 1.1.0.
+The Camera gate in `tests/e2e/camera_bundle.spec.ts` runs the packaged campaign through the real worker-hosted Pyodide runtime. It requires a visible Plotly response trace, decoded non-blank PRNU-map pixels, and the anchored metrics table in the Results panel. It also limits incremental WASM-heap growth to 64 MiB and retained output arrays to three times the input arrays. The status qualifies DataLab-Web 0.11.0, Pyodide 0.26.4, Camera 0.2.1, and relative-DN recipe 1.1.0.
 
-The Pulse gate in `tests/e2e/pulse_bundle.spec.ts` executes the deterministic
-500-shot campaign through Pyodide and transactionally commits three signal
-outputs plus the anchored 500-row metrics table. It requires visible Plotly
-traces for amplitude, raw mean, and aligned mean; all six quality statuses;
-489 valid/aligned shots; no more than 64 MiB incremental WASM heap; and exactly
-24,032 bytes of retained output arrays. This qualifies DataLab-Web 0.8.0,
-Pyodide 0.26.4, Pulse 0.2.0, and pulse campaign recipe 1.1.0.
+The Pulse gate in `tests/e2e/pulse_bundle.spec.ts` executes the deterministic 500-shot campaign through Pyodide and transactionally commits three signal outputs plus the anchored 500-row metrics table. It requires visible Plotly traces for amplitude, raw mean, and aligned mean; all six quality statuses; 489 valid/aligned shots; no more than 64 MiB incremental WASM heap; and exactly 24,032 bytes of retained output arrays. This qualifies DataLab-Web 0.11.0, Pyodide 0.26.4, Pulse 0.2.1, and pulse campaign recipe 1.1.0.
 
 Since version 0.2.0, Camera also offers photon transfer and dark-current recipes, and Pulse offers shot-to-shot stability, step-response, two-channel delay and pulse-height spectrum recipes, each with a generated example. `tests/e2e/application_methods.spec.ts` opens every new example through its deep link, checks that its method is ready, runs it from the Applications dialog and checks the created outputs in the visible object tree; it also runs the relative-DN method through _Try with this example_ on the photon transfer ladder. `tests/python/test_camera_application.py` and `tests/python/test_pulse_application.py` run the same pairs, plus the photon transfer → relative-DN and laser warm-up → campaign pairs, through the generic host and check that every example binds its recipe slots without ambiguity.
 

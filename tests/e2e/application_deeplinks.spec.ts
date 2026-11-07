@@ -21,7 +21,7 @@ function applicationUrl(values: {
 
 const CAMERA_LINK = {
   plugin: "org.datalab.camera-characterization",
-  pluginVersion: "0.2.0",
+  pluginVersion: "0.2.1",
   recipe: "org.datalab.camera-characterization:relative-dn-characterization",
   recipeVersion: "1.1.0",
   example: "quickstart",
@@ -29,7 +29,7 @@ const CAMERA_LINK = {
 
 const PULSE_LINK = {
   plugin: "org.datalab.pulse-characterization",
-  pluginVersion: "0.2.0",
+  pluginVersion: "0.2.1",
   recipe: "org.datalab.pulse-characterization:single-channel-campaign",
   recipeVersion: "1.1.0",
   example: "demo",
@@ -98,18 +98,22 @@ test("Pulse deep link validates the bundle and opens its visible demo", async ({
   ).toHaveCount(0);
 });
 
-test("deep link rejects a plugin version absent from the bundle", async ({
-  page,
-}) => {
-  await disableQuickstartTemplate(page);
-  await page.goto(applicationUrl({ ...CAMERA_LINK, pluginVersion: "9.0.0" }));
-  await waitForRuntimeReady(page);
+for (const pluginVersion of ["0.2.0", "9.0.0"]) {
+  test(`deep link rejects plugin version ${pluginVersion} absent from the bundle`, async ({
+    page,
+  }) => {
+    await disableQuickstartTemplate(page);
+    await page.goto(applicationUrl({ ...CAMERA_LINK, pluginVersion }));
+    await waitForRuntimeReady(page);
 
-  await expect(page.locator(".toast-error")).toContainText(
-    "requested pluginVersion 9.0.0, but this bundle provides 0.2.0",
-  );
-  await expect(page.locator(".object-tree-item")).toHaveCount(0);
-  expect(
-    await page.evaluate(async () => (await window.runtime.listImages()).length),
-  ).toBe(0);
-});
+    await expect(page.locator(".toast-error")).toContainText(
+      `requested pluginVersion ${pluginVersion}, but this bundle provides 0.2.1`,
+    );
+    await expect(page.locator(".object-tree-item")).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        async () => (await window.runtime.listImages()).length,
+      ),
+    ).toBe(0);
+  });
+}

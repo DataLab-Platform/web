@@ -193,7 +193,7 @@ const EXPECTED = [
     outputs: [{ kind: null, artifact: "table" }],
   },
   {
-    operation: { id: "sigima.image.centroid", contract_version: 1 },
+    operation: { id: "sigima.image.centroid", contract_version: 2 },
     roles: ["source"],
     inputKinds: ["image"],
     outputs: [{ kind: null, artifact: "geometry" }],

@@ -5,7 +5,7 @@
 An instrument is a headless object: it holds settings (a guidata DataSet),
 returns a live frame for these settings, and acquires objects. DataLab shows
 it in a window with the live view on the left and the settings on the right.
-DataLab Desktop and DataLab-Web share this module.
+The public instrument contract mirrors DataLab Desktop.
 """
 
 from __future__ import annotations
@@ -114,6 +114,44 @@ class PluginInstrument(abc.ABC):
         if not isinstance(settings, gds.DataSet):
             raise TypeError("Instrument settings must be a guidata DataSet")
         self.settings = settings
+        self._host_session: str | None = None
+        self._host_opened = False
+
+    def open(self) -> None:
+        """Prepare the instrument before its first preview or acquisition.
+
+        Raise ``ValueError`` with a user-facing message if opening fails. The
+        next request retries before calling :meth:`preview` or :meth:`acquire`.
+        """
+
+    def close(self) -> None:
+        """Release resources when the window closes or the plugin is unloaded.
+
+        Called even if :meth:`open` failed and possibly several times.
+        """
+
+    def _begin_host_session(self, session_id: str) -> None:
+        """Replace an older window session before opening another one."""
+        if self._host_session is not None or self._host_opened:
+            self._close_host_session()
+        self._host_session = session_id
+
+    def _ensure_host_open(self) -> None:
+        """Retry opening before a preview or acquisition when necessary."""
+        if not self._host_opened:
+            self.open()
+            self._host_opened = True
+
+    def _close_host_session(self, session_id: str | None = None) -> bool:
+        """Close the current session, ignoring a stale window's close request."""
+        if session_id is not None and session_id != self._host_session:
+            return False
+        try:
+            self.close()
+        finally:
+            self._host_opened = False
+            self._host_session = None
+        return True
 
     @abc.abstractmethod
     def preview(self) -> InstrumentFrame:

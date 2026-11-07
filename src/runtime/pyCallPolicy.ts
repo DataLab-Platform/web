@@ -185,6 +185,7 @@ export const NON_OBJECT_ID_KEYS: readonly string[] = [
   "plugin_id",
   "recipe_id",
   "tool_id",
+  "session_id",
   "example_id",
   "action_id",
   // HDF5 browser files and nodes (not workspace objects).
@@ -277,6 +278,7 @@ export const NON_DURABLE_WRITE_CALLS: ReadonlySet<string> = new Set<string>([
   "create_capsule_review",
   // Opens an acquisition session; ``acquire_plugin_instrument`` adds objects.
   "open_plugin_instrument",
+  "close_plugin_instrument",
 ]);
 
 function unionOf(...sets: ReadonlySet<string>[]): ReadonlySet<string> {

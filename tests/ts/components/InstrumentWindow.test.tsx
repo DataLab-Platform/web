@@ -16,6 +16,7 @@ import type { RuntimeApi } from "../../../src/runtime/RuntimeApi";
 
 const runtimeMock = vi.hoisted(() => ({
   openPluginInstrument: vi.fn(),
+  closePluginInstrument: vi.fn(),
   previewPluginInstrument: vi.fn(),
   acquirePluginInstrument: vi.fn(),
   resolvePluginInstrumentActive: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock("../../../src/components/InstrumentPlot", () => ({
 const SESSION: PluginInstrumentSession = {
   plugin_id: "org.example.camera",
   tool_id: "simulator",
+  session_id: "camera-session",
   title: "Camera simulator",
   live_interval_ms: 20,
   new_group: true,
@@ -70,6 +72,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.removeItem(NEW_GROUP_KEY);
   runtimeMock.openPluginInstrument.mockResolvedValue(SESSION);
+  runtimeMock.closePluginInstrument.mockResolvedValue(true);
   runtimeMock.previewPluginInstrument.mockResolvedValue(FRAME);
   runtimeMock.resolvePluginInstrumentActive.mockResolvedValue({});
   runtimeMock.acquirePluginInstrument.mockResolvedValue({
@@ -94,6 +97,34 @@ function renderWindow(props: Partial<Parameters<typeof InstrumentWindow>[0]>) {
 }
 
 describe("InstrumentWindow", () => {
+  it("closes its instrument session when the window unmounts", async () => {
+    const { unmount } = renderWindow({});
+    await screen.findByTestId("instrument-plot");
+    unmount();
+    await waitFor(() =>
+      expect(runtimeMock.closePluginInstrument).toHaveBeenCalledWith(
+        "camera-session",
+      ),
+    );
+  });
+
+  it("closes a session even if the window closes while it is opening", async () => {
+    let finishOpening: (session: PluginInstrumentSession) => void = () => {};
+    runtimeMock.openPluginInstrument.mockReturnValue(
+      new Promise<PluginInstrumentSession>((resolve) => {
+        finishOpening = resolve;
+      }),
+    );
+    const { unmount } = renderWindow({});
+    unmount();
+    finishOpening(SESSION);
+    await waitFor(() =>
+      expect(runtimeMock.closePluginInstrument).toHaveBeenCalledWith(
+        "camera-session",
+      ),
+    );
+  });
+
   it("shows a live frame for the settings, then acquires into a group", async () => {
     const onAcquired = vi.fn();
     renderWindow({ onAcquired });

@@ -694,6 +694,7 @@ export interface PluginToolSummary {
 export interface PluginInstrumentSession {
   plugin_id: string;
   tool_id: string;
+  session_id: string;
   title: string;
   settings: SchemaWithValues;
   live_interval_ms: number;
@@ -2004,6 +2005,7 @@ await micropip.install(${JSON.stringify(bootRequirements)})
     acquire_plugin_instrument,
     assess_plugin_recipes,
     check_plugin_recipe_bindings,
+    close_plugin_instrument,
     get_plugin_recipe_schema,
     launch_plugin_tool,
     open_plugin_example,
@@ -3905,6 +3907,13 @@ await micropip.install(${JSON.stringify(bootRequirements)})
       plugin_id: pluginId,
       tool_id: toolId,
     })) as PluginInstrumentSession;
+  }
+
+  /** Release one instrument-window session, including after an opening failure. */
+  async closePluginInstrument(sessionId: string): Promise<boolean> {
+    return await this.callPy<boolean>("close_plugin_instrument", {
+      session_id: sessionId,
+    });
   }
 
   /** Return a live frame of a plugin instrument for edited settings. */

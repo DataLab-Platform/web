@@ -100,7 +100,7 @@ test("bundled Pulse workflow renders campaign curves and metrics within budget",
 
   expect(result.plugin).toMatchObject({
     plugin_id: PULSE_PLUGIN_ID,
-    version: "0.2.0",
+    version: "0.2.1",
     source: "bundled-wheel",
     trust: "verified",
     enabled: true,

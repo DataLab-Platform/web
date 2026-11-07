@@ -8,6 +8,7 @@ import dataclasses
 import inspect
 import json
 import os
+import weakref
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -24,6 +25,7 @@ from guidata.dataset import (
 )
 import sigima
 from datalab.plugins.examples import PluginExampleData
+from datalab.plugins.instruments import PluginInstrument
 from datalab.plugins.recipe_binding import (
     RecipeInputIssueCode,
     RecipeReadiness,
@@ -99,6 +101,9 @@ _RESET_WORKSPACE: Callable[[], None] | None = globals().get("_RESET_WORKSPACE")
 _DATALAB_WEB_VERSION: str = globals().get("_DATALAB_WEB_VERSION", "0.0.0")
 _SIGNAL_PAYLOAD: Callable[..., dict[str, Any]] | None = globals().get("_SIGNAL_PAYLOAD")
 _IMAGE_PAYLOAD: Callable[..., dict[str, Any]] | None = globals().get("_IMAGE_PAYLOAD")
+_INSTRUMENT_SESSIONS: weakref.WeakValueDictionary[str, PluginInstrument] = (
+    globals().get("_INSTRUMENT_SESSIONS", weakref.WeakValueDictionary())
+)
 
 
 def install_host(
@@ -857,6 +862,7 @@ def _instrument(
     normalized = _normalize_mapping(values, "Instrument settings")
     if normalized:
         update_dataset(instrument.settings, normalized)
+    instrument._ensure_host_open()
     return instrument
 
 
@@ -870,14 +876,26 @@ def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
     title = tool.title.rstrip(".…")
     settings = dataset_to_schema_with_values(instrument.settings)
     settings["title"] = title
+    session_id = uuid4().hex
+    instrument._begin_host_session(session_id)
+    _INSTRUMENT_SESSIONS[session_id] = instrument
     return {
         "plugin_id": plugin_id,
         "tool_id": tool_id,
+        "session_id": session_id,
         "title": title,
         "settings": settings,
         "live_interval_ms": int(instrument.live_interval_ms),
         "new_group": bool(instrument.new_group),
     }
+
+
+def close_plugin_instrument(session_id: str) -> bool:
+    """Close a window session; an already replaced or unloaded session is harmless."""
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("Instrument session ID must be a non-empty string")
+    instrument = _INSTRUMENT_SESSIONS.pop(session_id, None)
+    return instrument is not None and instrument._close_host_session(session_id)
 
 
 def preview_plugin_instrument(
@@ -972,6 +990,7 @@ __all__ = [
     "acquire_plugin_instrument",
     "assess_plugin_recipes",
     "check_plugin_recipe_bindings",
+    "close_plugin_instrument",
     "get_plugin_recipe_schema",
     "install_host",
     "launch_plugin_tool",

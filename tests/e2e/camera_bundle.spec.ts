@@ -135,7 +135,7 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
 
   expect(result.plugin).toMatchObject({
     plugin_id: CAMERA_PLUGIN_ID,
-    version: "0.2.0",
+    version: "0.2.1",
     source: "bundled-wheel",
     trust: "verified",
     enabled: true,

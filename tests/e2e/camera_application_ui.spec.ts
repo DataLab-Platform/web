@@ -4,7 +4,7 @@ import { disableQuickstartTemplate, waitForRuntimeReady } from "./fixtures";
 
 const CAMERA_LINK = new URLSearchParams({
   plugin: "org.datalab.camera-characterization",
-  pluginVersion: "0.2.0",
+  pluginVersion: "0.2.1",
   recipe: "org.datalab.camera-characterization:relative-dn-characterization",
   recipeVersion: "1.1.0",
   example: "quickstart",

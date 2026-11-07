@@ -75,7 +75,7 @@ for (const method of METHODS) {
     const recipeId = `${method.plugin}:${method.recipe}`;
     const link = new URLSearchParams({
       plugin: method.plugin,
-      pluginVersion: "0.2.0",
+      pluginVersion: "0.2.1",
       recipe: recipeId,
       recipeVersion: "1.0.0",
       example: method.example,
