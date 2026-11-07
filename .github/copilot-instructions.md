@@ -224,6 +224,10 @@ done (bug fix, feature, or any phase of a multi-phase task):
 - Never use `git push --force`, `git reset --hard`, or `--no-verify` without
   explicit user instruction.
 
+## Releasing
+
+Follow [RELEASING.md](../RELEASING.md) and [doc/releasing.md](../doc/releasing.md). **Never create a GitHub release by hand** (with `gh release create` or from the GitHub web page): pushing a tag `vX.Y.Z` (on `main`, created by `node scripts/release.mjs`) or `vX.Y.Z-rcN` makes `.github/workflows/release.yml` (based on the shared [release actions](https://github.com/DataLab-Platform/release-actions)) create a draft release, and only publishing that draft deploys the site to GitHub Pages (final releases). Each final version needs a `## [X.Y.Z] - YYYY-MM-DD` section in `CHANGELOG.md`.
+
 ## Related projects (siblings in the multi-root workspace)
 
 | Folder               | Role                                               |

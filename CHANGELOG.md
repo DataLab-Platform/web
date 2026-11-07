@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Instrument window — New group option:** a **New group** option, next to **Acquire**, lets you choose whether each acquisition goes to a new group, as before, or to the current group of the panel. With the option off, the next acquisitions accumulate in the group of the previous one, until you select another group; a new group is still created when the panel has no current group. Each instrument sets the default state of the option, and your choice is remembered for each instrument.
 
+### Changed
+
+- **Releases:** each GitHub release now provides a `SHA256SUMS` checksums file and build provenance attestations for the app and SDK tarballs, which can be checked with `gh attestation verify`, and the online version is deployed from the static bundle of the released app tarball, so it is exactly the released version. Release candidates (`vX.Y.Z-rcN`) are published as GitHub pre-releases.
+
 ### Fixed
 
 - **Plugin instruments:** instrument plugins can now prepare and release their resources through `open()` and `close()`. A failed opening is reported and retried on the next request; closing a window or unloading its plugin releases the instrument.

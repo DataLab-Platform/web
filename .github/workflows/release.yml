@@ -1,20 +1,80 @@
-name: Release tarballs
+# ============================================================================
+# Prepare and publish a DataLab-Web release (procedure: RELEASING.md and
+# doc/releasing.md).
+#
+# Maintainers never create a GitHub release by hand. A release takes two
+# steps, each one running this workflow, which relies on the release actions
+# shared by the DataLab Platform projects
+# (https://github.com/DataLab-Platform/release-actions):
+#
+# 1. "Prepare vX.Y.Z" - a maintainer pushes a release tag (created by
+#    `node scripts/release.mjs`):
+#      vX.Y.Z      final release, on `main`, both package.json at "X.Y.Z"
+#      vX.Y.Z-rcN  release candidate, on any branch, at "X.Y.Z-rcN"
+#    The tag is checked (format, CHANGELOG.md section, release branch, no
+#    release already published), then the release guard and the versions,
+#    pytest, Playwright, lint, Vitest and the release build run, and a DRAFT
+#    GitHub release is created with the app and SDK tarballs, SHA256SUMS and
+#    build provenance attestations. Nothing is published yet: on failure,
+#    delete the tag, fix and tag again.
+#
+# 2. "Publish vX.Y.Z" - a maintainer reviews the draft release and publishes
+#    it. The tarballs of the release are checked against SHA256SUMS and their
+#    attestations; for a final release, the static bundle of the checked app
+#    tarball is then deployed to GitHub Pages, so the site is exactly the
+#    released bundle. A release created by hand has no such files: nothing is
+#    deployed.
+#
+# A manual run (workflow_dispatch) is a dry run: the same checks, tests and
+# tarballs, without draft release nor deployment.
+# ============================================================================
+name: Release
 
-# Trigger on tags ``vX.Y.Z`` and on manual dispatch (for re-runs).
+run-name: >-
+  ${{ github.event_name == 'release' && 'Publish' || (github.event_name == 'push' && 'Prepare' || 'Dry run') }}
+  ${{ github.ref_name }}
+
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v[0-9]*.[0-9]*.[0-9]*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NOTES_FILE: CHANGELOG.md
+  NOTES_HEADING: "## [{version}]"
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Step 1 - Prepare (tag push) or dry run (manual run).
+  # ---------------------------------------------------------------------------
+  check-tag:
+    name: Check the tag
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The versions of both package.json files are checked by the verify job.
+      - uses: DataLab-Platform/release-actions/check-tag@v1
+        with:
+          notes-file: ${{ env.NOTES_FILE }}
+          notes-heading: ${{ env.NOTES_HEADING }}
+
   verify:
     name: Verify versions
+    needs: check-tag
+    # The tag is only checked on tag pushes (skipped for dry runs).
+    if: ${{ !cancelled() && github.event_name != 'release' && needs.check-tag.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -32,7 +92,7 @@ jobs:
             exit 1
           fi
           # On a tag push, additionally enforce that the tag matches the
-          # package version. Skipped on workflow_dispatch (manual re-run).
+          # package version. Skipped on workflow_dispatch (dry run).
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG_VERSION="${GITHUB_REF_NAME#v}"
             if [ "$APP_VERSION" != "$TAG_VERSION" ]; then
@@ -147,7 +207,8 @@ jobs:
     name: End-to-end (Playwright report)
     runs-on: ubuntu-latest
     needs: e2e
-    if: ${{ !cancelled() }}
+    # Not when publishing a release, where the tests are not run.
+    if: ${{ !cancelled() && github.event_name != 'release' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -180,8 +241,6 @@ jobs:
     name: Build & pack (app + SDK)
     runs-on: ubuntu-latest
     needs: [verify, python-tests, e2e]
-    outputs:
-      app-version: ${{ steps.versions.outputs.app }}
     steps:
       - uses: actions/checkout@v7
 
@@ -192,10 +251,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Read app version
-        id: versions
-        run: echo "app=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Lint
         run: npm run lint
@@ -223,33 +278,64 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload built bundle for Pages deploy
-        uses: actions/upload-artifact@v7
+  draft-release:
+    name: Create the draft release
+    # Skipped for dry runs, where check-tag is skipped.
+    needs: [check-tag, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the draft release
+      id-token: write       # required by the build provenance attestation
+      attestations: write   # required by the build provenance attestation
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
         with:
-          name: datalab-web-dist
-          path: dist/
+          name: datalab-web-release
+          path: release
+
+      - uses: DataLab-Platform/release-actions/create-draft@v1
+        with:
+          name: DataLab-Web
+          files: release/*.tgz
+          notes-file: ${{ env.NOTES_FILE }}
+          notes-heading: ${{ env.NOTES_HEADING }}
+
+  # ---------------------------------------------------------------------------
+  # Step 2 - Publish: check the tarballs of the published release, then deploy
+  # the site of a final release from the checked app tarball.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Check the release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read      # download the files of the release
+      attestations: read  # verify their build provenance
+    steps:
+      - uses: DataLab-Platform/release-actions/verify-release@v1
+        with:
+          files: |
+            datalab-web-*.tgz
+            datalab-platform-web-sdk-*.tgz
+          output-dir: release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: checked-app-tarball
+          path: release/datalab-web-*.tgz
           if-no-files-found: error
           retention-days: 7
 
-      - name: Extract release notes from CHANGELOG
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node scripts/extract-changelog.mjs "$GITHUB_REF_NAME" -o release-notes.md
-
-      - name: Attach tarballs to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: release/*.tgz
-          fail_on_unmatched_files: true
-          body_path: release-notes.md
-          generate_release_notes: true
-
   deploy-pages:
     name: Deploy to GitHub Pages
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-rc') }}
     runs-on: ubuntu-latest
-    needs: pack
-    # Only deploy on actual tag pushes; skip on workflow_dispatch re-runs.
-    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -257,17 +343,25 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - name: Download built bundle
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
-          name: datalab-web-dist
-          path: dist
+          name: checked-app-tarball
+          path: release
+
+      - name: Extract the static bundle of the app tarball
+        run: |
+          mkdir site
+          tar -xzf release/datalab-web-*.tgz -C site --strip-components=1
+          # Added by scripts/pack-app.mjs for integrators, not part of the
+          # built bundle (dist/).
+          rm site/DEPLOY.md site/LICENSE
+          test -f site/index.html
 
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: dist
+          path: site
 
       - id: deployment
         uses: actions/deploy-pages@v5
