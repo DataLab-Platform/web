@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 
@@ -87,7 +87,17 @@ describe("MacroPanel — importing a macro", () => {
       .then(() => {
         importDone = true;
       });
-    releaseList();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(runtime.createMacro).not.toHaveBeenCalled();
+    expect(importDone).toBe(false);
+    await act(async () => {
+      releaseList();
+    });
+    await act(async () => {
+      await imported;
+    });
     // Both done: the import, and the restoration of the workspace macros.
     await waitFor(() => {
       expect(importDone).toBe(true);
@@ -100,6 +110,5 @@ describe("MacroPanel — importing a macro", () => {
         "Saved macro",
       );
     });
-    await imported;
   });
 });
