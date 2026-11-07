@@ -10,10 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Instrument window — New group option:** a **New group** option, next to **Acquire**, lets you choose whether each acquisition goes to a new group, as before, or to the current group of the panel. With the option off, the next acquisitions accumulate in the group of the previous one, until you select another group; a new group is still created when the panel has no current group. Each instrument sets the default state of the option, and your choice is remembered for each instrument.
 
-### Changed
-
-- **Releases:** each GitHub release now provides a `SHA256SUMS` checksums file and build provenance attestations for the app and SDK tarballs, which can be checked with `gh attestation verify`, and the online version is deployed from the static bundle of the released app tarball, so it is exactly the released version. Release candidates (`vX.Y.Z-rcN`) are published as GitHub pre-releases.
-
 ### Fixed
 
 - **Plugin instruments:** instrument plugins can now prepare and release their resources through `open()` and `close()`. A failed opening is reported and retried on the next request; closing a window or unloading its plugin releases the instrument.
@@ -44,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Data locality:** the README now states precisely what stays local: processing never requires sending data anywhere, and the network services that can be enabled (AI assistant provider, capsule registry) are named.
 - **Image regions of interest and coordinates:** image computations now follow Sigima 1.4. A region of interest selects the pixels whose centers lie inside its shape, boundary included: a rectangle whose bounds lie on pixel centers now includes one more row and column, and polygon vertices are no longer rounded to whole pixels. ROI grids are made of whole pixels, the center of an image (e.g. the default center of a radial profile) is the center of its pixel grid, and flips and rotations move regions of interest, annotations and analysis results with the pixels. Regions of interest saved earlier are not converted: they select pixels according to these rules when they are used again.
 - **Image profiles in physical coordinates:** line, segment, average and radial profiles are now defined in the physical coordinates of the image, like regions of interest and analysis results, instead of pixel indices (Sigima 1.4). The profile dialog places its shape on the pixel centers used by the computation, and the X axis of the resulting signals holds physical coordinates or distances with the unit of the image axes. The radial profile is circular on images with rectangular pixels or non-uniform coordinates; segment and radial profiles are refused when the X and Y units of the image differ, and coordinates outside the image are refused instead of being moved to its edge. Scripts and macros must use the new parameter names (`y`/`x`, `x1`/`y1`/`x2`/`y2`, `xc`/`yc`); profile computations recorded in earlier workspaces are reported as not verifiable instead of being replayed. On images without calibration, results are unchanged.
+- **Releases:** each GitHub release now provides a `SHA256SUMS` checksums file and build provenance attestations for the app and SDK tarballs, which can be checked with `gh attestation verify`, and the online version is deployed from the static bundle of the released app tarball, so it is exactly the released version. Release candidates (`vX.Y.Z-rcN`) are published as GitHub pre-releases.
 
 ## [0.10.0] - 2026-10-20
 

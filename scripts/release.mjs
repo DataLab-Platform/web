@@ -13,7 +13,8 @@
  *
  * <version> may be either an explicit SemVer (``0.2.0``, ``1.0.0-rc.1``)
  * or one of the ``npm version`` keywords (``patch``, ``minor``,
- * ``major``, ``prerelease``).
+ * ``major``, ``prerelease``). An explicit version may be the current
+ * one, when ``develop`` already carries the version being released.
  *
  * The script also promotes the ``[Unreleased]`` section of
  * ``CHANGELOG.md`` to ``[X.Y.Z] - YYYY-MM-DD``, suffixes each
@@ -178,6 +179,7 @@ run("npm", [
   "version",
   version,
   "--no-git-tag-version",
+  "--allow-same-version",
   "--prefix",
   "packages/sdk",
 ]);
@@ -185,7 +187,12 @@ run("npm", [
 // 4. Bump root (no commit, no tag — we control them ourselves so the SDK
 //    change is included in the same commit).
 console.log(`→ Bumping app to ${version} ...`);
-run("npm", ["version", version, "--no-git-tag-version"]);
+run("npm", [
+  "version",
+  version,
+  "--no-git-tag-version",
+  "--allow-same-version",
+]);
 
 // 5. Read the resolved versions and verify they match.
 const appVersion = readVersion(ROOT_PKG);
@@ -234,9 +241,10 @@ run("git", ["tag", "-a", tag, "-m", tag]);
 
 console.log(`\n✅ Release ${tag} ready locally.\n`);
 console.log("Next step (manual, intentional):");
-console.log("    git push --follow-tags\n");
+console.log(`    git push origin ${branch} ${tag}\n`);
 console.log(
-  "This will trigger the 'Release tarballs' workflow on GitHub:\n" +
-    "  verify → pytest + Playwright → lint + Vitest + build + pack →\n" +
-    "  GitHub Release with tarballs → GitHub Pages deploy.\n",
+  `This starts the 'Prepare ${tag}' run of the Release workflow, which\n` +
+    "creates a draft GitHub release with the tarballs. Nothing is published\n" +
+    "until a maintainer publishes that draft, which deploys the site\n" +
+    "(see RELEASING.md).\n",
 );
