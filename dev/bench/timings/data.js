@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794068900638,
+  "lastUpdate": 1794072462792,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (timings)": [
@@ -6396,6 +6396,455 @@ window.BENCHMARK_DATA = {
           {
             "name": "provenance · capsule.open-empty [quick worker/disk]",
             "value": 287.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty Δheap [quick worker/disk]",
+            "value": 0,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "8c5c387e2434e1b3dc43fcbc5f44e42d07b1af11",
+          "message": "chore(release): rehearse the release workflow on main with 0.10.1-rc2\n\nAssisted-by: Claude Opus 5.5",
+          "timestamp": "2026-11-07T18:21:06+01:00",
+          "tree_id": "8f746b43adb918f9e342931d4edbff506c42d173",
+          "url": "https://github.com/DataLab-Platform/web/commit/8c5c387e2434e1b3dc43fcbc5f44e42d07b1af11"
+        },
+        "date": 1794072462313,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · multi-select → grid",
+            "value": 382.8,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · getImagesData (×4)",
+            "value": 24.5,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · single Plotly render",
+            "value": 139.7,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · grid React commit",
+            "value": 367.8,
+            "unit": "ms"
+          },
+          {
+            "name": "image_perf · grid canvas paint",
+            "value": 15,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [10000 pts]",
+            "value": 137.4,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [10000 pts]",
+            "value": 223,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [10000 pts]",
+            "value": 44.1,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [10000 pts]",
+            "value": 249.2,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [10000 pts]",
+            "value": 209.6,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [100000 pts]",
+            "value": 88.9,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [100000 pts]",
+            "value": 94,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [100000 pts]",
+            "value": 17.1,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [100000 pts]",
+            "value": 341.4,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [100000 pts]",
+            "value": 249.5,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [500000 pts]",
+            "value": 107.5,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · binary fetch median [500000 pts]",
+            "value": 9.8,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [500000 pts]",
+            "value": 93,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [500000 pts]",
+            "value": 12,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [500000 pts]",
+            "value": 275.7,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [500000 pts]",
+            "value": 212.7,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · select → visible [1000000 pts]",
+            "value": 67.4,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · binary fetch median [1000000 pts]",
+            "value": 12.2,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · longest task [1000000 pts]",
+            "value": 102,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · hover [1000000 pts]",
+            "value": 17,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · pan [1000000 pts]",
+            "value": 260.2,
+            "unit": "ms"
+          },
+          {
+            "name": "signal_perf · zoom [1000000 pts]",
+            "value": 229.8,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [1024² ×16 float64]",
+            "value": 118.9,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [1024² ×16 float64]",
+            "value": 171.6,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [1024² ×16 float64]",
+            "value": 127.1,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · ram Δheap [2048² ×8 float64]",
+            "value": 77.9,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk add [2048² ×8 float64]",
+            "value": 297.9,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_storage · disk read [2048² ×8 float64]",
+            "value": 250.1,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [1024² ×16 float64]",
+            "value": 146.8,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [1024² ×16 float64]",
+            "value": 157.8,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · async add [2048² ×8 float64]",
+            "value": 314.3,
+            "unit": "ms"
+          },
+          {
+            "name": "opfs_worker · sync add [2048² ×8 float64]",
+            "value": 305.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · process.gaussian_filter [quick main/ram]",
+            "value": 41.8,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.save [quick main/ram]",
+            "value": 150.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.reopen [quick main/ram]",
+            "value": 160.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.describe [quick main/ram]",
+            "value": 1.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.check-data [quick main/ram]",
+            "value": 58.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.verify [quick main/ram]",
+            "value": 53.5,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.export [quick main/ram]",
+            "value": 223.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.inspect [quick main/ram]",
+            "value": 223.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-over-current [quick main/ram]",
+            "value": 216.8,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty [quick main/ram]",
+            "value": 213.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty Δheap [quick main/ram]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "provenance · ledger.describe-last [quick main/ram]",
+            "value": 0.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · ledger.replay-list [quick main/ram]",
+            "value": 40,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · process.gaussian_filter [quick main/disk]",
+            "value": 132.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.save [quick main/disk]",
+            "value": 295.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.reopen [quick main/disk]",
+            "value": 344.8,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.describe [quick main/disk]",
+            "value": 0.4,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.check-data [quick main/disk]",
+            "value": 0.5,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.verify [quick main/disk]",
+            "value": 176.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.export [quick main/disk]",
+            "value": 322,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.inspect [quick main/disk]",
+            "value": 212.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-over-current [quick main/disk]",
+            "value": 327.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty [quick main/disk]",
+            "value": 365.4,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty Δheap [quick main/disk]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "provenance · process.gaussian_filter [quick worker/ram]",
+            "value": 48.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.save [quick worker/ram]",
+            "value": 112.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.reopen [quick worker/ram]",
+            "value": 156.2,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.describe [quick worker/ram]",
+            "value": 0.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.check-data [quick worker/ram]",
+            "value": 62.5,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.verify [quick worker/ram]",
+            "value": 73.5,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.export [quick worker/ram]",
+            "value": 236.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.inspect [quick worker/ram]",
+            "value": 271.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-over-current [quick worker/ram]",
+            "value": 231.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty [quick worker/ram]",
+            "value": 218.1,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty Δheap [quick worker/ram]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "provenance · ledger.describe-last [quick worker/ram]",
+            "value": 0.6,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · ledger.replay-list [quick worker/ram]",
+            "value": 41,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · process.gaussian_filter [quick worker/disk]",
+            "value": 125.7,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.save [quick worker/disk]",
+            "value": 207,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · workspace.reopen [quick worker/disk]",
+            "value": 325.4,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.describe [quick worker/disk]",
+            "value": 3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.check-data [quick worker/disk]",
+            "value": 0.9,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · consult.verify [quick worker/disk]",
+            "value": 157.7,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.export [quick worker/disk]",
+            "value": 357.7,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.inspect [quick worker/disk]",
+            "value": 273.3,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-over-current [quick worker/disk]",
+            "value": 368,
+            "unit": "ms"
+          },
+          {
+            "name": "provenance · capsule.open-empty [quick worker/disk]",
+            "value": 253,
             "unit": "ms"
           },
           {
