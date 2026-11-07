@@ -4,7 +4,7 @@ import { disableQuickstartTemplate, waitForRuntimeReady } from "./fixtures";
 
 const PULSE_LINK = new URLSearchParams({
   plugin: "org.datalab.pulse-characterization",
-  pluginVersion: "0.2.0",
+  pluginVersion: "0.2.1",
   recipe: "org.datalab.pulse-characterization:single-channel-campaign",
   recipeVersion: "1.1.0",
   example: "demo",

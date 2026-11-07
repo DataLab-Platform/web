@@ -16,7 +16,7 @@ All five parameters are required. For example, the Camera quickstart link is:
 
 ```text
 ?plugin=org.datalab.camera-characterization
-&pluginVersion=0.2.0
+&pluginVersion=0.2.1
 &recipe=org.datalab.camera-characterization:relative-dn-characterization
 &recipeVersion=1.1.0
 &example=quickstart
@@ -26,7 +26,7 @@ The Pulse demo uses:
 
 ```text
 ?plugin=org.datalab.pulse-characterization
-&pluginVersion=0.2.0
+&pluginVersion=0.2.1
 &recipe=org.datalab.pulse-characterization:single-channel-campaign
 &recipeVersion=1.1.0
 &example=demo
@@ -46,6 +46,8 @@ The other bundled methods use recipe version `1.0.0` with these recipe and examp
 These blocks are wrapped for readability. Remove the line breaks when building
 a URL, or construct the query with `URLSearchParams` so identifiers are encoded
 correctly.
+
+Plugin versions must match exactly: links pinned to Camera or Pulse 0.2.0 must be updated to `pluginVersion=0.2.1` for the current bundles.
 
 ## Validation and loading
 

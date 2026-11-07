@@ -18,7 +18,7 @@ CAMERA_WHEEL = (
     / "src"
     / "runtime"
     / "builtin_wheels"
-    / "datalab_camera_characterization-0.2.0-py3-none-any.whl"
+    / "datalab_camera_characterization-0.2.1-py3-none-any.whl"
 )
 PLUGIN_ID = "org.datalab.camera-characterization"
 RECIPE_ID = f"{PLUGIN_ID}:relative-dn-characterization"
@@ -94,7 +94,7 @@ def test_camera_registry_contract_and_quickstart_binding(camera_application) -> 
 
     assert record["source"] == "bundled-wheel"
     assert record["trust"] == "verified"
-    assert record["version"] == "0.2.0"
+    assert record["version"] == "0.2.1"
     assert record["info"]["capabilities"] == ["application", "processing"]
     assert [recipe["id"] for recipe in record["recipes"]] == [
         RECIPE_ID,

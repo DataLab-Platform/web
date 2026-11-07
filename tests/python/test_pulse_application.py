@@ -19,7 +19,7 @@ PULSE_WHEEL = (
     / "src"
     / "runtime"
     / "builtin_wheels"
-    / "datalab_pulse_characterization-0.2.0-py3-none-any.whl"
+    / "datalab_pulse_characterization-0.2.1-py3-none-any.whl"
 )
 PLUGIN_ID = "org.datalab.pulse-characterization"
 RECIPE_ID = f"{PLUGIN_ID}:single-channel-campaign"
@@ -93,7 +93,7 @@ def test_pulse_registry_contract_and_generated_campaign(pulse_application) -> No
 
     assert record["source"] == "bundled-wheel"
     assert record["trust"] == "verified"
-    assert record["version"] == "0.2.0"
+    assert record["version"] == "0.2.1"
     assert record["info"]["capabilities"] == ["application", "processing"]
     assert [recipe["id"].split(":")[1] for recipe in record["recipes"]] == [
         "single-channel-campaign",

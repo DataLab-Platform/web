@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Bundled applications:** Camera and Pulse have been updated to 0.2.1. Application links pinned to version 0.2.0 must be updated to 0.2.1 because links require an exact plugin version.
 - **Plugin compatibility:** portable plugin wheels requiring DataLab 1.4 can now be installed when their other dependencies are available. The host remains a browser subset and does not provide Qt-dependent Desktop APIs.
 - **Processing and capsules:** the browser uses the published Sigima 1.4.0 and DataLab-Capsule 0.2.0 releases.
 - **Data locality:** the README now states precisely what stays local: processing never requires sending data anywhere, and the network services that can be enabled (AI assistant provider, capsule registry) are named.
