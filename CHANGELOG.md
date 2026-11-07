@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- **Releases:** each GitHub release now provides a `SHA256SUMS` checksums file and build provenance attestations for the app and SDK tarballs, which can be checked with `gh attestation verify`, and the online version is deployed from the static bundle of the released app tarball, so it is exactly the released version. Release candidates (`vX.Y.Z-rcN`) are published as GitHub pre-releases.
+
 ## [0.10.0] - 2026-10-20
 
 ### Added in 0.10.0
