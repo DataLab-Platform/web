@@ -10,7 +10,10 @@ Use the release helper to bump both packages, promote the changelog, create one 
 node scripts/release.mjs patch   # bug fix:  0.1.0 → 0.1.1
 node scripts/release.mjs minor   # feature:  0.1.0 → 0.2.0
 node scripts/release.mjs major   # breaking: 0.1.0 → 1.0.0
+node scripts/release.mjs 0.2.0   # explicit version, possibly the current one
 ```
+
+Pass the version explicitly when `develop` already carries it (both `package.json` files set while preparing the release): a keyword would bump it again.
 
 The push remains manual, providing a final checkpoint before the release workflow starts.
 

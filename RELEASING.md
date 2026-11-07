@@ -21,6 +21,8 @@ The qualification of the Python dependencies, the release contexts and the distr
    git push origin main vX.Y.Z
    ```
 
+   If `develop` already carries the version being released (both `package.json` files at `X.Y.Z`), pass that version instead of a keyword, e.g. `node scripts/release.mjs 0.11.0`: a keyword would bump it again.
+
 3. Follow the **Prepare vX.Y.Z** run in the [Actions](https://github.com/DataLab-Platform/web/actions/workflows/release.yml) tab. When it succeeds, its summary links to the draft release.
 4. Review the draft release (title, description, files: app tarball, SDK tarball and `SHA256SUMS`), then click **Publish release**.
 5. Publishing starts the **Publish vX.Y.Z** run, which deploys the site.

@@ -516,8 +516,8 @@
     {
       "id": "newVersion",
       "type": "promptString",
-      "description": "New version (SemVer like 0.2.0, or keyword: patch | minor | major | prerelease)",
-      "default": "minor"
+      "description": "Version to release (SemVer like 0.2.0, which may be the current version of package.json, or keyword: patch | minor | major | prerelease)",
+      "default": ""
     },
     {
       "id": "demoTheme",
