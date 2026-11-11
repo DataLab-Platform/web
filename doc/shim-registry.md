@@ -31,13 +31,13 @@ DataLab-Web requires guidata 3.17 or later. Guidata 3.15 introduced `guidata.dat
 
 `PACKAGE_VERSION_SOURCES` records where the fast audit can obtain a useful version estimate:
 
-| Package                  | How the runtime gets it                                  | Fast-audit source                                                                                                    |
-| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `guidata`                | `micropip.install("guidata>=3.17.0")`                    | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
-| `sigima`                 | `micropip.install("sigima>=1.1.6")`                      | Latest PyPI release from `https://pypi.org/pypi/sigima/json`                                                         |
-| `numpy`, `scipy`, `h5py` | Bundled with the pinned Pyodide build (`py.loadPackage`) | `pyodide-lock.json` of the pinned `PYODIDE_VERSION` (from [src/runtime/workerBase.ts](../src/runtime/workerBase.ts)) |
+| Package                  | How the runtime gets it                                                                                                      | Fast-audit source                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `guidata`                | `micropip.install` of the requirement of [guidata-dependency.json](../guidata-dependency.json) (currently `guidata>=3.17.0`) | Latest PyPI release from `https://pypi.org/pypi/guidata/json`                                                        |
+| `sigima`                 | `micropip.install` of the exact pin of [sigima-dependency.json](../sigima-dependency.json) (currently `sigima==1.4.0`)       | Latest PyPI release from `https://pypi.org/pypi/sigima/json`                                                         |
+| `numpy`, `scipy`, `h5py` | Bundled with the pinned Pyodide build (`py.loadPackage`)                                                                     | `pyodide-lock.json` of the pinned `PYODIDE_VERSION` (from [src/runtime/workerBase.ts](../src/runtime/workerBase.ts)) |
 
-The fast audit infers these versions **without booting Pyodide**, so it is cheap and useful for routine monitoring. For PyPI packages it does not execute dependency resolution, so the latest release is only an approximation of what `micropip` will select. The live audit instead reads the versions actually resolved inside Pyodide via `DataLabRuntime.getInstalledVersions()` (backed by `importlib.metadata`), which is authoritative but pays the cold-start cost. Both feed the same `classifyShim` logic.
+The fast audit infers these versions **without booting Pyodide**, so it is cheap and useful for routine monitoring. For PyPI packages it does not execute dependency resolution, so the latest release is only an approximation of what `micropip` will select; for Sigima, which is pinned exactly, the pin of the manifest is what the runtime installs (a development wheel replaces it only when `VITE_SIGIMA_INSTALL_SPEC` is set, for example by CI for a `developmentRef`). The live audit instead reads the versions actually resolved inside Pyodide via `DataLabRuntime.getInstalledVersions()` (backed by `importlib.metadata`), which is authoritative but pays the cold-start cost. Both feed the same `classifyShim` logic.
 
 A shim's `removableFrom` is the **minimum upstream version that ships the feature natively**. The audit compares it with the resolved installed version and classifies each shim:
 
@@ -82,7 +82,7 @@ A shim's `removableFrom` is the **minimum upstream version that ships the featur
 1. Run **🔍 Audit shims (versions)** (`npm run audit:shims`). A **`ready-to-remove`** result makes the shim a candidate for deeper verification.
 2. Run **🔬 Audit shims (live Pyodide)** (`npm run audit:shims:runtime`) and confirm that the actual browser runtime also reports **`ready-to-remove`**.
 3. Inspect the released upstream implementation and run focused contract or E2E tests through the native path. Version and symbol presence are not sufficient: required fields, callbacks, and round trips must remain intact. If only part of the shim is now native, reduce it to the smallest missing behavior and set `removableFrom` to `null` until the remainder is released upstream.
-4. Delete the fully superseded shim source (the sentinel-delimited block or the whole file), remove its loader calls, and bump the relevant floor in [requirements-dev.txt](../requirements-dev.txt) if appropriate.
+4. Delete the fully superseded shim source (the sentinel-delimited block or the whole file), remove its loader calls, and, if appropriate, raise the requirement of the matching manifest ([guidata-dependency.json](../guidata-dependency.json) or [sigima-dependency.json](../sigima-dependency.json)), keeping the guidata lower bound of [requirements-dev.txt](../requirements-dev.txt) aligned with its manifest.
 5. Remove its `ShimDescriptor` from `SHIM_REGISTRY` and run `npm test`, the relevant Python tests, and browser E2E coverage for the touched path.
 
 ### Running the audit

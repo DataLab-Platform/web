@@ -32,10 +32,9 @@ adapted to Angular conventions:
   1. **Same origin**: serve the static DataLab-Web bundle (the
      contents of `dist/` after `npm run build`) from your Angular app
      under, e.g., `/datalab-web/`.
-  2. **Different origin**: host DataLab-Web on a separate domain or
-     port. In that case the iframe URL must include
-     `?allowedOrigins=<your-app-origin>` so the bridge accepts
-     postMessage calls from your app.
+  2. **Different origin**: host DataLab-Web on a separate domain or port.
+
+  In both cases the iframe URL must include `?allowedOrigins=<your-app-origin>`: without it, DataLab-Web does not activate the bridge and ignores postMessage calls from your app.
 
 ## Step 1 — Install the SDK
 
@@ -88,9 +87,7 @@ const DATALAB_WEB_URL =
   encodeURIComponent(window.location.origin);
 ```
 
-The `allowedOrigins` query parameter restricts which parent windows
-the bridge accepts requests from. **Always set it** when you embed
-DataLab-Web in third-party shells.
+The `allowedOrigins` query parameter restricts which parent windows the bridge accepts requests from. **Always set it**: without it, the bridge is not activated.
 
 ## Step 4 — Use it
 
@@ -148,11 +145,7 @@ async pushSignal() {
 
 ## Notes on change detection
 
-The service uses [signals](https://angular.dev/guide/signals) to
-expose `ready`, `lastError` and `objectsCount`, so any component
-template that reads them is automatically re-rendered when DataLab-Web
-emits an `object-changed` event. If you target Angular ≤ 15, replace
-the signals with `BehaviorSubject` / `async` pipe.
+The service uses [signals](https://angular.dev/guide/signals) to expose `ready`, `lastError` and `objectsCount`, so any component template that reads them is automatically re-rendered when DataLab-Web emits a `model-changed` event. This event follows every workspace change requested through the bridge (by your app or another host window), not the changes made interactively inside DataLab-Web. If you target Angular ≤ 15, replace the signals with `BehaviorSubject` / `async` pipe.
 
 ## Notes on the binary fast path
 
@@ -182,8 +175,7 @@ from release `N+1` is supported as long as the MAJOR is unchanged.
 
 Before shipping the integration to production, verify:
 
-1. The bundle is served from a stable URL — relative URLs in the bundle
-   (`<base href="./">`) make any sub-path work.
+1. The bundle is served from a stable URL — the bundle uses relative asset URLs (Vite `base: "./"`), so any sub-path works.
 2. The iframe `src` includes `?allowedOrigins=<your-app-origin>` (URL-encoded,
    comma-separated for multiple origins). Never use `*` outside development.
 3. The host page's CSP allows `frame-src` for the bundle origin

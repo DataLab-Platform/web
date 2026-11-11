@@ -36,6 +36,22 @@ The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` i
 
 `targetOrigin` must be the origin of the iframe document: the client only accepts responses and events coming from the iframe window **and** from that origin, so that another document loaded in the iframe (after a navigation) cannot answer in its place. `targetOrigin: "*"` accepts any origin and is intended for local development only. Likewise, the bridge sends its responses and events to each host window with the origin of its requests.
 
+The typed helpers mirror DataLab's remote-control API: `getVersion`, `getProtocolVersion`, `addSignal`, `addImage`, `listSignals`, `listImages`, `getObject`, `getObjectUuids`, `deleteObject`, `getSignalXY`, `getImageData`, `applyFeature` (and its alias `calc`), `listFeatures`, `selectObjects`, `getSelection`, `setCurrentPanel`, `getCurrentPanel`, `getCurrentObjectUuid` and `resetAll`. `call(method, params)` sends any other request, and `dispose()` removes the message listener and rejects pending requests.
+
+## Events
+
+`client.on(name, handler)` subscribes to an event sent by the iframe and returns a function that removes the subscription:
+
+```ts
+const off = client.on("model-changed", (payload) => {
+  const { panel } = payload as { panel: "signal" | "image" | null };
+  console.log("Workspace changed, panel:", panel ?? "not specified");
+});
+// later: off();
+```
+
+The bridge currently emits a single event, `"model-changed"`, after each workspace change requested through the bridge (adding, replacing or deleting objects, adding groups, applying a processing, resetting the workspace), whichever host window requested it. Its payload is `{ panel }`: `"signal"` or `"image"` when the change concerns that panel, `null` when the bridge does not name one (for example after a deletion or a reset). Changes made interactively inside DataLab-Web do not emit it. Events are sent to the host windows that have already sent a request, such as the one sent by `client.ready()`.
+
 ## Wire-protocol versioning
 
 `client.ready()` negotiates a wire-protocol version with the iframe (semver `MAJOR.MINOR`). It rejects if the iframe reports a MAJOR incompatible with the SDK (`SUPPORTED_PROTOCOL_MAJOR`).

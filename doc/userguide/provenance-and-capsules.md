@@ -85,7 +85,7 @@ Even if an added object reuses the UUID of a deleted source or result, it does n
 | Processing/Recompute or replay of a supported Desktop History computation                    | A new execution; verification itself creates no workspace result or activity                                        |
 | Import/creation and direct edits of data, ROI or metadata                                    | No scientific call describing acquisition or arbitrary edits; states can be observed later without known production |
 | Plugins, macros, notebooks, scripts and remote API clients                                   | The supported calculations they call, not every instruction or direct object modification                           |
-| Desktop interactive fits and markers-table-to-signal                                         | Not currently recorded scientific calls; these Desktop paths are not Web features                                   |
+| Interactive fits and Desktop markers-table-to-signal                                         | Not currently recorded scientific calls; DataLab-Web has interactive fits but no markers table                      |
 | Discarded previews, errors and cancellations                                                 | Not successful executions; a successful detection that finds nothing is recorded normally                           |
 
 Provenance capture is independent of the Desktop History **Record** mode: History is an editable recipe, provenance records executions. A function without a known contract can remain opaque. Old histories have unknown input states and possibly incomplete parameters or environments; their Python names are never used to execute them retroactively.

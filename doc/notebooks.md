@@ -1,17 +1,10 @@
 # Notebooks
 
-DataLab-Web ships an in-browser notebook environment that lets you
-script DataLab from Python without leaving the page. Cells run inside
-the same [Pyodide](https://pyodide.org/) kernel that powers the rest
-of the application, so all of [Sigima](https://datalab-platform.com/)
-is available out of the box.
+DataLab-Web ships an in-browser notebook environment that lets you script DataLab from Python without leaving the page. Cells run in a dedicated [Pyodide](https://pyodide.org/) kernel, a Web Worker shared by all notebooks, where [Sigima](https://datalab-platform.com/) is installed; they reach the workspace through the `proxy` object.
 
 ## Opening the panel
 
-Click the **Notebooks** tab in the side panel switcher. The first
-time you open it, a bundled **Quickstart** notebook walks you through
-generating a synthetic signal, displaying it, and running a
-moving-average filter.
+Click the **Notebooks** tab at the top of the central area. The first time you open it, a bundled **Quickstart** notebook walks you through generating a synthetic signal, displaying it, and running a moving-average filter.
 
 ### Creating new notebooks
 
@@ -72,29 +65,18 @@ wraps top-level `await` in cells, so this works out of the box.
   variables defined in one notebook are visible from the others.
 - Notebooks are auto-saved to your browser's IndexedDB ~600 ms after
   any edit. Empty / pristine notebooks are not persisted.
-- The **Browser… (N)** menu in the toolbar lists every saved
-  notebook; clicking an entry focuses its tab if it is already open.
+- The **Recent… (N)** menu in the toolbar lists every saved notebook; clicking an entry focuses its tab if it is already open.
 - Closing the last tab spawns a fresh empty notebook so the panel is
   never empty.
 
-> **What survives a reload?** The IndexedDB cache is a _roll-over
-> recovery cache_, not durable storage. Notebook **content** is
-> rehydrated automatically on the next page load (and surfaced
-> through a one-time recovery banner so you know the workspace was
-> reseeded from the cache). To make a complete workspace durable
-> — including signals, images, groups and metadata — use **File →
-> Save HDF5 workspace…**. See _Persistence model_ in the README.
+> **What survives a reload?** The IndexedDB cache is a _roll-over recovery cache_, not durable storage. Notebook **content** is not restored automatically on the next page load: it stays reachable through the **Recent…** menu, and a one-time banner tells you that edited notebooks are available there. To make a complete workspace durable — including notebooks, signals, images, groups and metadata — use **File → Save to HDF5 file…**. See _Persistence model_ in the README.
 
 ## File compatibility (`.ipynb`)
 
-DataLab-Web reads and writes the standard
-[nbformat v4.5](https://nbformat.readthedocs.io/) format used by
-Jupyter, JupyterLab, VS Code and GitHub. Use:
+DataLab-Web reads and writes the standard [nbformat v4.5](https://nbformat.readthedocs.io/) format used by Jupyter, JupyterLab, VS Code and GitHub. In the notebook toolbar, use:
 
-- **File → Notebook → Open notebook…** (or the toolbar's **Open…**) to
-  import a `.ipynb` from disk.
-- **File → Notebook → Save notebook as…** (or the toolbar's **Save
-  as…**) to download the active notebook.
+- **Import…** to import a `.ipynb` from disk.
+- **Export…** to download the active notebook as a `.ipynb`.
 
 The notebook name is preserved through round-trips via a
 `metadata.dlw.name` entry; everything else follows the standard
@@ -104,14 +86,7 @@ An opened `.ipynb` is treated as untrusted: its markdown cells and the HTML and 
 
 ## Renaming a notebook
 
-- Click the toolbar's **✎ Rename** button or
-- Double-click the active tab title, or
-- Use **File → Notebook → Rename notebook…**.
-
-An inline input replaces the tab title. Press **Enter** to commit or
-**Escape** to cancel. (We avoid `window.prompt` because it is
-silently no-op in some embedded webviews — notably the VS Code Simple
-Browser.)
+Double-click the tab title of a notebook. An inline input replaces the tab title. Press **Enter** to commit or **Escape** to cancel. (We avoid `window.prompt` because it is silently no-op in some embedded webviews — notably the VS Code Simple Browser.)
 
 ## Keyboard shortcuts (cell editor focus)
 
