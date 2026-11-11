@@ -17,6 +17,8 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "../runtime/proxyBridge";
+import { GenerationPool } from "../runtime/workerPool";
+import { startWorker, WorkerStartCancelled } from "../runtime/workerReady";
 import { pyodideLang } from "../i18n/locale";
 
 /** Outputs are MIME bundles, exactly like Jupyter ``display_data``. */
@@ -52,6 +54,28 @@ interface OutboundReply {
 /** Status of the runtime as a whole. */
 export type NotebookRuntimeStatus = "idle" | "loading" | "running" | "stopping";
 
+/** A start cancelled by a dispose or a restart is not an error. */
+function ignoreCancelled(error: unknown): void {
+  if (!(error instanceof WorkerStartCancelled)) throw error;
+}
+
+/** Kernels of the Notebooks panel, shared by its successive mounts (see
+ *  :class:`GenerationPool`). */
+const panelKernels = new GenerationPool<RuntimeApi, NotebookRuntime>(
+  (runtime) => new NotebookRuntime(runtime),
+);
+
+/** The kernel of the Notebooks panel for ``generation``: the panel is
+ *  mounted afresh when the workspace is replaced or reset, and gets a new
+ *  kernel only with a new generation (the previous one is terminated,
+ *  unless no cell ran in it). */
+export function panelNotebookRuntime(
+  runtime: RuntimeApi,
+  generation: number,
+): NotebookRuntime {
+  return panelKernels.acquire(runtime, generation);
+}
+
 interface QueuedRun {
   cellId: string;
   code: string;
@@ -63,9 +87,15 @@ interface QueuedRun {
 export class NotebookRuntime {
   private worker: Worker | null = null;
   private workerReady = false;
+  /** Start of the worker in progress (shared by concurrent callers). */
+  private starting: Promise<void> | null = null;
+  /** Cancels the start in progress (dispose, interrupt, restart). */
+  private startAbort: AbortController | null = null;
   private currentRun: QueuedRun | null = null;
   private queue: QueuedRun[] = [];
   private status: NotebookRuntimeStatus = "idle";
+  /** A cell was sent to the current worker (its namespace is not fresh). */
+  private used = false;
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
@@ -77,11 +107,16 @@ export class NotebookRuntime {
 
   /** Eagerly create & init the worker so the first cell run is fast. */
   async preload(): Promise<void> {
-    await this.ensureWorker();
+    await this.ensureWorker().catch(ignoreCancelled);
   }
 
   getStatus(): NotebookRuntimeStatus {
     return this.status;
+  }
+
+  /** True while no cell ran in the kernel (fresh user namespace). */
+  isPristine(): boolean {
+    return !this.used && !this.currentRun && this.queue.length === 0;
   }
 
   /**
@@ -112,13 +147,7 @@ export class NotebookRuntime {
     }
     this.status = "stopping";
     const interrupted = this.currentRun;
-    try {
-      this.worker.terminate();
-    } catch {
-      /* ignore */
-    }
-    this.worker = null;
-    this.workerReady = false;
+    this.terminateWorker();
     this.currentRun = null;
     interrupted?.callbacks.onError?.(
       "KeyboardInterrupt",
@@ -139,18 +168,24 @@ export class NotebookRuntime {
       q.resolve();
     }
     this.status = "idle";
-    await this.ensureWorker();
+    await this.ensureWorker().catch(ignoreCancelled);
   }
 
-  /** Restart the kernel (= interrupt + clear queue). */
+  /** Restart the kernel: a running cell is interrupted; an idle (or still
+   *  starting) kernel is terminated as well and replaced by a fresh one,
+   *  so that the user namespace is always lost. */
   async restart(): Promise<void> {
-    await this.interrupt();
+    if (this.status === "running" && this.worker) {
+      await this.interrupt();
+      return;
+    }
+    this.terminateWorker();
+    this.status = "idle";
+    await this.ensureWorker().catch(ignoreCancelled);
   }
 
   dispose(): void {
-    this.worker?.terminate();
-    this.worker = null;
-    this.workerReady = false;
+    this.terminateWorker();
     this.currentRun = null;
     this.queue = [];
     this.status = "idle";
@@ -160,17 +195,56 @@ export class NotebookRuntime {
   // Worker lifecycle
   // ---------------------------------------------------------------------
 
-  private async ensureWorker(): Promise<void> {
-    if (this.worker && this.workerReady) return;
-    if (!this.worker) {
+  /** Terminate the worker, ready or still starting. */
+  private terminateWorker(): void {
+    this.startAbort?.abort();
+    this.startAbort = null;
+    this.starting = null;
+    try {
+      this.worker?.terminate();
+    } catch {
+      /* ignore */
+    }
+    this.worker = null;
+    this.workerReady = false;
+    this.used = false;
+  }
+
+  private ensureWorker(): Promise<void> {
+    if (this.worker && this.workerReady) return Promise.resolve();
+    if (!this.starting) {
+      const abort = new AbortController();
+      this.startAbort = abort;
       this.status = "loading";
-      this.worker = this.spawnWorker();
+      const starting = startWorker({
+        spawn: () => this.spawnWorker(),
+        onSpawn: (worker) => {
+          this.worker = worker;
+          this.workerReady = false;
+        },
+        signal: abort.signal,
+        label: "notebook kernel",
+      }).then(
+        () => {
+          if (this.starting !== starting) return;
+          this.starting = null;
+          this.startAbort = null;
+          this.workerReady = true;
+          if (this.status === "loading") this.status = "idle";
+        },
+        (error: unknown) => {
+          if (this.starting === starting) {
+            this.starting = null;
+            this.startAbort = null;
+            this.worker = null;
+            this.status = "idle";
+          }
+          throw error;
+        },
+      );
+      this.starting = starting;
     }
-    if (!this.workerReady) {
-      await this.waitForReady(this.worker);
-      this.workerReady = true;
-      if (this.status === "loading") this.status = "idle";
-    }
+    return this.starting;
   }
 
   private spawnWorker(): Worker {
@@ -197,26 +271,6 @@ export class NotebookRuntime {
     return w;
   }
 
-  private waitForReady(w: Worker): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const prev = w.onmessage;
-      const onMsg = (ev: MessageEvent) => {
-        const data = ev.data as { type?: string };
-        if (data?.type === "ready") {
-          w.onmessage = prev;
-          resolve();
-        } else if (prev) {
-          (prev as (e: MessageEvent) => void).call(w, ev);
-        }
-      };
-      w.onmessage = onMsg;
-      const onErr = (ev: ErrorEvent) => {
-        reject(new Error(ev.message || "notebook worker init failed"));
-      };
-      w.addEventListener("error", onErr, { once: true });
-    });
-  }
-
   // ---------------------------------------------------------------------
   // Pump (single-track queue)
   // ---------------------------------------------------------------------
@@ -228,6 +282,12 @@ export class NotebookRuntime {
     try {
       await this.ensureWorker();
     } catch (err) {
+      if (err instanceof WorkerStartCancelled) {
+        // Disposed or restarted meanwhile: the cell is not run.
+        next.callbacks.onFinished?.("interrupted", 0);
+        next.resolve();
+        return;
+      }
       next.callbacks.onError?.(
         "WorkerInitError",
         err instanceof Error ? err.message : String(err),
@@ -240,6 +300,7 @@ export class NotebookRuntime {
     }
     this.currentRun = next;
     this.status = "running";
+    this.used = true;
     this.worker!.postMessage({
       type: "exec_cell",
       cellId: next.cellId,

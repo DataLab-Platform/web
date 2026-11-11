@@ -23,11 +23,27 @@ const REGISTRY: Record<string, LLMProvider> = {
   mock: MOCK_PROVIDER,
 };
 
+/** Provider answering every request whatever the settings, or ``null``. */
+let providerOverride: LLMProvider | null = null;
+
+/** Route every request to *provider*, whatever the settings (``null``
+ *  restores the configured provider). In memory only: the user's settings
+ *  are neither read nor changed. Used by the showcase mode to replay a
+ *  scripted session. */
+export function setProviderOverride(provider: LLMProvider | null): void {
+  providerOverride = provider;
+}
+
+/** True while :func:`setProviderOverride` routes the requests. */
+export function hasProviderOverride(): boolean {
+  return providerOverride !== null;
+}
+
 /** Resolve the provider implementation for the given settings. Falls
  *  back to the OpenAI provider when the kind is unknown — keeps the
  *  app usable after a stale localStorage payload survives an upgrade. */
 export function getProvider(settings: ProviderSettings): LLMProvider {
-  return REGISTRY[settings.provider] ?? OPENAI_PROVIDER;
+  return providerOverride ?? REGISTRY[settings.provider] ?? OPENAI_PROVIDER;
 }
 
 /** Drive ``settings.provider`` to its underlying ``chatCompletions``. */

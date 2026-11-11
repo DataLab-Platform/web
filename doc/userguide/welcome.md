@@ -12,6 +12,7 @@ DataLab-Web is the **browser-native** sibling of the DataLab desktop application
 - See where each result comes from, check and verify it, and exchange it with DataLab Desktop as a capsule (see [Provenance and capsules](provenance-and-capsules.md)).
 - Automate workflows with **macros** and **notebooks** running in dedicated
   Web Workers so the UI stays responsive.
+- Play automated live demos of the application, for example on a conference booth screen, with the [Showcase mode](showcase-mode.md).
 - Extend the application with **Python plugins** (portable `PluginBase` classes, hosted through a browser shim of the desktop plugin API) and a **TypeScript SDK** for embedding DataLab-Web in third-party apps.
 
 ## Where to find help

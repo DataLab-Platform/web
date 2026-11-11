@@ -46,6 +46,19 @@ describe("t() translation helper", () => {
   });
 });
 
+describe("lazily loaded catalogs", () => {
+  it("merges the showcase catalog when its chunk loads", async () => {
+    setActiveLocale("fr", { reload: false });
+    // Kept out of the initial bundle: not translated before the showcase
+    // chunk is loaded.
+    expect(t("Try DataLab Web now")).toBe("Try DataLab Web now");
+    await import("../../../src/showcase/i18n");
+    expect(t("Try DataLab Web now")).toBe("Essayez DataLab Web dès maintenant");
+    // The main catalog is still there.
+    expect(t("Processing")).toBe("Traitement");
+  });
+});
+
 describe("pyodideLang()", () => {
   it("maps English to the POSIX C locale", () => {
     expect(pyodideLang("en")).toBe("C");

@@ -97,3 +97,18 @@ def test_replace_macros_overwrites_store(fresh_bootstrap):
     )
     macros = bs.list_macros()
     assert [m["title"] for m in macros] == ["New", "Other"]
+
+
+def test_untitled_macros_are_numbered_uniquely_per_workspace(fresh_bootstrap):
+    """New macros get unique "Untitled N" titles; numbering starts again in a
+    reset workspace (as DataLab desktop resets its untitled macro counter)."""
+    bs = fresh_bootstrap
+    assert [bs.create_macro()["title"] for _ in range(2)] == [
+        "Untitled 1",
+        "Untitled 2",
+    ]
+    bs.reset_all()
+    assert [bs.create_macro()["title"] for _ in range(2)] == [
+        "Untitled 1",
+        "Untitled 2",
+    ]

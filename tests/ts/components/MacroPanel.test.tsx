@@ -1,18 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 
 // The macro worker plays no part in restoring or importing macros.
-vi.mock("../../../src/runtime/MacroRuntime", () => ({
-  MacroRuntime: class {
+vi.mock("../../../src/runtime/MacroRuntime", () => {
+  class MacroRuntime {
     externalCallbacks = {};
     preload(): Promise<void> {
       return Promise.resolve();
     }
     dispose(): void {}
-  },
-}));
+  }
+  const shared = new MacroRuntime();
+  return { MacroRuntime, panelMacroRuntime: () => shared };
+});
 
 import {
   MacroPanel,
@@ -110,5 +119,118 @@ describe("MacroPanel — importing a macro", () => {
         "Saved macro",
       );
     });
+  });
+});
+
+/**
+ * Runtime holding a macro store like ``bootstrap.py``: new macros are
+ * named "Untitled N" with the first number not used by the store, and
+ * ``resetAll`` empties it.
+ */
+function storeRuntime(): { runtime: RuntimeApi; resetAll: () => void } {
+  const macros: MacroRecord[] = [];
+  let next = 0;
+  const untitled = () => {
+    const used = new Set(macros.map((m) => m.title));
+    let n = 1;
+    while (used.has(`Untitled ${n}`)) n += 1;
+    return `Untitled ${n}`;
+  };
+  const runtime = {
+    listMacros: vi.fn(async () =>
+      macros.map(({ id, title }) => ({ id, title })),
+    ),
+    getMacro: vi.fn(async (id: string) => macros.find((m) => m.id === id)),
+    createMacro: vi.fn(async (title?: string, code?: string) => {
+      next += 1;
+      const rec = {
+        id: `m${next}`,
+        title: title || untitled(),
+        code: code ?? "",
+      };
+      macros.push(rec);
+      return rec;
+    }),
+    setMacroCode: vi.fn(async () => undefined),
+  };
+  return {
+    runtime: runtime as unknown as RuntimeApi,
+    resetAll: () => {
+      macros.length = 0;
+    },
+  };
+}
+
+function macroPanel(runtime: RuntimeApi, key = 0) {
+  return (
+    <ToastProvider>
+      <DialogProvider>
+        <MacroPanel
+          key={key}
+          runtime={runtime}
+          onSetCurrentPanel={() => undefined}
+          getSelection={() => []}
+          getCurrentPanel={() => "signal"}
+          selectObjects={() => undefined}
+          onModelChanged={() => undefined}
+          theme="light"
+        />
+      </DialogProvider>
+    </ToastProvider>
+  );
+}
+
+function tabTitles(): string[] {
+  return screen
+    .getAllByRole("tab")
+    .map((tab) => (tab.textContent ?? "").replace(/[×✕•\s]+$/u, "").trim());
+}
+
+describe("MacroPanel — workspace reset", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    (globalThis as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
+  it("names a new macro uniquely after the workspace was reset", async () => {
+    const { runtime, resetAll } = storeRuntime();
+    const view = render(macroPanel(runtime, 0));
+    await waitFor(() => expect(tabTitles()).toEqual(["Untitled 1"]));
+    // The workspace is reset: the store is emptied and the panel mounted
+    // afresh on it (``resetWorkspace`` in App.tsx).
+    resetAll();
+    view.rerender(macroPanel(runtime, 1));
+    await waitFor(() => expect(tabTitles()).toEqual(["Untitled 1"]));
+    fireEvent.click(document.querySelector(".macro-tab-new")!);
+    fireEvent.click(screen.getAllByRole("menuitem")[0]);
+    await waitFor(() =>
+      expect(tabTitles()).toEqual(["Untitled 1", "Untitled 2"]),
+    );
+  });
+});
+
+describe("MacroPanel — Recent… counter", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    (globalThis as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
+  it("follows entries recorded or removed elsewhere", async () => {
+    const { recordRecent, removeRecent, _resetForTests } =
+      await import("../../../src/storage/recentStore");
+    _resetForTests();
+    const { runtime } = storeRuntime();
+    render(macroPanel(runtime));
+    const recent = await screen.findByRole("button", { name: /^Recent… \(/ });
+    await waitFor(() => expect(recent).toHaveTextContent("Recent… (0)"));
+    await act(async () => {
+      await recordRecent("macro", { id: "x", title: "X", content: "" });
+    });
+    await waitFor(() => expect(recent).toHaveTextContent("Recent… (1)"));
+    // E.g. the showcase removing the macros its demo created.
+    await act(async () => {
+      await removeRecent("macro", "x");
+    });
+    await waitFor(() => expect(recent).toHaveTextContent("Recent… (0)"));
   });
 });

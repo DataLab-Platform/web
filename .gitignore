@@ -18,6 +18,8 @@ playwright.config.js
 playwright.config.d.ts
 playwright.demo.config.js
 playwright.demo.config.d.ts
+playwright.showcase.config.js
+playwright.showcase.config.d.ts
 
 # Editor
 .vscode/*.log

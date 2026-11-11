@@ -486,6 +486,7 @@ export function ApplicationsDialog({
                 <button
                   key={record.plugin_id}
                   className={record.plugin_id === selectedId ? "active" : ""}
+                  data-plugin-id={record.plugin_id ?? undefined}
                   onClick={() => setSelectedId(record.plugin_id)}
                 >
                   <strong>{record.info?.name ?? record.plugin_id}</strong>

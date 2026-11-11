@@ -87,8 +87,8 @@ right.
 ```mermaid
 flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
-    L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/"]
-    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>ProcessingPreviewController.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
+    L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/showcase/"]
+    L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>ProcessingPreviewController.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>workerReady.ts · workerPool.ts · packageRetry.ts<br/>src/storage/ (OPFS spill stores)"]
     L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>dlw_provenance.py<br/>dlw_macro_lint.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py<br/>dlplugins/datalab/** (plugin shim)"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 

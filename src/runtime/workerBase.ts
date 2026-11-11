@@ -14,14 +14,28 @@
  */
 
 import { GUIDATA_INSTALL_SPEC, SIGIMA_INSTALL_SPEC } from "./dependencyConfig";
+import {
+  loadPackagesWithRetry,
+  loadPyodideOrFail,
+  micropipInstallWithRetry,
+} from "./packageRetry";
 
 export const PYODIDE_VERSION = "v0.26.4";
 export const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
 
+const LOG_LABEL = "[python worker]";
+
 /** Minimal slice of the Pyodide API surface used by the workers. */
 export interface PyodideAPI {
   runPythonAsync: (code: string) => Promise<unknown>;
-  loadPackage: (names: string | string[]) => Promise<void>;
+  loadPackage: (
+    names: string | string[],
+    options?: {
+      messageCallback?: (message: string) => void;
+      errorCallback?: (message: string) => void;
+      checkIntegrity?: boolean;
+    },
+  ) => Promise<unknown>;
   globals: {
     set: (name: string, value: unknown) => void;
     get: (name: string) => unknown;
@@ -71,7 +85,12 @@ export async function bootPyodide(opts: {
   const pyodideMod = (await import(
     /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
   )) as { loadPyodide: (o: { indexURL: string }) => Promise<PyodideAPI> };
-  const py = await pyodideMod.loadPyodide({ indexURL: PYODIDE_INDEX });
+  // Fails (instead of hanging) when the WebAssembly module cannot be
+  // loaded, so that the worker reports it and the main thread starts a
+  // fresh one (see ``workerReady.ts``).
+  const py = await loadPyodideOrFail(pyodideMod.loadPyodide, {
+    indexURL: PYODIDE_INDEX,
+  });
 
   // Pin ``LANG`` before any guidata/sigima import so gettext-wrapped
   // labels match the main thread's UI locale (``C`` = English, or e.g.
@@ -83,7 +102,7 @@ os.environ["LANG"] = ${JSON.stringify(opts.lang)}
 os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
 `);
 
-  await py.loadPackage(opts.packages);
+  await loadPackagesWithRetry(py, opts.packages, { label: LOG_LABEL });
 
   // Install Sigima + guidata so user code can ``import sigima`` and
   // ``import guidata.dataset`` exactly as in DataLab desktop. This adds
@@ -93,10 +112,12 @@ os.environ["LANGUAGE"] = ${JSON.stringify(opts.lang)}
   // is pulled explicitly for the same reason, preserving TIFF I/O.
   // Capped ``<2025``: tifffile 2025+ requires numpy>=2.1 but the pinned
   // Pyodide ships numpy 1.26.4 (lift when Pyodide bumps numpy).
-  await py.runPythonAsync(`
-import micropip
-await micropip.install([${JSON.stringify(SIGIMA_INSTALL_SPEC)}, ${JSON.stringify(GUIDATA_INSTALL_SPEC)}, "tifffile<2025"])
-`);
+  // Both steps are retried on a transient download failure (cold cache).
+  await micropipInstallWithRetry(
+    py,
+    [SIGIMA_INSTALL_SPEC, GUIDATA_INSTALL_SPEC, "tifffile<2025"],
+    { label: LOG_LABEL },
+  );
 
   // Install Sigima's ``PlaceholderTitleFormatter`` so titles produced in
   // the worker use the same placeholder format as the main runtime

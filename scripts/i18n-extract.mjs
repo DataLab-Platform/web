@@ -20,6 +20,14 @@
  * The English source is the key itself, so there is intentionally NO
  * ``en.json`` catalog — English is the identity locale.
  *
+ * Catalog domains: a lazily loaded feature may keep its texts out of the
+ * initial bundle in its own catalog (see ``DOMAINS``). A key referenced
+ * only from the sources of such a feature goes to its catalog; any other
+ * key (also referenced elsewhere, or listed in ``_dynamic-keys.json``)
+ * goes to the main catalog of ``src/locales/``, which is always loaded. In
+ * write mode, a key that moved from one catalog to the other keeps its
+ * translation.
+ *
  * Usage:
  *   node scripts/i18n-extract.mjs            # write/update catalogs
  *   node scripts/i18n-extract.mjs --check    # verify only (CI)
@@ -36,6 +44,22 @@ const LOCALES_DIR = path.join(ROOT, "src", "locales");
 
 /** Locales to maintain. English is implicit (identity), so excluded. */
 const LOCALES = ["fr"];
+
+/**
+ * Catalog domains: ``sourceDir`` is ``null`` for the main catalog (every
+ * key not owned by another domain).
+ *
+ * @type {{ name: string; localesDir: string; sourceDir: string | null }[]}
+ */
+const DOMAINS = [
+  { name: "main", localesDir: LOCALES_DIR, sourceDir: null },
+  {
+    // Showcase mode (lazily loaded, merged by ``src/showcase/i18n.ts``).
+    name: "showcase",
+    localesDir: path.join(SRC_DIR, "showcase", "locales"),
+    sourceDir: path.join(SRC_DIR, "showcase"),
+  },
+];
 
 /**
  * Match ``t("…")`` / ``t('…')`` calls — single argument string literal,
@@ -126,22 +150,37 @@ function stripComments(src) {
   return out;
 }
 
-/** Collect the set of translation keys referenced across all sources. */
+/** Collect the translation keys referenced across all sources, routed to
+ *  their catalog domain: ``Map<domain name, Set<key>>``. */
 async function collectKeys() {
   const files = await listSources(SRC_DIR);
-  /** @type {Set<string>} */
-  const keys = new Set();
-  // Seed with keys referenced only through variables (folder labels,
-  // per-panel open/save strings, message-box headings, …) which a static
-  // ``t("literal")`` scan cannot see. Keeps orphan detection accurate.
-  for (const k of await readDynamicKeys()) keys.add(k);
+  /** @type {Map<string, Set<string>>} key -> files referencing it */
+  const references = new Map();
   for (const file of files) {
     const text = stripComments(await fs.readFile(file, "utf8"));
     for (const m of text.matchAll(T_CALL)) {
-      keys.add(unescapeLiteral(m[2]));
+      const key = unescapeLiteral(m[2]);
+      if (!references.has(key)) references.set(key, new Set());
+      references.get(key)?.add(file);
     }
   }
-  return keys;
+  /** @type {Map<string, Set<string>>} */
+  const byDomain = new Map(DOMAINS.map((d) => [d.name, new Set()]));
+  // Seed with keys referenced only through variables (folder labels,
+  // per-panel open/save strings, message-box headings, …) which a static
+  // ``t("literal")`` scan cannot see. Keeps orphan detection accurate.
+  const dynamicKeys = new Set(await readDynamicKeys());
+  for (const k of dynamicKeys) byDomain.get("main")?.add(k);
+  for (const [key, keyFiles] of references) {
+    if (dynamicKeys.has(key)) continue;
+    const owner = DOMAINS.find(
+      (d) =>
+        d.sourceDir !== null &&
+        [...keyFiles].every((f) => f.startsWith(d.sourceDir + path.sep)),
+    );
+    byDomain.get(owner?.name ?? "main")?.add(key);
+  }
+  return byDomain;
 }
 
 /** Read the explicit list of dynamically-referenced keys, if present. */
@@ -155,8 +194,8 @@ async function readDynamicKeys() {
   }
 }
 
-async function readCatalog(locale) {
-  const file = path.join(LOCALES_DIR, `${locale}.json`);
+async function readCatalog(localesDir, locale) {
+  const file = path.join(localesDir, `${locale}.json`);
   try {
     return JSON.parse(await fs.readFile(file, "utf8"));
   } catch {
@@ -164,48 +203,82 @@ async function readCatalog(locale) {
   }
 }
 
-async function writeCatalog(locale, obj) {
-  const file = path.join(LOCALES_DIR, `${locale}.json`);
+async function writeCatalog(localesDir, locale, obj) {
+  const file = path.join(localesDir, `${locale}.json`);
+  await fs.mkdir(localesDir, { recursive: true });
   // Keep insertion order of ``obj``; Prettier will re-format on commit.
   await fs.writeFile(file, JSON.stringify(obj, null, 2) + "\n", "utf8");
 }
 
 async function main() {
   const mode = process.argv.includes("--check") ? "check" : "write";
-  const keys = await collectKeys();
-  const sortedKeys = [...keys].sort((a, b) => a.localeCompare(b));
+  const byDomain = await collectKeys();
+  /** @type {Set<string>} */
+  const allKeys = new Set();
+  for (const keys of byDomain.values()) for (const k of keys) allKeys.add(k);
 
   let problems = 0;
   for (const locale of LOCALES) {
-    const existing = await readCatalog(locale);
-    const missing = sortedKeys.filter((k) => !(k in existing));
-    const empty = sortedKeys.filter((k) => k in existing && existing[k] === "");
-    const orphans = Object.keys(existing).filter((k) => !keys.has(k));
-
-    if (mode === "check") {
-      for (const k of missing) {
-        console.error(`[${locale}] MISSING  ${JSON.stringify(k)}`);
-        problems++;
-      }
-      for (const k of empty) {
-        console.error(`[${locale}] EMPTY    ${JSON.stringify(k)}`);
-        problems++;
-      }
-      for (const k of orphans) {
-        console.warn(`[${locale}] orphan   ${JSON.stringify(k)}`);
-      }
-    } else {
-      // Merge: referenced keys first (preserving existing translations),
-      // then surviving orphans at the end so nothing is silently dropped.
-      /** @type {Record<string, string>} */
-      const merged = {};
-      for (const k of sortedKeys) merged[k] = existing[k] ?? "";
-      for (const k of orphans) merged[k] = existing[k];
-      await writeCatalog(locale, merged);
-      console.log(
-        `[${locale}] ${sortedKeys.length} keys (` +
-          `${missing.length} new, ${orphans.length} orphan)`,
+    /** @type {Map<string, Record<string, string>>} */
+    const existingByDomain = new Map();
+    for (const domain of DOMAINS) {
+      existingByDomain.set(
+        domain.name,
+        await readCatalog(domain.localesDir, locale),
       );
+    }
+    // Translations of every catalog: a key moving between domains keeps
+    // its translation.
+    /** @type {Record<string, string>} */
+    const known = {};
+    for (const existing of existingByDomain.values()) {
+      for (const [k, v] of Object.entries(existing)) if (v) known[k] ??= v;
+    }
+
+    for (const domain of DOMAINS) {
+      const keys = byDomain.get(domain.name) ?? new Set();
+      const existing = existingByDomain.get(domain.name) ?? {};
+      const sortedKeys = [...keys].sort((a, b) => a.localeCompare(b));
+      const label =
+        domain.name === "main" ? locale : `${domain.name}/${locale}`;
+      const missing = sortedKeys.filter((k) => !(k in existing));
+      const empty = sortedKeys.filter(
+        (k) => k in existing && existing[k] === "",
+      );
+      const orphans = Object.keys(existing).filter((k) => !keys.has(k));
+
+      if (mode === "check") {
+        for (const k of missing) {
+          console.error(`[${label}] MISSING  ${JSON.stringify(k)}`);
+          problems++;
+        }
+        for (const k of empty) {
+          console.error(`[${label}] EMPTY    ${JSON.stringify(k)}`);
+          problems++;
+        }
+        for (const k of orphans) {
+          if (allKeys.has(k)) {
+            console.error(`[${label}] MISPLACED ${JSON.stringify(k)}`);
+            problems++;
+          } else {
+            console.warn(`[${label}] orphan   ${JSON.stringify(k)}`);
+          }
+        }
+      } else {
+        // Merge: referenced keys first (preserving existing translations),
+        // then surviving orphans at the end so nothing is silently dropped
+        // (keys referenced by another domain moved there).
+        /** @type {Record<string, string>} */
+        const merged = {};
+        for (const k of sortedKeys) merged[k] = existing[k] || known[k] || "";
+        const kept = orphans.filter((k) => !allKeys.has(k));
+        for (const k of kept) merged[k] = existing[k];
+        await writeCatalog(domain.localesDir, locale, merged);
+        console.log(
+          `[${label}] ${sortedKeys.length} keys (` +
+            `${missing.length} new, ${kept.length} orphan)`,
+        );
+      }
     }
   }
 
@@ -214,7 +287,7 @@ async function main() {
     process.exit(1);
   }
   if (mode === "check") {
-    console.log(`i18n check OK — ${sortedKeys.length} keys.`);
+    console.log(`i18n check OK — ${allKeys.size} keys.`);
   }
 }
 

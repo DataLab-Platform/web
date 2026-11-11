@@ -6,8 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Showcase mode:** **Help > Showcase mode…** plays automated, live demos of DataLab Web, for example on a conference booth screen: the application drives itself at a readable pace, with captions, title cards and a visible pointer, once or in a loop, in the language of the application. A screen can also run the demos unattended with nothing but a browser, by opening the application with `?showcase=1&loop=1` in a kiosk window, and another program can play them once in an application window that closes by itself at the end, with `?showcase=1&close=1` (for example as an interlude of the DataLab desktop showcase). See the new **Showcase mode** page of the user guide.
+
 ### Fixed
 
+- **Notebooks and macros — background Python workers:** opening a workspace, a capsule or an application example started a new notebook kernel while the previous one kept running in the background, so that a long session piled up hidden Python instances and used more and more memory. The Python workers of the previous workspace are now stopped, and those in which no code ran yet are kept as they are, so that opening several workspaces or examples in a row no longer restarts Python each time.
+- **Notebooks — Restart kernel:** **Restart kernel** did not restart an idle kernel: the variables of the previous cells were kept, although the cell counters were reset. The kernel is now always restarted with an empty namespace.
+- **Notebooks and macros — slow or busy networks:** when the download of Python or of a Python package failed (e.g. several Python workers loading the same files on a first start), the notebook kernel or the macro worker could stay loading forever. Failed downloads are now retried, and a worker that fails or stalls while starting is replaced by a fresh one.
+- **Remote control — `reset_all`:** resetting the workspace from a page embedding DataLab-Web (`reset_all`) logged errors about the deleted objects, because the plot was refreshed for the objects that were selected before the reset. The selection of deleted objects is now dropped first.
 - **Signal plot:** the application no longer goes blank when you leave a signal that shows an analysis result drawn on the plot (such as a full width at half-maximum), for example to open the Images panel.
 - **User guide links:** the links to the Plugins and Notebooks guides on the Differences from desktop page now work both on GitHub and in the in-app user guide ([#96](https://github.com/DataLab-Platform/web/issues/96)).
 - **Documentation:** the README, the user guide, the developer guides and the SDK guide now match the application ([#93](https://github.com/DataLab-Platform/web/issues/93)): limits of plugin compatibility with DataLab Desktop, curated processing menus, desktop features not available in DataLab-Web (the History of a desktop workspace is lost when it is saved again from DataLab-Web), actual menu and button labels, and the `model-changed` event of the SDK. The README demo animation is displayed again, and the Angular integration example now refreshes its object count (it listened to an event that is never sent).

@@ -15,6 +15,7 @@
  * from the JSON payload.
  */
 
+import { hasProviderOverride } from "./provider";
 import { saveApiKey } from "./secureStorage";
 import type { ProviderKind, ProviderSettings } from "./types";
 import { t } from "../i18n/translate";
@@ -127,9 +128,10 @@ export {
 /** True when the provider is configured well enough to issue a request.
  *  Local endpoints (Ollama / vLLM) typically don't require an API key,
  *  so we only enforce ``baseUrl`` + ``model`` here. The mock provider
- *  is always considered configured (no network call). */
+ *  and an overriding provider (showcase replay) are always considered
+ *  configured (no network call). */
 export function isConfigured(settings: ProviderSettings): boolean {
-  if (settings.provider === "mock") return true;
+  if (settings.provider === "mock" || hasProviderOverride()) return true;
   return Boolean(settings.baseUrl.trim() && settings.model.trim());
 }
 

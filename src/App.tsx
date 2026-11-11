@@ -13,7 +13,9 @@ import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
 import { isDiskStorageSupported } from "./runtime/storageCapabilities";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
+import { useShowcaseActive, useShowcaseLauncher } from "./showcase/launch";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
+import { useWorkspaceReset } from "./runtime/useWorkspaceReset";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
 import { registerSelectionSource } from "./runtime/selectionState";
 import type {
@@ -213,6 +215,13 @@ const UserGuidePanel = lazy(() =>
 const CapsuleDialog = lazy(() =>
   import("./components/CapsuleDialog").then((m) => ({
     default: m.CapsuleDialog,
+  })),
+);
+// Showcase mode (automated live demos): the dialog, player and scenarios
+// live in a lazily loaded chunk.
+const ShowcaseDialog = lazy(() =>
+  import("./showcase/ShowcaseDialog").then((m) => ({
+    default: m.ShowcaseDialog,
   })),
 );
 
@@ -474,7 +483,10 @@ export default function App() {
     dirty: workspaceDirty,
     recovered: workspaceRecovered,
   });
-  useBeforeUnloadGuard(workspaceDirty);
+  // While the showcase plays, demos replace the workspace and kiosk loops
+  // reload the page: no unsaved-changes prompt then.
+  const showcaseActive = useShowcaseActive();
+  useBeforeUnloadGuard(workspaceDirty && !showcaseActive);
   // ?panel=signal|image picks the startup panel (works with or without
   // ?preload=; the preload flow may still auto-switch, see below).
   const [treeKind, setTreeKind] = useState<PanelKind>(
@@ -822,6 +834,16 @@ export default function App() {
    */
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
   /**
+   * Generation of the Python workers of the Macro and Notebook panels
+   * (notebook kernel, macro workers). Their successive mounts share the
+   * workers of a generation; bumped when another workspace replaces the
+   * current one, so that it starts with fresh Python namespaces — the
+   * workers of the previous generation are then terminated, unless no code
+   * ran in them (see ``runtime/workerPool.ts``). Not bumped by a workspace
+   * reset, which keeps the workers warm.
+   */
+  const [kernelGeneration, setKernelGeneration] = useState(0);
+  /**
    * Cold-start recovery banner state (PR 2 of the workspace-dirty UX
    * work). When the macro / notebook panels rehydrate from the
    * IndexedDB "Recent…" cache on first mount, we surface a one-time
@@ -874,6 +896,7 @@ export default function App() {
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const [welcomeForced, setWelcomeForced] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [showcaseDialogOpen, setShowcaseDialogOpen] = useState(false);
   // IDs of demo objects seeded by the guided tour — cleared when the
   // tour closes. We track them in a ref so the cleanup runs without
   // re-triggering render-time effects.
@@ -1112,25 +1135,27 @@ export default function App() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ panel: string | null }>).detail;
       const target = detail?.panel;
+      // ``refresh()`` only re-reads the tree/selection. When a
+      // remote/macro/notebook/AI call mutates the *current* object's
+      // metadata (title, axis labels/units, ROIs…) without changing
+      // ``currentId``, the central plot-data effect wouldn't otherwise
+      // re-run and the graph would keep stale axis titles/units: bump the
+      // plot nonce so it re-fetches the displayed object's data. Only once
+      // the tree is re-read, though: the call may have deleted objects
+      // (e.g. ``reset_all``), and re-fetching with the selection of
+      // deleted objects fails in Python (unknown object ids).
+      const refreshThenPlot = () =>
+        refresh().then(() => setPlotRefreshNonce((n) => n + 1));
       if (target === "signal" || target === "image") {
         if (target === treeKind) {
-          void refresh();
-          // ``refresh()`` only re-reads the tree/selection. When a
-          // remote/macro/notebook/AI call mutates the *current*
-          // object's metadata (title, axis labels/units, ROIs…)
-          // without changing ``currentId``, the central plot-data
-          // effect wouldn't otherwise re-run and the graph would keep
-          // stale axis titles/units. Bump the plot nonce so it
-          // re-fetches the displayed object's data.
-          setPlotRefreshNonce((n) => n + 1);
+          void refreshThenPlot();
         } else {
           // The result landed in a panel the user isn't looking at.
           // Don't yank them away — they'll see it on next switch.
         }
       } else {
         // Unknown / null panel: best-effort refresh of the active one.
-        void refresh();
-        setPlotRefreshNonce((n) => n + 1);
+        void refreshThenPlot();
       }
     };
     window.addEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
@@ -1861,6 +1886,7 @@ export default function App() {
   const handlePluginExampleOpened = useCallback(
     async (result: PluginExampleOpenResult) => {
       setWorkspaceVersion((version) => version + 1);
+      setKernelGeneration((generation) => generation + 1);
       setWorkspaceFilename(result.filename);
       if (result.dirty) markDirty();
       else markClean();
@@ -3761,6 +3787,7 @@ export default function App() {
         setSelectedIds([]);
         setCurrentId(null);
         setWorkspaceVersion((v) => v + 1);
+        setKernelGeneration((g) => g + 1);
         // Clean transition — the loaded workspace *is* the source of
         // truth, so clear any prior dirty/recovered flags and remember
         // the filename for subsequent Save operations.
@@ -3795,12 +3822,32 @@ export default function App() {
       setSelectedIds([]);
       setCurrentId(null);
       setWorkspaceVersion((v) => v + 1);
+      setKernelGeneration((g) => g + 1);
       setWorkspaceFilename(filename.replace(/\.dlcapsule$/i, ".h5"));
       markClean();
       await refresh(null);
     },
     [refresh, setWorkspaceFilename, markClean, setSelectedIds],
   );
+
+  /** "New workspace" (showcase mode, between two demos): empty every
+   *  panel, untitled and unmodified, the Python workers kept warm. */
+  const clearWorkspaceSelection = useCallback(() => {
+    setSelectedIds([]);
+    setCurrentId(null);
+    setSelectedGroupIds([]);
+    setPluginExampleContext(null);
+  }, [setSelectedIds]);
+  const remountWorkspacePanels = useCallback(
+    () => setWorkspaceVersion((v) => v + 1),
+    [],
+  );
+  const refreshWorkspace = useCallback(() => refresh(null), [refresh]);
+  const resetWorkspace = useWorkspaceReset(runtime, {
+    clearSelection: clearWorkspaceSelection,
+    remountPanels: remountWorkspacePanels,
+    refresh: refreshWorkspace,
+  });
 
   // Startup Applications deep-link: validate the exact plugin and recipe
   // versions against a manifest loaded from the bundle before opening its
@@ -4559,6 +4606,7 @@ export default function App() {
           setWelcomeForced(true);
         },
         onStartTour: handleStartTour,
+        onStartShowcase: () => setShowcaseDialogOpen(true),
         onShowReleaseNotes: () => setReleaseNotesOpen(true),
       }),
       ...buildViewActions({
@@ -4753,6 +4801,15 @@ export default function App() {
       availableLocales,
     ],
   );
+  // Showcase mode: started from the URL (kiosk) or from the Help menu.
+  const showcase = useShowcaseLauncher({
+    runtime,
+    ready: status === "ready",
+    actions,
+    actionState,
+    pluginRecords,
+    resetWorkspace,
+  });
 
   return (
     <ObjectNavigationProvider
@@ -4781,6 +4838,7 @@ export default function App() {
                 key={`nb-${workspaceVersion}`}
                 ref={notebookPanelRef}
                 runtime={runtime}
+                kernelGeneration={kernelGeneration}
                 theme={theme}
                 onCountChanged={setNotebookCount}
                 placement={notebookFloating ? "floating" : "tab"}
@@ -4827,6 +4885,7 @@ export default function App() {
                 key={`macro-${workspaceVersion}`}
                 ref={macroPanel.ref}
                 runtime={runtime}
+                kernelGeneration={kernelGeneration}
                 onCountChanged={setMacroCount}
                 placement={macroFloating ? "floating" : "tab"}
                 onTogglePlacement={toggleMacroFloating}
@@ -5033,10 +5092,11 @@ export default function App() {
                   treeEmpty(tree) && treeEmpty(inactiveTree);
                 const emptyEverywhere = workspaceEmpty;
                 const showWelcome =
-                  welcomeForced ||
-                  (!welcomeDismissed &&
-                    emptyEverywhere &&
-                    readShowWelcomeOnStartup());
+                  !showcaseActive &&
+                  (welcomeForced ||
+                    (!welcomeDismissed &&
+                      emptyEverywhere &&
+                      readShowWelcomeOnStartup()));
                 if (showWelcome) {
                   return (
                     <WelcomeView
@@ -5373,6 +5433,19 @@ export default function App() {
           steps={tourSteps}
           onClose={handleCloseTour}
         />
+        {showcaseDialogOpen && (
+          <Suspense fallback={null}>
+            <ShowcaseDialog
+              getHost={showcase.getHost}
+              unsavedChanges={workspaceDirty}
+              onStart={(options) => {
+                setShowcaseDialogOpen(false);
+                showcase.start(options);
+              }}
+              onClose={() => setShowcaseDialogOpen(false)}
+            />
+          </Suspense>
+        )}
         {showAISettings && (
           <AISettingsDialog onClose={() => setShowAISettings(false)} />
         )}

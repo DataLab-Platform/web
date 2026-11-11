@@ -101,6 +101,9 @@ export default defineConfig({
         // ``playwright.demo.config.ts`` (video on) via ``npm run demo:gif``
         // and must never run as part of the regression suite.
         /demo[\\/]demo\.spec\.ts/,
+        // The Showcase mode check harness is opt-in too: it runs through
+        // ``playwright.showcase.config.ts`` (``npm run showcase:check``).
+        /showcase[\\/]/,
       ],
     },
     // Opt-in performance project — only present when targeted via

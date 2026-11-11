@@ -368,6 +368,8 @@ export interface HelpActionCallbacks {
   onOpenUserGuide: () => void;
   onOpenWelcome: () => void;
   onStartTour: () => void;
+  /** Open the Showcase mode dialog (automated live demos). */
+  onStartShowcase: () => void;
   onShowReleaseNotes: () => void;
 }
 
@@ -391,6 +393,14 @@ export function buildHelpActions(cb: HelpActionCallbacks): ActionDescriptor[] {
       iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
       enabled: always,
       run: cb.onStartTour,
+    },
+    {
+      id: "help.showcase",
+      label: t("Showcase mode…"),
+      menuPath: "Help/Showcase mode",
+      iconUrl: getHelpIconUrl("showcase.svg"),
+      enabled: always,
+      run: cb.onStartShowcase,
     },
     {
       id: "help.userguide",

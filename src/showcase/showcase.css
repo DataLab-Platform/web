@@ -1,0 +1,342 @@
+/* Showcase mode overlays (src/showcase/overlay.ts). Everything lives in a
+   fixed, click-through layer above the application; only the shield
+   catches the real pointer while a demo plays. */
+
+.showcase-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    Roboto,
+    sans-serif;
+}
+
+.showcase-overlay > * {
+  pointer-events: none;
+}
+
+.showcase-spotlight {
+  position: fixed;
+  z-index: 1;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  outline: 3px solid rgba(250, 204, 21, 0.95);
+  transition:
+    left 0.3s ease,
+    top 0.3s ease,
+    width 0.3s ease,
+    height 0.3s ease;
+}
+
+.showcase-overlay > .showcase-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.showcase-caption {
+  position: fixed;
+  left: 50%;
+  bottom: 56px;
+  z-index: 3;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  min-width: min(560px, 86vw);
+  max-width: min(1320px, 90vw);
+  padding: 14px 32px 18px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.38);
+  text-align: center;
+}
+
+.showcase-caption--top {
+  top: 84px;
+  bottom: auto;
+}
+
+.showcase-caption--pop {
+  animation: showcase-pop 0.32s ease-out;
+}
+
+.showcase-caption--notice {
+  min-width: 0;
+  padding: 10px 20px;
+  background: rgba(120, 53, 15, 0.9);
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.showcase-caption--notice .showcase-caption-text {
+  font-size: 16px;
+}
+
+@keyframes showcase-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.showcase-caption-head {
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.showcase-caption-text {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+html[data-theme="dark"] .showcase-caption:not(.showcase-caption--notice) {
+  background: rgba(8, 47, 73, 0.93);
+  border-color: rgba(125, 211, 252, 0.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.6);
+}
+
+html[data-theme="dark"] .showcase-caption-head {
+  color: #bae6fd;
+}
+
+.showcase-card {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 0 6vw;
+  text-align: center;
+  color: #fff;
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    #16507f 0%,
+    #0b2742 52%,
+    #040b16 100%
+  );
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+.showcase-card--visible {
+  opacity: 1;
+}
+
+.showcase-card-logo {
+  width: 112px;
+  height: 112px;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
+}
+
+.showcase-card-kicker {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.showcase-card-title {
+  max-width: 1500px;
+  font-size: 58px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.showcase-card-subtitle {
+  max-width: 1300px;
+  font-size: 28px;
+  line-height: 1.4;
+  color: #cbd5e1;
+}
+
+.showcase-card-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 44px;
+  font-size: 21px;
+  color: #94a3b8;
+}
+
+.showcase-card-status {
+  min-height: 24px;
+  font-size: 18px;
+  color: #93c5fd;
+}
+
+.showcase-spinner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #38bdf8;
+  animation: showcase-spin 1s linear infinite;
+}
+
+@keyframes showcase-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.showcase-badge {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.92);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.showcase-badge--pause {
+  background: rgba(220, 38, 38, 0.94);
+}
+
+.showcase-badge--idle {
+  background: rgba(22, 163, 74, 0.94);
+}
+
+/* Persistent label of a demo (e.g. "Replayed session"). */
+.showcase-sticker {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 7px 20px;
+  border-radius: 999px;
+  border: 2px solid rgba(251, 191, 36, 0.95);
+  background: rgba(120, 53, 15, 0.94);
+  color: #fef3c7;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.showcase-ripple {
+  position: fixed;
+  z-index: 6;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border-radius: 50%;
+  border: 3px solid rgba(250, 204, 21, 0.95);
+  background: rgba(250, 204, 21, 0.28);
+  animation: showcase-ripple 0.55s ease-out forwards;
+}
+
+@keyframes showcase-ripple {
+  from {
+    transform: scale(0.25);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.showcase-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 7;
+  width: 30px;
+  height: 30px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+  will-change: transform;
+}
+
+/* The real pointer is hidden while a demo plays (the fake one shows where
+   the showcase acts) and comes back when the operator stops it. */
+html[data-showcase="autoplay"],
+html[data-showcase="autoplay"] * {
+  cursor: none !important;
+}
+
+html[data-showcase="idle"] .showcase-cursor {
+  display: none;
+}
+
+/* Showcase mode dialog (Help > Showcase mode…). */
+.showcase-dialog {
+  width: min(560px, 92vw);
+}
+
+.showcase-dialog-intro {
+  margin-top: 0;
+}
+
+.showcase-dialog-list {
+  max-height: 40vh;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.35));
+  border-radius: 6px;
+}
+
+.showcase-dialog-list legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.showcase-dialog-list label,
+.showcase-dialog-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.showcase-dialog-id {
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+
+.showcase-dialog-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-bottom: 12px;
+}
+
+.showcase-dialog-hint {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.showcase-dialog-warning {
+  font-size: 0.9em;
+  color: var(--warning, #b45309);
+}

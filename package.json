@@ -26,6 +26,8 @@
     "gen:colormaps": "node scripts/gen-colormaps.mjs",
     "changelog:extract": "node scripts/extract-changelog.mjs",
     "demo:gif": "node scripts/make-demo-gif.mjs",
+    "showcase:check": "playwright test --config playwright.showcase.config.ts --project=showcase-check",
+    "showcase:headed": "playwright test --config playwright.showcase.config.ts --project=showcase-headed",
     "bench:run": "node tests/benchmark/scripts/run_all.mjs",
     "bench:report": "python tests/benchmark/shared/report.py",
     "bench:wheels": "node tests/benchmark/scripts/build_wheels.mjs",

@@ -151,6 +151,7 @@ describe("buildHelpActions", () => {
       onOpenUserGuide: vi.fn(),
       onOpenWelcome: vi.fn(),
       onStartTour: vi.fn(),
+      onStartShowcase: vi.fn(),
       onShowReleaseNotes: vi.fn(),
     });
     // Assert the stable set of entries (robust to reordering) rather
@@ -159,6 +160,7 @@ describe("buildHelpActions", () => {
       expect.arrayContaining([
         "help.welcome",
         "help.tour",
+        "help.showcase",
         "help.userguide",
         "help.releaseNotes",
         "help.documentation",

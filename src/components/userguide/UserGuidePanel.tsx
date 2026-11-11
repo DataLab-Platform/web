@@ -19,6 +19,7 @@ import welcomeMd from "../../../doc/userguide/welcome.md?raw";
 import differencesMd from "../../../doc/userguide/differences-from-desktop.md?raw";
 import engineMd from "../../../doc/userguide/computation-engine.md?raw";
 import provenanceMd from "../../../doc/userguide/provenance-and-capsules.md?raw";
+import showcaseMd from "../../../doc/userguide/showcase-mode.md?raw";
 import notebooksMd from "../../../doc/notebooks.md?raw";
 import pluginsMd from "../../../doc/plugins.md?raw";
 
@@ -65,6 +66,12 @@ const PAGES: GuidePage[] = [
     title: "Plugins",
     sourcePath: "doc/plugins.md",
     source: pluginsMd,
+  },
+  {
+    slug: "showcase-mode",
+    title: "Showcase mode",
+    sourcePath: "doc/userguide/showcase-mode.md",
+    source: showcaseMd,
   },
 ];
 

@@ -33,7 +33,10 @@ import {
   forwardRef,
 } from "react";
 import type { RuntimeApi } from "../../runtime/runtime";
-import { NotebookRuntime } from "../../notebook/NotebookRuntime";
+import {
+  panelNotebookRuntime,
+  type NotebookRuntime,
+} from "../../notebook/NotebookRuntime";
 import {
   emptyCodeCell,
   emptyMarkdownCell,
@@ -57,6 +60,7 @@ import {
   clearRecent,
   getRecent,
   listRecent,
+  onRecentChange,
   recordRecent,
   removeRecent,
   type RecentEntry,
@@ -73,6 +77,9 @@ import {
 
 interface NotebookPanelProps {
   runtime: RuntimeApi;
+  /** Kernel to use: successive mounts of the panel share it while the
+   *  generation is the same (default 0, see :func:`panelNotebookRuntime`). */
+  kernelGeneration?: number;
   theme: "light" | "dark";
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];
@@ -156,6 +163,7 @@ export const NotebookPanel = forwardRef<
 >(function NotebookPanel(
   {
     runtime,
+    kernelGeneration = 0,
     theme,
     onSetCurrentPanel,
     getSelection,
@@ -233,10 +241,13 @@ export const NotebookPanel = forwardRef<
   };
 
   // -- One NotebookRuntime instance shared across notebooks ------------
+  // Shared with the previous mounts of the panel (same generation):
+  // remounting it (workspace reset) keeps the kernel, and a new generation
+  // (workspace replaced) terminates the previous kernel.
   const ntbRuntimeRef = useRef<NotebookRuntime | null>(null);
   const getNbRuntime = useCallback((): NotebookRuntime => {
     if (!ntbRuntimeRef.current) {
-      const r = new NotebookRuntime(runtime);
+      const r = panelNotebookRuntime(runtime, kernelGeneration);
       r.externalCallbacks = {
         getSelection: () => callbacksRef.current.getSelection(),
         getCurrentPanel: () => callbacksRef.current.getCurrentPanel(),
@@ -252,7 +263,7 @@ export const NotebookPanel = forwardRef<
       ntbRuntimeRef.current = r;
     }
     return ntbRuntimeRef.current;
-  }, [runtime]);
+  }, [runtime, kernelGeneration]);
 
   // Preload kernel + restore last-open notebooks on first mount.
   // Guarded with a ref so React 18 StrictMode (which runs effects twice
@@ -365,6 +376,24 @@ export const NotebookPanel = forwardRef<
       setRestored(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep "Recent… (n)" exact whenever the cache changes, whoever changed
+  // it (e.g. entries removed by the showcase or by another panel).
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = onRecentChange((kind) => {
+      if (kind !== "notebook") return;
+      listRecent("notebook")
+        .then((entries) => {
+          if (!cancelled) setStoredList(entries);
+        })
+        .catch(() => undefined);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   // Persist open-tabs / active id to localStorage. Skip writes until

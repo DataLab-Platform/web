@@ -16,6 +16,7 @@
     "vite.config.ts",
     "playwright.config.ts",
     "playwright.demo.config.ts",
+    "playwright.showcase.config.ts",
     "build-plugins/**/*.ts"
   ]
 }
