@@ -22,7 +22,7 @@ Guides and reference material for DataLab-Web. Start with the [project README](.
 - [Synthetic radiograph spike](synthetic-ndt-spike.md) — deterministic NDT
   algorithm-development data, ground truth, and explicit validation limits.
 - [Notebooks](notebooks.md) — multi-tab notebook panel, `.ipynb` import/export, macro conversion.
-- [Plugins](plugins.md) — Qt-compatible `PluginBase` API, hot-reload and the bundled vitrine plugin.
+- [Plugins](plugins.md) — portable `PluginBase` API (browser shim of the desktop plugin API and its differences), managed wheels, bundled application plugins and hot reload.
 - [Shim registry](shim-registry.md) — tracking temporary backport shims.
 
 ## Contributing & release

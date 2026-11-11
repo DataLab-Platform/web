@@ -14,17 +14,21 @@ The latest release is deployed automatically to GitHub Pages. Open the link in a
 
 > First load downloads Pyodide and installs Sigima via `micropip` (~30–60 s). Subsequent loads are cached by the browser. On Microsoft Edge the first load may be much slower — see [doc/troubleshooting.md](doc/troubleshooting.md) for the one-line fix.
 
-![DataLab Web demo — creating a 2D sinc image, extracting a cross-section profile, measuring its full width at half-maximum, and running Canny edge detection from the command palette](doc/images/datalab-web-demo.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="doc/images/datalab-web-demo-dark.gif">
+  <source media="(prefers-color-scheme: light)" srcset="doc/images/datalab-web-demo-light.gif">
+  <img alt="DataLab Web demo — creating a 2D sinc image, extracting a cross-section profile, measuring its full width at half-maximum, and running Canny edge detection from the command palette" src="doc/images/datalab-web-demo-light.gif">
+</picture>
 
 ## Features
 
 DataLab Web mirrors a large portion of the desktop application surface:
 
 - **Signal & image panels** — 1D curves and 2D arrays with a rich set of synthetic generators, full Plotly visualisation, cross-hair markers, contrast adjustment, cross profiles and stats area tools.
-- **Processing & analysis** — operations, transforms, filters, fitting, FFT/PSD, stability analyses, measurements and profile extraction, exposed automatically through the menu bar by introspecting Sigima's catalog. Compatible parameterised processings offer an optional non-publishing live preview before anything is added to the workspace.
+- **Processing & analysis** — operations, transforms, filters, fitting, FFT/PSD, stability analyses, measurements and profile extraction, exposed through the menu bar from a curated catalogue of Sigima functions. Compatible parameterised processings offer an optional non-publishing live preview before anything is added to the workspace.
 - **ROI & object tree** — segment / rectangular / circular / polygonal regions of interest, plus a multi-group workspace with drag & drop, metadata editor, statistics card and computation history.
 - **Macros & notebooks** — embedded Python editor and multi-tab notebook panel, each running in dedicated Web Workers, with `.ipynb` import/export and bidirectional macro ⇄ notebook conversion. See [doc/notebooks.md](doc/notebooks.md).
-- **Plugins** — Qt-compatible `PluginBase` API: the same plugin source runs in DataLab desktop and DataLab Web. See [doc/plugins.md](doc/plugins.md).
+- **Plugins** — portable `PluginBase` classes, hosted through a browser shim of the desktop plugin API with `async` dialogs; a plugin targeting both applications declares a distinct Web class. See [doc/plugins.md](doc/plugins.md) for the supported API.
 - **I/O** — HDF5 browser (via `h5py` in Pyodide), text import wizard and per-directory save dialog.
 - **UI niceties** — light / dark theme, persisted layout, pop-out result panel, contextual help, full [internationalisation](doc/i18n.md).
 
@@ -50,7 +54,7 @@ For the full picture — layer view, component view, worker protocols, the sourc
 
 ## Development
 
-Prerequisites: Node.js ≥ 18.
+Prerequisites: Node.js 22 (≥ 22.22) or 24 (≥ 24.15), as required by the test toolchain; CI uses Node.js 24.
 
 ```powershell
 npm install

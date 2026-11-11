@@ -15,12 +15,12 @@ These examples are bundled at build time (via Vite's `import.meta.glob`) so that
 
 ## Browser-specific differences from the desktop examples
 
-The same plugin model applies, with one structural constraint: **plugin code cannot block the JavaScript event loop**. In practice:
+These examples target DataLab-Web only: they rely on its browser shim of the desktop plugin API, which differs from DataLab Desktop on two points.
 
-- Action callbacks that open a dialog are `async` and use the `_async` helpers (`show_info_async`, `show_warning_async`, `show_error_async`, `ask_yesno_async`, `edit_new_signal_parameters_async`, `edit_new_image_parameters_async`).
-- Custom processings are registered once with `processor.register_1_to_1` / `register_2_to_1` / `register_n_to_1` rather than called synchronously with `processor.compute_1_to_1(...)` / `run_feature(...)`.
+- **Plugin code cannot block the JavaScript event loop.** Action callbacks that open a dialog are `async` and use the `_async` helpers (`show_info_async`, `show_warning_async`, `show_error_async`, `ask_yesno_async`, `edit_new_signal_parameters_async`, `edit_new_image_parameters_async`). These helpers exist only in DataLab-Web, and DataLab Desktop does not run `async` callbacks.
+- **The desktop registration model is not supported.** The desktop examples register processings in `register_computations()` and add them to a menu with `acthandler.action_for(...)`; the shim calls neither (`action_for` returns `None`, see [issue #94](https://github.com/DataLab-Platform/web/issues/94)). Custom processings are therefore registered in `create_actions()` with `processor.register_1_to_1` / `register_2_to_1` / `register_n_to_1`, and appear under the _Plugins_ menu.
 
-See [`doc/plugins.md`](../../doc/plugins.md) for the full authoring guide.
+A plugin targeting both applications declares a distinct Web class in the `datalab.web_plugins` entry-point group. See [`doc/plugins.md`](../../doc/plugins.md) for the full authoring guide and the list of API differences.
 
 ## Desktop examples not ported
 

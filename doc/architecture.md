@@ -50,7 +50,7 @@ flowchart TB
         subgraph Workers["Web Workers"]
             direction LR
             Mw["macroWorker.ts<br/>Pyodide #1<br/>macro_proxy.py + user code"]
-            Nw["notebookWorker.ts<br/>Pyodide #N (1 per notebook)<br/>notebook_display.py"]
+            Nw["notebookWorker.ts<br/>Pyodide #2 (shared by all notebooks)<br/>notebook_display.py"]
         end
 
         IDB[("IndexedDB<br/>recentStore.ts")]
@@ -66,11 +66,10 @@ flowchart TB
 
 Key facts:
 
+- The diagram shows the in-thread topology (`?runtime=main`). By default, `DataLabRuntime` and Pyodide #0 run in a dedicated kernel worker instead (see §3.3, _Worker-hosted runtime_).
 - **One Pyodide instance owns the object model** (`_MODEL` in
   `bootstrap.py`). All UI reads go through it.
-- **Each macro / notebook runs in its own Web Worker** with its own
-  Pyodide instance. Workers never touch the main object model directly:
-  they call back to the main runtime through `proxyBridge`.
+- **Macros and notebooks run in Web Workers** with their own Pyodide instances: one macro worker (plus a warm standby) and one notebook worker shared by all notebooks. Workers never touch the main object model directly: they call back to the main runtime through `proxyBridge`.
 - **Processing preview reuses the already-loaded computation runtime**. Python
   deep-copies the source, computes a temporary plotting payload, and never
   publishes the copy or result to the main object model.
@@ -88,9 +87,9 @@ right.
 ```mermaid
 flowchart LR
     L1["<b>L1 — UI layer</b><br/>(React components)<br/><br/>src/components/<br/>src/App.tsx<br/>src/main.tsx<br/><br/><i>Purely presentational.<br/>No Pyodide imports.</i>"]
-    L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/<br/>src/preferences/"]
+    L2["<b>L2 — Orchestration</b><br/><br/>src/actions/<br/>(registry, menu builder)<br/>src/macros/<br/>src/notebook/<br/>src/plugins/<br/>src/aiassistant/"]
     L3["<b>L3 — Runtime / bridge</b><br/>(TypeScript)<br/><br/>RuntimeApi.ts (façade)<br/>runtime.ts<br/>(DataLabRuntime + types)<br/>WorkerRuntimeProxy.ts · kernelWorker.ts<br/>runtimeMode.ts · workerProtocol.ts<br/>ProcessingPreviewController.ts<br/>RuntimeContext.tsx<br/>WorkspaceContext.tsx<br/>MacroRuntime.ts<br/>proxyBridge.ts · remoteBridge.ts<br/>macroWorker.ts · notebookWorker.ts<br/>src/storage/ (OPFS spill stores)"]
-    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>dlw_provenance.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py"]
+    L4["<b>L4 — Python kernel</b><br/>(loaded into Pyodide)<br/><br/>bootstrap.py<br/>processor.py<br/>dlw_main.py<br/>dlw_wheels.py<br/>dlw_plugins.py<br/>dlw_applications.py<br/>dlw_h5browser.py<br/>dlw_interactive_fit.py<br/>dlw_title_format.py<br/>dlw_provenance.py<br/>dlw_macro_lint.py<br/>notebook_display.py<br/>macro_proxy.py<br/>_guidata_*_shim.py<br/>dlplugins/datalab/** (plugin shim)"]
     L5["<b>L5 — Computation engine</b><br/><br/>Sigima<br/>+ numpy · scipy<br/>+ scikit-image<br/>+ h5py · pandas …<br/><br/><i>Installed via micropip<br/>on first load.</i>"]
 
     L1 --> L2 --> L3 --> L4 --> L5
@@ -100,12 +99,12 @@ flowchart LR
 
 | Boundary    | Contract                                                                                                                                 |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| L1 → L2     | `useAction(id)` / event handlers; no direct runtime calls from components.                                                               |
+| L1 → L2     | Action registry entries (`run`) / event handlers; no direct runtime calls from components.                                               |
 | L2 → L3     | Typed methods on the `RuntimeApi` façade (`useRuntime()`); the concrete impl is the in-thread `DataLabRuntime` or a worker-backed proxy. |
 | L3 → L4     | `pyodide.runPython()` / `pyodide.runPythonAsync()` calling `bootstrap.py` helpers.                                                       |
 | L3 ↔ Worker | `postMessage` (`bridge_call` / `bridge_reply` / `stdout` / `stderr` / …).                                                                |
 | L3 ↔ Host   | `postMessage` JSON-RPC (`request` / `response` / `event`) via `remoteBridge`.                                                            |
-| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). Catalog is auto-discovered.                                                         |
+| L4 → L5     | Python imports (`sigima.proc`, `sigima.objects`, …). The processing catalogue lists the Sigima functions declared in `processor.py`.     |
 
 ### Hard invariants
 
@@ -116,8 +115,7 @@ flowchart LR
   Dedicated Web Worker without touching any call site.
 - Python helpers return **JSON-friendly dicts / lists** (`tolist()` on
   arrays), never live PyProxies, to keep the bridge cheap.
-- The pinned `PYODIDE_VERSION` in `runtime.ts` and the `<script>` tag in
-  `index.html` must always match — the wheel index is version-specific.
+- The pinned `PYODIDE_VERSION` in `runtime.ts` and `workerBase.ts` and the `<script>` tag in `index.html` must always match — the wheel index is version-specific.
 
 ---
 
@@ -184,11 +182,7 @@ flowchart TB
     Run --> RT2["runtime.&lt;method&gt;(…)"]
 ```
 
-Most processings are **not** hand-registered: `buildMenu.ts` queries
-`processor.py` (`build_signal_catalog`, `build_image_catalog`) and
-synthesises menu entries automatically. The static registry only adds
-DataLab-Web-specific commands (file IO, ROI editor, plugin manager,
-notebooks, macros, …).
+Processing menu entries are **not** hand-written in TypeScript: `buildMenu.ts` queries `processor.py` (`build_signal_catalog`, `build_image_catalog`) and synthesises them from its curated catalogue (`SIGNAL_OVERRIDES` / `IMAGE_OVERRIDES`): a Sigima function absent from these dicts is not shown. The static registry only adds DataLab-Web-specific commands (file IO, ROI editor, plugin manager, notebooks, macros, …).
 
 ### 3.3 Runtime / bridge — `src/runtime/`
 
@@ -249,6 +243,7 @@ flowchart LR
     subgraph MT["Main thread"]
         direction TB
         MR["MacroRuntime.ts<br/>spawns workers on demand<br/>keeps a warm standby<br/>postMessage glue"]
+        NR["NotebookRuntime.ts<br/>(src/notebook/)<br/>one persistent worker"]
         PB2["proxyBridge.ts<br/>whitelisted command router"]
         RT3["DataLabRuntime"]
         PC["ProcessingPreviewController.ts<br/>one active + latest pending"]
@@ -259,21 +254,28 @@ flowchart LR
     subgraph Workers2["Web Workers"]
         direction TB
         MW2["macroWorker.ts<br/>Pyodide #1<br/>macro_proxy.py<br/>+ user script"]
-        NW2["notebookWorker.ts<br/>Pyodide #N (per notebook)<br/>notebook_display.py"]
+        NW2["notebookWorker.ts<br/>Pyodide #2 (shared by all notebooks)<br/>notebook_display.py"]
     end
 
     MR ==>|postMessage| MW2
-    MR ==>|postMessage| NW2
+    NR ==>|postMessage| NW2
     MW2 -. bridge_call .-> PB2
     NW2 -. bridge_call .-> PB2
 ```
 
-Wire shape (same for both worker kinds):
+Wire shape of the macro worker:
 
 | Direction     | Message types                                                          |
 | ------------- | ---------------------------------------------------------------------- |
 | main → worker | `init` · `run` · `bridge_reply`                                        |
 | worker → main | `ready` · `started` · `finished` · `stdout` · `stderr` · `bridge_call` |
+
+The notebook worker runs one cell per request and keeps its namespace between cells:
+
+| Direction     | Message types                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| main → worker | `init` · `exec_cell` · `bridge_reply`                                                                               |
+| worker → main | `ready` · `cell_started` · `stream` · `display_data` · `execute_result` · `error` · `cell_finished` · `bridge_call` |
 
 `proxyBridge.ts` is a **whitelisted command router**: it maps the
 `method` string in a `bridge_call` to a specific main-thread runtime
@@ -381,18 +383,15 @@ to be re-executable so HMR keeps `_MODEL` / `_CATALOG` alive.
   - **Typed generators**: `list_signal_creation_types`,
     `create_signal_typed`, `update_signal_creation_params`, idem image.
   - **IO**: `list_signal_io_formats`, `open_signal_from_bytes`,
-    `save_signal_to_bytes`, idem image. HDF5 workspace serialisation (`save_workspace_to_bytes` / `open_workspace_from_bytes`, same layout as DataLab desktop, provenance block included). Opening is transactional: the file is fully read and validated before the current workspace is replaced, so an invalid file leaves it untouched.
+    `save_signal_to_bytes`, idem image. HDF5 workspace serialisation (`save_workspace_to_bytes` / `open_workspace_from_bytes`, layout compatible with DataLab desktop, provenance block included; the differences — no History group, Web-only notebooks group, no group UUIDs, Sigima version in `DataLab_Version` — are listed in [Differences from desktop DataLab](userguide/differences-from-desktop.md)). Opening is transactional: the file is fully read and validated before the current workspace is replaced, so an invalid file leaves it untouched.
   - **Macros / notebooks**: full CRUD + reorder + replace (used by the
     in-browser recovery cache when restoring from IndexedDB).
   - **Dialog bridge**: `set_dialog_bridge(bridge)` registers the JS
     callable used by Python helpers that need to ask the user something.
 
-- **`processor.py`** (loaded as `dlw_processor.py`) — introspects Sigima's catalog and exposes `build_signal_catalog()`, `build_image_catalog()` and the `apply_*` dispatchers. Equivalent of desktop DataLab's `register_1_to_1` / `register_n_to_1` / `register_2_to_1`. The pattern of a feature and the kind of its result come from the Sigima operation contract of its function (the only source of patterns, shared with DataLab desktop); override hooks hold interface choices only (labels, menus, icons, operand labels, preview) and allow renaming / hiding / regrouping entries or wiring custom result renderers.
+- **`processor.py`** (loaded as `dlw_processor.py`) — builds the processing catalogue from the Sigima functions listed in `SIGNAL_OVERRIDES` / `IMAGE_OVERRIDES` (functions not listed there are hidden) and exposes `build_signal_catalog()`, `build_image_catalog()` and the `apply_*` dispatchers. Equivalent of desktop DataLab's `register_1_to_1` / `register_n_to_1` / `register_2_to_1`. The pattern of a feature and the kind of its result come from the Sigima operation contract of its function (the only source of patterns, shared with DataLab desktop); override hooks hold interface choices only (labels, menus, icons, operand labels, preview) and allow renaming / hiding / regrouping entries or wiring custom result renderers.
 
-- **`dlw_main.py`** — exposes a `datalab.*` namespace inside Pyodide
-  (panels, current panel, etc.) so that **DataLab desktop plugins run
-  unchanged** in the browser, provided they use `await
-param.edit_async(...)` for parameter dialogs.
+- **`dlw_main.py`** — exposes a `datalab.*` namespace inside Pyodide (panels, current panel, etc.) so that portable DataLab plugin classes can run in the browser. This browser shim covers part of the desktop plugin API only, and dialogs must be awaited (`await param.edit_async(...)`): see [Plugins](plugins.md) for the supported API and the differences from DataLab desktop.
 
 - **`dlw_wheels.py`** — non-importing wheel inspector. It binds the rules of `datalab.plugins.wheels` (a verbatim copy of the DataLab desktop module, also used by the plugin catalog) to the dedicated `datalab.web_plugins` entry-point group: archive structure, pure-Python tags, Python/dependency compatibility and reserved namespaces.
 
@@ -457,7 +456,7 @@ above. Its `package.json` version must stay aligned with the app's.
 
 ### 4.1 Worker ↔ main (proxyBridge)
 
-Implemented in `macroWorker.ts` / `notebookWorker.ts` ↔ `proxyBridge.ts`.
+Implemented in `macroWorker.ts` / `notebookWorker.ts` ↔ `proxyBridge.ts`. The block below is the macro worker protocol; the notebook worker shares `init`, `ready`, `bridge_call` and `bridge_reply`, and replaces the other messages with the per-cell messages listed in §3.3 (`exec_cell`, `cell_started`, `stream`, `display_data`, `execute_result`, `error`, `cell_finished`).
 
 ```text
 main → worker
@@ -526,11 +525,11 @@ compatibility independently of the application version.
 
 ```text
 1. Host imports @datalab-platform/web-sdk and embeds the iframe
-2. Host calls  client.addSignal(x, y, title)
+2. Host calls  client.addSignal(title, x, y)
 3. SDK posts   { id, type: "request", method: "add_signal", params }
 4. remoteBridge.ts dispatches to DataLabRuntime (same allow-list spirit)
 5. iframe posts  { id, type: "response", result }
-6. Model changes also surface as  { type: "event", name, payload }
+6. Changes requested through the bridge also surface as  { type: "event", name: "model-changed", payload: { panel } }
 ```
 
 ---
@@ -541,11 +540,11 @@ The architecture is mirrored by three test layers — see
 [doc/testing-strategy.md](testing-strategy.md) for the full decision
 tree.
 
-| Layer      | Tool                | Scope                                            |
-| ---------- | ------------------- | ------------------------------------------------ |
-| Python     | pytest (in Pyodide) | `bootstrap.py`, `processor.py`, dlw\_\*.py logic |
-| TS unit    | Vitest + RTL        | runtime types, action registry, components       |
-| End-to-end | Playwright          | full UI through real Pyodide round-trips         |
+| Layer      | Tool                                        | Scope                                            |
+| ---------- | ------------------------------------------- | ------------------------------------------------ |
+| Python     | pytest (CPython, Pyodide modules simulated) | `bootstrap.py`, `processor.py`, dlw\_\*.py logic |
+| TS unit    | Vitest + RTL                                | runtime types, action registry, components       |
+| End-to-end | Playwright                                  | full UI through real Pyodide round-trips         |
 
 ---
 
@@ -560,5 +559,4 @@ tree.
   passing PyProxies.
 - **`base: "./"`** in Vite config — the build is drop-in deployable to
   GitHub Pages and other sub-path hosts. Do not introduce absolute URLs.
-- **Pinned Pyodide**: `PYODIDE_VERSION` in `runtime.ts` and the
-  `<script>` tag in `index.html` must always be bumped together.
+- **Pinned Pyodide**: `PYODIDE_VERSION` in `runtime.ts` and `workerBase.ts` and the `<script>` tag in `index.html` must always be bumped together.
