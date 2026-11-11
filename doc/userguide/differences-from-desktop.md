@@ -71,13 +71,11 @@ The desktop application has no analogue because it never hits a memory wall of t
 
 ## Plugins
 
-Built-in Python plugins live under `src/runtime/builtin_plugins/` and are discovered automatically at startup; user plugins are loaded from a local `.py` file via _Plugins → Manage plugins…_. The same dialog also lists the bundled **example plugins** (repo-root `plugins/examples/`, mirroring the desktop layout), which you can load on demand. All are registered through a browser shim of the desktop plugin API, which does not support all of it: for example, it does not call `register_computations()`, its `action_for()` returns `None`, and the desktop welcome tiles and recipe launchers are not available. A plugin targeting both applications declares its Web class in the dedicated `datalab.web_plugins` entry-point group. See [Plugins](plugins.md) for the practical guide and the list of differences.
+Built-in Python plugins live under `src/runtime/builtin_plugins/` and are discovered automatically at startup; user plugins are loaded from a local `.py` file via _Plugins → Manage plugins…_. The same dialog also lists the bundled **example plugins** (repo-root `plugins/examples/`, mirroring the desktop layout), which you can load on demand. All are registered through a browser shim of the desktop plugin API, which does not support all of it: for example, it does not call `register_computations()`, its `action_for()` returns `None`, and the desktop welcome tiles and recipe launchers are not available. A plugin targeting both applications declares its Web class in the dedicated `datalab.web_plugins` entry-point group. See [Plugins](../plugins.md) for the practical guide and the list of differences.
 
 ## Macros and notebooks
 
-See [Notebooks](notebooks.md) for the architecture and behaviour of the
-notebook subsystem. Macros follow the same model: a dedicated Pyodide
-worker, a proxy bridge to the main runtime, structured cell results.
+See [Notebooks](../notebooks.md) for the architecture and behaviour of the notebook subsystem. Macros follow the same model: a dedicated Pyodide worker, a proxy bridge to the main runtime, structured cell results.
 
 ## Performance
 
