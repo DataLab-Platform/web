@@ -280,6 +280,37 @@ describe("SignalPlot multi-signal layouts", () => {
     expect(currentPlot().layout.uirevision).not.toBe(before);
   });
 
+  it("gives every trace a CSS-safe uid (Plotly selects .cb<uid>)", () => {
+    const segment = {
+      category: "geometry",
+      metadata_key: "fwhm",
+      title: "FWHM",
+      func_name: "fwhm",
+      headers: [],
+      roi_indices: null,
+      kind: "segment",
+      coords: [[0.5, 0.5, 1.5, 0.5]],
+    } satisfies AnalysisResult;
+    renderPlot({
+      results: [segment],
+      graphicalAnnotations: {
+        items: [],
+        overlay: {
+          traces: [{ type: "scatter", x: [1], y: [2] }],
+          shapes: [],
+          annotations: [],
+        },
+      },
+    });
+    const uids = currentPlot()
+      .data.map((trace) => trace.uid)
+      .filter((uid): uid is string => typeof uid === "string");
+    expect(uids.length).toBeGreaterThanOrEqual(3);
+    for (const uid of uids) {
+      expect(() => document.querySelector(`.cb${uid}`)).not.toThrow();
+    }
+  });
+
   it("keeps a single signal on the historical primary axes", () => {
     renderPlot({ data: makeSignal("primary"), layoutMode: "vertical" });
     const { data, layout } = currentPlot();
