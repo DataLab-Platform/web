@@ -7,9 +7,9 @@
  * always matches the running version. Markdown is rendered with the
  * shared :mod:`MarkdownView` (``marked`` + ``DOMPurify``).
  *
- * Internal links between guide pages use the convention
- * ``href="<slug>.md"`` and are intercepted to switch the active page
- * without leaving the drawer; external links open in a new tab.
+ * Links to bundled pages are resolved relative to each Markdown source
+ * and intercepted to switch the active page without leaving the drawer;
+ * external links open in a new tab.
  */
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -25,38 +25,65 @@ import pluginsMd from "../../../doc/plugins.md?raw";
 interface GuidePage {
   slug: string;
   title: string;
+  sourcePath: string;
   source: string;
 }
 
 const PAGES: GuidePage[] = [
-  { slug: "welcome", title: "Welcome", source: welcomeMd },
+  {
+    slug: "welcome",
+    title: "Welcome",
+    sourcePath: "doc/userguide/welcome.md",
+    source: welcomeMd,
+  },
   {
     slug: "differences-from-desktop",
     title: "Differences from desktop",
+    sourcePath: "doc/userguide/differences-from-desktop.md",
     source: differencesMd,
   },
   {
     slug: "computation-engine",
     title: "Computation engine (Sigima)",
+    sourcePath: "doc/userguide/computation-engine.md",
     source: engineMd,
   },
   {
     slug: "provenance-and-capsules",
     title: "Provenance and capsules",
+    sourcePath: "doc/userguide/provenance-and-capsules.md",
     source: provenanceMd,
   },
-  { slug: "notebooks", title: "Notebooks", source: notebooksMd },
-  { slug: "plugins", title: "Plugins", source: pluginsMd },
+  {
+    slug: "notebooks",
+    title: "Notebooks",
+    sourcePath: "doc/notebooks.md",
+    source: notebooksMd,
+  },
+  {
+    slug: "plugins",
+    title: "Plugins",
+    sourcePath: "doc/plugins.md",
+    source: pluginsMd,
+  },
 ];
 
-const PAGE_BY_FILENAME: Record<string, string> = {
-  "welcome.md": "welcome",
-  "differences-from-desktop.md": "differences-from-desktop",
-  "computation-engine.md": "computation-engine",
-  "provenance-and-capsules.md": "provenance-and-capsules",
-  "notebooks.md": "notebooks",
-  "plugins.md": "plugins",
-};
+const GUIDE_SOURCE_ROOT = "https://userguide.invalid/";
+const PAGE_BY_URL = new Map(
+  PAGES.map((page) => [
+    new URL(page.sourcePath, GUIDE_SOURCE_ROOT).href,
+    page.slug,
+  ]),
+);
+
+function pageForLink(href: string, sourcePath: string): string | undefined {
+  const reference = href.trim().replace(/[\t\r\n]/g, "");
+  if (!reference || /^(?:[a-z][a-z\d+.-]*:|[\\/#?])/i.test(reference)) {
+    return undefined;
+  }
+  const base = new URL(sourcePath, GUIDE_SOURCE_ROOT);
+  return PAGE_BY_URL.get(new URL(reference, base).href);
+}
 
 interface Props {
   onClose: () => void;
@@ -109,17 +136,15 @@ export function UserGuidePanel({ onClose }: Props) {
     return () => cancelAnimationFrame(raf);
   }, [activeSlug]);
 
-  // Intercept internal links of the form ``href="<slug>.md"`` and route
-  // them to the corresponding page without leaving the drawer. External
-  // links keep their default behaviour (handled by ``MarkdownView`` /
-  // ``DOMPurify``, which preserves ``target`` and ``rel`` attributes).
+  // Only intercept links resolving to a bundled source file. Anchors,
+  // external URLs and other files keep their normal browser behaviour.
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest("a");
       if (!anchor) return;
       const href = anchor.getAttribute("href") ?? "";
-      const internal = PAGE_BY_FILENAME[href];
+      const internal = pageForLink(href, activePage.sourcePath);
       if (internal) {
         event.preventDefault();
         goToPage(internal);
@@ -132,7 +157,7 @@ export function UserGuidePanel({ onClose }: Props) {
         anchor.rel = "noopener noreferrer";
       }
     },
-    [goToPage],
+    [activePage.sourcePath, goToPage],
   );
 
   return (

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **User guide links:** the links to the Plugins and Notebooks guides on the Differences from desktop page now work both on GitHub and in the in-app user guide ([#96](https://github.com/DataLab-Platform/web/issues/96)).
 - **Documentation:** the README, the user guide, the developer guides and the SDK guide now match the application ([#93](https://github.com/DataLab-Platform/web/issues/93)): limits of plugin compatibility with DataLab Desktop, curated processing menus, desktop features not available in DataLab-Web (the History of a desktop workspace is lost when it is saved again from DataLab-Web), actual menu and button labels, and the `model-changed` event of the SDK. The README demo animation is displayed again, and the Angular integration example now refreshes its object count (it listened to an event that is never sent).
 
 ## [0.11.0] - 2026-11-07
