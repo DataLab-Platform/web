@@ -78,6 +78,7 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
                 "menu-item menu-item-leaf" + (enabled ? "" : " disabled")
               }
               role={itemRole}
+              data-action-id={action.id}
               aria-checked={
                 action.checkable ? (action.checked ?? false) : undefined
               }
