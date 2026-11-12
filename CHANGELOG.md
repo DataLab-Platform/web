@@ -6,7 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Fixed
+## [0.11.1] - 2026-11-12
+
+### Fixed in 0.11.1
 
 - **Notebooks and macros — background Python workers:** opening a workspace, a capsule or an application example started a new notebook kernel while the previous one kept running in the background, so that a long session piled up hidden Python instances and used more and more memory. The Python workers of the previous workspace are now stopped, and those in which no code ran yet are kept as they are, so that opening several workspaces or examples in a row no longer restarts Python each time ([#100](https://github.com/DataLab-Platform/web/issues/100)).
 - **Notebooks — Restart kernel:** **Restart kernel** did not restart an idle kernel: the variables of the previous cells were kept, although the cell counters were reset. The kernel is now always restarted with an empty namespace ([#100](https://github.com/DataLab-Platform/web/issues/100)).
@@ -391,7 +393,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/DataLab-Platform/web/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/DataLab-Platform/web/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/DataLab-Platform/web/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/DataLab-Platform/web/compare/v0.8.0...v0.9.0
