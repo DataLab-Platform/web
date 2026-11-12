@@ -41,6 +41,7 @@ import {
   clearRecent,
   getRecent,
   listRecent,
+  onRecentChange,
   recordRecent,
   removeRecent,
   type RecentEntry,
@@ -824,16 +825,25 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       return () => document.removeEventListener("mousedown", onDoc);
     }, [recentMenuOpen]);
 
-    // Refresh the cross-workspace recent cache list whenever macros change.
+    // Refresh the cross-workspace recent cache list whenever macros change,
+    // and whenever the cache itself changes (e.g. a macro recorded, or the
+    // oldest entry evicted, after the list was read), so that "Recent… (n)"
+    // is exact.
     useEffect(() => {
       let cancelled = false;
-      listRecent("macro")
-        .then((entries) => {
-          if (!cancelled) setRecentList(entries);
-        })
-        .catch(() => undefined);
+      const reload = () =>
+        listRecent("macro")
+          .then((entries) => {
+            if (!cancelled) setRecentList(entries);
+          })
+          .catch(() => undefined);
+      void reload();
+      const unsubscribe = onRecentChange((kind) => {
+        if (kind === "macro") void reload();
+      });
       return () => {
         cancelled = true;
+        unsubscribe();
       };
     }, [macros]);
 

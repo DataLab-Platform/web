@@ -60,6 +60,7 @@ import {
   clearRecent,
   getRecent,
   listRecent,
+  onRecentChange,
   recordRecent,
   removeRecent,
   type RecentEntry,
@@ -375,6 +376,24 @@ export const NotebookPanel = forwardRef<
       setRestored(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep "Recent… (n)" exact whenever the cache changes, whoever changed
+  // it (e.g. an entry recorded or evicted after the list was read).
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = onRecentChange((kind) => {
+      if (kind !== "notebook") return;
+      listRecent("notebook")
+        .then((entries) => {
+          if (!cancelled) setStoredList(entries);
+        })
+        .catch(() => undefined);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   // Persist open-tabs / active id to localStorage. Skip writes until
