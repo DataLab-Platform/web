@@ -17,6 +17,7 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "../runtime/proxyBridge";
+import { GenerationPool } from "../runtime/workerPool";
 import { startWorker, WorkerStartCancelled } from "../runtime/workerReady";
 import { pyodideLang } from "../i18n/locale";
 
@@ -58,6 +59,23 @@ function ignoreCancelled(error: unknown): void {
   if (!(error instanceof WorkerStartCancelled)) throw error;
 }
 
+/** Kernels of the Notebooks panel, shared by its successive mounts (see
+ *  :class:`GenerationPool`). */
+const panelKernels = new GenerationPool<RuntimeApi, NotebookRuntime>(
+  (runtime) => new NotebookRuntime(runtime),
+);
+
+/** The kernel of the Notebooks panel for ``generation``: the panel is
+ *  mounted afresh when the workspace is opened or imported into, and gets
+ *  a new kernel only with a new generation (the previous one is
+ *  terminated, unless no cell ran in it). */
+export function panelNotebookRuntime(
+  runtime: RuntimeApi,
+  generation: number,
+): NotebookRuntime {
+  return panelKernels.acquire(runtime, generation);
+}
+
 interface QueuedRun {
   cellId: string;
   code: string;
@@ -76,6 +94,8 @@ export class NotebookRuntime {
   private currentRun: QueuedRun | null = null;
   private queue: QueuedRun[] = [];
   private status: NotebookRuntimeStatus = "idle";
+  /** A cell was sent to the current worker (its namespace is not fresh). */
+  private used = false;
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
@@ -92,6 +112,11 @@ export class NotebookRuntime {
 
   getStatus(): NotebookRuntimeStatus {
     return this.status;
+  }
+
+  /** True while no cell ran in the kernel (fresh user namespace). */
+  isPristine(): boolean {
+    return !this.used && !this.currentRun && this.queue.length === 0;
   }
 
   /**
@@ -146,9 +171,17 @@ export class NotebookRuntime {
     await this.ensureWorker().catch(ignoreCancelled);
   }
 
-  /** Restart the kernel (= interrupt + clear queue). */
+  /** Restart the kernel: a running cell is interrupted; an idle (or still
+   *  starting) kernel is terminated as well and replaced by a fresh one,
+   *  so that the user namespace is always lost. */
   async restart(): Promise<void> {
-    await this.interrupt();
+    if (this.status === "running" && this.worker) {
+      await this.interrupt();
+      return;
+    }
+    this.terminateWorker();
+    this.status = "idle";
+    await this.ensureWorker().catch(ignoreCancelled);
   }
 
   dispose(): void {
@@ -174,6 +207,7 @@ export class NotebookRuntime {
     }
     this.worker = null;
     this.workerReady = false;
+    this.used = false;
   }
 
   private ensureWorker(): Promise<void> {
@@ -249,7 +283,7 @@ export class NotebookRuntime {
       await this.ensureWorker();
     } catch (err) {
       if (err instanceof WorkerStartCancelled) {
-        // Disposed meanwhile: the cell is not run.
+        // Disposed or restarted meanwhile: the cell is not run.
         next.callbacks.onFinished?.("interrupted", 0);
         next.resolve();
         return;
@@ -266,6 +300,7 @@ export class NotebookRuntime {
     }
     this.currentRun = next;
     this.status = "running";
+    this.used = true;
     this.worker!.postMessage({
       type: "exec_cell",
       cellId: next.cellId,

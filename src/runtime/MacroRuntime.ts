@@ -13,6 +13,7 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "./proxyBridge";
+import { GenerationPool } from "./workerPool";
 import {
   startWorker,
   waitForWorkerReady,
@@ -66,6 +67,8 @@ export class MacroRuntime {
   private spare: SpareWorker | null = null;
   private currentRun: MacroRunCallbacks | null = null;
   private state: "idle" | "running" | "stopping" = "idle";
+  /** A macro ran in the live worker (its namespace is not fresh). */
+  private used = false;
 
   constructor(private readonly runtime: RuntimeApi) {}
 
@@ -82,6 +85,11 @@ export class MacroRuntime {
     return this.state === "running";
   }
 
+  /** True while no macro ran in the live worker (fresh namespace). */
+  isPristine(): boolean {
+    return !this.used && this.state === "idle";
+  }
+
   /** Run *code* and stream output to the supplied callbacks. */
   async run(
     code: string,
@@ -91,6 +99,7 @@ export class MacroRuntime {
     if (this.state !== "idle") {
       throw new Error("A macro is already running. Stop it first.");
     }
+    this.used = true;
     await this.ensureWorker();
     this.currentRun = callbacks;
     this.state = "running";
@@ -148,6 +157,8 @@ export class MacroRuntime {
     }
     this.worker = null;
     this.workerReady = false;
+    // The next live worker (spare or fresh one) has a fresh namespace.
+    this.used = false;
   }
 
   /** Start the live worker (with a fresh one if it fails to start, see
@@ -328,4 +339,21 @@ export class MacroRuntime {
   // ---------------------------------------------------------------------
 
   externalCallbacks: BridgeExternalCallbacks = {};
+}
+
+/** Workers of the Macros panel, shared by its successive mounts (see
+ *  :class:`GenerationPool`). */
+const panelWorkers = new GenerationPool<RuntimeApi, MacroRuntime>(
+  (runtime) => new MacroRuntime(runtime),
+);
+
+/** The macro runtime of the Macros panel for ``generation``: the panel is
+ *  mounted afresh when the workspace is opened or imported into, and gets
+ *  new workers only with a new generation (the previous ones are
+ *  terminated, unless no macro ran in them). */
+export function panelMacroRuntime(
+  runtime: RuntimeApi,
+  generation: number,
+): MacroRuntime {
+  return panelWorkers.acquire(runtime, generation);
 }

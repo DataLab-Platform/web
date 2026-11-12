@@ -22,7 +22,7 @@ import {
   useState,
 } from "react";
 import type { MacroMeta, RuntimeApi } from "../runtime/runtime";
-import { MacroRuntime } from "../runtime/MacroRuntime";
+import { panelMacroRuntime, type MacroRuntime } from "../runtime/MacroRuntime";
 import {
   MacroEditorTabs,
   type MacroTab,
@@ -108,6 +108,10 @@ const LS_EDITOR_HEIGHT = "datalab-web.macros.editorHeight";
 
 interface Props {
   runtime: RuntimeApi;
+  /** Python workers to use: successive mounts of the panel share them
+   *  while the generation is the same (default 0, see
+   *  :func:`panelMacroRuntime`). */
+  kernelGeneration?: number;
   /** Called by ``proxy.set_current_panel`` so the host can switch tabs. */
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];
@@ -162,6 +166,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
   function MacroPanel(
     {
       runtime,
+      kernelGeneration = 0,
       onSetCurrentPanel,
       getSelection,
       getCurrentPanel,
@@ -237,7 +242,10 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     };
 
     useEffect(() => {
-      const rt = new MacroRuntime(runtime);
+      // Shared with the previous mounts of the panel (same generation):
+      // remounting it (e.g. HDF5 import) does not restart Python, and a new
+      // generation (workspace replaced) terminates the previous workers.
+      const rt = panelMacroRuntime(runtime, kernelGeneration);
       rt.externalCallbacks = {
         getSelection: () => callbacksRef.current.getSelection(),
         getCurrentPanel: () => callbacksRef.current.getCurrentPanel(),
@@ -254,10 +262,9 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
           console.error("Macro worker preload failed:", error),
         );
       return () => {
-        rt.dispose();
-        macroRtRef.current = null;
+        if (macroRtRef.current === rt) macroRtRef.current = null;
       };
-    }, [runtime]);
+    }, [runtime, kernelGeneration]);
 
     // ---------------------------------------------------------------------
     // Initial load: ask Python for macros; if empty try localStorage mirror;

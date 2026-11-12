@@ -1,12 +1,20 @@
 /**
- * Start-up of the Python workers of the Macros and Notebooks panels: a
- * worker that fails or stalls while starting is replaced by a fresh one,
- * and every worker (live, starting or spare) is terminated when disposed.
+ * Life cycle of the Python workers of the Macros and Notebooks panels:
+ * shared by successive mounts of a panel, terminated when a new generation
+ * is requested (workspace replaced) or when the kernel restarts, and
+ * replaced by a fresh worker when they fail or stall while starting.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeWorker } from "./fakeWorker";
-import { NotebookRuntime } from "../../../src/notebook/NotebookRuntime";
-import { MacroRuntime } from "../../../src/runtime/MacroRuntime";
+import {
+  panelNotebookRuntime,
+  NotebookRuntime,
+} from "../../../src/notebook/NotebookRuntime";
+import {
+  MacroRuntime,
+  panelMacroRuntime,
+} from "../../../src/runtime/MacroRuntime";
+import { GenerationPool } from "../../../src/runtime/workerPool";
 import {
   startWorker,
   waitForWorkerReady,
@@ -35,6 +43,39 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("GenerationPool", () => {
+  it("shares an instance per generation and disposes the previous one", () => {
+    const created: Array<{ dispose: ReturnType<typeof vi.fn> }> = [];
+    const pool = new GenerationPool<object, { dispose: () => void }>(() => {
+      const item = { dispose: vi.fn() };
+      created.push(item);
+      return item;
+    });
+    const key = {};
+    const first = pool.acquire(key, 0);
+    expect(pool.acquire(key, 0)).toBe(first);
+    const second = pool.acquire(key, 1);
+    expect(second).not.toBe(first);
+    expect(created[0].dispose).toHaveBeenCalledTimes(1);
+    expect(created[1].dispose).not.toHaveBeenCalled();
+    // Another key has its own instance.
+    expect(pool.acquire({}, 1)).not.toBe(second);
+  });
+
+  it("keeps an instance in which no code ran for the next generation", () => {
+    let pristine = true;
+    const item = { dispose: vi.fn(), isPristine: () => pristine };
+    const pool = new GenerationPool<object, typeof item>(() => item);
+    const key = {};
+    pool.acquire(key, 0);
+    expect(pool.acquire(key, 1)).toBe(item);
+    expect(item.dispose).not.toHaveBeenCalled();
+    pristine = false;
+    pool.acquire(key, 2);
+    expect(item.dispose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("waitForWorkerReady", () => {
@@ -132,6 +173,23 @@ describe("startWorker", () => {
 describe("NotebookRuntime", () => {
   const runtime = {} as RuntimeApi;
 
+  it("restarts an idle kernel with a fresh worker", async () => {
+    const kernel = new NotebookRuntime(runtime);
+    const preload = kernel.preload();
+    const first = last();
+    first.emit({ type: "ready" });
+    await preload;
+    expect(kernel.getStatus()).toBe("idle");
+
+    const restart = kernel.restart();
+    expect(first.terminated).toBe(true);
+    const second = last();
+    expect(second).not.toBe(first);
+    second.emit({ type: "ready" });
+    await restart;
+    expect(FakeWorker.alive()).toEqual([second]);
+  });
+
   it("shares one start between concurrent callers", async () => {
     const kernel = new NotebookRuntime(runtime);
     const a = kernel.preload();
@@ -148,6 +206,45 @@ describe("NotebookRuntime", () => {
     // A cancelled start is not an error.
     await expect(preload).resolves.toBeUndefined();
     expect(FakeWorker.alive()).toEqual([]);
+  });
+
+  it("keeps the panel kernel across remounts until a new generation", async () => {
+    const workspace = {} as RuntimeApi;
+    const first = panelNotebookRuntime(workspace, 0);
+    const preload = first.preload();
+    last().emit({ type: "ready" });
+    await preload;
+    // The panel mounted afresh (e.g. HDF5 import): same kernel.
+    expect(panelNotebookRuntime(workspace, 0)).toBe(first);
+    expect(FakeWorker.alive()).toHaveLength(1);
+    // No cell ran yet: another workspace keeps this fresh kernel.
+    expect(first.isPristine()).toBe(true);
+    expect(panelNotebookRuntime(workspace, 1)).toBe(first);
+    // A cell runs, then another workspace is opened: the kernel is
+    // terminated and replaced.
+    void first.executeCell("c1", "x = 1", {});
+    await flush();
+    expect(first.isPristine()).toBe(false);
+    const second = panelNotebookRuntime(workspace, 2);
+    expect(second).not.toBe(first);
+    expect(FakeWorker.alive()).toEqual([]);
+    void second.preload();
+    expect(FakeWorker.alive()).toHaveLength(1);
+  });
+
+  it("is pristine again after a restart", async () => {
+    const kernel = new NotebookRuntime(runtime);
+    const preload = kernel.preload();
+    last().emit({ type: "ready" });
+    await preload;
+    void kernel.executeCell("c1", "x = 1", {});
+    await flush();
+    last().emit({ type: "cell_finished", ok: true, execCount: 1 });
+    expect(kernel.isPristine()).toBe(false);
+    const restart = kernel.restart();
+    last().emit({ type: "ready" });
+    await restart;
+    expect(kernel.isPristine()).toBe(true);
   });
 });
 
@@ -180,5 +277,22 @@ describe("MacroRuntime", () => {
     // left running.
     expect(FakeWorker.alive()).toEqual([spare, last()]);
     expect(FakeWorker.instances).toHaveLength(3);
+  });
+
+  it("terminates the workers of the previous generation once a macro ran", async () => {
+    const workspace = {} as RuntimeApi;
+    const first = panelMacroRuntime(workspace, 0);
+    const preload = first.preload();
+    last().emit({ type: "ready" });
+    await preload;
+    expect(panelMacroRuntime(workspace, 0)).toBe(first);
+    expect(FakeWorker.alive()).toHaveLength(2);
+    // No macro ran yet: kept for another workspace.
+    expect(panelMacroRuntime(workspace, 1)).toBe(first);
+    await first.run("x = 1", "m", {});
+    FakeWorker.instances[0].emit({ type: "finished", ok: true });
+    expect(first.isPristine()).toBe(false);
+    expect(panelMacroRuntime(workspace, 2)).not.toBe(first);
+    expect(FakeWorker.alive()).toEqual([]);
   });
 });

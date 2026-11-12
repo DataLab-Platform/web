@@ -33,7 +33,10 @@ import {
   forwardRef,
 } from "react";
 import type { RuntimeApi } from "../../runtime/runtime";
-import { NotebookRuntime } from "../../notebook/NotebookRuntime";
+import {
+  panelNotebookRuntime,
+  type NotebookRuntime,
+} from "../../notebook/NotebookRuntime";
 import {
   emptyCodeCell,
   emptyMarkdownCell,
@@ -73,6 +76,9 @@ import {
 
 interface NotebookPanelProps {
   runtime: RuntimeApi;
+  /** Kernel to use: successive mounts of the panel share it while the
+   *  generation is the same (default 0, see :func:`panelNotebookRuntime`). */
+  kernelGeneration?: number;
   theme: "light" | "dark";
   onSetCurrentPanel: (panel: string) => void;
   getSelection: () => string[];
@@ -156,6 +162,7 @@ export const NotebookPanel = forwardRef<
 >(function NotebookPanel(
   {
     runtime,
+    kernelGeneration = 0,
     theme,
     onSetCurrentPanel,
     getSelection,
@@ -233,10 +240,13 @@ export const NotebookPanel = forwardRef<
   };
 
   // -- One NotebookRuntime instance shared across notebooks ------------
+  // Shared with the previous mounts of the panel (same generation):
+  // remounting it (e.g. HDF5 import) keeps the kernel, and a new
+  // generation (workspace replaced) terminates the previous kernel.
   const ntbRuntimeRef = useRef<NotebookRuntime | null>(null);
   const getNbRuntime = useCallback((): NotebookRuntime => {
     if (!ntbRuntimeRef.current) {
-      const r = new NotebookRuntime(runtime);
+      const r = panelNotebookRuntime(runtime, kernelGeneration);
       r.externalCallbacks = {
         getSelection: () => callbacksRef.current.getSelection(),
         getCurrentPanel: () => callbacksRef.current.getCurrentPanel(),
@@ -252,7 +262,7 @@ export const NotebookPanel = forwardRef<
       ntbRuntimeRef.current = r;
     }
     return ntbRuntimeRef.current;
-  }, [runtime]);
+  }, [runtime, kernelGeneration]);
 
   // Preload kernel + restore last-open notebooks on first mount.
   // Guarded with a ref so React 18 StrictMode (which runs effects twice

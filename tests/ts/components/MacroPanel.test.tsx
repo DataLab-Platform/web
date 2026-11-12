@@ -4,15 +4,17 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 
 // The macro worker plays no part in restoring or importing macros.
-vi.mock("../../../src/runtime/MacroRuntime", () => ({
-  MacroRuntime: class {
+vi.mock("../../../src/runtime/MacroRuntime", () => {
+  class MacroRuntime {
     externalCallbacks = {};
     preload(): Promise<void> {
       return Promise.resolve();
     }
     dispose(): void {}
-  },
-}));
+  }
+  const shared = new MacroRuntime();
+  return { MacroRuntime, panelMacroRuntime: () => shared };
+});
 
 import {
   MacroPanel,
