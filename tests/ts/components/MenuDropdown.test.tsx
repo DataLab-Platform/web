@@ -48,4 +48,27 @@ describe("MenuDropdown", () => {
     expect(onClose).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledOnce();
   });
+
+  it("exposes the action id as a stable automation hook", () => {
+    const nodes: MenuNode[] = [
+      {
+        label: "Open…",
+        displayLabel: "Ouvrir…",
+        path: "File/Open…",
+        action: {
+          id: "file.open",
+          label: "Open…",
+          menuPath: "File/Open…",
+          enabled: () => true,
+          run: vi.fn(),
+        },
+      },
+    ];
+    render(<MenuDropdown nodes={nodes} state={state} onClose={vi.fn()} />);
+
+    // Independent of the (translated) label.
+    expect(
+      screen.getByRole("menuitem", { name: "Ouvrir…" }).dataset.actionId,
+    ).toBe("file.open");
+  });
 });

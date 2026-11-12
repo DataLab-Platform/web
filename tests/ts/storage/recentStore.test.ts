@@ -18,6 +18,7 @@ import {
   clearRecent,
   getRecent,
   listRecent,
+  onRecentChange,
   recordRecent,
   removeRecent,
   setMaxEntries,
@@ -119,5 +120,18 @@ describe("recentStore", () => {
     await clearRecent("macro");
     expect(await listRecent("macro")).toEqual([]);
     expect((await listRecent("notebook")).length).toBe(1);
+  });
+
+  it("tells listeners about every change, by kind", async () => {
+    const changes: string[] = [];
+    const unsubscribe = onRecentChange((kind) => changes.push(kind));
+    await recordRecent("macro", { id: "a", title: "A", content: "" });
+    await recordRecent("notebook", { id: "x", title: "X", content: "" });
+    await removeRecent("macro", "a");
+    await clearRecent("notebook");
+    expect(changes).toEqual(["macro", "notebook", "macro", "notebook"]);
+    unsubscribe();
+    await recordRecent("macro", { id: "b", title: "B", content: "" });
+    expect(changes).toHaveLength(4);
   });
 });

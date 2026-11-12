@@ -523,7 +523,9 @@ export function SignalPlot({
         ...overlays.resultTraces.map((trace, traceIndex) => ({
           ...(trace as Record<string, unknown>),
           legendgroup: bundle.signalId,
-          uid: `${bundle.signalId}:result:${traceIndex}`,
+          // CSS-safe: Plotly builds selectors from trace uids (e.g. ``.cb``
+          // + uid when a trace is removed), a ``:`` there throws.
+          uid: `${bundle.signalId}-result-${traceIndex}`,
         })),
       );
     });
@@ -655,7 +657,7 @@ export function SignalPlot({
         ...trace,
         xaxis: primaryAxis.xRef,
         yaxis: primaryAxis.yRef,
-        uid: `${data.id}:annotation:${index}`,
+        uid: `${data.id}-annotation-${index}`,
       }),
     );
     return [
