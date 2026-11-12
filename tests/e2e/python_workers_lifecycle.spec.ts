@@ -75,13 +75,20 @@ test("opening workspaces does not pile up Python workers", async ({ page }) => {
   await disableQuickstartTemplate(page);
   await page.goto("/");
   await waitForRuntimeReady(page);
+  // Workers are counted once code ran in the notebook kernel and in the macro
+  // worker: the spare macro worker is only started once the macro worker is
+  // ready, which may take longer than the settling delay (it would then be
+  // missed by the count), and running code makes sure it was started.
+  await runPythonCode(page, "0");
   const baseline = await settledWorkerCount(page);
-  // Notebook kernel, macro worker and its spare (+ the runtime worker).
+  // Notebook kernel, macro worker and its spare (+ the runtime workers).
   expect(baseline).toBeGreaterThanOrEqual(3);
 
   for (let open = 1; open <= 2; open++) {
-    await runPythonCode(page, `${open}`);
     await openWorkspace(page);
+    // The workers in which code ran are replaced: the replaced ones must be
+    // terminated, so that the count does not grow.
+    await runPythonCode(page, `${open}`);
     expect(await settledWorkerCount(page), `after opening #${open}`).toBe(
       baseline,
     );
