@@ -56,6 +56,11 @@ import { hashBytes } from "../plugins/trustStore";
 // diagnostics and the shim version audit (see ``shims/registry.ts``).
 import { PACKAGE_VERSION_SOURCES } from "./shims/registry";
 import { fetchBundledPluginWheels } from "./bundledPlugins";
+import {
+  loadPackagesWithRetry,
+  micropipInstallWithRetry,
+  type PackageLoader,
+} from "./packageRetry";
 import { currentRuntimeLabels, type RuntimeLabels } from "./runtimeLabels";
 import {
   DISK_SWEEP_CALLS,
@@ -97,7 +102,7 @@ const builtinPluginSources = import.meta.glob("./builtin_plugins/*.py", {
 
 export interface PyodideAPI {
   runPythonAsync: (code: string) => Promise<unknown>;
-  loadPackage: (names: string | string[]) => Promise<void>;
+  loadPackage: PackageLoader["loadPackage"];
   globals: {
     get: (name: string) => PyProxy | undefined;
   };
@@ -1899,14 +1904,13 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
     onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    await py.loadPackage([
-      "numpy",
-      "scipy",
-      "h5py",
-      "pandas",
-      "pillow",
-      "micropip",
-    ]);
+    // Retried on a transient download failure (cold cache, see
+    // ``packageRetry.ts``), as the installation below.
+    await loadPackagesWithRetry(
+      py,
+      ["numpy", "scipy", "h5py", "pandas", "pillow", "micropip"],
+      { label: "[runtime]" },
+    );
 
     onProgress?.(t("Installing Sigima…"));
     // Pyodide's ``scikit-image`` package omits Pillow and tifffile from its
@@ -1924,10 +1928,9 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
       "tifffile<2025",
       ...(DATALAB_CAPSULE_INSTALL_SPEC ? [DATALAB_CAPSULE_INSTALL_SPEC] : []),
     ];
-    await py.runPythonAsync(`
-import micropip
-await micropip.install(${JSON.stringify(bootRequirements)})
-`);
+    await micropipInstallWithRetry(py, bootRequirements, {
+      label: "[runtime]",
+    });
 
     onProgress?.(t("Initialising Sigima namespace…"));
     await py.runPythonAsync(guidataJsonSchemaShim);

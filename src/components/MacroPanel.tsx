@@ -248,7 +248,11 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         onModelChanged: (panel) => callbacksRef.current.onModelChanged(panel),
       };
       macroRtRef.current = rt;
-      void rt.preload();
+      void rt
+        .preload()
+        .catch((error: unknown) =>
+          console.error("Macro worker preload failed:", error),
+        );
       return () => {
         rt.dispose();
         macroRtRef.current = null;
