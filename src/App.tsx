@@ -1122,25 +1122,27 @@ export default function App() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ panel: string | null }>).detail;
       const target = detail?.panel;
+      // ``refresh()`` only re-reads the tree/selection. When a
+      // remote/macro/notebook/AI call mutates the *current* object's
+      // metadata (title, axis labels/units, ROIs…) without changing
+      // ``currentId``, the central plot-data effect wouldn't otherwise
+      // re-run and the graph would keep stale axis titles/units: bump the
+      // plot nonce so it re-fetches the displayed object's data. Only once
+      // the tree is re-read, though: the call may have deleted objects
+      // (e.g. ``reset_all``), and re-fetching with the selection of
+      // deleted objects fails in Python (unknown object ids).
+      const refreshThenPlot = () =>
+        refresh().then(() => setPlotRefreshNonce((n) => n + 1));
       if (target === "signal" || target === "image") {
         if (target === treeKind) {
-          void refresh();
-          // ``refresh()`` only re-reads the tree/selection. When a
-          // remote/macro/notebook/AI call mutates the *current*
-          // object's metadata (title, axis labels/units, ROIs…)
-          // without changing ``currentId``, the central plot-data
-          // effect wouldn't otherwise re-run and the graph would keep
-          // stale axis titles/units. Bump the plot nonce so it
-          // re-fetches the displayed object's data.
-          setPlotRefreshNonce((n) => n + 1);
+          void refreshThenPlot();
         } else {
           // The result landed in a panel the user isn't looking at.
           // Don't yank them away — they'll see it on next switch.
         }
       } else {
         // Unknown / null panel: best-effort refresh of the active one.
-        void refresh();
-        setPlotRefreshNonce((n) => n + 1);
+        void refreshThenPlot();
       }
     };
     window.addEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
