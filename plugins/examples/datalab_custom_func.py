@@ -8,11 +8,14 @@ Browser-friendly port of DataLab desktop's ``datalab_custom_func`` plugin.
 It adds a custom image processing ("Weighted average denoise") to the image
 panel.
 
-Difference from the desktop version: instead of calling the synchronous
-``processor.compute_1_to_1(...)`` from an action callback (unavailable in the
-browser), the filter is registered once via ``processor.register_1_to_1(...)``
-in ``create_actions``. The host then surfaces it as a regular menu entry and
-runs it through the same asynchronous dispatch as the built-in processings.
+Difference from the desktop version: the desktop example registers the filter
+in ``register_computations`` and adds it to a menu with
+``acthandler.action_for(...)``. The DataLab-Web plugin shim calls neither
+(``action_for`` returns ``None``, see
+https://github.com/DataLab-Platform/web/issues/94), so the filter is
+registered via ``processor.register_1_to_1(...)`` in ``create_actions``. The
+host then surfaces it as a regular menu entry (under "Plugins") and runs it
+through the same asynchronous dispatch as the built-in processings.
 
 Load it from *Plugins → Manage plugins…* (it appears under "Example plugins").
 """

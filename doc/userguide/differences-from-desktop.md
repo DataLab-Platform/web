@@ -1,22 +1,19 @@
 # Differences from desktop DataLab
 
-DataLab-Web shares the **computation engine** (Sigima) and the **processing
-catalog** with the desktop application: results are bit-for-bit identical for
-the same inputs. The differences listed below are about the **runtime
-environment** and a few UI surfaces, not about the science.
+DataLab-Web shares the **computation engine** (Sigima) with the desktop application and exposes most of its **processings**: for the same inputs, results are numerically equivalent (exact, or within the tolerance declared by the contract of the operation), even though Pyodide ships its own numerical stack. The differences listed below are about the **runtime environment** and a few UI surfaces, not about the science.
 
 ## Runtime
 
-| Topic           | Desktop DataLab            | DataLab-Web                                       |
-| --------------- | -------------------------- | ------------------------------------------------- |
-| Python          | System CPython             | Pyodide (CPython compiled to WebAssembly)         |
-| GUI toolkit     | Qt + PlotPy                | React + TypeScript + Plotly.js                    |
-| Plotting        | PlotPy (Qt)                | Plotly.js                                         |
-| Multi-threading | Native threads / processes | Web Workers (one per macro / notebook)            |
-| File system     | Native I/O                 | Browser file picker, drag-and-drop, OPFS          |
-| Persistence     | HDF5 on disk               | HDF5 download / upload, IndexedDB workspace cache |
-| Memory          | System RAM (64-bit)        | ~2 GB wasm32 heap, optional OPFS on-disk spill    |
-| Remote control  | XML-RPC, FastAPI Web API   | In-browser proxy, optional postMessage SDK        |
+| Topic           | Desktop DataLab            | DataLab-Web                                                                                                   |
+| --------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Python          | System CPython             | Pyodide (CPython compiled to WebAssembly)                                                                     |
+| GUI toolkit     | Qt + PlotPy                | React + TypeScript + Plotly.js                                                                                |
+| Plotting        | PlotPy (Qt)                | Plotly.js                                                                                                     |
+| Multi-threading | Native threads / processes | Web Workers: computation runtime (default), macros (one worker plus a standby), notebooks (one shared worker) |
+| File system     | Native I/O                 | Browser file picker, OPFS                                                                                     |
+| Persistence     | HDF5 on disk               | HDF5 download / upload, IndexedDB cache of recent macros and notebooks                                        |
+| Memory          | System RAM (64-bit)        | ~2 GB wasm32 heap, optional OPFS on-disk spill                                                                |
+| Remote control  | XML-RPC, FastAPI Web API   | In-browser proxy, optional postMessage SDK                                                                    |
 
 The first load downloads Pyodide (~10 MB) and installs Sigima via
 `micropip`; expect 30–60 s on a cold cache. Subsequent loads are served
@@ -30,10 +27,7 @@ from the browser cache.
 - **No Qt-only widgets**. PlotPy interactive tools (rotation, polygon
   picker…) are not available; equivalent flows are reimplemented with
   Plotly + React when applicable.
-- **Plugins are Python only**. The Qt-compatible `PluginBase` API is
-  shared with the desktop DataLab — the same plugin source runs in
-  both, provided dialogs use `await param.edit_async(...)`. See
-  [Plugins](#plugins).
+- **Plugins are Python only**. DataLab-Web hosts portable `PluginBase` classes through a browser shim of the desktop plugin API. Dialogs must be opened from `async` callbacks with `await param.edit_async(...)`, which DataLab Desktop does not run, and part of the desktop API is not supported: a plugin targeting both applications declares a distinct Web class. See [Plugins](#plugins).
 - **Macros and notebooks run in Web Workers**. They have their own Pyodide
   instance and communicate with the main runtime through a structured
   proxy (`MacroRuntime`, `proxyBridge`). Long-running computations no
@@ -46,13 +40,21 @@ from the browser cache.
 ## What is intentionally **not** different
 
 - The **object model** (`SignalObj`, `ImageObj`, ROI, groups) is identical.
-- The **processing catalog** is discovered from Sigima — every function
-  registered there appears in the menu bar with the same parameters.
+- The **processings** come from Sigima, with the same parameters. The menu bar lists a curated selection of them, declared in DataLab-Web (see _Not available in DataLab-Web_ below).
 - **Parameter dialogs** are auto-generated from the same guidata `DataSet`
   schemas as in the desktop app.
-- **HDF5 workspace files** are interoperable: a workspace saved in
-  desktop DataLab can be opened in DataLab-Web (and vice versa, within
-  the limits of available processings).
+- **HDF5 workspace files** are interoperable: a workspace saved in desktop DataLab can be opened in DataLab-Web (and vice versa, within the limits of available processings). The layouts are close but not identical: DataLab-Web ignores the desktop History (see _Not available in DataLab-Web_ below), stores its notebooks in a `DataLab_Nb` group that the desktop application ignores, saves groups without their UUID (the desktop application gives them new ones) and records the Sigima version in the `DataLab_Version` entry.
+
+## Not available in DataLab-Web
+
+DataLab-Web exposes a curated subset of the desktop menus. Notable desktop features without an equivalent:
+
+- **History panel.** DataLab-Web has no History panel and ignores the `DataLab_His` group of an HDF5 workspace saved by DataLab Desktop. Saving such a workspace again from DataLab-Web writes a new file without this group: **its desktop History is lost**. Keep the original file if you need it.
+- **Edit menu:** _Recompute_, _Select source objects_ and the _Annotations_ submenu, including _Insert object title as annotation label_ (annotations stored with an object are displayed, but cannot be edited, copied, imported or exported).
+- **Processing and analysis:** _Replace special values_, the batch actions running all methods of a family (thresholding, denoising, morphology, edge detection, stability analysis), the _Multi-Gaussian_ and _Multi-Lorentzian_ fits, _Extract peak positions_ and _Create signal from markers table_.
+- **Settings dialog** (_File → Settings…_).
+
+The processing menus are generated from a catalogue declared in DataLab-Web (`src/runtime/processor.py`): a function added to Sigima appears only once an entry is added to this catalogue.
 
 ## Memory and on-disk storage
 
@@ -62,26 +64,18 @@ To lift that ceiling, DataLab-Web offers an opt-in **on-disk storage mode**, tog
 
 - When enabled, the heavy NumPy array of every signal and image is **spilled out of the WebAssembly heap to disk** — specifically to the browser's [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) (OPFS), a sandboxed, origin-scoped, browser-managed filesystem. The object model keeps only metadata resident; each array is paged back in just for the duration of the operation that needs it.
 - The result is that the working set is bounded by **disk quota instead of the ~2 GB RAM ceiling**, so you can work with datasets far larger than the heap would otherwise allow. The trade-off is a small per-operation latency for the disk round-trip.
-- The OPFS store is an **ephemeral cache, not a save format**: the HDF5 workspace remains the single durable source of truth, exactly as in RAM mode. The store is cleared if you clear the site's data, and it is independent of the **File → Save HDF5 workspace…** action you use to persist your work.
+- The OPFS store is an **ephemeral cache, not a save format**: the HDF5 workspace remains the single durable source of truth, exactly as in RAM mode. The store is cleared if you clear the site's data, and it is independent of the **File → Save to HDF5 file…** action you use to persist your work.
 - The toggle is only available in **secure contexts that support OPFS** (modern Chromium / Firefox / Safari over `https://` or `localhost`); when unavailable, it is disabled and the app stays in the default in-memory mode.
 
 The desktop application has no analogue because it never hits a memory wall of this kind: this feature exists purely to work around the browser's WebAssembly memory model.
 
 ## Plugins
 
-Built-in Python plugins live under `src/runtime/builtin_plugins/` and
-are discovered automatically at startup; user plugins are loaded from a
-local `.py` file via _Plugins → Manage plugins…_. The same dialog also
-lists the bundled **example plugins** (repo-root `plugins/examples/`,
-mirroring the desktop layout), which you can load on demand. All are
-registered through the same hook system as the desktop app. See
-[Plugins](plugins.md) for the practical guide.
+Built-in Python plugins live under `src/runtime/builtin_plugins/` and are discovered automatically at startup; user plugins are loaded from a local `.py` file via _Plugins → Manage plugins…_. The same dialog also lists the bundled **example plugins** (repo-root `plugins/examples/`, mirroring the desktop layout), which you can load on demand. All are registered through a browser shim of the desktop plugin API, which does not support all of it: for example, it does not call `register_computations()`, its `action_for()` returns `None`, and the desktop welcome tiles and recipe launchers are not available. A plugin targeting both applications declares its Web class in the dedicated `datalab.web_plugins` entry-point group. See [Plugins](../plugins.md) for the practical guide and the list of differences.
 
 ## Macros and notebooks
 
-See [Notebooks](notebooks.md) for the architecture and behaviour of the
-notebook subsystem. Macros follow the same model: a dedicated Pyodide
-worker, a proxy bridge to the main runtime, structured cell results.
+See [Notebooks](../notebooks.md) for the architecture and behaviour of the notebook subsystem. Macros follow the same model: a dedicated Pyodide worker, a proxy bridge to the main runtime, structured cell results.
 
 ## Performance
 
@@ -101,12 +95,8 @@ Sigima pipeline on native CPython.
 
 - The browser and Node.js backends perform almost identically — the
   WebAssembly engine is the dominant factor, not the host.
-- Cold-start is the main visible difference: ~10 s for the Pyodide
-  bootstrap + Sigima install on a cold cache, vs ~2 s for native
-  Python startup. Subsequent operations run at full WASM speed.
-- Visualization (Plotly.js) adds an overhead per displayed object
-  comparable to the desktop PlotPy renderer for typical signals and
-  images.
+- Cold-start is the main visible difference: on a cold cache, the benchmark measured ~10 s for a bare Pyodide bootstrap + Sigima install and ~30 s for the complete DataLab-Web application, vs ~2 s for native Python startup. Subsequent operations run at full WASM speed.
+- The benchmark does not measure the Plotly.js rendering time, so the visualization overhead is not compared with the desktop PlotPy renderer.
 
 In practice, for the interactive workflows DataLab-Web targets
 (load 1–3 objects, apply 1–2 processings, observe), the runtime cost

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Notebooks and macros — background Python workers:** opening a workspace, a capsule or an application example started a new notebook kernel while the previous one kept running in the background, so that a long session piled up hidden Python instances and used more and more memory. The Python workers of the previous workspace are now stopped, and those in which no code ran yet are kept as they are, so that opening several workspaces or examples in a row no longer restarts Python each time ([#100](https://github.com/DataLab-Platform/web/issues/100)).
+- **Notebooks — Restart kernel:** **Restart kernel** did not restart an idle kernel: the variables of the previous cells were kept, although the cell counters were reset. The kernel is now always restarted with an empty namespace ([#100](https://github.com/DataLab-Platform/web/issues/100)).
+- **Notebooks and macros — slow or busy networks:** when the download of Python or of a Python package failed (e.g. several Python workers loading the same files on a first start), the notebook kernel or the macro worker could stay loading forever. Failed downloads are now retried, and a worker that fails or stalls while starting is replaced by a fresh one ([#100](https://github.com/DataLab-Platform/web/issues/100)).
+- **Remote control — `reset_all`:** resetting the workspace from a page embedding DataLab-Web (`reset_all`) logged errors about the deleted objects, because the plot was refreshed for the objects that were selected before the reset. The selection of deleted objects is now dropped first ([#100](https://github.com/DataLab-Platform/web/issues/100)).
+- **Macros and notebooks — Recent… counter:** once the recent cache was full, adding a macro dropped the oldest entry from the cache, but the **Recent… (n)** button still counted it and its menu still listed it. The counters of the Macros and Notebooks panels now follow every change of the cache ([#100](https://github.com/DataLab-Platform/web/issues/100)).
+- **Signal plot:** the application no longer goes blank when you leave a signal that shows an analysis result drawn on the plot (such as a full width at half-maximum), for example to open the Images panel.
+- **User guide links:** the links to the Plugins and Notebooks guides on the Differences from desktop page now work both on GitHub and in the in-app user guide ([#96](https://github.com/DataLab-Platform/web/issues/96)).
+- **Documentation:** the README, the user guide, the developer guides and the SDK guide now match the application ([#93](https://github.com/DataLab-Platform/web/issues/93)): limits of plugin compatibility with DataLab Desktop, curated processing menus, desktop features not available in DataLab-Web (the History of a desktop workspace is lost when it is saved again from DataLab-Web), actual menu and button labels, and the `model-changed` event of the SDK. The README demo animation is displayed again, and the Angular integration example now refreshes its object count (it listened to an event that is never sent).
+
 ## [0.11.0] - 2026-11-07
 
 ### Added in 0.11.0

@@ -76,7 +76,7 @@ VS Code tasks are provided under `.vscode/tasks.json` (`🚀 Pytest`, `🟢 Vite
 
 ## Default suite vs perf project
 
-The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. The costly `perf` and `benchmark` projects are **opt-in**: each is registered only when explicitly requested, either via its `--project=<name>` flag or its `PW_<NAME>` env var (see `wantsProject` in [playwright.config.ts](../playwright.config.ts)). A bare `playwright test` — and therefore the default CI run, which calls `npm run test:e2e` (`--project=chromium`) — never pays for them.
+The default Playwright project (`chromium`) runs the regression suite and intentionally **excludes** performance benchmarks and `_repro_*` throwaway probes. The costly `perf` and `benchmark` projects are **opt-in**: each is registered only when explicitly requested, either via its `--project=<name>` flag or its env var (`PW_PERF` or `PW_BENCH`; see `wantsProject` in [playwright.config.ts](../playwright.config.ts)). A bare `playwright test` — and therefore the default CI run, which calls `npm run test:e2e` (`--project=chromium`) — never pays for them.
 
 ```powershell
 npm run test:e2e                       # default chromium suite (CI default)
@@ -84,7 +84,7 @@ npm run test:e2e:perf                  # perf benchmarks only (--project=perf)
 npx playwright test --project=perf     # same, explicit form
 ```
 
-When you need a perf or budget-style probe, add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `signal_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`). The default `chromium` project must ignore the same file so an ordinary E2E run remains cheap.
+When you need a perf or budget-style probe, add the spec to the `perf` project's `testMatch` glob (currently `image_perf.spec.ts`, `signal_perf.spec.ts`, `opfs_storage_bench.spec.ts`, `opfs_sync_spike.spec.ts`, `opfs_worker_bench.spec.ts`, `provenance_capsule_perf.spec.ts`). The default `chromium` project must ignore the same file so an ordinary E2E run remains cheap.
 
 ## CI shards
 
@@ -134,17 +134,7 @@ Run it from the `DataLab-Web` folder — if the terminal cwd is another workspac
 
 ### Worker-mode coverage
 
-The runtime can also run inside a Dedicated Web Worker (opt-in via
-`?runtime=worker`; see [architecture.md](architecture.md) §3.3 and DEW
-ADR #2). That path has its own failure surface — Pyodide boot in a
-module worker, the `postMessage` RPC bridge, transferable buffers, the
-synchronous mirror, and workspace-mutation events crossing back to the
-main thread — which unit tests cannot reach. `tests/e2e/worker_mode.spec.ts`
-is the **permanent** regression suite that exercises it in the default
-`chromium` project, so it runs on every CI build. It boots the worker
-runtime **once** (`describe.serial` + `beforeAll`) and shares the page
-across assertions to amortise the cold boot. This suite is the gate for
-ever promoting worker mode to the default execution mode.
+By default, the runtime runs inside a Dedicated Web Worker (the in-thread runtime remains available with `?runtime=main`; see [architecture.md](architecture.md) §3.3 and DEW ADR #2). That path has its own failure surface — Pyodide boot in a module worker, the `postMessage` RPC bridge, transferable buffers, the synchronous mirror, and workspace-mutation events crossing back to the main thread — which unit tests cannot reach. `tests/e2e/worker_mode.spec.ts` is the **permanent** regression suite that exercises it explicitly (`?runtime=worker`) in the default `chromium` project, so it runs on every CI build. It boots the worker runtime **once** (`describe.serial` + `beforeAll`) and shares the page across assertions to amortise the cold boot.
 
 ## Decision tree for a bug fix
 
@@ -154,7 +144,7 @@ ever promoting worker mode to the default execution mode.
      `tests/python/`.
    - If the symptom is a React state/render bug isolatable from the
      runtime: write a Vitest + RTL test under `tests/ts/` (mock the
-     runtime via the `DataLabRuntime` interface).
+     runtime via the `RuntimeApi` interface).
    - Only if neither layer can express the bug — it requires a real
      Pyodide round-trip or multi-component interaction — write a
      **throwaway Playwright spec** under `tests/e2e/_repro_*.spec.ts`.

@@ -70,11 +70,11 @@ The recommended workflow:
 
 ## Internationalisation
 
-DataLab-Web is fully internationalised: English is the source language and French is the first translated locale. The framework, the user-facing behaviour and the full contributor workflow are documented in the **Internationalisation** section of [README.md](README.md). In short:
+DataLab-Web is fully internationalised: English is the source language and French is the first translated locale. The framework, the user-facing behaviour and the full contributor workflow are documented in [doc/i18n.md](doc/i18n.md). In short:
 
 - Wrap every new user-facing string in `t("…")` (from `src/i18n/translate`); use `t("…{x}…", { x })` for interpolation. Never translate brand names or AI-assistant system prompts.
 - Run `npm run i18n:extract` to merge new keys into `src/locales/fr.json`, then fill in the translations.
-- Run `npm run i18n:check` to verify there are no missing or empty keys (it is wise to run this in CI).
+- Run `npm run i18n:check` to verify there are no missing or empty keys (CI runs it too).
 - Keys referenced only through a variable must be listed in `src/locales/_dynamic-keys.json`.
 
 ## Temporary shims

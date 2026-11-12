@@ -12,7 +12,8 @@ action ("Do nothing") and a couple of nested submenus.
 Difference from the desktop version: message dialogs cannot block the
 JavaScript event loop in Pyodide, so the action callbacks are ``async`` and
 use ``await self.show_info_async(...)`` instead of the synchronous
-``self.show_info(...)``.
+``self.show_info(...)``. DataLab Desktop does not run ``async`` callbacks and
+has no ``*_async`` helpers: this example is for DataLab-Web only.
 
 Load it from *Plugins → Manage plugins…* (it appears under "Example plugins").
 """
@@ -53,7 +54,9 @@ class EmptyPlugin(PluginBase):
         acth = self.imagepanel.acthandler
         with acth.new_menu(self.PLUGIN_INFO.name):
             # ``select_condition="always"`` keeps the action enabled even when
-            # no object is selected (the default requires at least one).
+            # no object is selected. DataLab-Web enables an action without
+            # ``select_condition`` at all times, whereas DataLab Desktop then
+            # requires at least one selected object.
             acth.new_action(
                 _("Do nothing"),
                 triggered=self.do_nothing,

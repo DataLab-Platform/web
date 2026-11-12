@@ -33,21 +33,14 @@ you add or restructure a top-level subsystem.
   JSON-friendly helpers used from JS (object CRUD, ROI editing, HDF5
   workspace serialisation, plot/metadata accessors, etc.). It is
   re-executable: `_MODEL` and `_CATALOG` are preserved across HMR reloads.
-- **`src/runtime/processor.py`** (written into Pyodide as `dlw_processor.py`)
-  introspects Sigima's catalog and exposes `build_signal_catalog()` /
-  `build_image_catalog()` and the `apply_*` dispatch — the equivalent of
-  DataLab desktop's `register_1_to_1` / `register_n_to_1` / etc. machinery.
+- **`src/runtime/processor.py`** (written into Pyodide as `dlw_processor.py`) builds the processing catalogue from the Sigima functions listed in its `SIGNAL_OVERRIDES` / `IMAGE_OVERRIDES` dicts and exposes `build_signal_catalog()` / `build_image_catalog()` and the `apply_*` dispatch — the equivalent of DataLab desktop's `register_1_to_1` / `register_n_to_1` / etc. machinery.
 - **`src/runtime/dlw_main.py`, `dlw_plugins.py`, `dlw_h5browser.py`,
   `dlw_interactive_fit.py`, `notebook_display.py`, `macro_proxy.py`,
   `_guidata_jsonschema_shim.py`** — focused Python modules pushed into
   Pyodide's FS alongside `bootstrap.py` (plugin host, HDF5 browser,
   interactive fit, notebook `display()`, macro/notebook proxy, and the
   tracked guidata `FloatArrayItem` schema-hint backport).
-- **`src/runtime/runtime.ts`** is the only place that touches the Pyodide
-  API. All Python calls go through `DataLabRuntime`; the rest of the UI
-  consumes typed interfaces (`SignalMeta`, `SignalData`,
-  `ProcessingDescriptor`, `AnalysisResult`, `MacroRecord`,
-  `NotebookRecord`, …).
+- **`src/runtime/runtime.ts`** owns the main Pyodide instance (hosted by `kernelWorker.ts` in the default worker mode); `workerBase.ts` boots the separate Pyodide instances of the macro and notebook workers. All Python calls from the UI go through `DataLabRuntime` (behind the `RuntimeApi` façade); the rest of the UI consumes typed interfaces (`SignalMeta`, `SignalData`, `ProcessingDescriptor`, `AnalysisResult`, `MacroRecord`, `NotebookRecord`, …).
 - **`src/runtime/macroWorker.ts` / `notebookWorker.ts`** host secondary
   Pyodide instances (one per worker) so macros and notebook cells run off
   the UI thread. `MacroRuntime.ts`, `proxyBridge.ts` and `remoteBridge.ts`
@@ -89,28 +82,15 @@ doesn't know natively.
 
 ## Adding a new processing
 
-Processings are discovered by introspecting Sigima's catalog in
-`src/runtime/processor.py` (`build_signal_catalog()` /
-`build_image_catalog()`). For most cases:
+The processing menus are built from an explicit catalogue in `src/runtime/processor.py` (`build_signal_catalog()` / `build_image_catalog()`): only the Sigima functions listed in `SIGNAL_OVERRIDES` / `IMAGE_OVERRIDES` are shown. To expose a new processing:
 
-1. Implement the function in Sigima (see `../Sigima/.github/copilot-instructions.md`)
-   and register it via `@computation_function` so it appears in the catalog.
-2. The DataLab-Web menu bar picks it up automatically — no JS change needed.
-3. Use `processor.py`'s override hooks only when the catalog entry needs to
-   be renamed, hidden, regrouped or paired with a custom result renderer.
-   Parameter dialogs are auto-generated from the guidata `DataSet` by
-   `DataSetDialog.tsx`; only add a hand-written component when the auto
-   form genuinely cannot express the UX.
+1. Implement the function in Sigima (see `../Sigima/.github/copilot-instructions.md`) and register it via `@computation_function` with its operation contract (the catalogue takes the pattern and the result kind from the contract).
+2. Add a `FeatureOverride` entry (label, menu path, optional icon, operand label and preview flag) to `SIGNAL_OVERRIDES` or `IMAGE_OVERRIDES`, keyed by the Sigima function name; the order of the dict sets the order of the menu entries. Without this entry, the function does not appear. Analyses (1-to-0 functions) are listed apart, in `_build_signal_analysis_catalog()` / `_build_image_analysis_catalog()` in `bootstrap.py`.
+3. Parameter dialogs are auto-generated from the guidata `DataSet` by `DataSetDialog.tsx`; only add a hand-written component when the auto form genuinely cannot express the UX.
 
 ## Adding a new signal / image generator
 
-Generators are also Sigima-driven (`SignalTypes` / `ImageTypes` in
-`sigima.objects.signal.creation` / `image.creation`). New types added in
-Sigima surface automatically through `createSignalTyped` /
-`createImageTyped` and the _Create > Signal_ / _Create > Image_ submenus.
-The legacy `SignalCreationParams` / `ImageCreationParams` interfaces in
-`runtime.ts` are kept only for the small set of programmatic / test
-helpers — prefer the typed path for new work.
+Generators are also Sigima-driven (`SignalTypes` / `ImageTypes` in `sigima.objects.signal.creation` / `image.creation`), but the _Create > Signal_ / _Create > Image_ submenus only list the types named in the hard-coded `_SIGNAL_TYPE_ORDER` / `_IMAGE_TYPE_ORDER` lists of `bootstrap.py` (which also set their order and separators): add a new Sigima type to the matching list so that it appears in these submenus (objects are then created through `createSignalTyped` / `createImageTyped`). The legacy `SignalCreationParams` / `ImageCreationParams` interfaces in `runtime.ts` are kept only for the small set of programmatic / test helpers — prefer the typed path for new work.
 
 ## Conventions
 
@@ -125,20 +105,8 @@ helpers — prefer the typed path for new work.
 - **Path strategy**: Vite is configured with `base: "./"` so the build is
   drop-in deployable to GitHub Pages and other sub-path hosts. Don’t introduce
   absolute URLs.
-- **Pyodide version is pinned** (`PYODIDE_VERSION` in `runtime.ts` and the
-  `<script>` tag in `index.html`). Bump both together; Pyodide’s wheel index
-  is version-specific.
-- **Internationalisation is mandatory for user-facing strings**: wrap every
-  new visible string in `t("English source")` (from `src/i18n/translate`;
-  the English text _is_ the key). Use `t("Delete {count}", { count })` for
-  interpolation. Do **not** translate brand names or AI-assistant system
-  prompts. Watch for `t` shadowing in `.map((t) => …)` (rename the param).
-  Literal `t("…")` calls are auto-extracted; keys passed only as a variable
-  (`t(label)`) must be listed in `src/locales/_dynamic-keys.json`. After
-  adding strings, run the **`🌍 i18n: Extract keys (step 1/2)`** task, fill
-  the new empty values in `src/locales/fr.json`, then run the
-  **`🌍 i18n: Check catalog (step 2/2)`** task. See the README
-  "Internationalisation" section for the full workflow.
+- **Pyodide version is pinned** (`PYODIDE_VERSION` in `runtime.ts` and `workerBase.ts`, and the `<script>` tag in `index.html`). Bump all three together; Pyodide’s wheel index is version-specific.
+- **Internationalisation is mandatory for user-facing strings**: wrap every new visible string in `t("English source")` (from `src/i18n/translate`; the English text _is_ the key). Use `t("Delete {count}", { count })` for interpolation. Do **not** translate brand names or AI-assistant system prompts. Watch for `t` shadowing in `.map((t) => …)` (rename the param). Literal `t("…")` calls are auto-extracted; keys passed only as a variable (`t(label)`) must be listed in `src/locales/_dynamic-keys.json`. After adding strings, run the **`🌍 i18n: Extract keys (step 1/2)`** task, fill the new empty values in `src/locales/fr.json`, then run the **`🌍 i18n: Check catalog (step 2/2)`** task. See [`doc/i18n.md`](../doc/i18n.md) for the full workflow.
 
 ## Temporary shims (backports)
 
@@ -169,10 +137,7 @@ temporary shim**, not an ad-hoc patch:
 
 ## Testing
 
-DataLab-Web has three test layers (pytest in Pyodide, Vitest + RTL,
-Playwright). Pick the cheapest layer that can express the behaviour;
-the full decision tree, promotion criteria, and authoring rules for
-permanent E2E specs live in [`doc/testing-strategy.md`](../doc/testing-strategy.md).
+DataLab-Web has three test layers (pytest under CPython with simulated Pyodide modules, Vitest + RTL, Playwright). Pick the cheapest layer that can express the behaviour; the full decision tree, promotion criteria, and authoring rules for permanent E2E specs live in [`doc/testing-strategy.md`](../doc/testing-strategy.md).
 
 **Mandatory pre-completion checks** — before declaring ANY change
 done (bug fix, feature, or any phase of a multi-phase task):

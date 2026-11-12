@@ -33,7 +33,9 @@ tests/benchmark/
 │   ├── run_datalab_qt.py
 │   └── bench2_web.spec.ts
 ├── scripts/
+│   ├── build_wheels.mjs    # builds a wheel of the sibling ../Sigima checkout
 │   └── run_all.mjs
+├── .cache/wheels/          # gitignored local Sigima wheels (npm run bench:wheels)
 └── results/                # gitignored output (JSON + report.md)
 ```
 
@@ -75,11 +77,7 @@ npm run bench:report
 - **Determinism:** the chain uses a fixed RNG seed; every backend computes the
   same checksum (sum of detected blob counts) so cross-runtime numerical drift
   is detected immediately.
-- **Sigima version:** every backend uses the Sigima version pinned in
-  [`shared/chain.json`](shared/chain.json) (`sigima_version`). For local
-  development with the in-tree checkout, leave it `null` — CPython will pick up
-  the local `.env`, the browser/Node Pyodide backends will resolve via micropip
-  to the latest release.
+- **Sigima version:** `sigima_version` in [`shared/chain.json`](shared/chain.json) is only reported (`null` appears as "local / latest available" in the report); each result file records the Sigima version actually used. CPython picks up the local `.env`, and the Bench #1 Pyodide backends (Node and browser) install the wheel built from the sibling `../Sigima` checkout by `npm run bench:wheels` (stored under `.cache/wheels/`), or else the latest PyPI release via micropip.
 - **Calibration:** `n_images` in `chain.json` is set to 5 so the CPython
   baseline total runs in ~10 s on a reference machine; tune it for your
   hardware (note that Bench #2 Web scales roughly linearly and dominates
@@ -98,6 +96,4 @@ npm run bench:report
   `panel.add_object()` and the next `QCoreApplication.processEvents()` cycle
   that completes the plot's `replot()` — there is no direct equivalent of
   Plotly's `afterplot` event in PlotPy.
-- The Pyodide-in-Node backend (`run_pyodide_node.mjs`) requires the `pyodide`
-  npm package (added as devDep, version-pinned to match
-  `src/runtime/runtime.ts`'s `PYODIDE_VERSION`).
+- The Pyodide-in-Node backend (`run_pyodide_node.mjs`) requires the `pyodide` npm package, a devDependency declared as `^0.26.4` (locked to 0.26.4 in `package-lock.json`): keep it on the release of `PYODIDE_VERSION` (`src/runtime/runtime.ts`, `src/runtime/workerBase.ts`).

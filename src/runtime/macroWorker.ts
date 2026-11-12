@@ -159,7 +159,19 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     if (msg.type === "init") {
       if (msg.lang) pyLang = msg.lang;
-      await getPyodide();
+      try {
+        await getPyodide();
+      } catch (err) {
+        // Let the main thread retry with a fresh worker.
+        pyPromise = null;
+        // A warning: the main thread retries (and reports a final failure).
+        console.warn("[macro worker] start failed", err);
+        self.postMessage({
+          type: "init_error",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
       self.postMessage({ type: "ready" });
       return;
     }

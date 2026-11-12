@@ -1,8 +1,8 @@
 /**
  * Main-thread controller for the macro Web Worker.
  *
- * Owns the live ``Worker`` instance plus a "warm" replacement worker
- * (kept ready so a Stop+Run sequence is fast despite Pyodide's ~5 s
+ * Owns the live ``Worker`` instance plus a "warm" spare worker (kept
+ * ready so a Stop+Run sequence is fast despite Pyodide's ~5 s
  * cold-start).  Routes ``proxy.*`` bridge calls from the worker to a
  * whitelisted set of :class:`DataLabRuntime` methods.
  */
@@ -13,6 +13,12 @@ import {
   type BridgeExternalCallbacks,
   type BridgeMethod,
 } from "./proxyBridge";
+import { GenerationPool } from "./workerPool";
+import {
+  startWorker,
+  waitForWorkerReady,
+  WorkerStartCancelled,
+} from "./workerReady";
 import { pyodideLang } from "../i18n/locale";
 
 export type MacroStreamKind = "stdout" | "stderr" | "system";
@@ -38,13 +44,31 @@ interface OutboundReply {
   error?: string;
 }
 
+/** A start cancelled by a dispose is not an error. */
+function ignoreCancelled(error: unknown): void {
+  if (!(error instanceof WorkerStartCancelled)) throw error;
+}
+
+/** A worker started in advance, promoted when the live one is stopped. */
+interface SpareWorker {
+  worker: Worker;
+  ready: boolean;
+  abort: AbortController;
+}
+
 export class MacroRuntime {
   private worker: Worker | null = null;
-  private warmWorker: Worker | null = null;
   /** Whether the (current) worker has finished its initial Pyodide load. */
   private workerReady = false;
+  /** Start of the live worker in progress (shared by concurrent callers). */
+  private starting: Promise<void> | null = null;
+  private startAbort: AbortController | null = null;
+  /** Spare worker, so that Stop ⇒ Run is near-instant. */
+  private spare: SpareWorker | null = null;
   private currentRun: MacroRunCallbacks | null = null;
   private state: "idle" | "running" | "stopping" = "idle";
+  /** A macro ran in the live worker (its namespace is not fresh). */
+  private used = false;
 
   constructor(private readonly runtime: RuntimeApi) {}
 
@@ -54,11 +78,16 @@ export class MacroRuntime {
 
   /** Eagerly create & init the worker so the first Run is fast. */
   async preload(): Promise<void> {
-    await this.ensureWorker();
+    await this.ensureWorker().catch(ignoreCancelled);
   }
 
   isRunning(): boolean {
     return this.state === "running";
+  }
+
+  /** True while no macro ran in the live worker (fresh namespace). */
+  isPristine(): boolean {
+    return !this.used && this.state === "idle";
   }
 
   /** Run *code* and stream output to the supplied callbacks. */
@@ -70,6 +99,7 @@ export class MacroRuntime {
     if (this.state !== "idle") {
       throw new Error("A macro is already running. Stop it first.");
     }
+    this.used = true;
     await this.ensureWorker();
     this.currentRun = callbacks;
     this.state = "running";
@@ -82,31 +112,31 @@ export class MacroRuntime {
     if (this.state !== "running" || !this.worker) return;
     this.state = "stopping";
     const cb = this.currentRun;
-    try {
-      this.worker.terminate();
-    } catch {
-      /* ignore */
-    }
-    this.worker = null;
-    this.workerReady = false;
+    this.terminateLive();
     cb?.onStream?.("system", "■ Stopped by user.\n");
     cb?.onFinished?.("stopped");
     this.currentRun = null;
     this.state = "idle";
-    // Promote the warm worker (or spawn one) so the next Run is instant.
-    if (this.warmWorker) {
-      this.adoptWarmWorker();
+    // Promote the spare worker when ready (or start a fresh one) so the
+    // next Run is instant.
+    const spare = this.spare;
+    if (spare?.ready) {
+      this.spare = null;
+      this.adopt(spare.worker);
+      this.spawnSpare();
     } else {
-      void this.ensureWorker();
+      void this.ensureWorker().catch(ignoreCancelled);
     }
   }
 
+  /** Terminate every worker (live, starting and spare). */
   dispose(): void {
-    this.worker?.terminate();
-    this.warmWorker?.terminate();
-    this.worker = null;
-    this.warmWorker = null;
-    this.workerReady = false;
+    this.terminateLive();
+    if (this.spare) {
+      this.spare.abort.abort();
+      this.spare.worker.terminate();
+      this.spare = null;
+    }
     this.currentRun = null;
     this.state = "idle";
   }
@@ -115,61 +145,69 @@ export class MacroRuntime {
   // Worker lifecycle
   // ---------------------------------------------------------------------
 
-  private async ensureWorker(): Promise<void> {
-    if (this.worker && this.workerReady) return;
-    if (!this.worker) {
-      this.worker = this.spawnWorker();
+  /** Terminate the live worker, ready or still starting. */
+  private terminateLive(): void {
+    this.startAbort?.abort();
+    this.startAbort = null;
+    this.starting = null;
+    try {
+      this.worker?.terminate();
+    } catch {
+      /* ignore */
     }
-    if (!this.workerReady) {
-      await this.waitForReady(this.worker);
-      this.workerReady = true;
-      // As soon as the live worker is ready, pre-warm a replacement so
-      // Stop ⇒ Run is near-instant.
-      this.spawnWarmWorker();
-    }
+    this.worker = null;
+    this.workerReady = false;
+    // The next live worker (spare or fresh one) has a fresh namespace.
+    this.used = false;
   }
 
-  private spawnWorker(): Worker {
+  /** Start the live worker (with a fresh one if it fails to start, see
+   *  ``workerReady.ts``), then a spare one. */
+  private ensureWorker(): Promise<void> {
+    if (this.worker && this.workerReady) return Promise.resolve();
+    if (!this.starting) {
+      const abort = new AbortController();
+      this.startAbort = abort;
+      const starting = startWorker({
+        spawn: () => this.spawnWorker(),
+        onSpawn: (worker) => {
+          this.worker = worker;
+          this.workerReady = false;
+        },
+        signal: abort.signal,
+        label: "macro worker",
+      }).then(
+        () => {
+          if (this.starting !== starting) return;
+          this.starting = null;
+          this.startAbort = null;
+          this.workerReady = true;
+          this.spawnSpare();
+        },
+        (error: unknown) => {
+          if (this.starting === starting) {
+            this.starting = null;
+            this.startAbort = null;
+            this.worker = null;
+          }
+          throw error;
+        },
+      );
+      this.starting = starting;
+    }
+    return this.starting;
+  }
+
+  private createWorker(): Worker {
     const w = new Worker(new URL("./macroWorker.ts", import.meta.url), {
       type: "module",
     });
-    w.onmessage = (ev) => this.handleWorkerMessage(ev.data);
-    w.onerror = (ev) => {
-      const msg = ev.message || "worker error";
-      this.currentRun?.onStream?.("stderr", msg + "\n");
-      this.currentRun?.onFinished?.("error", msg);
-      this.currentRun = null;
-      this.state = "idle";
-    };
     w.postMessage({ type: "init", lang: pyodideLang() });
     return w;
   }
 
-  private spawnWarmWorker(): void {
-    if (this.warmWorker) return;
-    const w = new Worker(new URL("./macroWorker.ts", import.meta.url), {
-      type: "module",
-    });
-    let ready = false;
-    w.onmessage = (ev) => {
-      const data = ev.data as { type?: string };
-      if (data?.type === "ready") {
-        ready = true;
-      }
-      // Warm worker should not receive anything else before adoption.
-    };
-    w.postMessage({ type: "init", lang: pyodideLang() });
-    this.warmWorker = w;
-    // Track readiness for adoptWarmWorker(); we only adopt if ready.
-    (w as unknown as { __ready: () => boolean }).__ready = () => ready;
-  }
-
-  private adoptWarmWorker(): void {
-    const w = this.warmWorker!;
-    this.warmWorker = null;
-    this.worker = w;
-    this.workerReady =
-      (w as unknown as { __ready?: () => boolean }).__ready?.() ?? false;
+  /** Route the messages of the live worker to the running macro. */
+  private attach(w: Worker): void {
     w.onmessage = (ev) => this.handleWorkerMessage(ev.data);
     w.onerror = (ev) => {
       const msg = ev.message || "worker error";
@@ -178,36 +216,44 @@ export class MacroRuntime {
       this.currentRun = null;
       this.state = "idle";
     };
-    if (!this.workerReady) {
-      // Will resolve once the warm worker finishes loading Pyodide.
-      void this.waitForReady(w).then(() => {
-        this.workerReady = true;
-        this.spawnWarmWorker();
-      });
-    } else {
-      this.spawnWarmWorker();
-    }
   }
 
-  private waitForReady(w: Worker): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const prev = w.onmessage;
-      const onMsg = (ev: MessageEvent) => {
-        const data = ev.data as { type?: string };
-        if (data?.type === "ready") {
-          w.onmessage = prev;
-          resolve();
-        } else if (prev) {
-          // Forward unrelated messages (defensive — shouldn't happen).
-          (prev as (e: MessageEvent) => void).call(w, ev);
-        }
-      };
-      w.onmessage = onMsg;
-      const onErr = (ev: ErrorEvent) => {
-        reject(new Error(ev.message || "worker init failed"));
-      };
-      w.addEventListener("error", onErr, { once: true });
-    });
+  private spawnWorker(): Worker {
+    const w = this.createWorker();
+    this.attach(w);
+    return w;
+  }
+
+  private adopt(w: Worker): void {
+    this.attach(w);
+    this.worker = w;
+    this.workerReady = true;
+  }
+
+  /** Start a spare worker (unless one exists); one that fails to start is
+   *  dropped (the next Stop then starts a fresh live worker). */
+  private spawnSpare(): void {
+    if (this.spare) return;
+    const spare: SpareWorker = {
+      worker: this.createWorker(),
+      ready: false,
+      abort: new AbortController(),
+    };
+    this.spare = spare;
+    waitForWorkerReady(spare.worker, {
+      signal: spare.abort.signal,
+      label: "macro worker (spare)",
+    }).then(
+      () => {
+        spare.ready = true;
+      },
+      (error: unknown) => {
+        if (error instanceof WorkerStartCancelled) return;
+        console.warn("[macro worker] spare worker failed to start", error);
+        spare.worker.terminate();
+        if (this.spare === spare) this.spare = null;
+      },
+    );
   }
 
   // ---------------------------------------------------------------------
@@ -220,7 +266,7 @@ export class MacroRuntime {
     const type = msg.type as string | undefined;
     switch (type) {
       case "ready":
-        // Already handled in waitForReady; ignore late arrivals.
+        // Already handled by waitForWorkerReady; ignore late arrivals.
         return;
       case "stdout":
         this.currentRun?.onStream?.("stdout", String(msg.text ?? ""));
@@ -293,4 +339,21 @@ export class MacroRuntime {
   // ---------------------------------------------------------------------
 
   externalCallbacks: BridgeExternalCallbacks = {};
+}
+
+/** Workers of the Macros panel, shared by its successive mounts (see
+ *  :class:`GenerationPool`). */
+const panelWorkers = new GenerationPool<RuntimeApi, MacroRuntime>(
+  (runtime) => new MacroRuntime(runtime),
+);
+
+/** The macro runtime of the Macros panel for ``generation``: the panel is
+ *  mounted afresh when the workspace is opened or imported into, and gets
+ *  new workers only with a new generation (the previous ones are
+ *  terminated, unless no macro ran in them). */
+export function panelMacroRuntime(
+  runtime: RuntimeApi,
+  generation: number,
+): MacroRuntime {
+  return panelWorkers.acquire(runtime, generation);
 }

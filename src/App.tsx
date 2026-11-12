@@ -822,6 +822,16 @@ export default function App() {
    */
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
   /**
+   * Generation of the Python workers of the Macro and Notebook panels
+   * (notebook kernel, macro workers). Their successive mounts share the
+   * workers of a generation; bumped when another workspace replaces the
+   * current one, so that it starts with fresh Python namespaces — the
+   * workers of the previous generation are then terminated, unless no code
+   * ran in them (see ``runtime/workerPool.ts``). Not bumped when objects
+   * are imported into the workspace, which keeps the workers warm.
+   */
+  const [kernelGeneration, setKernelGeneration] = useState(0);
+  /**
    * Cold-start recovery banner state (PR 2 of the workspace-dirty UX
    * work). When the macro / notebook panels rehydrate from the
    * IndexedDB "Recent…" cache on first mount, we surface a one-time
@@ -1112,25 +1122,27 @@ export default function App() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ panel: string | null }>).detail;
       const target = detail?.panel;
+      // ``refresh()`` only re-reads the tree/selection. When a
+      // remote/macro/notebook/AI call mutates the *current* object's
+      // metadata (title, axis labels/units, ROIs…) without changing
+      // ``currentId``, the central plot-data effect wouldn't otherwise
+      // re-run and the graph would keep stale axis titles/units: bump the
+      // plot nonce so it re-fetches the displayed object's data. Only once
+      // the tree is re-read, though: the call may have deleted objects
+      // (e.g. ``reset_all``), and re-fetching with the selection of
+      // deleted objects fails in Python (unknown object ids).
+      const refreshThenPlot = () =>
+        refresh().then(() => setPlotRefreshNonce((n) => n + 1));
       if (target === "signal" || target === "image") {
         if (target === treeKind) {
-          void refresh();
-          // ``refresh()`` only re-reads the tree/selection. When a
-          // remote/macro/notebook/AI call mutates the *current*
-          // object's metadata (title, axis labels/units, ROIs…)
-          // without changing ``currentId``, the central plot-data
-          // effect wouldn't otherwise re-run and the graph would keep
-          // stale axis titles/units. Bump the plot nonce so it
-          // re-fetches the displayed object's data.
-          setPlotRefreshNonce((n) => n + 1);
+          void refreshThenPlot();
         } else {
           // The result landed in a panel the user isn't looking at.
           // Don't yank them away — they'll see it on next switch.
         }
       } else {
         // Unknown / null panel: best-effort refresh of the active one.
-        void refresh();
-        setPlotRefreshNonce((n) => n + 1);
+        void refreshThenPlot();
       }
     };
     window.addEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
@@ -1861,6 +1873,7 @@ export default function App() {
   const handlePluginExampleOpened = useCallback(
     async (result: PluginExampleOpenResult) => {
       setWorkspaceVersion((version) => version + 1);
+      setKernelGeneration((generation) => generation + 1);
       setWorkspaceFilename(result.filename);
       if (result.dirty) markDirty();
       else markClean();
@@ -3761,6 +3774,7 @@ export default function App() {
         setSelectedIds([]);
         setCurrentId(null);
         setWorkspaceVersion((v) => v + 1);
+        setKernelGeneration((g) => g + 1);
         // Clean transition — the loaded workspace *is* the source of
         // truth, so clear any prior dirty/recovered flags and remember
         // the filename for subsequent Save operations.
@@ -3795,6 +3809,7 @@ export default function App() {
       setSelectedIds([]);
       setCurrentId(null);
       setWorkspaceVersion((v) => v + 1);
+      setKernelGeneration((g) => g + 1);
       setWorkspaceFilename(filename.replace(/\.dlcapsule$/i, ".h5"));
       markClean();
       await refresh(null);
@@ -4781,6 +4796,7 @@ export default function App() {
                 key={`nb-${workspaceVersion}`}
                 ref={notebookPanelRef}
                 runtime={runtime}
+                kernelGeneration={kernelGeneration}
                 theme={theme}
                 onCountChanged={setNotebookCount}
                 placement={notebookFloating ? "floating" : "tab"}
@@ -4827,6 +4843,7 @@ export default function App() {
                 key={`macro-${workspaceVersion}`}
                 ref={macroPanel.ref}
                 runtime={runtime}
+                kernelGeneration={kernelGeneration}
                 onCountChanged={setMacroCount}
                 placement={macroFloating ? "floating" : "tab"}
                 onTogglePlacement={toggleMacroFloating}

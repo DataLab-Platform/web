@@ -318,6 +318,19 @@ describe("ApplicationsDialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("exposes the plugin id of each listed application", async () => {
+    const { container } = renderDialog();
+
+    await screen.findByRole("heading", { name: "Camera Application" });
+    // A stable automation hook, independent of the displayed name.
+    const entry = container.querySelector(
+      `.applications-list [data-plugin-id="${PLUGIN_ID}"]`,
+    );
+    expect(entry).toHaveTextContent("Camera Application");
+    fireEvent.click(entry!);
+    expect(entry).toHaveClass("active");
+  });
+
   it("describes the expected inputs and the live readiness of each method", async () => {
     const { container } = renderDialog();
 

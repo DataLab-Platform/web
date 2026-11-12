@@ -1,7 +1,7 @@
 # Python development dependencies for DataLab-Web's automated test suite.
 #
 # These are *only* used by the headless CPython tests that exercise the
-# Python sources living under ``src/sigima/`` (the same code that runs
+# Python sources living under ``src/runtime/`` (the same code that runs
 # inside Pyodide in production). The application itself is shipped to
 # users as a static JavaScript bundle and does not require a Python
 # install.
@@ -20,10 +20,11 @@ pylint>=3.0
 pre-commit>=3.7
 
 # Sigima (= computation engine) and guidata are selected through
-# sigima-dependency.json and guidata-dependency.json. Use
-# scripts/sigima_dependency.py to install the configured revisions together
-# with these mandatory dependencies.
-guidata>=3.16.0
+# sigima-dependency.json (exact pin, e.g. ``sigima==1.4.0``) and
+# guidata-dependency.json. Use scripts/sigima_dependency.py to install the
+# configured revisions together with these mandatory dependencies. Keep the
+# guidata lower bound below aligned with guidata-dependency.json.
+guidata>=3.17.0
 numpy>=1.22
 scipy>=1.10.1
 scikit-image>=0.19.2

@@ -65,6 +65,33 @@ export function getMaxEntries(kind: RecentKind): number {
 
 let _dbPromise: Promise<IDBPDatabase<Schema>> | null = null;
 
+/** Listeners of :func:`onRecentChange`. */
+const _listeners = new Set<(kind: RecentKind) => void>();
+
+/**
+ * Be told whenever the entries of a kind change — recorded, evicted,
+ * removed or cleared, by any caller —, e.g. to keep a "Recent… (n)"
+ * counter up to date. Returns the unsubscribe function.
+ */
+export function onRecentChange(
+  listener: (kind: RecentKind) => void,
+): () => void {
+  _listeners.add(listener);
+  return () => {
+    _listeners.delete(listener);
+  };
+}
+
+function _notifyChange(kind: RecentKind): void {
+  for (const listener of [..._listeners]) {
+    try {
+      listener(kind);
+    } catch (error) {
+      console.error("[recentStore] change listener failed", error);
+    }
+  }
+}
+
 function getDb(): Promise<IDBPDatabase<Schema>> {
   if (!_dbPromise) {
     _dbPromise = openDB<Schema>(DB_NAME, DB_VERSION, {
@@ -107,6 +134,7 @@ export async function recordRecent(
   };
   await db.put(STORE, entry);
   await _evictIfNeeded(db, kind);
+  _notifyChange(kind);
 }
 
 async function _evictIfNeeded(
@@ -159,6 +187,7 @@ export async function removeRecent(
 ): Promise<void> {
   const db = await getDb();
   await db.delete(STORE, [kind, id]);
+  _notifyChange(kind);
 }
 
 export async function clearRecent(kind: RecentKind): Promise<void> {
@@ -172,4 +201,5 @@ export async function clearRecent(kind: RecentKind): Promise<void> {
   const store = tx.objectStore(STORE);
   for (const r of all) await store.delete([r.kind, r.id]);
   await tx.done;
+  _notifyChange(kind);
 }

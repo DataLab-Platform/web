@@ -47,14 +47,15 @@ export class DataLabWebService implements OnDestroy {
   readonly lastError = signal<Error | null>(null);
 
   /** Cached signal+image count refreshed on every
-   *  ``object-changed`` event. ``-1`` means "not yet known". */
+   *  ``model-changed`` event (emitted after each workspace change
+   *  requested through the bridge). ``-1`` means "not yet known". */
   readonly objectsCount = signal(-1);
 
   /** DataLab-Web version string, populated when ``ready()`` resolves. */
   readonly version = signal<string | null>(null);
 
   private client: DataLabWebClient | null = null;
-  private offObjectChanged: (() => void) | null = null;
+  private offModelChanged: (() => void) | null = null;
 
   /** Bind the service to a freshly mounted iframe. Called from
    *  ``DataLabWebFrameComponent.ngAfterViewInit`` — you should not
@@ -67,7 +68,7 @@ export class DataLabWebService implements OnDestroy {
     }
     const client = new DataLabWebClient(iframe, { targetOrigin });
     this.client = client;
-    this.offObjectChanged = client.on("object-changed", () => {
+    this.offModelChanged = client.on("model-changed", () => {
       void this.refreshCount();
     });
     try {
@@ -84,8 +85,8 @@ export class DataLabWebService implements OnDestroy {
   /** Tear the bridge down. Called from the frame component's
    *  ``ngOnDestroy`` so the postMessage listener is removed cleanly. */
   detach(): void {
-    this.offObjectChanged?.();
-    this.offObjectChanged = null;
+    this.offModelChanged?.();
+    this.offModelChanged = null;
     this.client?.dispose();
     this.client = null;
     this.ready.set(false);
@@ -208,7 +209,7 @@ export class DataLabWebService implements OnDestroy {
       ]);
       this.objectsCount.set(sigs.length + imgs.length);
     } catch (err) {
-      // ``object-changed`` can fire while the bridge is mid-shutdown
+      // ``model-changed`` can fire while the bridge is mid-shutdown
       // — swallow rather than spam the error signal.
       console.warn("[datalab-web] refreshCount failed", err);
     }
