@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import inspect
 import json
@@ -867,8 +868,8 @@ def _instrument(
 
 
 def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
-    """Return what an instrument window shows: title, settings, live period, and
-    default state of its **New group** option."""
+    """Return what an instrument window shows: title, settings and their default
+    values, live period, and default state of its **New group** option."""
 
     plugin = dlw_plugins.get_plugin_instance(plugin_id)
     tool = plugin.get_tool(tool_id)
@@ -876,6 +877,8 @@ def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
     title = tool.title.rstrip(".…")
     settings = dataset_to_schema_with_values(instrument.settings)
     settings["title"] = title
+    defaults = copy.deepcopy(instrument.settings)
+    defaults.set_defaults()
     session_id = uuid4().hex
     instrument._begin_host_session(session_id)
     _INSTRUMENT_SESSIONS[session_id] = instrument
@@ -885,6 +888,7 @@ def open_plugin_instrument(plugin_id: str, tool_id: str) -> dict[str, Any]:
         "session_id": session_id,
         "title": title,
         "settings": settings,
+        "defaults": dataset_to_schema_with_values(defaults)["values"],
         "live_interval_ms": int(instrument.live_interval_ms),
         "new_group": bool(instrument.new_group),
     }
