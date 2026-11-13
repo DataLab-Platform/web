@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
 
+### Fixed
+
+- **Image display of DataLab Desktop workspaces:** images opened from a DataLab Desktop workspace, or prepared by a plugin, were shown with the default colormap and range, because DataLab-Web ignored the colormap, its inversion and the LUT range stored by DataLab Desktop. They are now shown as in DataLab Desktop, and the colormap and range chosen in DataLab-Web are saved in the workspace so that DataLab Desktop shows them too.
+
 ## [0.11.1] - 2026-11-12
 
 ### Fixed in 0.11.1

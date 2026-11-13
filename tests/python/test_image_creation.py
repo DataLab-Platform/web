@@ -82,6 +82,40 @@ def test_lut_range_round_trips(fresh_bootstrap):
     assert bs.get_lut_range(oid) is None
 
 
+def test_lut_range_is_shared_with_the_image_zscale(fresh_bootstrap):
+    """The LUT range of DataLab Desktop, Sigima or plugins applies and is kept."""
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.arange(16, dtype=float).reshape(4, 4))
+    obj = bs._MODEL.get(oid)
+    obj.zscalemin, obj.zscalemax = 2.0, 12.0
+    assert bs.get_lut_range(oid) == [2.0, 12.0]
+    obj.zscalemax = 1.0
+    assert bs.get_lut_range(oid) is None
+    bs.set_lut_range(oid, [0.0, 10.0])
+    assert (obj.zscalemin, obj.zscalemax) == (0.0, 10.0)
+    bs.set_lut_range(oid, None)
+    assert (obj.zscalemin, obj.zscalemax) == (None, None)
+    assert bs.get_lut_range(oid) is None
+
+
+def test_colormap_is_shared_with_desktop_display_options(fresh_bootstrap):
+    """Desktop display options apply; Web choices win and are written back."""
+    bs = fresh_bootstrap
+    oid = bs.add_image_from_array("I", np.arange(16, dtype=float).reshape(4, 4))
+    obj = bs._MODEL.get(oid)
+    obj.set_metadata_option("colormap", "gray")
+    obj.set_metadata_option("invert_colormap", True)
+    payload = bs.get_image_data(oid)
+    assert payload["colormap"] == "gray"
+    assert payload["invert_colormap"] is True
+    bs.set_colormap(oid, "Plasma", False)
+    payload = bs.get_image_data(oid)
+    assert payload["colormap"] == "Plasma" and payload["invert_colormap"] is False
+    assert obj.get_metadata_option("colormap") == "Plasma"
+    bs.set_colormap(oid, None)
+    assert bs.get_image_data(oid)["colormap"] is None
+
+
 def test_set_colormap_round_trips_via_image_data(fresh_bootstrap):
     bs = fresh_bootstrap
     oid = bs.add_image_from_array("I", np.arange(16, dtype=float).reshape(4, 4))
