@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Plugin instruments — restore defaults:** the window of a plugin instrument, e.g. the camera, oscilloscope or radiography simulators, has a new **Restore defaults** button, which sets the settings of the instrument back to their default values and refreshes the view ([#110](https://github.com/DataLab-Platform/web/issues/110)).
+
 ### Fixed
 
 - **Notebooks and macros — actions while Python starts:** while the notebook kernel or the macro worker was still starting, a notebook cell could run in the kernel of the next workspace when another workspace or example was opened meanwhile, running two cells left the first one queued forever with its outputs shown under the second one, and **Stop** did not cancel a macro waiting to start. Cells now run one at a time and are cancelled when their workspace is replaced, and **Stop** cancels a waiting macro ([#107](https://github.com/DataLab-Platform/web/issues/107)).
