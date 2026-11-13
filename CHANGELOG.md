@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **X-ray Radiography & NDT application:** DataLab-Web bundles the X-ray Radiography & NDT plugin: radiographic display, magnifications of several object planes, detector corrections, physical quantities, enhancement filters, image quality (SNR, CNR, duplex IQI) and NDT measurements (tangential wall thickness, indication detection), with simulated and real-data examples and a radiography simulator.
 - **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
 
 ### Fixed

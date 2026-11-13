@@ -168,7 +168,7 @@ SHA-256 entry in `bundledPlugins.ts`. The runtime fetches only the Vite-bundled
 URL and passes the wheel through the same inspector and managed registry as a
 local wheel before importing its Web entry point.
 
-The Camera and Pulse characterization wheels are the first such bundles. They
+The Camera, Pulse and Radiography wheels are the first such bundles. They
 are deliberately not installed from a public package index and their Desktop
 entry points are not used in the browser. DataLab-Web supplies the portable
 `datalab.*` host shim. Camera reuses the existing HDF5 byte loader for its
@@ -185,6 +185,8 @@ The Camera gate in `tests/e2e/camera_bundle.spec.ts` runs the packaged campaign 
 The Pulse gate in `tests/e2e/pulse_bundle.spec.ts` executes the deterministic 500-shot campaign through Pyodide and transactionally commits three signal outputs plus the anchored 500-row metrics table. It requires visible Plotly traces for amplitude, raw mean, and aligned mean; all six quality statuses; 489 valid/aligned shots; no more than 64 MiB incremental WASM heap; and exactly 24,032 bytes of retained output arrays. This qualifies DataLab-Web 0.11.0, Pyodide 0.26.4, Pulse 0.2.1, and pulse campaign recipe 1.1.0.
 
 Since version 0.2.0, Camera also offers photon transfer and dark-current recipes, and Pulse offers shot-to-shot stability, step-response, two-channel delay and pulse-height spectrum recipes, each with a generated example. `tests/e2e/application_methods.spec.ts` opens every new example through its deep link, checks that its method is ready, runs it from the Applications dialog and checks the created outputs in the visible object tree; it also runs the relative-DN method through _Try with this example_ on the photon transfer ladder. `tests/python/test_camera_application.py` and `tests/python/test_pulse_application.py` run the same pairs, plus the photon transfer → relative-DN and laser warm-up → campaign pairs, through the generic host and check that every example binds its recipe slots without ambiguity.
+
+The X-ray Radiography & NDT wheel adds processing features under its plugin menu (enhancement, detector corrections, physical quantities), analyses registered with `register_1_to_0` (measurement report, SNR, CNR), five recipes (offset and gain correction, step wedge calibration, duplex IQI, tangential wall thickness, indication detection), simulated and packaged real-data examples, a radiography simulator, and tools that edit magnifications and the display of the selected images through asynchronous dialogs. Its gate in `tests/e2e/radiography_bundle.spec.ts` opens the simulated weld, checks its gray-scale display and window, runs a processing feature, an analysis and a display tool, checks the plugin menu, and limits incremental WASM-heap growth to 128 MiB. `tests/e2e/radiography_application_ui.spec.ts` defines a magnification through a tool dialog, and `tests/e2e/application_methods.spec.ts` runs the duplex IQI, wall thickness and indication detection methods on their examples. `tests/python/test_radiography_application.py` checks the same contracts through the generic host. The status qualifies DataLab-Web 0.12.0, Pyodide 0.26.4 and Radiography 0.1.0.
 
 ## Hot reload
 

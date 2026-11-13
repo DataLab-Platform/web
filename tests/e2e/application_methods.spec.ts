@@ -9,10 +9,13 @@ interface MethodCase {
   example: string;
   created: number;
   output: string;
+  pluginVersion?: string;
+  recipeVersion?: string;
 }
 
 const CAMERA = "org.datalab.camera-characterization";
 const PULSE = "org.datalab.pulse-characterization";
+const RADIOGRAPHY = "org.datalab.radiography";
 
 const METHODS: MethodCase[] = [
   {
@@ -63,6 +66,33 @@ const METHODS: MethodCase[] = [
     created: 4,
     output: "Pulse-height spectrum",
   },
+  {
+    plugin: RADIOGRAPHY,
+    recipe: "duplex-iqi",
+    title: "Basic spatial resolution (duplex IQI)",
+    example: "simulated-weld",
+    created: 1,
+    output: "Duplex IQI profile of Weld",
+    pluginVersion: "0.1.0",
+  },
+  {
+    plugin: RADIOGRAPHY,
+    recipe: "wall-thickness",
+    title: "Wall thickness (tangential)",
+    example: "simulated-pipe",
+    created: 2,
+    output: "Pipe profile of Pipe",
+    pluginVersion: "0.1.0",
+  },
+  {
+    plugin: RADIOGRAPHY,
+    recipe: "indication-detection",
+    title: "Indication detection",
+    example: "simulated-weld",
+    created: 1,
+    output: "Indications of Weld",
+    pluginVersion: "0.1.0",
+  },
 ];
 
 for (const method of METHODS) {
@@ -75,9 +105,9 @@ for (const method of METHODS) {
     const recipeId = `${method.plugin}:${method.recipe}`;
     const link = new URLSearchParams({
       plugin: method.plugin,
-      pluginVersion: "0.2.1",
+      pluginVersion: method.pluginVersion ?? "0.2.1",
       recipe: recipeId,
-      recipeVersion: "1.0.0",
+      recipeVersion: method.recipeVersion ?? "1.0.0",
       example: method.example,
     });
 

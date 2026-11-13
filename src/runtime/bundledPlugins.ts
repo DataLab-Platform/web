@@ -1,5 +1,6 @@
 import cameraWheelUrl from "./builtin_wheels/datalab_camera_characterization-0.2.1-py3-none-any.whl?url";
 import pulseWheelUrl from "./builtin_wheels/datalab_pulse_characterization-0.2.1-py3-none-any.whl?url";
+import radiographyWheelUrl from "./builtin_wheels/datalab_radiography-0.1.0-py3-none-any.whl?url";
 
 export interface BundledPluginWheel {
   distribution: string;
@@ -30,6 +31,15 @@ export const BUNDLED_PLUGIN_WHEELS: readonly BundledPluginWheel[] =
         "51ec3ecf5f390ed4eaf785f949dd6da7bbac353f317d5c804f12ec8354d8db74",
       sizeBytes: 79_826,
       url: pulseWheelUrl,
+    }),
+    Object.freeze({
+      distribution: "datalab-radiography",
+      version: "0.1.0",
+      filename: "datalab_radiography-0.1.0-py3-none-any.whl",
+      sha256:
+        "26c219de5e2c23db096b965cd4028aee10b37fa5109d437e03dd27e69e90f60f",
+      sizeBytes: 1_273_022,
+      url: radiographyWheelUrl,
     }),
   ]);
 
