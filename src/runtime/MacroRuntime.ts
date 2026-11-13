@@ -66,7 +66,9 @@ export class MacroRuntime {
   /** Spare worker, so that Stop ⇒ Run is near-instant. */
   private spare: SpareWorker | null = null;
   private currentRun: MacroRunCallbacks | null = null;
-  private state: "idle" | "running" | "stopping" = "idle";
+  /** Macro waiting for the live worker to be ready (cancelled by Stop). */
+  private waitingRun: MacroRunCallbacks | null = null;
+  private state: "idle" | "starting" | "running" | "stopping" = "idle";
   /** A macro ran in the live worker (its namespace is not fresh). */
   private used = false;
 
@@ -99,8 +101,20 @@ export class MacroRuntime {
     if (this.state !== "idle") {
       throw new Error("A macro is already running. Stop it first.");
     }
+    this.state = "starting";
+    this.waitingRun = callbacks;
+    try {
+      await this.ensureWorker();
+    } catch (error) {
+      // Stopped or disposed meanwhile: nothing to report.
+      if (this.waitingRun !== callbacks) return;
+      this.waitingRun = null;
+      this.state = "idle";
+      throw error;
+    }
+    if (this.waitingRun !== callbacks) return; // Stopped meanwhile.
+    this.waitingRun = null;
     this.used = true;
-    await this.ensureWorker();
     this.currentRun = callbacks;
     this.state = "running";
     callbacks.onStream?.("system", `▶ Running "${name}"…\n`);
@@ -109,6 +123,15 @@ export class MacroRuntime {
 
   /** Hard-stop the running macro (terminates the worker). */
   stop(): void {
+    if (this.state === "starting") {
+      // The worker keeps starting: only the waiting macro is cancelled.
+      const cb = this.waitingRun;
+      this.waitingRun = null;
+      this.state = "idle";
+      cb?.onStream?.("system", "■ Stopped by user.\n");
+      cb?.onFinished?.("stopped");
+      return;
+    }
     if (this.state !== "running" || !this.worker) return;
     this.state = "stopping";
     const cb = this.currentRun;
@@ -138,6 +161,7 @@ export class MacroRuntime {
       this.spare = null;
     }
     this.currentRun = null;
+    this.waitingRun = null;
     this.state = "idle";
   }
 
@@ -214,7 +238,8 @@ export class MacroRuntime {
       this.currentRun?.onStream?.("stderr", msg + "\n");
       this.currentRun?.onFinished?.("error", msg);
       this.currentRun = null;
-      this.state = "idle";
+      // A start error is handled by ``startWorker`` (the macro waits).
+      if (this.state !== "starting") this.state = "idle";
     };
   }
 
