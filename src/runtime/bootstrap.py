@@ -4965,7 +4965,7 @@ def _iter_data_objects() -> list[Any]:
 
 def _is_known_operation(_kind: str, name: str, _plugin_origin: Any) -> bool:
     """Return True if a processing or analysis of the catalogue has this name."""
-    if any(name in catalog for catalog in _ANALYSIS_CATALOG.values()):
+    if any(name in _analysis_catalog(kind) for kind in ("signal", "image")):
         return True
     return any(
         name in (feature_id, feature_id.split(":")[-1])
@@ -6208,6 +6208,42 @@ if not _ANALYSIS_CATALOG:
 _SIGNAL_ANALYSIS = _ANALYSIS_CATALOG["signal"]
 
 
+def _plugin_analysis_entries(kind: str) -> dict[str, dict[str, Any]]:
+    """Return the 1→0 analyses registered by plugins for *kind*.
+
+    Plugins register them with ``register_1_to_0``; each entry keeps the
+    plugin menu path, where the menu lists it (as on DataLab Desktop).
+    """
+    try:
+        # Lazy: the ``datalab`` shim is installed after this module.
+        # pylint: disable-next=import-outside-toplevel
+        from datalab.registries import EXTRA_FEATURES
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {}
+    entries: dict[str, dict[str, Any]] = {}
+    for extra in EXTRA_FEATURES.get(kind, ()):
+        if extra.pattern != "1_to_0":
+            continue
+        entries[extra.feature_id] = {
+            "id": extra.feature_id,
+            "label": extra.label,
+            "icon": extra.icon or "",
+            "func": extra.func,
+            "paramclass": extra.paramclass,
+            "separator_before": False,
+            "menu_path": extra.menu_path,
+        }
+    return entries
+
+
+def _analysis_catalog(kind: str) -> dict[str, dict[str, Any]]:
+    """Return the built-in analyses of *kind*, then those of the plugins."""
+    catalog = dict(_ANALYSIS_CATALOG.get(kind, {}))
+    for feature_id, entry in _plugin_analysis_entries(kind).items():
+        catalog.setdefault(feature_id, entry)
+    return catalog
+
+
 # Cached parameter instances per (kind, oid, func_id) so a parametric
 # analysis can be re-opened with its previous values pre-filled.
 _ANALYSIS_PARAMS: dict[str, Any] = globals().get("_ANALYSIS_PARAMS", {})
@@ -6236,7 +6272,7 @@ def list_image_analysis() -> list[dict[str, Any]]:
 
 
 def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     return [
         {
             "id": e["id"],
@@ -6245,13 +6281,14 @@ def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
             "separator_before": e["separator_before"],
             "has_params": e["paramclass"] is not None,
             "submenu": e.get("submenu"),
+            "menu_path": e.get("menu_path"),
         }
         for e in catalog.values()
     ]
 
 
 def _get_or_create_analysis_param(kind: str, oid: str, func_id: str) -> Any:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     entry = catalog[func_id]
@@ -6303,7 +6340,7 @@ def resolve_analysis_active(
     """
     from guidata.dataset import resolve_dataset_active, update_dataset
 
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     paramclass = catalog[func_id]["paramclass"]
@@ -6570,7 +6607,7 @@ async def _ensure_pyodide_pkg(name: str) -> None:
 async def _run_analysis(
     kind: str, oid: str, func_id: str, params: Any = None
 ) -> dict[str, Any] | None:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     entry = catalog[func_id]

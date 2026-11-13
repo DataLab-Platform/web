@@ -335,6 +335,47 @@ def test_stable_ids_own_web_plugin_contributions():
             PluginRegistry.get_plugin_classes().remove(DuplicatePlugin)
 
 
+def test_plugin_analyses_are_listed_and_run_at_their_menu_path(fresh_bootstrap):
+    """1→0 plugin features join the analyses, at the plugin menu path."""
+    import asyncio
+
+    import numpy as np
+    from sigima.objects import TableResult
+
+    def portable_mean(source):
+        return TableResult.from_rows(
+            "Portable mean", ["Mean"], [[float(np.mean(source.data))]], [-1]
+        )
+
+    feature_id = "org.example.analysis:mean"
+    registries.push_origin("org.example.analysis")
+    try:
+        BaseProcessor("image").register_1_to_0(
+            portable_mean,
+            "Mean",
+            menu_path="Plugins/Example/Mean",
+            feature_id=feature_id,
+            owner_plugin_id="org.example.analysis",
+        )
+    finally:
+        registries.pop_origin()
+    try:
+        assert registries.EXTRA_FEATURES["image"][0].pattern == "1_to_0"
+        assert dlw_processor.merge_plugin_features({}, "image") == {}
+        bs = fresh_bootstrap
+        entry = {e["id"]: e for e in bs.list_image_analysis()}[feature_id]
+        assert entry["menu_path"] == "Plugins/Example/Mean"
+        assert entry["has_params"] is False
+        oid = bs.add_image_from_array("I", np.full((4, 4), 3.0))
+        result = asyncio.run(bs.run_image_analysis(oid, feature_id))
+        assert result["title"] == "Portable mean"
+        builtin = {e["id"]: e for e in bs.list_image_analysis()}["stats"]
+        assert builtin["menu_path"] is None
+    finally:
+        registries.clear_origin("org.example.analysis")
+    assert feature_id not in {e["id"] for e in fresh_bootstrap.list_image_analysis()}
+
+
 def test_plugin_info_exposes_portable_application_metadata():
     info = PluginInfo(
         id="org.example.application",

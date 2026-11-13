@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
+
 ## [0.11.1] - 2026-11-12
 
 ### Fixed in 0.11.1
