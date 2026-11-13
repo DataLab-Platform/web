@@ -92,10 +92,14 @@ export class NotebookRuntime {
   /** Cancels the start in progress (dispose, interrupt, restart). */
   private startAbort: AbortController | null = null;
   private currentRun: QueuedRun | null = null;
+  /** Cell taken from the queue, waiting for the worker to be ready. */
+  private waitingRun: QueuedRun | null = null;
   private queue: QueuedRun[] = [];
   private status: NotebookRuntimeStatus = "idle";
   /** A cell was sent to the current worker (its namespace is not fresh). */
   private used = false;
+  /** Disposed (workspace replaced): cells are no longer run. */
+  private disposed = false;
 
   externalCallbacks: BridgeExternalCallbacks = {};
 
@@ -107,6 +111,7 @@ export class NotebookRuntime {
 
   /** Eagerly create & init the worker so the first cell run is fast. */
   async preload(): Promise<void> {
+    if (this.disposed) return;
     await this.ensureWorker().catch(ignoreCancelled);
   }
 
@@ -116,7 +121,12 @@ export class NotebookRuntime {
 
   /** True while no cell ran in the kernel (fresh user namespace). */
   isPristine(): boolean {
-    return !this.used && !this.currentRun && this.queue.length === 0;
+    return (
+      !this.used &&
+      !this.currentRun &&
+      !this.waitingRun &&
+      this.queue.length === 0
+    );
   }
 
   /**
@@ -130,6 +140,12 @@ export class NotebookRuntime {
     callbacks: CellExecCallbacks,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      if (this.disposed) {
+        // E.g. a Run All of a panel whose workspace was replaced.
+        callbacks.onFinished?.("interrupted", 0);
+        resolve();
+        return;
+      }
       this.queue.push({ cellId, code, callbacks, resolve, reject });
       void this.pump();
     });
@@ -179,16 +195,30 @@ export class NotebookRuntime {
       await this.interrupt();
       return;
     }
+    this.cancelPendingCells();
     this.terminateWorker();
     this.status = "idle";
     await this.ensureWorker().catch(ignoreCancelled);
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.cancelPendingCells();
     this.terminateWorker();
     this.currentRun = null;
-    this.queue = [];
     this.status = "idle";
+  }
+
+  /** Finish the cells waiting for the worker or queued, without running
+   *  them (kernel restarted or disposed while starting). */
+  private cancelPendingCells(): void {
+    const pending = this.queue.splice(0);
+    if (this.waitingRun) pending.unshift(this.waitingRun);
+    this.waitingRun = null;
+    for (const run of pending) {
+      run.callbacks.onFinished?.("interrupted", 0);
+      run.resolve();
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -276,16 +306,22 @@ export class NotebookRuntime {
   // ---------------------------------------------------------------------
 
   private async pump(): Promise<void> {
+    // One cell at a time, also while it waits for the worker to start.
     if (this.status === "running" || this.status === "stopping") return;
+    if (this.waitingRun) return;
     const next = this.queue.shift();
     if (!next) return;
+    this.waitingRun = next;
     try {
       await this.ensureWorker();
     } catch (err) {
+      // Finished already when the kernel was restarted or disposed.
+      if (this.waitingRun !== next) return;
+      this.waitingRun = null;
       if (err instanceof WorkerStartCancelled) {
-        // Disposed or restarted meanwhile: the cell is not run.
         next.callbacks.onFinished?.("interrupted", 0);
         next.resolve();
+        void this.pump();
         return;
       }
       next.callbacks.onError?.(
@@ -298,6 +334,8 @@ export class NotebookRuntime {
       void this.pump();
       return;
     }
+    if (this.waitingRun !== next) return; // Restarted or disposed meanwhile.
+    this.waitingRun = null;
     this.currentRun = next;
     this.status = "running";
     this.used = true;

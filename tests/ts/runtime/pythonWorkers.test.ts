@@ -246,6 +246,75 @@ describe("NotebookRuntime", () => {
     await restart;
     expect(kernel.isPristine()).toBe(true);
   });
+
+  it("does not keep a kernel in which a cell waits for the start", async () => {
+    const workspace = {} as RuntimeApi;
+    const kernel = panelNotebookRuntime(workspace, 0);
+    void kernel.preload();
+    const finished: string[] = [];
+    const cell = kernel.executeCell("c1", "x = 1", {
+      onFinished: (status) => finished.push(status),
+    });
+    await flush();
+    expect(kernel.isPristine()).toBe(false);
+    // Another workspace: the kernel is replaced and the cell not run.
+    expect(panelNotebookRuntime(workspace, 1)).not.toBe(kernel);
+    await cell;
+    expect(finished).toEqual(["interrupted"]);
+    expect(FakeWorker.alive()).toEqual([]);
+    // A Run All of the replaced panel goes on: no worker is started.
+    await kernel.executeCell("c2", "y = 2", {});
+    expect(FakeWorker.alive()).toEqual([]);
+  });
+
+  it("runs the cells one at a time while the kernel starts", async () => {
+    const kernel = new NotebookRuntime(runtime);
+    void kernel.preload();
+    const finished: string[] = [];
+    const a = kernel.executeCell("a", "a = 1", {
+      onFinished: () => finished.push("a"),
+    });
+    const b = kernel.executeCell("b", "b = 2", {
+      onFinished: () => finished.push("b"),
+    });
+    await flush();
+    const worker = last();
+    worker.emit({ type: "ready" });
+    await flush();
+    const cells = () =>
+      worker.posted.filter(
+        (m) => (m as { type?: string }).type === "exec_cell",
+      );
+    expect(cells()).toHaveLength(1);
+    worker.emit({ type: "cell_finished", ok: true, execCount: 1 });
+    await a;
+    await flush();
+    expect(cells()).toHaveLength(2);
+    worker.emit({ type: "cell_finished", ok: true, execCount: 2 });
+    await b;
+    expect(finished).toEqual(["a", "b"]);
+  });
+
+  it("does not run the waiting cells after a restart", async () => {
+    const kernel = new NotebookRuntime(runtime);
+    void kernel.preload();
+    const finished: string[] = [];
+    const cell = kernel.executeCell("c1", "x = 1", {
+      onFinished: (status) => finished.push(status),
+    });
+    await flush();
+    const restart = kernel.restart();
+    await cell;
+    expect(finished).toEqual(["interrupted"]);
+    const worker = last();
+    worker.emit({ type: "ready" });
+    await restart;
+    await flush();
+    expect(
+      worker.posted.some((m) => (m as { type?: string }).type === "exec_cell"),
+    ).toBe(false);
+    expect(kernel.isPristine()).toBe(true);
+  });
 });
 
 describe("MacroRuntime", () => {
@@ -294,5 +363,30 @@ describe("MacroRuntime", () => {
     expect(first.isPristine()).toBe(false);
     expect(panelMacroRuntime(workspace, 2)).not.toBe(first);
     expect(FakeWorker.alive()).toEqual([]);
+  });
+
+  it("cancels a macro waiting for its worker when stopped", async () => {
+    const macro = new MacroRuntime(runtime);
+    const finished: string[] = [];
+    const run = macro.run("x = 1", "m", {
+      onFinished: (status) => finished.push(status),
+    });
+    await flush();
+    // Another Run is refused while the first one waits.
+    await expect(macro.run("y = 2", "m2", {})).rejects.toThrow(
+      "already running",
+    );
+    macro.stop();
+    expect(finished).toEqual(["stopped"]);
+    const worker = FakeWorker.instances[0];
+    // The worker keeps starting, but the stopped macro is not sent to it.
+    expect(worker.terminated).toBe(false);
+    worker.emit({ type: "ready" });
+    await run;
+    expect(
+      worker.posted.some((m) => (m as { type?: string }).type === "run"),
+    ).toBe(false);
+    expect(macro.isRunning()).toBe(false);
+    expect(macro.isPristine()).toBe(true);
   });
 });
