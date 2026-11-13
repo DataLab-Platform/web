@@ -702,6 +702,8 @@ export interface PluginInstrumentSession {
   session_id: string;
   title: string;
   settings: SchemaWithValues;
+  /** Default values of the settings. */
+  defaults: Record<string, unknown>;
   live_interval_ms: number;
   /** Default state of the "New group" option, set by the instrument. */
   new_group: boolean;

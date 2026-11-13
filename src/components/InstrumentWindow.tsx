@@ -66,6 +66,8 @@ export function InstrumentWindow({
   const { runtime } = useRuntime();
   const [session, setSession] = useState<PluginInstrumentSession | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
+  // Changed to rebuild the settings form when the defaults are restored
+  const [formRevision, setFormRevision] = useState(0);
   const [valid, setValid] = useState(true);
   const [frame, setFrame] = useState<PluginInstrumentFrame | null>(null);
   const [live, setLive] = useState(false);
@@ -179,6 +181,13 @@ export function InstrumentWindow({
     }
   };
 
+  const restoreDefaults = () => {
+    if (!session) return;
+    setValues({ ...valuesRef.current, ...session.defaults });
+    setFormRevision((revision) => revision + 1);
+    setStatus(null);
+  };
+
   const acquire = async () => {
     if (!runtime || !session) return;
     setAcquiring(true);
@@ -243,6 +252,7 @@ export function InstrumentWindow({
             <div className="instrument-form">
               {session && (
                 <DataSetForm
+                  key={formRevision}
                   schema={session.settings.schema}
                   values={values}
                   onChange={setValues}
@@ -261,17 +271,30 @@ export function InstrumentWindow({
             {error && <div className="error">{error}</div>}
             {status && <div className="applications-status">{status}</div>}
             <div className="instrument-commands">
-              <button
-                type="button"
-                aria-pressed={live}
-                className={live ? "active" : ""}
-                onClick={() => setLive(!live)}
-                disabled={!session}
-                title={t("Refresh the view continuously")}
-              >
-                <img src={getRootIconUrl("refresh-auto.svg")} alt="" />
-                {t("Live")}
-              </button>
+              <div className="instrument-view-commands">
+                <button
+                  type="button"
+                  onClick={restoreDefaults}
+                  disabled={!session}
+                  title={t(
+                    "Set the settings of the instrument back to their default values",
+                  )}
+                >
+                  <img src={getRootIconUrl("reset.svg")} alt="" />
+                  {t("Restore defaults")}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={live}
+                  className={live ? "active" : ""}
+                  onClick={() => setLive(!live)}
+                  disabled={!session}
+                  title={t("Refresh the view continuously")}
+                >
+                  <img src={getRootIconUrl("refresh-auto.svg")} alt="" />
+                  {t("Live")}
+                </button>
+              </div>
               <div className="instrument-acquire">
                 <label
                   className="instrument-new-group"

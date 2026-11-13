@@ -56,6 +56,7 @@ const SESSION: PluginInstrumentSession = {
     },
     values: { exposure: 10 },
   },
+  defaults: { exposure: 5 },
 };
 
 const FRAME: PluginInstrumentFrame = {
@@ -228,6 +229,22 @@ describe("InstrumentWindow", () => {
     const stopped = runtimeMock.previewPluginInstrument.mock.calls.length;
     await act(() => new Promise((resolve) => window.setTimeout(resolve, 80)));
     expect(runtimeMock.previewPluginInstrument.mock.calls.length).toBe(stopped);
+  });
+
+  it("restores the default settings and refreshes the view", async () => {
+    renderWindow({});
+    await screen.findByTestId("instrument-plot");
+    fireEvent.click(screen.getByRole("button", { name: "Restore defaults" }));
+    await waitFor(() =>
+      expect(runtimeMock.previewPluginInstrument).toHaveBeenLastCalledWith(
+        "org.example.camera",
+        "simulator",
+        { exposure: 5 },
+      ),
+    );
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe(
+      "5",
+    );
   });
 
   it("reports settings the instrument rejects", async () => {

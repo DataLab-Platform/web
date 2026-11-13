@@ -810,6 +810,10 @@ def test_instrument_session_opens_after_settings_and_closes_on_replacement(
 
     second = dlw_applications.open_plugin_instrument(PLUGIN_ID, "generator")
     assert calls == [("open", 0.5), ("close",)]
+    # Edited settings are kept; their default values come with them
+    assert second["settings"]["values"]["amplitude"] == 0.5
+    assert second["defaults"]["amplitude"] == 1.0
+    assert record.instance.get_instrument("generator").settings.amplitude == 0.5
     dlw_applications.preview_plugin_instrument(
         PLUGIN_ID, "generator", {"amplitude": 0.75}
     )

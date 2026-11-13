@@ -3714,6 +3714,7 @@ input {
   background: color-mix(in srgb, var(--accent) 16%, var(--panel));
 }
 
+.instrument-view-commands,
 .instrument-acquire,
 .instrument-new-group {
   display: inline-flex;
@@ -3721,6 +3722,7 @@ input {
   gap: 6px;
 }
 
+.instrument-view-commands,
 .instrument-acquire {
   gap: 12px;
 }
