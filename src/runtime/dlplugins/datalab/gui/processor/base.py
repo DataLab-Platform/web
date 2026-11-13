@@ -4,9 +4,9 @@
 DataLab Qt processor's plugin-facing registration API.
 
 Only the methods that bundled stock plugins call are exposed:
-:meth:`register_1_to_1`, :meth:`register_2_to_1`, :meth:`register_n_to_1`,
-:meth:`update_param_defaults`. Everything else raises a clear
-:class:`BrowserNotSupportedError` if a plugin tries to use it.
+:meth:`register_1_to_1`, :meth:`register_1_to_0`, :meth:`register_2_to_1`,
+:meth:`register_n_to_1`, :meth:`update_param_defaults`. Everything else raises a
+clear :class:`BrowserNotSupportedError` if a plugin tries to use it.
 """
 
 from __future__ import annotations
@@ -59,6 +59,33 @@ class BaseProcessor:
             func,
             label,
             "1_to_1",
+            paramclass=paramclass,
+            icon=icon_name,
+            menu_path=menu_path,
+            feature_id=feature_id,
+            owner_plugin_id=owner_plugin_id,
+        )
+
+    def register_1_to_0(
+        self,
+        func: Callable[..., Any],
+        label: str,
+        paramclass: type | None = None,
+        icon_name: str | None = None,
+        menu_path: str | None = None,
+        feature_id: str | None = None,
+        owner_plugin_id: str | None = None,
+    ) -> None:
+        """Register a 1→0 analysis entry (result attached to the object).
+
+        The function returns a :class:`sigima.objects.TableResult` or
+        :class:`sigima.objects.GeometryResult` (or ``None``). DataLab-Web
+        lists it with the analyses, at its menu path.
+        """
+        self._register(
+            func,
+            label,
+            "1_to_0",
             paramclass=paramclass,
             icon=icon_name,
             menu_path=menu_path,

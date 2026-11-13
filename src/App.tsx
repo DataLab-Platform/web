@@ -1820,6 +1820,9 @@ export default function App() {
       await runtime.reloadPlugins();
       await refreshPluginActions();
       await runtime.listFeatures().then(setFeatures);
+      // Plugins also register analyses (1-to-0 features)
+      await runtime.listSignalAnalysis().then(setAnalysisEntries);
+      await runtime.listImageAnalysis().then(setImageAnalysisEntries);
     } finally {
       setBusy(false);
     }
@@ -5613,7 +5616,11 @@ export default function App() {
             onClose={() => {
               setPluginManagerOpen(false);
               void refreshPluginActions();
-              if (runtime) void runtime.listFeatures().then(setFeatures);
+              if (runtime) {
+                void runtime.listFeatures().then(setFeatures);
+                void runtime.listSignalAnalysis().then(setAnalysisEntries);
+                void runtime.listImageAnalysis().then(setImageAnalysisEntries);
+              }
             }}
           />
         )}

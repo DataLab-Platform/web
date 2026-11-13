@@ -5,7 +5,7 @@ DataLab-Web build. They are explicit application assets, not a general wheel
 installer: Pyodide never searches a public package index for them or resolves
 their Desktop dependencies.
 
-The Camera and Pulse wheels are the artifacts attached to the GitHub releases of their plugin repositories, the same files as in the [DataLab plugin catalog](https://datalab-platform.com/plugins/):
+The Camera, Pulse and Radiography wheels are the artifacts attached to the GitHub releases of their plugin repositories, the same files as in the [DataLab plugin catalog](https://datalab-platform.com/plugins/):
 
 ```powershell
 gh release download v<version> -R DataLab-Platform/<plugin-repository> -p "*-py3-none-any.whl" -D src/runtime/builtin_wheels

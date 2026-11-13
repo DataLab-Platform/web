@@ -802,9 +802,12 @@ function buildAnalysisActions(
     // Group related analyses under a submenu folder (e.g. the four blob
     // detectors live under "Analysis/Blob detection", mirroring the
     // desktop app). Folder labels are translated by ``buildMenuTree``.
-    const menuPath = e.submenu
-      ? `Analysis/${e.submenu}/${safeLabel}`
-      : `Analysis/${safeLabel}`;
+    // Plugin analyses keep the menu path of their plugin.
+    const menuPath = e.menu_path
+      ? e.menu_path
+      : e.submenu
+        ? `Analysis/${e.submenu}/${safeLabel}`
+        : `Analysis/${safeLabel}`;
     return {
       id: `analysis.${kind}.${e.id}`,
       label: e.has_params ? `${safeLabel}…` : safeLabel,

@@ -1458,6 +1458,10 @@ export interface SignalAnalysisDescriptor {
   /** Optional submenu (folder) this entry belongs to, e.g. ``"Blob
    *  detection"``; ``null``/absent for top-level Analysis entries. */
   submenu?: string | null;
+  /** Full menu path of an analysis registered by a plugin (e.g.
+   *  ``"Plugins/<plugin>/<group>/<label>"``), listed there instead of the
+   *  Analysis menu, as in DataLab desktop; ``null``/absent for built-ins. */
+  menu_path?: string | null;
 }
 
 /** Optional plot overlay attached to a result (currently only emitted

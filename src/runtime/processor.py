@@ -1012,6 +1012,9 @@ def merge_plugin_features(
         return dict(catalog)
     merged = dict(catalog)
     for extra in EXTRA_FEATURES.get(kind, ()):
+        if extra.pattern not in PATTERNS:
+            # 1→0 analyses are listed and run with the analyses (bootstrap)
+            continue
         fid = extra.feature_id
         if fid in merged:
             raise ValueError(f"Plugin feature ID {fid!r} already registered")

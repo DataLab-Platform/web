@@ -19,7 +19,9 @@ describe.each(BUNDLED_PLUGIN_WHEELS)("bundled $distribution wheel", (wheel) => {
   it("matches its committed version, size, and SHA-256 manifest", async () => {
     const bytes = await readFile(wheelPath);
 
-    expect(wheel.version).toBe("0.2.1");
+    expect(wheel.filename).toBe(
+      `${wheel.distribution.replace(/-/g, "_")}-${wheel.version}-py3-none-any.whl`,
+    );
     expect(bytes.byteLength).toBe(wheel.sizeBytes);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(wheel.sha256);
   });
@@ -28,9 +30,9 @@ describe.each(BUNDLED_PLUGIN_WHEELS)("bundled $distribution wheel", (wheel) => {
     const bytes = await readFile(wheelPath);
     const fetcher = vi.fn(async () => new Response(bytes, { status: 200 }));
 
-    await expect(fetchBundledPluginWheel(wheel, fetcher)).resolves.toEqual(
-      new Uint8Array(bytes),
-    );
+    const loaded = await fetchBundledPluginWheel(wheel, fetcher);
+    // Byte comparison: element-wise equality is slow for megabyte wheels
+    expect(Buffer.compare(Buffer.from(loaded), bytes)).toBe(0);
     expect(fetcher).toHaveBeenCalledWith(wheel.url);
 
     const corrupted = new Uint8Array(bytes);

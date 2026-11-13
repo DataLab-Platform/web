@@ -3670,6 +3670,20 @@ def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
     return data[::stride, ::stride]
 
 
+def _display_option(metadata: dict[str, Any], *keys: str) -> Any:
+    """Return the first display option of *keys* set in *metadata*.
+
+    DataLab-Web stores its display choices under plain keys
+    (``colormap``); DataLab Desktop and Sigima store them as metadata
+    options (``__colormap``), kept in workspaces: both are read.
+    """
+    for key in keys:
+        value = metadata.get(key)
+        if value is not None:
+            return value
+    return None
+
+
 def _image_data_payload(
     obj: Any,
     oid: str,
@@ -3680,8 +3694,10 @@ def _image_data_payload(
     """Return a plotting payload for a resident image object."""
     raw = obj.data
     md = getattr(obj, "metadata", None) or {}
-    colormap = md.get("colormap") or md.get("colourmap")
-    invert_cm = md.get("invert_colormap") or md.get("colormap_inverted")
+    colormap = _display_option(md, "colormap", "colourmap", "__colormap")
+    invert_cm = _display_option(
+        md, "invert_colormap", "colormap_inverted", "__invert_colormap"
+    )
     resample = md.get("resample_method")
     display = summary or _build_image_display_summary(raw)
     data_min = display["data_min"]
@@ -4188,42 +4204,60 @@ def get_graphical_annotations(oid: str) -> dict[str, Any]:
 def get_lut_range(oid: str) -> list[float] | None:
     """Return the persisted LUT range ``[zmin, zmax]`` for image *oid*.
 
-    Returns ``None`` when no override has been stored — in which case the
-    UI should fall back to the image's intrinsic ``data_min``/``data_max``.
+    The range set in DataLab-Web wins; otherwise the range of the image
+    itself (``zscalemin``/``zscalemax``, set by DataLab Desktop, Sigima or
+    plugins) applies. Returns ``None`` when neither is set — in which case
+    the UI should fall back to the image's intrinsic ``data_min``/``data_max``.
     """
     obj = _MODEL.get(oid)
     payload = obj.metadata.get(_LUT_RANGE_KEY)
     if not isinstance(payload, (list, tuple)) or len(payload) != 2:
-        return None
+        payload = (getattr(obj, "zscalemin", None), getattr(obj, "zscalemax", None))
+        if payload[0] is None or payload[1] is None:
+            return None
     try:
         zmin = float(payload[0])
         zmax = float(payload[1])
     except (TypeError, ValueError):
         return None
+    if not (np.isfinite(zmin) and np.isfinite(zmax)) or zmax <= zmin:
+        return None
     return [zmin, zmax]
+
+
+def _set_image_zscale(obj: Any, zmin: float | None, zmax: float | None) -> None:
+    """Set the LUT range of the image itself, read by DataLab Desktop."""
+    if hasattr(obj, "zscalemin"):
+        obj.zscalemin, obj.zscalemax = zmin, zmax
 
 
 def set_lut_range(oid: str, payload: list[float] | None) -> None:
     """Persist the LUT range ``[zmin, zmax]`` for image *oid*.
 
-    Pass ``None`` (or an empty/invalid value) to clear the override.
+    Pass ``None`` (or an empty/invalid value) to clear the override. The
+    range is also stored in the image (``zscalemin``/``zscalemax``), so that
+    DataLab Desktop shows it.
     """
     if hasattr(payload, "to_py"):
         payload = payload.to_py()
     obj = _MODEL.get(oid)
     if payload is None:
         obj.metadata.pop(_LUT_RANGE_KEY, None)
+        _set_image_zscale(obj, None, None)
         return
     if not isinstance(payload, (list, tuple)) or len(payload) != 2:
         obj.metadata.pop(_LUT_RANGE_KEY, None)
+        _set_image_zscale(obj, None, None)
         return
     try:
         zmin = float(payload[0])
         zmax = float(payload[1])
     except (TypeError, ValueError):
         obj.metadata.pop(_LUT_RANGE_KEY, None)
+        _set_image_zscale(obj, None, None)
         return
     obj.metadata[_LUT_RANGE_KEY] = [zmin, zmax]
+    _set_image_zscale(obj, zmin, zmax)
 
 
 def set_colormap(oid: str, name: str | None, inverted: bool = False) -> None:
@@ -4231,18 +4265,27 @@ def set_colormap(oid: str, name: str | None, inverted: bool = False) -> None:
 
     The values are stored under the canonical ``colormap`` /
     ``invert_colormap`` metadata keys so :func:`get_image_data` picks
-    them up on the next read.  Pass ``name=None`` (or empty) to clear
-    the override; ``invert_colormap`` is removed alongside it.
+    them up on the next read, and as the ``__colormap`` /
+    ``__invert_colormap`` metadata options read by DataLab Desktop.  Pass
+    ``name=None`` (or empty) to clear the override; ``invert_colormap`` is
+    removed alongside it.
     """
     obj = _MODEL.get(oid)
     if not name:
-        obj.metadata.pop("colormap", None)
-        obj.metadata.pop("colourmap", None)
-        obj.metadata.pop("invert_colormap", None)
-        obj.metadata.pop("colormap_inverted", None)
+        for key in (
+            "colormap",
+            "colourmap",
+            "invert_colormap",
+            "colormap_inverted",
+            "__colormap",
+            "__invert_colormap",
+        ):
+            obj.metadata.pop(key, None)
         return
     obj.metadata["colormap"] = str(name)
     obj.metadata["invert_colormap"] = bool(inverted)
+    obj.metadata["__colormap"] = str(name)
+    obj.metadata["__invert_colormap"] = bool(inverted)
 
 
 _RESAMPLE_METHODS = ("nearest", "max", "mean")
@@ -4965,7 +5008,7 @@ def _iter_data_objects() -> list[Any]:
 
 def _is_known_operation(_kind: str, name: str, _plugin_origin: Any) -> bool:
     """Return True if a processing or analysis of the catalogue has this name."""
-    if any(name in catalog for catalog in _ANALYSIS_CATALOG.values()):
+    if any(name in _analysis_catalog(kind) for kind in ("signal", "image")):
         return True
     return any(
         name in (feature_id, feature_id.split(":")[-1])
@@ -6208,6 +6251,42 @@ if not _ANALYSIS_CATALOG:
 _SIGNAL_ANALYSIS = _ANALYSIS_CATALOG["signal"]
 
 
+def _plugin_analysis_entries(kind: str) -> dict[str, dict[str, Any]]:
+    """Return the 1→0 analyses registered by plugins for *kind*.
+
+    Plugins register them with ``register_1_to_0``; each entry keeps the
+    plugin menu path, where the menu lists it (as on DataLab Desktop).
+    """
+    try:
+        # Lazy: the ``datalab`` shim is installed after this module.
+        # pylint: disable-next=import-outside-toplevel
+        from datalab.registries import EXTRA_FEATURES
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {}
+    entries: dict[str, dict[str, Any]] = {}
+    for extra in EXTRA_FEATURES.get(kind, ()):
+        if extra.pattern != "1_to_0":
+            continue
+        entries[extra.feature_id] = {
+            "id": extra.feature_id,
+            "label": extra.label,
+            "icon": extra.icon or "",
+            "func": extra.func,
+            "paramclass": extra.paramclass,
+            "separator_before": False,
+            "menu_path": extra.menu_path,
+        }
+    return entries
+
+
+def _analysis_catalog(kind: str) -> dict[str, dict[str, Any]]:
+    """Return the built-in analyses of *kind*, then those of the plugins."""
+    catalog = dict(_ANALYSIS_CATALOG.get(kind, {}))
+    for feature_id, entry in _plugin_analysis_entries(kind).items():
+        catalog.setdefault(feature_id, entry)
+    return catalog
+
+
 # Cached parameter instances per (kind, oid, func_id) so a parametric
 # analysis can be re-opened with its previous values pre-filled.
 _ANALYSIS_PARAMS: dict[str, Any] = globals().get("_ANALYSIS_PARAMS", {})
@@ -6236,7 +6315,7 @@ def list_image_analysis() -> list[dict[str, Any]]:
 
 
 def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     return [
         {
             "id": e["id"],
@@ -6245,13 +6324,14 @@ def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
             "separator_before": e["separator_before"],
             "has_params": e["paramclass"] is not None,
             "submenu": e.get("submenu"),
+            "menu_path": e.get("menu_path"),
         }
         for e in catalog.values()
     ]
 
 
 def _get_or_create_analysis_param(kind: str, oid: str, func_id: str) -> Any:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     entry = catalog[func_id]
@@ -6303,7 +6383,7 @@ def resolve_analysis_active(
     """
     from guidata.dataset import resolve_dataset_active, update_dataset
 
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     paramclass = catalog[func_id]["paramclass"]
@@ -6570,7 +6650,7 @@ async def _ensure_pyodide_pkg(name: str) -> None:
 async def _run_analysis(
     kind: str, oid: str, func_id: str, params: Any = None
 ) -> dict[str, Any] | None:
-    catalog = _ANALYSIS_CATALOG.get(kind, {})
+    catalog = _analysis_catalog(kind)
     if func_id not in catalog:
         raise KeyError(f"Unknown {kind} analysis function: {func_id!r}")
     entry = catalog[func_id]

@@ -150,3 +150,63 @@ test("Camera simulator acquires a photon transfer sequence", async ({
     "org.datalab.camera-characterization:photon-transfer",
   );
 });
+
+test("Radiography simulator acquires frames ready for the offset and gain correction", async ({
+  warmPage: page,
+}) => {
+  test.setTimeout(240_000);
+  await dismissAnyDialog(page);
+  await page.evaluate(() => window.runtime.resetAll());
+  await page.getByRole("tab", { name: "Images" }).click();
+
+  await openPluginTool(
+    page,
+    "X-ray Radiography & NDT",
+    "X-ray radiography simulator...",
+  );
+  const instrument = page.getByRole("dialog", {
+    name: "X-ray radiography simulator",
+  });
+  await expect(instrument).toBeVisible();
+  await expect(instrument.locator(".instrument-plot svg image")).toHaveCount(
+    1,
+    { timeout: 60_000 },
+  );
+  await expect(instrument.locator(".instrument-summary")).toContainText(
+    "Weld: M = 1.25",
+  );
+
+  const scene = formRow(page, "Scene").locator("select");
+  await scene.selectOption("pipe");
+  await expect(scene).toHaveValue("pipe");
+  await expect(instrument.locator(".instrument-summary")).toContainText(
+    "Pipe axis: M = 1.25",
+    { timeout: 60_000 },
+  );
+  await instrument
+    .locator(".dataset-form-tab-bar button", { hasText: "Acquisition" })
+    .click();
+  await formRow(page, "Dark frames").locator("input").fill("2");
+  await formRow(page, "Flat frames").locator("input").fill("2");
+  await instrument.getByRole("button", { name: "Acquire" }).click();
+  const group = "Simulated Pipe";
+  await expect(instrument.locator(".applications-status")).toHaveText(
+    `5 objects added to group '${group}'`,
+    { timeout: 60_000 },
+  );
+  await instrument.getByRole("button", { name: "Close" }).click();
+  await expect(instrument).toBeHidden();
+
+  await page.getByRole("menuitem", { name: "Applications…" }).click();
+  const applications = page.getByRole("dialog", { name: "Applications" });
+  await applications
+    .locator(".applications-list button")
+    .filter({ hasText: "X-ray Radiography & NDT" })
+    .click();
+  await expect(
+    applications.locator(
+      '[data-recipe-id="org.datalab.radiography:offset-gain-correction"] [data-readiness]',
+    ),
+  ).toHaveAttribute("data-readiness", "ready", { timeout: 30_000 });
+  await applications.getByRole("button", { name: "Close" }).click();
+});

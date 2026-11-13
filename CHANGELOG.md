@@ -8,10 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **X-ray Radiography & NDT application:** DataLab-Web bundles the X-ray Radiography & NDT plugin: radiographic display, magnifications of several object planes, detector corrections, physical quantities, enhancement filters, image quality (SNR, CNR, duplex IQI) and NDT measurements (tangential wall thickness, indication detection), with simulated and real-data examples and a radiography simulator.
+- **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
 - **Plugin instruments — restore defaults:** the window of a plugin instrument, e.g. the camera, oscilloscope or radiography simulators, has a new **Restore defaults** button, which sets the settings of the instrument back to their default values and refreshes the view ([#110](https://github.com/DataLab-Platform/web/issues/110)).
 
 ### Fixed
 
+- **Image display of DataLab Desktop workspaces:** images opened from a DataLab Desktop workspace, or prepared by a plugin, were shown with the default colormap and range, because DataLab-Web ignored the colormap, its inversion and the LUT range stored by DataLab Desktop. They are now shown as in DataLab Desktop, and the colormap and range chosen in DataLab-Web are saved in the workspace so that DataLab Desktop shows them too.
 - **Notebooks and macros — actions while Python starts:** while the notebook kernel or the macro worker was still starting, a notebook cell could run in the kernel of the next workspace when another workspace or example was opened meanwhile, running two cells left the first one queued forever with its outputs shown under the second one, and **Stop** did not cancel a macro waiting to start. Cells now run one at a time and are cancelled when their workspace is replaced, and **Stop** cancels a waiting macro ([#107](https://github.com/DataLab-Platform/web/issues/107)).
 
 ## [0.11.1] - 2026-11-12
