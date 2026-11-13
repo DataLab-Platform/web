@@ -37,8 +37,8 @@ export const BUNDLED_PLUGIN_WHEELS: readonly BundledPluginWheel[] =
       version: "0.1.0",
       filename: "datalab_radiography-0.1.0-py3-none-any.whl",
       sha256:
-        "0e31739fd9174c88b1f0793d78536abae6e2e866522f7a688aaa39dfb7933145",
-      sizeBytes: 1_276_061,
+        "0623dbe19925e6c5f595c0b3b5deb8c22596f72ced3661f09d4abba437d3dba2",
+      sizeBytes: 1_277_237,
       url: radiographyWheelUrl,
     }),
   ]);
