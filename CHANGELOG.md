@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Application recipes — optional inputs:** a recipe could not be started when its proposed inputs left an optional slot empty, even when those inputs were valid. The input dialog now lets you confirm valid bindings without assigning an optional input ([#113](https://github.com/DataLab-Platform/web/issues/113)).
 - **Image display of DataLab Desktop workspaces:** images opened from a DataLab Desktop workspace, or prepared by a plugin, were shown with the default colormap and range, because DataLab-Web ignored the colormap, its inversion and the LUT range stored by DataLab Desktop. They are now shown as in DataLab Desktop, and the colormap and range chosen in DataLab-Web are saved in the workspace so that DataLab Desktop shows them too.
 - **Notebooks and macros — actions while Python starts:** while the notebook kernel or the macro worker was still starting, a notebook cell could run in the kernel of the next workspace when another workspace or example was opened meanwhile, running two cells left the first one queued forever with its outputs shown under the second one, and **Stop** did not cancel a macro waiting to start. Cells now run one at a time and are cancelled when their workspace is replaced, and **Stop** cancels a waiting macro ([#107](https://github.com/DataLab-Platform/web/issues/107)).
 

@@ -12,6 +12,71 @@ declare global {
 const RADIOGRAPHY = "org.datalab.radiography";
 const MAGNIFICATIONS_KEY = "plugin.org.datalab.radiography.magnifications";
 
+test("step wedge example runs without optional radiographs to map", async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await disableQuickstartTemplate(page);
+  await page.goto("/");
+  await waitForRuntimeReady(page);
+  await page.getByRole("menuitem", { name: "Applications…" }).click();
+
+  const applications = page.getByRole("dialog", { name: "Applications" });
+  await applications
+    .getByRole("button")
+    .filter({ hasText: "X-ray Radiography & NDT" })
+    .click();
+  const recipe = applications.locator(
+    `[data-recipe-id="${RADIOGRAPHY}:step-wedge-calibration"]`,
+  );
+  await recipe.locator("summary").click();
+  await recipe
+    .locator('[data-example-id="simulated-step-wedge"]')
+    .getByRole("button", { name: "Try with this example" })
+    .click();
+
+  const inputs = page.getByRole("dialog", { name: "Recipe inputs" });
+  await expect(inputs).toBeVisible({ timeout: 120_000 });
+  const optional = inputs
+    .locator("fieldset")
+    .filter({ hasText: "Radiographs to map" });
+  await expect(optional).toContainText("optional");
+  await expect(optional.locator("input:checked")).toHaveCount(0);
+  const continueButton = inputs.getByRole("button", { name: "Continue" });
+  await expect(continueButton).toBeEnabled({ timeout: 60_000 });
+  await continueButton.click();
+
+  const parameters = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", {
+      name: "Step wedge thickness calibration",
+    }),
+  });
+  await expect(parameters).toBeVisible();
+  await parameters.getByRole("button", { name: "OK" }).click();
+  await expect(applications.locator(".applications-status")).toHaveText(
+    "Created 2 objects",
+    { timeout: 180_000 },
+  );
+  await applications
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "Signals" }).click();
+  await expect(
+    page
+      .locator(".object-tree-item")
+      .filter({ hasText: "Thickness calibration" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Images" }).click();
+  await expect(
+    page
+      .locator(".object-tree-item")
+      .filter({ hasText: "Thickness of Step wedge" }),
+  ).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 test("Radiography magnification tool edits its parameters in a browser dialog", async ({
   page,
 }) => {

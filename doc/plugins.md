@@ -133,7 +133,7 @@ and may implement `materialize_example()`. Recipe slots carry signal/image type,
 `RecipeOutcome`; DataLab-Web commits objects, anchored scalar results,
 diagnostics, and provenance transactionally.
 
-The Applications dialog presents each recipe as a method card: expected inputs, a readiness status re-assessed when the selection changes, a _Run on selection…_ button, and _Try with this example_ for each example designed for it. Examples without a recipe are listed as datasets. Readiness and binding checks use the same `datalab.plugins.recipe_binding` module as DataLab Desktop, copied into the host shim, so both hosts accept the same selections.
+The Applications dialog presents each recipe as a method card: expected inputs, a readiness status re-assessed when the selection changes, a _Run on selection…_ button, and _Try with this example_ for each example designed for it. Examples without a recipe are listed as datasets. In the input dialog, optional inputs may be left empty when the proposed bindings pass the recipe checks. Readiness and binding checks use the same `datalab.plugins.recipe_binding` module as DataLab Desktop, copied into the host shim, so both hosts accept the same selections.
 
 ### Tools and instruments
 
