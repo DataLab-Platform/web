@@ -23,7 +23,7 @@ declare global {
  *     unsaved-changes marker,
  *   * mutating the workspace (creating a signal) flips the title to
  *     include the bullet "•" marker,
- *   * "Save HDF5 workspace…" assigns a timestamped filename, clears
+ *   * "Save HDF5 workspace…" assigns "Untitled.h5", clears
  *     dirty, and persists *every* asset class (signals + macros +
  *     notebooks),
  *   * reloading the page wipes Pyodide; re-importing the saved bytes
@@ -129,7 +129,7 @@ test("workspace HDF5 round-trip + dirty title transitions", async ({
   await page.getByRole("menuitem", { name: /Save to HDF5 file/i }).click();
   const download = await downloadPromise;
   const suggested = download.suggestedFilename();
-  expect(suggested).toMatch(/^workspace-.*\.h5$/);
+  expect(suggested).toBe("Untitled.h5");
   const tmpPath = test.info().outputPath(suggested);
   await download.saveAs(tmpPath);
 
