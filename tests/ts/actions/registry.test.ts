@@ -9,10 +9,15 @@ import {
   buildPluginActions,
   buildViewActions,
   buildPlotResultsAction,
+  excludeExplicitPluginFeatures,
   isFeatureActionEnabled,
 } from "../../../src/actions/registry";
+import { buildMenuTree } from "../../../src/actions/buildMenu";
 import type { ActionState } from "../../../src/actions/types";
-import type { PluginRecord } from "../../../src/runtime/runtime";
+import type {
+  PluginMenuAction,
+  PluginRecord,
+} from "../../../src/runtime/runtime";
 
 function makeState(over: Partial<ActionState> = {}): ActionState {
   return {
@@ -217,6 +222,152 @@ describe("buildPlotResultsAction", () => {
 });
 
 describe("buildPluginActions", () => {
+  it("dispatches computation placements and preserves literal menu segments", () => {
+    const onTrigger = vi.fn();
+    const onApplyFeature = vi.fn();
+    const entry: PluginMenuAction = {
+      action_type: "feature",
+      action_id: "generated",
+      title: "Sample processing",
+      menu_path: ["Generated & portable/demo"],
+      select_condition: "at_least_one",
+      separator_before: false,
+      icon: null,
+      tip: null,
+      origin: "org.example.issue94",
+      object_kind: "signal",
+      feature_id: "org.example.issue94:sample-processing",
+      pattern: "1_to_1",
+      has_params: false,
+      replace_implicit: true,
+    };
+    const callbacks = {
+      onTrigger,
+      onApplyFeature,
+      onRunAnalysis: vi.fn(),
+      onOpenApplications: vi.fn(),
+      onOpenApplicationRecipe: vi.fn(),
+      onOpenApplicationExample: vi.fn(),
+      onLaunchApplicationTool: vi.fn(),
+      onOpenManager: vi.fn(),
+      onReloadAll: vi.fn(),
+    };
+    const actions = buildPluginActions([entry], [], "signal", callbacks);
+    const action = actions.find((item) => item.id === "plugin.generated")!;
+    expect(action.enabled(makeState())).toBe(false);
+    expect(action.enabled(makeState({ currentId: "s1" }))).toBe(true);
+    action.run();
+    expect(onApplyFeature).toHaveBeenCalledWith(
+      "org.example.issue94:sample-processing",
+    );
+    expect(onTrigger).not.toHaveBeenCalled();
+
+    const menu = buildMenuTree(actions).find(
+      (node) => node.label === "Plugins",
+    );
+    const submenu = menu?.children?.find(
+      (node) => node.label === "Generated & portable/demo",
+    );
+    expect(submenu?.children?.[0].displayLabel).toBe("Sample processing");
+    expect(
+      excludeExplicitPluginFeatures(
+        [{ id: entry.feature_id }, { id: "normalize" }],
+        [
+          entry,
+          {
+            ...entry,
+            action_id: "other-plugin",
+            feature_id: "normalize",
+            replace_implicit: false,
+          },
+        ],
+        "signal",
+      ),
+    ).toEqual([{ id: "normalize" }]);
+    expect(
+      excludeExplicitPluginFeatures(
+        [{ id: entry.feature_id }],
+        [entry],
+        "image",
+      ),
+    ).toEqual([{ id: entry.feature_id }]);
+  });
+
+  it("routes analysis placements through the analysis handler", () => {
+    const onRunAnalysis = vi.fn();
+    const entry: PluginMenuAction = {
+      action_type: "feature",
+      action_id: "analysis",
+      title: "Mean…",
+      menu_path: ["Measurements"],
+      select_condition: "at_least_one",
+      separator_before: false,
+      icon: null,
+      tip: null,
+      origin: "org.example.analysis",
+      object_kind: "image",
+      feature_id: "org.example.analysis:mean",
+      pattern: "1_to_0",
+      has_params: true,
+      replace_implicit: true,
+    };
+    const actions = buildPluginActions([entry], [], "image", {
+      onTrigger: vi.fn(),
+      onApplyFeature: vi.fn(),
+      onRunAnalysis,
+      onOpenApplications: vi.fn(),
+      onOpenApplicationRecipe: vi.fn(),
+      onOpenApplicationExample: vi.fn(),
+      onLaunchApplicationTool: vi.fn(),
+      onOpenManager: vi.fn(),
+      onReloadAll: vi.fn(),
+    });
+    const action = actions.find((item) => item.id === "plugin.analysis")!;
+    expect(action.enabled(makeState())).toBe(false);
+    expect(action.enabled(makeState({ currentId: "i1" }))).toBe(true);
+    action.run();
+    expect(onRunAnalysis).toHaveBeenCalledWith(
+      "org.example.analysis:mean",
+      true,
+    );
+  });
+
+  it("uses the built-in selection rules for aggregation placements", () => {
+    const onApplyFeature = vi.fn();
+    const entry: PluginMenuAction = {
+      action_type: "feature",
+      action_id: "average",
+      title: "Average",
+      menu_path: ["Operations"],
+      select_condition: "at_least_two",
+      separator_before: false,
+      icon: null,
+      tip: null,
+      origin: "org.example.average",
+      object_kind: "signal",
+      feature_id: "org.example.average:average",
+      pattern: "n_to_1",
+      has_params: false,
+      replace_implicit: true,
+    };
+    const [action] = buildPluginActions([entry], [], "signal", {
+      onTrigger: vi.fn(),
+      onApplyFeature,
+      onRunAnalysis: vi.fn(),
+      onOpenApplications: vi.fn(),
+      onOpenApplicationRecipe: vi.fn(),
+      onOpenApplicationExample: vi.fn(),
+      onLaunchApplicationTool: vi.fn(),
+      onOpenManager: vi.fn(),
+      onReloadAll: vi.fn(),
+    });
+
+    expect(action.enabled(makeState({ currentId: "s1" }))).toBe(false);
+    expect(action.enabled(makeState({ selectedIds: ["s1", "s2"] }))).toBe(true);
+    action.run();
+    expect(onApplyFeature).toHaveBeenCalledWith("org.example.average:average");
+  });
+
   it("projects application recipes, examples and tools under the plugin menu", () => {
     const onOpenApplicationRecipe = vi.fn();
     const onOpenApplicationExample = vi.fn();
@@ -238,9 +389,10 @@ describe("buildPluginActions", () => {
       enabled: true,
       loaded: true,
       error: null,
+      warnings: [],
       info: {
         id: "org.example.application",
-        name: "Example & Application",
+        name: "Example & Application / Shared",
         version: "1.0.0",
         description: "Example application",
         icon: null,
@@ -251,7 +403,7 @@ describe("buildPluginActions", () => {
         {
           id: "org.example.application:analyze",
           version: "1.0.0",
-          title: "Analyze campaign",
+          title: "Analyze / campaign",
           description: "Analyze the selected campaign",
           inputs: [],
           has_params: false,
@@ -301,6 +453,8 @@ describe("buildPluginActions", () => {
     };
     const actions = buildPluginActions([], [record], "signal", {
       onTrigger: vi.fn(),
+      onApplyFeature: vi.fn(),
+      onRunAnalysis: vi.fn(),
       onOpenApplications: vi.fn(),
       onOpenApplicationRecipe,
       onOpenApplicationExample,
@@ -323,11 +477,22 @@ describe("buildPluginActions", () => {
       action.id.startsWith("plugin.application.example."),
     )!;
     expect(recipe.menuPath).toBe(
-      "Plugins/Example & Application/Analyze campaign",
+      "Plugins/Example & Application / Shared/Analyze / campaign",
     );
     expect(example.menuPath).toBe(
-      "Plugins/Example & Application/Open quickstart",
+      "Plugins/Example & Application / Shared/Open quickstart",
     );
+    const pluginFolder = buildMenuTree(actions)
+      .find((node) => node.label === "Plugins")
+      ?.children?.find(
+        (node) => node.label === "Example & Application / Shared",
+      );
+    expect(pluginFolder?.children?.map((node) => node.displayLabel)).toEqual([
+      "Analyze / campaign",
+      "Open quickstart",
+      "Signal generator…",
+      "Inspect signals…",
+    ]);
     recipe.run();
     example.run();
     expect(onOpenApplicationRecipe).toHaveBeenCalledWith(
@@ -344,8 +509,8 @@ describe("buildPluginActions", () => {
       action.id.startsWith("plugin.application.tool."),
     );
     expect(tools.map((action) => action.menuPath)).toEqual([
-      "Plugins/Example & Application/Signal generator…",
-      "Plugins/Example & Application/Inspect signals…",
+      "Plugins/Example & Application / Shared/Signal generator…",
+      "Plugins/Example & Application / Shared/Inspect signals…",
     ]);
     expect(tools.map((action) => action.beginGroup)).toEqual([true, false]);
     const state = makeState();

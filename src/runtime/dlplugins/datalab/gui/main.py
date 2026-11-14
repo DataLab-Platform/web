@@ -15,7 +15,7 @@ to host plugins: object CRUD, panel switching, calc dispatch.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from datalab.errors import BrowserNotSupportedError
 from datalab.gui.panel.image import ImagePanel
@@ -23,6 +23,8 @@ from datalab.gui.panel.signal import SignalPanel
 
 if TYPE_CHECKING:
     from sigima.objects import ImageObj, SignalObj
+
+    from datalab.registries import ExtraFeature
 
 
 class DLMainWindow:
@@ -87,6 +89,14 @@ class DLMainWindow:
 
     def calc(self, name: str, param: Any | None = None) -> Any:
         return self._bridge.calc(name, param=param)
+
+    def _get_registered_feature(
+        self, kind: str, function_or_name: Callable[..., Any] | str
+    ) -> ExtraFeature:
+        return self._bridge.get_registered_feature(kind, function_or_name)
+
+    def _validate_plugin_features(self) -> None:
+        self._bridge.validate_plugin_features()
 
     # -- Anything else: raise -----------------------------------------
 

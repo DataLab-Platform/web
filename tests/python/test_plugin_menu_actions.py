@@ -9,6 +9,8 @@ import asyncio
 import numpy as np
 import pytest
 from datalab import registries
+from datalab.errors import BrowserNotSupportedError
+from datalab.gui.actionhandler import ActionHandler
 
 
 def _action(action_id: str, triggered) -> registries.ExtraMenuAction:
@@ -60,3 +62,29 @@ def test_awaits_an_asynchronous_action(fresh_bootstrap, menu_actions):
 def test_refuses_an_unknown_action(fresh_bootstrap, menu_actions):
     with pytest.raises(KeyError, match="Unknown plugin action: missing"):
         asyncio.run(fresh_bootstrap.trigger_plugin_action("missing"))
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"position": 0},
+        {"context_menu_pos": 0},
+        {"toolbar_pos": 0},
+        {"toggled": lambda: None},
+        {"shortcut": "Ctrl+P"},
+        {"select_condition": lambda: False},
+        {"select_condition": "with_roi"},
+    ],
+)
+def test_rejects_unsupported_desktop_action_options(menu_actions, options):
+    handler = ActionHandler("signal", None)
+    with pytest.raises(BrowserNotSupportedError):
+        handler.new_action("Unsupported", triggered=lambda: None, **options)
+    assert not menu_actions["signal"]
+
+
+def test_rejects_desktop_menu_references():
+    handler = ActionHandler("signal", None)
+    with pytest.raises(BrowserNotSupportedError, match="menu reference"):
+        with handler.new_menu("Example", store_ref="example_menu"):
+            pass

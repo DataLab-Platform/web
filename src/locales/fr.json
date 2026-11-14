@@ -381,6 +381,7 @@
   "Derivative": "Dérivée",
   "Description": "Description",
   "desktop-focused": "axé sur l'application de bureau",
+  "Desktop welcome tiles are not available in DataLab-Web.": "Les tuiles d'accueil de DataLab Desktop ne sont pas disponibles dans DataLab-Web.",
   "Detach Macros": "Détacher les Macros",
   "Detach Macros panel": "Détacher le panneau Macros",
   "Detach Notebooks": "Détacher les Notebooks",

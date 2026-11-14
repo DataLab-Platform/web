@@ -998,9 +998,9 @@ def merge_plugin_features(
     Reads :data:`datalab.registries.EXTRA_FEATURES` (populated by the
     portable ``datalab.gui.processor`` shim when plugins call
     ``register_1_to_1`` etc.) and converts each :class:`ExtraFeature` to
-    a :class:`FeatureSpec`. Existing curated entries take precedence —
-    plugins cannot override built-ins. The returned dict is always a
-    *new* dict to keep the input untouched.
+    a :class:`FeatureSpec`. Colliding feature IDs raise an error instead
+    of overriding existing entries. The returned dict is always a *new*
+    dict to keep the input untouched.
     """
     try:
         # Lazy: ``datalab`` is the in-Pyodide shim, not always present.

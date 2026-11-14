@@ -35,7 +35,7 @@ import math
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 import dlw_interactive_fit as _ifit
 
@@ -78,6 +78,9 @@ from sigima.objects.signal.creation import (
     SignalTypes,
     create_signal_parameters,
 )
+
+if TYPE_CHECKING:
+    from datalab.registries import ExtraFeature
 from sigima.objects.signal.roi import SignalROI
 from sigima.viz.annotation_plotly import annotations_to_plotly_spec
 
@@ -855,16 +858,11 @@ def replace_notebooks(records: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _plugin_features_for_kind(kind: str) -> dict[str, _proc.FeatureSpec]:
-    """Return ``{feature_id: FeatureSpec}`` for plugin contributions."""
-    return _proc.merge_plugin_features({}, kind)
-
-
 def _full_catalog_with_plugins() -> dict[str, _proc.FeatureSpec]:
     """Return the curated catalogue augmented with plugin features."""
     cat = dict(_CATALOG)
     for kind in ("signal", "image"):
-        cat.update(_plugin_features_for_kind(kind))
+        cat = _proc.merge_plugin_features(cat, kind)
     return cat
 
 
@@ -6283,8 +6281,81 @@ def _analysis_catalog(kind: str) -> dict[str, dict[str, Any]]:
     """Return the built-in analyses of *kind*, then those of the plugins."""
     catalog = dict(_ANALYSIS_CATALOG.get(kind, {}))
     for feature_id, entry in _plugin_analysis_entries(kind).items():
-        catalog.setdefault(feature_id, entry)
+        if feature_id in catalog:
+            raise ValueError(f"Plugin feature ID {feature_id!r} already registered")
+        catalog[feature_id] = entry
     return catalog
+
+
+def validate_plugin_features() -> None:
+    """Reject duplicate plugin IDs and collisions with built-in features."""
+    from datalab.registries import EXTRA_FEATURES
+
+    seen = set(_CATALOG)
+    for kind in ("signal", "image"):
+        for feature in EXTRA_FEATURES[kind]:
+            if (
+                feature.feature_id in seen
+                or feature.feature_id in _ANALYSIS_CATALOG[kind]
+            ):
+                raise ValueError(
+                    f"Plugin feature ID {feature.feature_id!r} already registered"
+                )
+            seen.add(feature.feature_id)
+
+
+def resolve_registered_feature(
+    kind: str, function_or_name: Callable[..., Any] | str
+) -> ExtraFeature:
+    """Resolve a menu reference by exact ID, callable, or unambiguous name."""
+    from datalab.registries import EXTRA_FEATURES, ExtraFeature
+
+    if kind not in EXTRA_FEATURES:
+        raise ValueError(f"Unknown panel kind: {kind!r}")
+    features = list(EXTRA_FEATURES[kind])
+    for spec in _CATALOG.values():
+        if spec.object_kind == kind:
+            features.append(
+                ExtraFeature(
+                    feature_id=spec.feature_id,
+                    label=spec.label,
+                    menu_path=spec.menu_path,
+                    pattern=spec.pattern,
+                    func=spec.func,
+                    paramclass=spec.paramclass,
+                    icon=spec.icon,
+                    object_kind=kind,
+                )
+            )
+    for entry in _ANALYSIS_CATALOG[kind].values():
+        features.append(
+            ExtraFeature(
+                feature_id=entry["id"],
+                label=entry["label"],
+                menu_path="",
+                pattern="1_to_0",
+                func=entry["func"],
+                paramclass=entry["paramclass"],
+                icon=entry["icon"] or None,
+                object_kind=kind,
+            )
+        )
+    if isinstance(function_or_name, str):
+        exact = [f for f in features if f.feature_id == function_or_name]
+        if len(exact) == 1:
+            return exact[0]
+        matches = exact or [
+            f for f in features if getattr(f.func, "__name__", None) == function_or_name
+        ]
+    elif callable(function_or_name):
+        matches = [f for f in features if f.func is function_or_name]
+    else:
+        raise TypeError("Computing feature reference must be a name or callable")
+    if len(matches) > 1:
+        raise ValueError(f"Ambiguous computing feature alias: {function_or_name!r}")
+    if not matches:
+        raise ValueError(f"Unknown computing feature: {function_or_name!r}")
+    return matches[0]
 
 
 # Cached parameter instances per (kind, oid, func_id) so a parametric
@@ -6937,7 +7008,7 @@ async def trigger_plugin_action(action_id: str) -> dict[str, list[str]]:
     """
     import inspect
 
-    from datalab.registries import EXTRA_MENU_ACTIONS
+    from datalab.registries import EXTRA_MENU_ACTIONS, ExtraFeatureMenuAction
     from dlw_main import WebMainBridge
 
     bridge = WebMainBridge()
@@ -6953,6 +7024,8 @@ async def trigger_plugin_action(action_id: str) -> dict[str, list[str]]:
     )
     if target is None:
         raise KeyError(f"Unknown plugin action: {action_id}")
+    if isinstance(target, ExtraFeatureMenuAction):
+        raise ValueError("Plugin feature actions must use the computation dispatcher")
     before = {kind: set(bridge.get_object_uuids(kind)) for kind in kinds}
     result = target.triggered()
     if inspect.isawaitable(result):

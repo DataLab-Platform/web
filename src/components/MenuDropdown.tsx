@@ -71,7 +71,7 @@ export function MenuDropdown({ nodes, state, onClose }: MenuDropdownProps) {
               ? "menuitemcheckbox"
               : "menuitem";
         return (
-          <Fragment key={node.path}>
+          <Fragment key={action.id}>
             {sep}
             <li
               className={

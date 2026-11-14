@@ -12,17 +12,18 @@ load time.
 # This module talks to ``bootstrap.py`` through its module-level globals
 # (``_MODEL``, ``_CATALOG``, ``ObjectModel``); these are the documented
 # integration surface for the Pyodide bridge, hence the file-wide opt-out
-# of ``protected-access`` (W0212). The lazy guidata import in ``calc`` is
-# intentional too: ``guidata.dataset.dataset_to_json`` is only needed when
-# a plugin actually invokes ``main.calc(name, param)``.
+# of ``protected-access`` (W0212). The guidata import in ``calc`` is lazy
+# because it is only needed when a plugin passes a parameter dataset.
 # pylint: disable=protected-access,import-outside-toplevel
 
 from __future__ import annotations
 
 import importlib
 import sys
-import traceback
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from datalab.registries import ExtraFeature
 
 
 class WebMainBridge:
@@ -143,13 +144,11 @@ class WebMainBridge:
     def calc(self, name: str, param: Any | None = None) -> Any:
         """Dispatch a computation.
 
-        Looks up *name* in the live :data:`bootstrap._CATALOG` (which now
-        includes plugin-supplied features) and applies it to the *first*
-        object of the current panel — mirroring the desktop
-        ``LocalProxy.calc`` semantics for "selection-less" calls.
+        Looks up *name* in the live catalogue, including plugin features,
+        and applies it to the *first* object of the feature's panel.
         """
         bootstrap = self._bootstrap()
-        catalog = bootstrap._CATALOG
+        catalog = bootstrap._full_catalog_with_plugins()
         spec = catalog.get(name)
         if spec is None:
             raise KeyError(f"Unknown feature: {name!r}")
@@ -159,14 +158,20 @@ class WebMainBridge:
         # Convert DataSet param instance to dict for the apply API.
         params: dict[str, Any] | None = None
         if param is not None:
-            try:
-                from guidata.dataset import dataset_to_json
+            from guidata.dataset import dataset_to_schema_with_values
 
-                params = dataset_to_json(param)
-            except Exception:  # pylint: disable=broad-except
-                traceback.print_exc()
-                params = None
+            params = dataset_to_schema_with_values(param)["values"]
         return bootstrap.apply_feature(name, [uids[0]], params=params)
+
+    def get_registered_feature(
+        self, kind: str, function_or_name: Callable[..., Any] | str
+    ) -> ExtraFeature:
+        """Resolve a feature for a plugin menu placement."""
+        return self._bootstrap().resolve_registered_feature(kind, function_or_name)
+
+    def validate_plugin_features(self) -> None:
+        """Reject plugin IDs that would shadow existing computations."""
+        self._bootstrap().validate_plugin_features()
 
 
 __all__ = ["WebMainBridge"]

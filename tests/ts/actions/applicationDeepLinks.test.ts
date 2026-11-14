@@ -71,6 +71,7 @@ function bundledRecord(
     enabled: true,
     loaded: true,
     error: null,
+    warnings: [],
     info: {
       id: request.pluginId,
       name: request.pluginId,

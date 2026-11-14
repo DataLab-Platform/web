@@ -25,6 +25,7 @@ import sys
 import traceback
 import uuid
 import zipimport
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -35,6 +36,7 @@ from typing import Any, Callable
 # pylint: disable=import-error,global-statement,broad-exception-caught
 from datalab import __version__ as datalab_version
 from datalab import registries  # noqa: F401  # used elsewhere in module
+from datalab.errors import BrowserNotSupportedError
 from datalab.plugins import PluginBase, PluginCapability, PluginRegistry  # noqa: F401
 from dlw_wheels import inspect_wheel
 
@@ -173,10 +175,17 @@ def _activate_plugin_class(record: PluginRecord, plugin_cls: type[PluginBase]) -
     plugin_cls.get_recipes()
     plugin_cls.get_examples()
     plugin_cls.get_tools()
+    if not isinstance(plugin_cls.RECIPE_LAUNCHERS, Mapping):
+        raise TypeError("Plugin recipe launchers must be a mapping")
+    if plugin_cls.RECIPE_LAUNCHERS:
+        raise BrowserNotSupportedError(
+            "Plugin RECIPE_LAUNCHERS are not available in DataLab-Web."
+        )
     instance = plugin_cls()
     try:
         if _MAIN is not None:
             instance.register(_MAIN)
+            _MAIN._validate_plugin_features()
     except Exception:
         if instance.is_registered():
             instance.unregister()
@@ -779,6 +788,11 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
         "enabled": record.enabled,
         "loaded": record.instance is not None,
         "error": record.error,
+        "warnings": (
+            ["desktop_welcome_tiles"]
+            if plugin_cls is not None and plugin_cls.WELCOME_TILES
+            else []
+        ),
         "info": info,
         "recipes": recipes,
         "examples": examples,

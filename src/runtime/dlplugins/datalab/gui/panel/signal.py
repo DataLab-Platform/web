@@ -22,7 +22,7 @@ class SignalPanel:
     def __init__(self, main: Any) -> None:
         self.main = main
         self.processor = SignalProcessor()
-        self.acthandler = ActionHandler("signal")
+        self.acthandler = ActionHandler("signal", main)
 
     # -- Plugin-facing helpers ----------------------------------------
 

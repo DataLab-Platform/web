@@ -54,6 +54,7 @@ import {
   buildSignalCreationActions,
   buildStaticActions,
   buildViewActions,
+  excludeExplicitPluginFeatures,
 } from "./actions/registry";
 import { openBundledApplicationDeepLink } from "./actions/applicationDeepLinks";
 import { ObjectTree } from "./components/ObjectTree";
@@ -4780,7 +4781,10 @@ export default function App() {
       ...(treeKind === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
-      ...buildFeatureActions(visibleFeatures, handleApplyFeature),
+      ...buildFeatureActions(
+        excludeExplicitPluginFeatures(visibleFeatures, pluginActions, treeKind),
+        handleApplyFeature,
+      ),
       ...(treeKind === "image"
         ? buildImageGridActions({
             onDistributeOnGrid: handleDistributeOnGrid,
@@ -4797,8 +4801,22 @@ export default function App() {
           )
         : []),
       ...(treeKind === "signal"
-        ? buildSignalAnalysisActions(analysisEntries, handleAnalysis)
-        : buildImageAnalysisActions(imageAnalysisEntries, handleAnalysis)),
+        ? buildSignalAnalysisActions(
+            excludeExplicitPluginFeatures(
+              analysisEntries,
+              pluginActions,
+              treeKind,
+            ),
+            handleAnalysis,
+          )
+        : buildImageAnalysisActions(
+            excludeExplicitPluginFeatures(
+              imageAnalysisEntries,
+              pluginActions,
+              treeKind,
+            ),
+            handleAnalysis,
+          )),
       buildPlotResultsAction(treeKind, handlePlotResults),
       ...(treeKind === "signal"
         ? buildRoiActions(roi, roiEditMode, hasRoiClipboard, {
@@ -4828,6 +4846,8 @@ export default function App() {
           })),
       ...buildPluginActions(pluginActions, pluginRecords, treeKind, {
         onTrigger: handleTriggerPluginAction,
+        onApplyFeature: handleApplyFeature,
+        onRunAnalysis: handleAnalysis,
         onOpenApplications: () => {
           setApplicationTarget(null);
           setApplicationsOpen(true);

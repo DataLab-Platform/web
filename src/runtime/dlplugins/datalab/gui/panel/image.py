@@ -22,7 +22,7 @@ class ImagePanel:
     def __init__(self, main: Any) -> None:
         self.main = main
         self.processor = ImageProcessor()
-        self.acthandler = ActionHandler("image")
+        self.acthandler = ActionHandler("image", main)
 
     # -- Plugin-facing helpers ----------------------------------------
 
