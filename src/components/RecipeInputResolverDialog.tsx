@@ -51,9 +51,20 @@ export function RecipeInputResolverDialog({
   const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onlyOptionalAmbiguities =
+    preparation.readiness.issues.length > 0 &&
+    preparation.readiness.issues.every(
+      (issue) =>
+        issue.code === "ambiguous" &&
+        preparation.slots.some(
+          (slot) => slot.id === issue.slot_id && !slot.required,
+        ),
+    );
 
   useEffect(() => {
-    if (bindings === initialBindings.current) return;
+    if (bindings === initialBindings.current && !onlyOptionalAmbiguities) {
+      return;
+    }
     let cancelled = false;
     setChecking(true);
     const timer = window.setTimeout(() => {
@@ -76,7 +87,7 @@ export function RecipeInputResolverDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bindings, onCheck]);
+  }, [bindings, onCheck, onlyOptionalAmbiguities]);
 
   const valid =
     !checking &&

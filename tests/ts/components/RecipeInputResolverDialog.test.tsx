@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RecipeInputResolverDialog } from "../../../src/components/RecipeInputResolverDialog";
@@ -58,6 +64,36 @@ const PREPARATION: PluginRecipePreparation = {
   parameters: null,
 };
 
+const OPTIONAL_BINDINGS = { reference: ["signal-b"], targets: [] };
+const OPTIONAL_PREPARATION: PluginRecipePreparation = {
+  ...PREPARATION,
+  slots: [
+    ...PREPARATION.slots,
+    {
+      id: "targets",
+      title: "Signals to compare",
+      description: "",
+      object_type: "signal",
+      cardinality: "many",
+      required: false,
+      min_count: 1,
+      metadata: [],
+    },
+  ],
+  candidates: PREPARATION.candidates.map((candidate) => ({
+    ...candidate,
+    compatible_slots: [...candidate.compatible_slots, "targets"],
+  })),
+  bindings: OPTIONAL_BINDINGS,
+  ambiguous_slots: ["targets"],
+  readiness: {
+    status: "needs_assignment",
+    bindings: OPTIONAL_BINDINGS,
+    issues: [{ code: "ambiguous", slot_id: "targets", details: {} }],
+    diagnostics: [],
+  },
+};
+
 function readiness(
   status: PluginRecipeReadiness["status"],
   extra: Partial<PluginRecipeReadiness> = {},
@@ -99,6 +135,137 @@ describe("RecipeInputResolverDialog", () => {
       screen.getByText("Reference signal: choose the objects to use"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("lets the user confirm valid proposed bindings with empty optional inputs", async () => {
+    const onCheck = vi
+      .fn()
+      .mockResolvedValue(readiness("ready", { bindings: OPTIONAL_BINDINGS }));
+    const onSubmit = vi.fn();
+    render(
+      <RecipeInputResolverDialog
+        preparation={OPTIONAL_PREPARATION}
+        onCheck={onCheck}
+        onSubmit={onSubmit}
+        onCancel={() => {}}
+      />,
+    );
+
+    const continueButton = screen.getByRole("button", { name: "Continue" });
+    expect(continueButton).toBeDisabled();
+    await waitFor(() => {
+      expect(onCheck).toHaveBeenCalledWith(OPTIONAL_BINDINGS);
+      expect(continueButton).toBeEnabled();
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.click(continueButton);
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(OPTIONAL_BINDINGS);
+    });
+  });
+
+  it("keeps proposed optional inputs blocked when the recipe rejects them", async () => {
+    const onCheck = vi.fn().mockResolvedValue(
+      readiness("not_ready", {
+        bindings: OPTIONAL_BINDINGS,
+        diagnostics: [
+          {
+            level: "error",
+            code: "invalid_reference",
+            message: "The reference cannot be used",
+            details: {},
+          },
+        ],
+      }),
+    );
+    render(
+      <RecipeInputResolverDialog
+        preparation={OPTIONAL_PREPARATION}
+        onCheck={onCheck}
+        onSubmit={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Error: The reference cannot be used"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("ignores an initial check that finishes after the inputs were edited", async () => {
+    let resolveInitial!: (value: PluginRecipeReadiness) => void;
+    const initialCheck = new Promise<PluginRecipeReadiness>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const onCheck = vi
+      .fn()
+      .mockReturnValueOnce(initialCheck)
+      .mockResolvedValueOnce(
+        readiness("not_ready", {
+          bindings: { reference: ["signal-b"], targets: ["signal-a"] },
+          diagnostics: [
+            {
+              level: "error",
+              code: "invalid_target",
+              message: "The target cannot be used",
+              details: {},
+            },
+          ],
+        }),
+      );
+    render(
+      <RecipeInputResolverDialog
+        preparation={OPTIONAL_PREPARATION}
+        onCheck={onCheck}
+        onSubmit={vi.fn()}
+        onCancel={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(onCheck).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Signal A" }));
+    expect(
+      await screen.findByText("Error: The target cannot be used"),
+    ).toBeInTheDocument();
+    await act(async () => {
+      resolveInitial(readiness("ready", { bindings: OPTIONAL_BINDINGS }));
+      await initialCheck;
+    });
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("still requires a choice for ambiguous required inputs", () => {
+    vi.useFakeTimers();
+    try {
+      const onCheck = vi.fn();
+      const preparation: PluginRecipePreparation = {
+        ...OPTIONAL_PREPARATION,
+        readiness: {
+          ...OPTIONAL_PREPARATION.readiness,
+          bindings: { reference: [], targets: [] },
+          issues: [
+            { code: "ambiguous", slot_id: "reference", details: {} },
+            { code: "ambiguous", slot_id: "targets", details: {} },
+          ],
+        },
+      };
+      render(
+        <RecipeInputResolverDialog
+          preparation={preparation}
+          onCheck={onCheck}
+          onSubmit={vi.fn()}
+          onCancel={() => {}}
+        />,
+      );
+
+      act(() => vi.advanceTimersByTime(250));
+      expect(onCheck).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("checks edited bindings before allowing submission", async () => {
