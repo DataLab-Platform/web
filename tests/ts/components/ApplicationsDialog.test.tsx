@@ -78,6 +78,7 @@ const APPLICATION: PluginRecord = {
   enabled: true,
   loaded: true,
   error: null,
+  warnings: [],
   info: {
     id: PLUGIN_ID,
     name: "Camera Application",

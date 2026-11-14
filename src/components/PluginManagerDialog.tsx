@@ -319,6 +319,13 @@ export function PluginManagerDialog({ onClose }: Props) {
                   ) : (
                     <span>—</span>
                   )}
+                  {r.loaded && r.warnings.includes("desktop_welcome_tiles") && (
+                    <div style={{ color: "var(--warning, #9a6700)" }}>
+                      {t(
+                        "Desktop welcome tiles are not available in DataLab-Web.",
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td>{sourceLabel(r.source)}</td>
                 <td>

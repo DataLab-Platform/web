@@ -48,6 +48,7 @@ const BUNDLED_RECORD: PluginRecord = {
   enabled: true,
   loaded: true,
   error: null,
+  warnings: [],
   info: {
     id: "org.example.camera",
     name: "Camera Application",
@@ -59,6 +60,7 @@ const BUNDLED_RECORD: PluginRecord = {
   },
   recipes: [],
   examples: [],
+  tools: [],
   operations: {
     can_enable: true,
     can_disable: true,
@@ -131,6 +133,20 @@ beforeEach(() => {
 });
 
 describe("PluginManagerDialog", () => {
+  it("reports ignored Desktop welcome tiles without marking the plugin failed", async () => {
+    runtimeMock.listPlugins.mockResolvedValue([
+      { ...BUNDLED_RECORD, warnings: ["desktop_welcome_tiles"] },
+    ]);
+    render(<PluginManagerDialog onClose={() => {}} />);
+
+    expect(await screen.findByText("loaded")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Desktop welcome tiles are not available in DataLab-Web.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows bundled provenance and disables without offering removal", async () => {
     render(<PluginManagerDialog onClose={() => {}} />);
 

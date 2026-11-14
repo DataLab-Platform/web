@@ -6,21 +6,20 @@ These examples are bundled at build time (via Vite's `import.meta.glob`) so that
 
 ## Available examples
 
-| File                                                                 | Demonstrates                                                               |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [`datalab_example_empty.py`](datalab_example_empty.py)               | Minimal plugin structure; nested submenus                                  |
-| [`datalab_example_nested_menus.py`](datalab_example_nested_menus.py) | Deep submenu hierarchies on both the signal and image panels               |
-| [`datalab_example_dialogs.py`](datalab_example_dialogs.py)           | Message / question / parameter dialogs and object creation                 |
-| [`datalab_custom_func.py`](datalab_custom_func.py)                   | Registering a custom image processing via `processor.register_1_to_1(...)` |
+| File                                                                 | Demonstrates                                                            |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`datalab_example_empty.py`](datalab_example_empty.py)               | Minimal plugin structure; nested submenus                               |
+| [`datalab_example_nested_menus.py`](datalab_example_nested_menus.py) | Deep submenu hierarchies on both the signal and image panels            |
+| [`datalab_example_dialogs.py`](datalab_example_dialogs.py)           | Message / question / parameter dialogs and object creation              |
+| [`datalab_custom_func.py`](datalab_custom_func.py)                   | Registering and placing a custom image processing as in DataLab Desktop |
 
 ## Browser-specific differences from the desktop examples
 
-These examples target DataLab-Web only: they rely on its browser shim of the desktop plugin API, which differs from DataLab Desktop on two points.
+These examples use the browser shim of the Desktop plugin API. The custom processing example follows the registration model shared with DataLab Desktop; examples opening dialogs use browser-specific asynchronous callbacks.
 
 - **Plugin code cannot block the JavaScript event loop.** Action callbacks that open a dialog are `async` and use the `_async` helpers (`show_info_async`, `show_warning_async`, `show_error_async`, `ask_yesno_async`, `edit_new_signal_parameters_async`, `edit_new_image_parameters_async`). These helpers exist only in DataLab-Web, and DataLab Desktop does not run `async` callbacks.
-- **The desktop registration model is not supported.** The desktop examples register processings in `register_computations()` and add them to a menu with `acthandler.action_for(...)`; the shim calls neither (`action_for` returns `None`, see [issue #94](https://github.com/DataLab-Platform/web/issues/94)). Custom processings are therefore registered in `create_actions()` with `processor.register_1_to_1` / `register_2_to_1` / `register_n_to_1`, and appear under the _Plugins_ menu.
 
-A plugin targeting both applications declares a distinct Web class in the `datalab.web_plugins` entry-point group. See [`doc/plugins.md`](../../doc/plugins.md) for the full authoring guide and the list of API differences.
+See [`doc/plugins.md`](../../doc/plugins.md) for the shared registration API, wheel entry points and the remaining browser-specific differences.
 
 ## Desktop examples not ported
 

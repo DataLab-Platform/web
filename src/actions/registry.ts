@@ -1206,12 +1206,32 @@ export function buildImageGridActions(
 /** Wire actions contributed by Python plugins. */
 export interface PluginActionCallbacks {
   onTrigger: (actionId: string) => void;
+  onApplyFeature: (featureId: string) => void;
+  onRunAnalysis: (featureId: string, hasParams: boolean) => void;
   onOpenApplications: () => void;
   onOpenApplicationRecipe: (pluginId: string, recipeId: string) => void;
   onOpenApplicationExample: (pluginId: string, exampleId: string) => void;
   onLaunchApplicationTool: (pluginId: string, toolId: string) => void;
   onOpenManager: () => void;
   onReloadAll: () => void;
+}
+
+/** Hide only implicit placements replaced by their owning plugin. */
+export function excludeExplicitPluginFeatures<T extends { id: string }>(
+  features: T[],
+  entries: PluginMenuAction[],
+  activePanel: "signal" | "image",
+): T[] {
+  const replaced = new Set(
+    entries.flatMap((entry) =>
+      entry.action_type === "feature" &&
+      entry.object_kind === activePanel &&
+      entry.replace_implicit
+        ? [entry.feature_id]
+        : [],
+    ),
+  );
+  return features.filter((feature) => !replaced.has(feature.id));
 }
 
 export function buildPluginActions(
@@ -1256,16 +1276,27 @@ export function buildPluginActions(
   // Filter to entries belonging to the active panel kind.
   const visible = entries.filter((e) => e.object_kind === activePanel);
   const dynamic = visible.map<ActionDescriptor>((entry) => {
-    const path = ["Plugins", ...entry.menu_path, entry.title]
-      .filter((s) => s && s.length > 0)
-      .join("/");
+    const segments = ["Plugins", ...entry.menu_path, entry.title].filter(
+      (s) => s.length > 0,
+    );
     return {
       id: `plugin.${entry.action_id}`,
       label: entry.title,
-      menuPath: path,
-      iconUrl: getFeatureIconUrl(entry.icon),
+      menuPath: segments.join("/"),
+      menuSegments: segments,
+      iconUrl:
+        entry.action_type === "feature" && entry.pattern === "1_to_0"
+          ? (getAnalysisIconUrl(entry.icon ?? undefined) ??
+            getFeatureIconUrl(entry.icon))
+          : getFeatureIconUrl(entry.icon),
       beginGroup: entry.separator_before,
       enabled: (s) => {
+        if (entry.action_type === "feature") {
+          if (entry.pattern === "1_to_0") {
+            return ready(s) && s.currentId !== null;
+          }
+          return isFeatureActionEnabled(entry.pattern, s);
+        }
         if (!ready(s)) return false;
         switch (entry.select_condition) {
           case "exactly_one":
@@ -1278,7 +1309,15 @@ export function buildPluginActions(
             return true;
         }
       },
-      run: () => cb.onTrigger(entry.action_id),
+      run: () => {
+        if (entry.action_type === "callback") {
+          cb.onTrigger(entry.action_id);
+        } else if (entry.pattern === "1_to_0") {
+          cb.onRunAnalysis(entry.feature_id, entry.has_params);
+        } else {
+          cb.onApplyFeature(entry.feature_id);
+        }
+      },
     };
   });
 
@@ -1297,6 +1336,7 @@ export function buildPluginActions(
         id: `plugin.application.recipe.${pluginId}.${recipe.id}`,
         label: recipe.title,
         menuPath: `Plugins/${pluginName}/${recipe.title}`,
+        menuSegments: ["Plugins", pluginName, recipe.title],
         enabled: ready,
         run: () => cb.onOpenApplicationRecipe(pluginId, recipe.id),
       }));
@@ -1305,6 +1345,7 @@ export function buildPluginActions(
           id: `plugin.application.example.${pluginId}.${example.id}`,
           label: example.title,
           menuPath: `Plugins/${pluginName}/${example.title}`,
+          menuSegments: ["Plugins", pluginName, example.title],
           beginGroup: recipes.length > 0 && index === 0,
           enabled: ready,
           run: () => cb.onOpenApplicationExample(pluginId, example.id),
@@ -1320,6 +1361,7 @@ export function buildPluginActions(
           id: `plugin.application.tool.${pluginId}.${tool.id}`,
           label: tool.title,
           menuPath: `Plugins/${pluginName}/${tool.title}`,
+          menuSegments: ["Plugins", pluginName, tool.title],
           beginGroup: recipes.length + examples.length > 0 && index === 0,
           enabled: (s) =>
             ready(s) &&

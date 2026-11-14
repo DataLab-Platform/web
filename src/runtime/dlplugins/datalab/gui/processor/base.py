@@ -173,7 +173,15 @@ class BaseProcessor:
         owner_plugin_id: str | None = None,
     ) -> None:
         if feature_id is None:
-            feature_id = f"{func.__module__}.{func.__qualname__}"
+            module = getattr(func, "__module__", None)
+            name = getattr(func, "__qualname__", None) or getattr(
+                func, "__name__", None
+            )
+            if not module or not name:
+                raise ValueError(
+                    "A callable without a module and name needs a feature ID"
+                )
+            feature_id = f"{module}.{name}"
         elif not feature_id.strip():
             raise ValueError("Plugin feature ID must not be empty")
         origin = registries.current_origin()
@@ -188,7 +196,8 @@ class BaseProcessor:
             origin = owner_plugin_id
         if any(
             feature.feature_id == feature_id
-            for feature in registries.EXTRA_FEATURES[self.object_kind]
+            for features in registries.EXTRA_FEATURES.values()
+            for feature in features
         ):
             raise ValueError(f"Plugin feature ID {feature_id!r} already registered")
         if not menu_path:

@@ -37,7 +37,8 @@ import os
 import os.path as osp
 import sys
 import traceback
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -52,10 +53,12 @@ from sigima.io.signal.base import SignalFormatBase  # noqa: F401
 from datalab.config import MOD_NAME, Conf, _
 from datalab.control.proxy import LocalProxy
 from datalab.env import execenv
+from datalab.errors import BrowserNotSupportedError
 from datalab.plugins.examples import PluginExample, PluginExampleData
 from datalab.plugins.instruments import PluginInstrument
 from datalab.plugins.recipes import RecipeDescriptor
 from datalab.plugins.tools import PluginTool, ToolSelection, tool_accepts_selection
+from datalab.plugins.tiles import WelcomeTile
 
 if TYPE_CHECKING:
     from sigima.objects import ImageObj, NewImageParam, NewSignalParam, SignalObj
@@ -279,6 +282,8 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     RECIPES: tuple[RecipeDescriptor, ...] = ()
     EXAMPLES: tuple[PluginExample, ...] = ()
     TOOLS: tuple[PluginTool, ...] = ()
+    RECIPE_LAUNCHERS: Mapping[str, str] = MappingProxyType({})
+    WELCOME_TILES: tuple[WelcomeTile, ...] = ()
 
     def __init__(self):
         self.main: main.DLMainWindow = None
@@ -458,6 +463,57 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
             self._instruments[tool_id] = instrument
         return self._instruments[tool_id]
 
+    def assess_recipe(
+        self,
+        recipe_id: str,
+        objects: Sequence[SignalObj | ImageObj] | None = None,
+    ) -> None:
+        """Reject the Desktop recipe assessment API."""
+        raise BrowserNotSupportedError(
+            "PluginBase.assess_recipe() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
+    def launch_recipe(self, recipe_id: str) -> None:
+        """Reject the synchronous Desktop recipe launcher."""
+        raise BrowserNotSupportedError(
+            "PluginBase.launch_recipe() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
+    def start_recipe(
+        self,
+        recipe_id: str,
+        objects: Sequence[SignalObj | ImageObj] | None = None,
+        parameter_values: Mapping[str, object] | None = None,
+    ) -> None:
+        """Reject the synchronous Desktop recipe interaction."""
+        raise BrowserNotSupportedError(
+            "PluginBase.start_recipe() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
+    def try_example(self, example_id: str, recipe_id: str) -> None:
+        """Reject the synchronous Desktop example interaction."""
+        raise BrowserNotSupportedError(
+            "PluginBase.try_example() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
+    def launch_example(self, example_id: str) -> None:
+        """Reject the synchronous Desktop example launcher."""
+        raise BrowserNotSupportedError(
+            "PluginBase.launch_example() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
+    def open_example(self, example_id: str, reset_all: bool = True) -> None:
+        """Reject the Desktop example-opening API."""
+        raise BrowserNotSupportedError(
+            "PluginBase.open_example() is not available in DataLab-Web; "
+            "use the Applications panel."
+        )
+
     # -- Convenience accessors -----------------------------------------
 
     @property
@@ -616,9 +672,8 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
     def register(self, main: main.DLMainWindow) -> None:
         """Register the plugin against the (browser) main window.
 
-        Also calls :meth:`create_actions`, with the stable plugin ID pushed
-        onto :mod:`datalab.registries` so every contribution carries an
-        ``origin`` field — required for hot reload.
+        Register computations before actions, with the stable plugin ID
+        pushed onto :mod:`datalab.registries` for hot reload.
         """
         if self._is_registered:
             return
@@ -628,10 +683,10 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
         self._is_registered = True
         self.main = main
         self.proxy = LocalProxy(main)
-        self.register_hooks()
-
         registries.push_origin(self.plugin_id)
         try:
+            self.register_hooks()
+            self.register_computations()
             self.create_actions()
         finally:
             registries.pop_origin()
@@ -651,17 +706,22 @@ class PluginBase(abc.ABC, metaclass=PluginBaseMeta):
                 )
         PluginRegistry.unregister_plugin(self)
         self._is_registered = False
-        self.unregister_hooks()
-        registries.clear_origin(self.plugin_id)
-        self.main = None
-        self.proxy = None
-        self._instruments.clear()
+        try:
+            self.unregister_hooks()
+        finally:
+            registries.clear_origin(self.plugin_id)
+            self.main = None
+            self.proxy = None
+            self._instruments.clear()
 
     def register_hooks(self) -> None:
         """Override to register additional hooks at plugin load time."""
 
     def unregister_hooks(self) -> None:
         """Override to release additional hooks at plugin unload time."""
+
+    def register_computations(self) -> None:
+        """Override to register computations before creating menu actions."""
 
     @abc.abstractmethod
     def create_actions(self) -> None:

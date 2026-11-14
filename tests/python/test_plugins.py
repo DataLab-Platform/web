@@ -15,11 +15,13 @@ import hashlib
 import io
 import sys
 import zipfile
+from pathlib import Path
 
 import dlw_plugins
 import dlw_processor
 import pytest
 from datalab import registries
+from datalab.errors import BrowserNotSupportedError
 from datalab.gui.processor.base import BaseProcessor
 from datalab.plugins import (
     PluginBase,
@@ -81,6 +83,397 @@ def plugins_env(tmp_path, monkeypatch):
             sys.modules.pop(name, None)
         PluginRegistry.get_plugin_classes()[:] = saved_plugin_classes
         PluginRegistry.get_plugins()[:] = saved_plugin_instances
+
+
+@pytest.fixture
+def live_plugins_env(fresh_bootstrap, plugins_env, monkeypatch):
+    """Exercise plugin registration with the real browser main-window facade."""
+    from datalab.gui.main import DLMainWindow
+    from dlw_main import WebMainBridge
+
+    monkeypatch.setattr(registries, "EXTRA_FEATURES", {"signal": [], "image": []})
+    monkeypatch.setattr(registries, "EXTRA_MENU_ACTIONS", {"signal": [], "image": []})
+    monkeypatch.setattr(dlw_plugins, "_MAIN", DLMainWindow(WebMainBridge()))
+    yield plugins_env, fresh_bootstrap
+    for record_id in list(plugins_env._RECORDS):
+        plugins_env.unload_plugin(record_id, force=True)
+
+
+def test_generated_desktop_plugin_registers_runs_and_reloads(live_plugins_env):
+    """Exercise actual generator output, including the facade and proxy."""
+    import numpy as np
+
+    loader, bs = live_plugins_env
+    fixture = Path(__file__).resolve().parents[1] / "fixtures" / "datalab_issue94.py"
+    payload = loader.load_plugin_source(fixture.name, fixture.read_text("utf-8"))
+    assert payload["loaded"], payload["error"]
+    feature_id = "org.example.issue94:sample-processing"
+    (feature,) = registries.EXTRA_FEATURES["signal"]
+    (action,) = registries.EXTRA_MENU_ACTIONS["signal"]
+    assert feature.feature_id == feature_id
+    assert action.feature_id == feature_id
+    assert action.menu_path == ["Generated & portable/demo"]
+    assert action.title == "Sample processing"
+
+    bs.add_signal_from_arrays("source", np.arange(3.0), np.array([-1.0, 0.0, 2.0]))
+    (result_id,) = loader._RECORDS[payload["record_id"]].instance.proxy.calc(feature_id)
+    np.testing.assert_array_equal(bs._MODEL.get(result_id).y, [0.0, 0.0, 2.0])
+
+    loader.reload_plugins()
+    assert len(registries.EXTRA_FEATURES["signal"]) == 1
+    assert len(registries.EXTRA_MENU_ACTIONS["signal"]) == 1
+    disabled = loader.set_plugin_enabled(payload["record_id"], False)
+    assert not disabled["loaded"]
+    assert registries.EXTRA_FEATURES["signal"] == []
+    assert registries.EXTRA_MENU_ACTIONS["signal"] == []
+    enabled = loader.set_plugin_enabled(payload["record_id"], True)
+    assert enabled["loaded"], enabled["error"]
+    assert len(registries.EXTRA_FEATURES["signal"]) == 1
+    assert len(registries.EXTRA_MENU_ACTIONS["signal"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("assess_recipe", ("recipe",)),
+        ("launch_recipe", ("recipe",)),
+        ("start_recipe", ("recipe",)),
+        ("try_example", ("example", "recipe")),
+        ("launch_example", ("example",)),
+        ("open_example", ("example",)),
+    ],
+)
+def test_desktop_recipe_helpers_report_unsupported(live_plugins_env, name, args):
+    loader, _bs = live_plugins_env
+    payload = loader.load_plugin_source("recipe_helpers.py", VALID_PLUGIN)
+    assert payload["loaded"], payload["error"]
+    plugin = loader._RECORDS[payload["record_id"]].instance
+    with pytest.raises(BrowserNotSupportedError, match="Applications"):
+        getattr(plugin, name)(*args)
+
+
+def test_legacy_web_plugin_registers_wrapped_function(live_plugins_env):
+    """Plugins registering wrapped functions in create_actions keep their menu."""
+    import numpy as np
+
+    loader, bs = live_plugins_env
+    source = """
+import sigima.proc.image as sipi
+from datalab.plugins import PluginBase, PluginInfo
+
+def double(data):
+    return data * 2
+
+class LegacyPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.legacy", name="Legacy")
+    def create_actions(self):
+        self.imagepanel.processor.register_1_to_1(sipi.Wrap1to1Func(double), "Double")
+"""
+    payload = loader.load_plugin_source("legacy.py", source)
+    assert payload["loaded"], payload["error"]
+    (feature,) = registries.EXTRA_FEATURES["image"]
+    assert feature.menu_path == "Plugins/Double"
+    assert registries.EXTRA_MENU_ACTIONS["image"] == []
+    data = np.arange(100.0).reshape(10, 10)
+    source_id = bs.add_image_from_array("source", data)
+    (result_id,) = bs.apply_feature(feature.feature_id, [source_id])
+    np.testing.assert_array_equal(bs._MODEL.get(result_id).data, data * 2)
+
+
+def test_bundled_custom_filter_uses_desktop_registration(live_plugins_env):
+    import numpy as np
+
+    loader, bs = live_plugins_env
+    example = (
+        Path(__file__).resolve().parents[2]
+        / "plugins"
+        / "examples"
+        / "datalab_custom_func.py"
+    )
+    payload = loader.load_plugin_source(example.name, example.read_text("utf-8"))
+    assert payload["loaded"], payload["error"]
+    (feature,) = registries.EXTRA_FEATURES["image"]
+    (action,) = registries.EXTRA_MENU_ACTIONS["image"]
+    assert action.feature_id == feature.feature_id
+    assert action.menu_path == ["My custom filters"]
+    source_id = bs.add_image_from_array("source", np.arange(100.0).reshape(10, 10))
+    (result_id,) = bs.apply_feature(feature.feature_id, [source_id])
+    assert np.isfinite(bs._MODEL.get(result_id).data).all()
+
+
+def test_action_for_resolves_callable_and_legacy_name(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginInfo
+
+def transform(obj):
+    return obj.copy()
+
+class AliasPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.alias", name="Aliases")
+    def register_computations(self):
+        self.signalpanel.processor.register_1_to_1(
+            transform, "Transform", feature_id="org.example.alias:transform"
+        )
+    def create_actions(self):
+        handler = self.signalpanel.acthandler
+        with handler.new_menu("First"):
+            handler.action_for(transform)
+        with handler.new_menu("Second"):
+            handler.action_for("transform")
+"""
+    payload = loader.load_plugin_source("alias_plugin.py", source)
+    assert payload["loaded"], payload["error"]
+    actions = registries.EXTRA_MENU_ACTIONS["signal"]
+    assert [action.menu_path for action in actions] == [["First"], ["Second"]]
+    assert {action.feature_id for action in actions} == {"org.example.alias:transform"}
+
+
+def test_action_for_keeps_builtins_and_other_plugins_implicit_entries(live_plugins_env):
+    loader, bs = live_plugins_env
+    owner = """
+from datalab.plugins import PluginBase, PluginInfo
+
+def transform(obj):
+    return obj.copy()
+
+class OwnerPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.owner", name="Owner")
+    def create_actions(self):
+        self.signalpanel.processor.register_1_to_1(
+            transform, "Transform", feature_id="org.example.owner:transform"
+        )
+"""
+    visitor = """
+from datalab.plugins import PluginBase, PluginInfo
+
+class VisitorPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.visitor", name="Visitor")
+    def create_actions(self):
+        self.signalpanel.acthandler.action_for("org.example.owner:transform")
+        self.signalpanel.acthandler.action_for("normalize")
+"""
+    for filename, source in (("owner.py", owner), ("visitor.py", visitor)):
+        payload = loader.load_plugin_source(filename, source)
+        assert payload["loaded"], payload["error"]
+    actions = registries.EXTRA_MENU_ACTIONS["signal"]
+    assert [action.feature_id for action in actions] == [
+        "org.example.owner:transform",
+        "normalize",
+    ]
+    assert all(not action.replace_implicit for action in actions)
+    assert "normalize" in bs._CATALOG
+    loader.unload_plugin("org.example.visitor")
+    assert registries.EXTRA_FEATURES["signal"][0].feature_id == (
+        "org.example.owner:transform"
+    )
+
+
+def test_proxy_calc_preserves_plugin_parameter_values(live_plugins_env):
+    import numpy as np
+
+    loader, bs = live_plugins_env
+    source = """
+import guidata.dataset as gds
+from datalab.plugins import PluginBase, PluginInfo
+
+class Parameters(gds.DataSet):
+    factor = gds.FloatItem("Factor", default=1.0)
+
+def scale(obj, param):
+    result = obj.copy()
+    result.y = obj.y * param.factor
+    return result
+
+class ParameterPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.params", name="Parameters")
+    def register_computations(self):
+        self.signalpanel.processor.register_1_to_1(
+            scale, "Scale", paramclass=Parameters, feature_id="org.example.params:scale"
+        )
+    def create_actions(self):
+        self.signalpanel.acthandler.action_for("org.example.params:scale")
+"""
+    payload = loader.load_plugin_source("param_plugin.py", source)
+    assert payload["loaded"], payload["error"]
+    param = sys.modules["param_plugin"].Parameters.create(factor=3.0)
+    bs.add_signal_from_arrays("source", np.arange(2.0), np.array([1.0, 2.0]))
+    (result_id,) = loader._RECORDS[payload["record_id"]].instance.proxy.calc(
+        "org.example.params:scale", param
+    )
+    np.testing.assert_array_equal(bs._MODEL.get(result_id).y, [3.0, 6.0])
+
+
+def test_action_for_routes_registered_analysis(live_plugins_env):
+    import asyncio
+
+    import numpy as np
+
+    loader, bs = live_plugins_env
+    source = """
+import numpy as np
+from datalab.plugins import PluginBase, PluginInfo
+from sigima.objects import TableResult
+
+def mean(obj):
+    return TableResult.from_rows("Mean", ["Mean"], [[float(np.mean(obj.y))]], [-1])
+
+class AnalysisPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.analysis", name="Analysis")
+    def register_computations(self):
+        self.signalpanel.processor.register_1_to_0(
+            mean, "Mean", feature_id="org.example.analysis:mean"
+        )
+    def create_actions(self):
+        with self.signalpanel.acthandler.new_menu("Analysis plugin"):
+            self.signalpanel.acthandler.action_for("org.example.analysis:mean")
+"""
+    payload = loader.load_plugin_source("analysis_plugin.py", source)
+    assert payload["loaded"], payload["error"]
+    (action,) = registries.EXTRA_MENU_ACTIONS["signal"]
+    assert action.pattern == "1_to_0"
+    assert action.feature_id == "org.example.analysis:mean"
+    source_id = bs.add_signal_from_arrays("source", np.arange(3.0), np.ones(3))
+    result = asyncio.run(bs.run_signal_analysis(source_id, action.feature_id))
+    assert result["title"] == "Mean"
+
+
+def test_action_for_rejects_ambiguous_legacy_names(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginInfo
+
+def first(obj):
+    return obj
+
+def second(obj):
+    return obj
+
+first.__name__ = second.__name__ = "ambiguous"
+
+class AmbiguousPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.ambiguous", name="Ambiguous")
+    def register_computations(self):
+        processor = self.signalpanel.processor
+        processor.register_1_to_1(first, "First", feature_id="org.example.ambiguous:a")
+        processor.register_1_to_1(second, "Second", feature_id="org.example.ambiguous:b")
+    def create_actions(self):
+        self.signalpanel.acthandler.action_for("ambiguous")
+"""
+    payload = loader.load_plugin_source("ambiguous_plugin.py", source)
+    assert not payload["loaded"]
+    assert "Ambiguous" in payload["error"]
+    assert registries.EXTRA_FEATURES["signal"] == []
+
+
+@pytest.mark.parametrize(
+    ("kind", "method", "feature_id"),
+    [
+        ("signal", "register_1_to_1", "arithmetic"),
+        ("signal", "register_1_to_0", "stats"),
+    ],
+)
+def test_builtin_feature_collisions_reject_plugin_atomically(
+    live_plugins_env, kind, method, feature_id
+):
+    loader, bs = live_plugins_env
+    source = f"""
+from datalab.plugins import PluginBase, PluginInfo
+
+def transform(obj):
+    return obj
+
+class CollisionPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.collision", name="Collision")
+    def create_actions(self):
+        self.{kind}panel.processor.{method}(
+            transform, "Collision", feature_id={feature_id!r}
+        )
+        self.{kind}panel.acthandler.new_action("Temporary", triggered=lambda: None)
+"""
+    payload = loader.load_plugin_source("collision_plugin.py", source)
+    assert not payload["loaded"]
+    assert feature_id in payload["error"]
+    assert registries.EXTRA_FEATURES[kind] == []
+    assert registries.EXTRA_MENU_ACTIONS[kind] == []
+    assert PluginRegistry.get_plugin("org.example.collision") is None
+    assert bs._full_catalog_with_plugins()["arithmetic"] is bs._CATALOG["arithmetic"]
+
+
+def test_failed_registration_hook_rolls_back_contributions(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginInfo
+
+def transform(obj):
+    return obj
+
+class BrokenPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.broken", name="Broken")
+    def register_computations(self):
+        self.signalpanel.processor.register_1_to_1(transform, "Temporary")
+        raise RuntimeError("registration failed")
+    def create_actions(self):
+        pass
+"""
+    payload = loader.load_plugin_source("broken_registration.py", source)
+    assert not payload["loaded"]
+    assert "registration failed" in payload["error"]
+    assert registries.EXTRA_FEATURES["signal"] == []
+    assert PluginRegistry.get_plugin("org.example.broken") is None
+    assert registries.current_origin() is None
+
+
+def test_unknown_action_reference_rejects_plugin(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginInfo
+
+class BrokenPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.missing", name="Missing")
+    def create_actions(self):
+        self.signalpanel.acthandler.action_for("missing-feature")
+"""
+    payload = loader.load_plugin_source("missing_feature.py", source)
+    assert not payload["loaded"]
+    assert "missing-feature" in payload["error"]
+    assert registries.EXTRA_MENU_ACTIONS["signal"] == []
+
+
+def test_desktop_recipe_launchers_are_rejected(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginInfo
+
+class LauncherPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(id="org.example.launcher", name="Launcher")
+    RECIPE_LAUNCHERS = {"org.example.launcher:recipe": "custom_launcher"}
+    def create_actions(self):
+        pass
+"""
+    payload = loader.load_plugin_source("recipe_launcher.py", source)
+    assert not payload["loaded"]
+    assert "RECIPE_LAUNCHERS" in payload["error"]
+
+
+def test_desktop_welcome_tiles_are_reported_without_rejecting_plugin(live_plugins_env):
+    loader, _bs = live_plugins_env
+    source = """
+from datalab.plugins import PluginBase, PluginCapability, PluginInfo
+from datalab.plugins.tiles import WelcomeTile
+
+class TilesPlugin(PluginBase):
+    PLUGIN_INFO = PluginInfo(
+        id="org.example.tiles", name="Tiles",
+        capabilities=(PluginCapability.APPLICATION,),
+    )
+    WELCOME_TILES = (WelcomeTile(id="hello", title="Hello"),)
+    def create_actions(self):
+        pass
+"""
+    payload = loader.load_plugin_source("welcome_tiles.py", source)
+    assert payload["loaded"], payload["error"]
+    assert payload["warnings"] == ["desktop_welcome_tiles"]
 
 
 def _make_entry_point_wheel(requirement: str | None = None) -> bytes:

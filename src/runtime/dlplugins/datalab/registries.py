@@ -30,7 +30,7 @@ class ExtraFeature:
     feature_id: str
     label: str
     menu_path: str
-    pattern: str  # "1_to_1" | "2_to_1" | "n_to_1"
+    pattern: str  # "1_to_1" | "1_to_0" | "2_to_1" | "n_to_1"
     func: Callable[..., Any]
     paramclass: type | None = None
     icon: str | None = None
@@ -63,7 +63,25 @@ class ExtraMenuAction:
     origin: str | None = None
 
 
-EXTRA_MENU_ACTIONS: dict[str, list[ExtraMenuAction]] = {
+@dataclass
+class ExtraFeatureMenuAction:
+    """A menu placement referring to a registered computation."""
+
+    action_id: str
+    title: str
+    menu_path: list[str]
+    feature_id: str
+    pattern: str
+    has_params: bool
+    replace_implicit: bool
+    select_condition: str = "at_least_one"
+    separator_before: bool = False
+    icon: str | None = None
+    tip: str | None = None
+    origin: str | None = None
+
+
+EXTRA_MENU_ACTIONS: dict[str, list[ExtraMenuAction | ExtraFeatureMenuAction]] = {
     "signal": [],
     "image": [],
 }
@@ -117,7 +135,7 @@ def clear_all() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Origin tracking — set by the loader before calling ``create_actions``
+# Origin tracking — set while the plugin registers its contributions
 # ---------------------------------------------------------------------------
 
 
@@ -145,6 +163,7 @@ __all__ = [
     "EXTRA_GENERATORS",
     "EXTRA_MENU_ACTIONS",
     "ExtraFeature",
+    "ExtraFeatureMenuAction",
     "ExtraGenerator",
     "ExtraMenuAction",
     "clear_all",

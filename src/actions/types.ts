@@ -38,6 +38,8 @@ export interface ActionDescriptor {
   label: string;
   /** Slash-separated path, e.g. "Operations/Constant/Add constant…". */
   menuPath: string;
+  /** Literal path segments for plugin names or labels containing "/". */
+  menuSegments?: string[];
   /** Optional mutually exclusive or independent checked-menu semantics. */
   checkable?: "checkbox" | "radio";
   /** Current state for a checkable action. */

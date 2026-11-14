@@ -27,7 +27,7 @@ from the browser cache.
 - **No Qt-only widgets**. PlotPy interactive tools (rotation, polygon
   picker…) are not available; equivalent flows are reimplemented with
   Plotly + React when applicable.
-- **Plugins are Python only**. DataLab-Web hosts portable `PluginBase` classes through a browser shim of the desktop plugin API. Dialogs must be opened from `async` callbacks with `await param.edit_async(...)`, which DataLab Desktop does not run, and part of the desktop API is not supported: a plugin targeting both applications declares a distinct Web class. See [Plugins](#plugins).
+- **Plugins are Python only**. DataLab-Web hosts portable `PluginBase` classes through a browser shim of the desktop plugin API. Dialogs must be opened from `async` callbacks with `await param.edit_async(...)`, which DataLab Desktop does not run, and part of the desktop API is not supported. Simple processing plugins can share a class; others need a distinct Web class. See [Plugins](#plugins).
 - **Macros and notebooks run in Web Workers**. They have their own Pyodide
   instance and communicate with the main runtime through a structured
   proxy (`MacroRuntime`, `proxyBridge`). Long-running computations no
@@ -71,7 +71,7 @@ The desktop application has no analogue because it never hits a memory wall of t
 
 ## Plugins
 
-Built-in Python plugins live under `src/runtime/builtin_plugins/` and are discovered automatically at startup; user plugins are loaded from a local `.py` file via _Plugins → Manage plugins…_. The same dialog also lists the bundled **example plugins** (repo-root `plugins/examples/`, mirroring the desktop layout), which you can load on demand. All are registered through a browser shim of the desktop plugin API, which does not support all of it: for example, it does not call `register_computations()`, its `action_for()` returns `None`, and the desktop welcome tiles and recipe launchers are not available. A plugin targeting both applications declares its Web class in the dedicated `datalab.web_plugins` entry-point group. See [Plugins](../plugins.md) for the practical guide and the list of differences.
+Built-in Python plugins live under `src/runtime/builtin_plugins/` and are discovered automatically at startup; user plugins are loaded from a local `.py` file via _Plugins → Manage plugins…_. The same dialog also lists the bundled **example plugins** (repo-root `plugins/examples/`, mirroring the desktop layout), which you can load on demand. The browser shim supports `register_computations()` and `action_for()`, but not the full desktop API: desktop welcome tiles are ignored with a warning, and recipe launchers are rejected. A wheel targeting both applications declares a Web entry point in `datalab.web_plugins`. See [Plugins](../plugins.md) for the practical guide and the list of differences.
 
 ## Macros and notebooks
 

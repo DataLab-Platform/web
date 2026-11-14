@@ -8,14 +8,8 @@ Browser-friendly port of DataLab desktop's ``datalab_custom_func`` plugin.
 It adds a custom image processing ("Weighted average denoise") to the image
 panel.
 
-Difference from the desktop version: the desktop example registers the filter
-in ``register_computations`` and adds it to a menu with
-``acthandler.action_for(...)``. The DataLab-Web plugin shim calls neither
-(``action_for`` returns ``None``, see
-https://github.com/DataLab-Platform/web/issues/94), so the filter is
-registered via ``processor.register_1_to_1(...)`` in ``create_actions``. The
-host then surfaces it as a regular menu entry (under "Plugins") and runs it
-through the same asynchronous dispatch as the built-in processings.
+The filter is registered in ``register_computations`` and placed in the
+plugin's submenu with ``acthandler.action_for(...)``, as in DataLab Desktop.
 
 Load it from *Plugins → Manage plugins…* (it appears under "Example plugins").
 """
@@ -26,7 +20,7 @@ import numpy as np
 import scipy.ndimage as spi
 import sigima.proc.image as sipi
 from datalab.config import _
-from datalab.plugins import PluginBase, PluginInfo
+from datalab.plugins import PluginBase, PluginCapability, PluginInfo
 
 
 def weighted_average_denoise(data: np.ndarray) -> np.ndarray:
@@ -49,19 +43,26 @@ def weighted_average_denoise(data: np.ndarray) -> np.ndarray:
 class CustomFilters(PluginBase):
     """DataLab-Web Custom Filters Plugin"""
 
+    FEATURE_ID = "org.datalab.examples.custom-filters:weighted-average-denoise"
     PLUGIN_INFO = PluginInfo(
+        id="org.datalab.examples.custom-filters",
         name=_("My custom filters"),
         version="1.0.0",
         description=_("This is an example plugin"),
+        capabilities=(PluginCapability.PROCESSING,),
     )
 
-    def create_actions(self) -> None:
+    def register_computations(self) -> None:
         """Register the custom image processing."""
-        # ``Wrap1to1Func`` adapts the NumPy-array filter to operate on
-        # ``ImageObj`` instances (and carries a ``__name__`` used as the
-        # feature id). With no ``paramclass`` the host runs it directly on
-        # each selected image.
         self.imagepanel.processor.register_1_to_1(
             sipi.Wrap1to1Func(weighted_average_denoise),
             _("Weighted average denoise"),
+            feature_id=self.FEATURE_ID,
+            owner_plugin_id=self.plugin_id,
         )
+
+    def create_actions(self) -> None:
+        """Add the registered processing to the plugin's submenu."""
+        handler = self.imagepanel.acthandler
+        with handler.new_menu(self.PLUGIN_INFO.name.replace("&", "&&")):
+            handler.action_for(self.FEATURE_ID)

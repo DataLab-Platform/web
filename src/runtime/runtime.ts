@@ -769,6 +769,7 @@ export interface PluginRecord {
   enabled: boolean;
   loaded: boolean;
   error: string | null;
+  warnings: "desktop_welcome_tiles"[];
   info: PluginInfoMeta | null;
   recipes: PluginRecipeSummary[];
   examples: PluginExampleSummary[];
@@ -894,7 +895,7 @@ export interface PluginExampleOpenResult extends WorkspaceLoadResult {
   parameter_values: Record<string, Record<string, unknown>>;
 }
 
-export interface PluginMenuAction {
+interface PluginMenuActionBase {
   action_id: string;
   title: string;
   menu_path: string[];
@@ -905,6 +906,16 @@ export interface PluginMenuAction {
   origin: string | null;
   object_kind: PanelKind;
 }
+
+export type PluginMenuAction =
+  | (PluginMenuActionBase & { action_type: "callback" })
+  | (PluginMenuActionBase & {
+      action_type: "feature";
+      feature_id: string;
+      pattern: Pattern | "1_to_0";
+      has_params: boolean;
+      replace_implicit: boolean;
+    });
 
 export type PanelKind = "signal" | "image";
 
@@ -5005,7 +5016,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
    */
   async listPluginMenuActions(): Promise<PluginMenuAction[]> {
     return (await this.runPython(`
-from datalab.registries import EXTRA_MENU_ACTIONS
+from datalab.registries import EXTRA_MENU_ACTIONS, ExtraFeatureMenuAction
 [{
     "action_id": entry.action_id,
     "title": entry.title,
@@ -5016,6 +5027,15 @@ from datalab.registries import EXTRA_MENU_ACTIONS
     "tip": entry.tip,
     "origin": entry.origin,
     "object_kind": kind,
+    **({
+        "action_type": "feature",
+        "feature_id": entry.feature_id,
+        "pattern": entry.pattern,
+        "has_params": entry.has_params,
+        "replace_implicit": entry.replace_implicit,
+    } if isinstance(entry, ExtraFeatureMenuAction) else {
+        "action_type": "callback",
+    }),
 } for kind in ("signal", "image") for entry in EXTRA_MENU_ACTIONS[kind]]
 `)) as PluginMenuAction[];
   }

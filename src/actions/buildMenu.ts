@@ -9,8 +9,8 @@ export const COMMAND_PATH_SEPARATOR = " › ";
 
 /** Build a hierarchical menu tree from a flat list of action descriptors.
  *
- * Each action's `menuPath` is split on `/`; intermediate segments become
- * submenu folders, the last segment becomes a leaf bound to the action.
+ * Each action supplies literal `menuSegments` or a `menuPath` split on `/`;
+ * intermediate segments become folders, and the last becomes a leaf.
  *
  * Menu structure (folder matching, ordering, node keys) stays in the
  * canonical English `menuPath`; the user-visible text is carried by
@@ -56,7 +56,9 @@ export function buildMenuTree(actions: ActionDescriptor[]): MenuNode[] {
   };
 
   for (const action of actions) {
-    const parts = action.menuPath.split("/").filter(Boolean);
+    const parts = (action.menuSegments ?? action.menuPath.split("/")).filter(
+      Boolean,
+    );
     if (parts.length === 0) continue;
     let parent = root;
     for (let i = 0; i < parts.length - 1; i++) {
