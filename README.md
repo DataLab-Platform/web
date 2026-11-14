@@ -28,7 +28,7 @@ DataLab Web mirrors a large portion of the desktop application surface:
 - **Processing & analysis** — operations, transforms, filters, fitting, FFT/PSD, stability analyses, measurements and profile extraction, exposed through the menu bar from a curated catalogue of Sigima functions. Compatible parameterised processings offer an optional non-publishing live preview before anything is added to the workspace.
 - **ROI & object tree** — segment / rectangular / circular / polygonal regions of interest, plus a multi-group workspace with drag & drop, metadata editor, statistics card and computation history.
 - **Macros & notebooks** — embedded Python editor and multi-tab notebook panel, each running in dedicated Web Workers, with `.ipynb` import/export and bidirectional macro ⇄ notebook conversion. See [doc/notebooks.md](doc/notebooks.md).
-- **Plugins** — portable `PluginBase` classes, hosted through a browser shim of the desktop plugin API with `async` dialogs; a plugin targeting both applications declares a distinct Web class. See [doc/plugins.md](doc/plugins.md) for the supported API.
+- **Plugins** — portable `PluginBase` classes, hosted through a browser shim of the desktop plugin API. Simple plugins can share a class with Desktop; plugins using Web-specific asynchronous dialogs need a Web adapter. See [doc/plugins.md](doc/plugins.md) for the supported API.
 - **I/O** — HDF5 browser (via `h5py` in Pyodide), text import wizard and per-directory save dialog.
 - **UI niceties** — light / dark theme, persisted layout, pop-out result panel, contextual help, full [internationalisation](doc/i18n.md).
 
@@ -54,7 +54,7 @@ For the full picture — layer view, component view, worker protocols, the sourc
 
 ## Development
 
-Prerequisites: Node.js 22 (≥ 22.22) or 24 (≥ 24.15), as required by the test toolchain; CI uses Node.js 24.
+Prerequisites: Node.js 22 (≥ 22.22.2) or 24 (≥ 24.15.0), as required by the test toolchain; CI uses Node.js 24.
 
 ```powershell
 npm install

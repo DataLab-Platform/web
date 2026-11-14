@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **Documentation:** the user guide and SDK documentation now describe storage and transfer limits, plugin reload, notebook operations and cross-host comparison more accurately; the plugin link in the in-app guide works again (fixes [Issue #116](https://github.com/DataLab-Platform/web/issues/116)).
 - **Desktop-generated plugins:** a processing plugin created by DataLab Desktop could load without adding its menu action. Compatible plugins now expose and run their registered processings and analyses, including after reload; unsupported Desktop recipe launchers are reported, and ignored welcome tiles are identified in the plugin manager (fixes [Issue #94](https://github.com/DataLab-Platform/web/issues/94)).
 - **Application recipes — optional inputs:** a recipe could not be started when its proposed inputs left an optional slot empty, even when those inputs were valid. The input dialog now lets you confirm valid bindings without assigning an optional input ([#113](https://github.com/DataLab-Platform/web/issues/113)).
 - **Image display of DataLab Desktop workspaces:** images opened from a DataLab Desktop workspace, or prepared by a plugin, were shown with the default colormap and range, because DataLab-Web ignored the colormap, its inversion and the LUT range stored by DataLab Desktop. They are now shown as in DataLab Desktop, and the colormap and range chosen in DataLab-Web are saved in the workspace so that DataLab Desktop shows them too.

@@ -90,7 +90,7 @@ The processing menus are built from an explicit catalogue in `src/runtime/proces
 
 ## Adding a new signal / image generator
 
-Generators are also Sigima-driven (`SignalTypes` / `ImageTypes` in `sigima.objects.signal.creation` / `image.creation`), but the _Create > Signal_ / _Create > Image_ submenus only list the types named in the hard-coded `_SIGNAL_TYPE_ORDER` / `_IMAGE_TYPE_ORDER` lists of `bootstrap.py` (which also set their order and separators): add a new Sigima type to the matching list so that it appears in these submenus (objects are then created through `createSignalTyped` / `createImageTyped`). The legacy `SignalCreationParams` / `ImageCreationParams` interfaces in `runtime.ts` are kept only for the small set of programmatic / test helpers — prefer the typed path for new work.
+Generators are also Sigima-driven (`SignalTypes` / `ImageTypes` in `sigima.objects.signal.creation` / `image.creation`), but the flat _Create_ menu only lists the types named in the hard-coded `_SIGNAL_TYPE_ORDER` / `_IMAGE_TYPE_ORDER` lists of `bootstrap.py` (which also set their order and separators): add a new Sigima type to the matching list so that it appears in the menu (objects are then created through `createSignalTyped` / `createImageTyped`). The legacy `SignalCreationParams` / `ImageCreationParams` interfaces in `runtime.ts` are kept only for the small set of programmatic / test helpers — prefer the typed path for new work.
 
 ## Conventions
 

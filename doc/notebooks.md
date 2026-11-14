@@ -18,7 +18,7 @@ notebook tab strip. The dropdown lists:
   `await proxy.add_signal(...)` / `await proxy.add_image(...)`.
 - **Signal & image processing** — end-to-end tour of the `proxy`
   workspace API on both panels (publish a sinc signal, run
-  `signal:moving_average`, publish a noisy Gaussian image, run
+  `moving_average`, publish a noisy Gaussian image, run
   `image:fft`).
 - **Proxy methods** — introspection-focused: `list_signals`,
   `list_images`, panel switching, and feature discovery through
@@ -76,7 +76,7 @@ wraps top-level `await` in cells, so this works out of the box.
 DataLab-Web reads and writes the standard [nbformat v4.5](https://nbformat.readthedocs.io/) format used by Jupyter, JupyterLab, VS Code and GitHub. In the notebook toolbar, use:
 
 - **Import…** to import a `.ipynb` from disk.
-- **Export…** to download the active notebook as a `.ipynb`.
+- **Export…** to save the active notebook as a `.ipynb`, using a browser save picker where supported or a download otherwise.
 
 The notebook name is preserved through round-trips via a
 `metadata.dlw.name` entry; everything else follows the standard

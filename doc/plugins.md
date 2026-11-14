@@ -147,7 +147,7 @@ A tool is opened in one of two ways:
 
 An instrument can override `open()` and `close()` to prepare and release resources. DataLab-Web opens it with the edited settings before the first preview or acquisition, retries a failed opening on the next request, and closes it when the window closes or the plugin is unloaded. Calls are serialized, but a slow call may block the browser when the runtime runs on the main thread. Abrupt page termination cannot guarantee that `close()` runs.
 
-`datalab.plugins.tools`, `datalab.plugins.resources` and `datalab.plugins.recipe_binding` are copied from DataLab Desktop into the host shim. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
+`datalab.plugins.resources` and `datalab.plugins.recipe_binding` are copied from DataLab Desktop into the host shim. The tools shim is based on the Desktop contract but does not support `PluginTool(menu=False)`. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
 
 The wheel rules below come from `datalab.plugins.wheels`, also copied verbatim from DataLab Desktop and used by the plugin catalog, so a wheel is judged the same way everywhere; `dlw_wheels.py` only applies them to the `datalab.web_plugins` group. A Python test compares the copy with a sibling DataLab checkout when one is available.
 
@@ -191,7 +191,4 @@ The X-ray Radiography & NDT wheel adds processing features under its plugin menu
 
 ## Hot reload
 
-_Plugins → Reload all plugins_ re-imports every loaded plugin module
-from disk. The plugin registry strips all features and menu entries
-contributed by previous versions before re-applying them, so live
-edits are safe.
+_Plugins → Reload all plugins_ unregisters existing contributions and re-imports the copies held by the browser runtime. A local `.py` file is copied into that runtime when selected; edits to the original file are not read by reload. Select the updated file again in _Plugins → Manage plugins…_ to load those changes.

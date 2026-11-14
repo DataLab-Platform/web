@@ -1,6 +1,6 @@
 # Differences from desktop DataLab
 
-DataLab-Web shares the **computation engine** (Sigima) with the desktop application and exposes most of its **processings**: for the same inputs, results are numerically equivalent (exact, or within the tolerance declared by the contract of the operation), even though Pyodide ships its own numerical stack. The differences listed below are about the **runtime environment** and a few UI surfaces, not about the science.
+DataLab-Web shares the **computation engine** (Sigima) with the desktop application and exposes a selection of its **processings**. Compatible Sigima versions use the same algorithms and parameters, but numerical equivalence across hosts depends on the operation, inputs and numerical environment. Some operations declare a replay comparison rule (exact or tolerance-based); others have no declared comparison rule.
 
 ## Runtime
 
@@ -11,7 +11,7 @@ DataLab-Web shares the **computation engine** (Sigima) with the desktop applicat
 | Plotting        | PlotPy (Qt)                | Plotly.js                                                                                                     |
 | Multi-threading | Native threads / processes | Web Workers: computation runtime (default), macros (one worker plus a standby), notebooks (one shared worker) |
 | File system     | Native I/O                 | Browser file picker, OPFS                                                                                     |
-| Persistence     | HDF5 on disk               | HDF5 download / upload, IndexedDB cache of recent macros and notebooks                                        |
+| Persistence     | HDF5 on disk               | HDF5 save / open, IndexedDB cache of recent macros and notebooks                                              |
 | Memory          | System RAM (64-bit)        | ~2 GB wasm32 heap, optional OPFS on-disk spill                                                                |
 | Remote control  | XML-RPC, FastAPI Web API   | In-browser proxy, optional postMessage SDK                                                                    |
 
@@ -21,13 +21,11 @@ from the browser cache.
 
 ## What is intentionally different
 
-- **No native dialogs**. File open / save go through the browser's own
-  pickers; HDF5 workspaces are downloaded as files rather than written
-  in place.
+- **File dialogs** use browser pickers where supported; otherwise files are opened through an upload control and saved as downloads.
 - **No Qt-only widgets**. PlotPy interactive tools (rotation, polygon
   picker…) are not available; equivalent flows are reimplemented with
   Plotly + React when applicable.
-- **Plugins are Python only**. DataLab-Web hosts portable `PluginBase` classes through a browser shim of the desktop plugin API. Dialogs must be opened from `async` callbacks with `await param.edit_async(...)`, which DataLab Desktop does not run, and part of the desktop API is not supported. Simple processing plugins can share a class; others need a distinct Web class. See [Plugins](#plugins).
+- **Plugins are Python only**. DataLab-Web hosts portable `PluginBase` classes through a browser shim of the desktop plugin API. Dialogs must be opened from `async` callbacks with `await param.edit_async(...)`, which DataLab Desktop does not run, and part of the desktop API is not supported. Simple processing plugins can share a class; others need a distinct Web class. See [Plugins](../plugins.md).
 - **Macros and notebooks run in Web Workers**. They have their own Pyodide
   instance and communicate with the main runtime through a structured
   proxy (`MacroRuntime`, `proxyBridge`). Long-running computations no
@@ -63,7 +61,7 @@ This is a concept **exclusive to DataLab-Web** with no desktop equivalent. Deskt
 To lift that ceiling, DataLab-Web offers an opt-in **on-disk storage mode**, toggled from the **Store data on disk** entry in the menu opened by clicking the menu-bar memory indicator:
 
 - When enabled, the heavy NumPy array of every signal and image is **spilled out of the WebAssembly heap to disk** — specifically to the browser's [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) (OPFS), a sandboxed, origin-scoped, browser-managed filesystem. The object model keeps only metadata resident; each array is paged back in just for the duration of the operation that needs it.
-- The result is that the working set is bounded by **disk quota instead of the ~2 GB RAM ceiling**, so you can work with datasets far larger than the heap would otherwise allow. The trade-off is a small per-operation latency for the disk round-trip.
+- This allows stored datasets to exceed the heap capacity, subject to disk quota, but each operation must still fit its working data in the heap. Saving an HDF5 workspace or exporting a capsule pages all spilled arrays into memory, so either can fail when the workspace exceeds the available heap. Disk round-trips also add latency.
 - The OPFS store is an **ephemeral cache, not a save format**: the HDF5 workspace remains the single durable source of truth, exactly as in RAM mode. The store is cleared if you clear the site's data, and it is independent of the **File → Save to HDF5 file…** action you use to persist your work.
 - The toggle is only available in **secure contexts that support OPFS** (modern Chromium / Firefox / Safari over `https://` or `localhost`); when unavailable, it is disabled and the app stays in the default in-memory mode.
 

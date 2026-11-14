@@ -149,11 +149,7 @@ The service uses [signals](https://angular.dev/guide/signals) to expose `ready`,
 
 ## Notes on the binary fast path
 
-`DataLabWebClient` already passes `Float64Array` payloads zero-copy
-through `postMessage`. **Always prefer typed arrays over plain
-`number[]`** when pushing signals/images — the SDK boxes plain arrays
-into `Float64Array` for you, but allocating the typed array upstream
-saves a copy and a pass over your data.
+`DataLabWebClient` transfers `Float64Array` payloads through `postMessage` without copying them first. Transfer detaches the underlying buffer, so pass a copy if your application still needs the data. Use distinct buffers for signal X and Y: two views of the same buffer currently cause a transfer error. `Float32Array` and plain `number[]` inputs are converted to new `Float64Array` values before transfer.
 
 ## Compatibility & versioning
 

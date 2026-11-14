@@ -95,6 +95,20 @@ describe("UserGuidePanel", () => {
     );
   });
 
+  it("routes the plugin reference in the differences overview", () => {
+    const { content, navigation } = openGuide();
+    fireEvent.click(
+      within(navigation).getByRole("button", {
+        name: "Differences from desktop",
+      }),
+    );
+    const link = within(content).getAllByRole("link", { name: "Plugins" })[0];
+    expect(clickLink(link as HTMLAnchorElement)).toBe(true);
+    expect(content.querySelector("h1")).toHaveTextContent(
+      "Authoring DataLab-Web plugins",
+    );
+  });
+
   it.each([
     {
       page: "Welcome",
@@ -186,9 +200,8 @@ describe("UserGuidePanel", () => {
         name: "Differences from desktop",
       }),
     );
-    const link = content.querySelector<HTMLAnchorElement>('a[href="#plugins"]');
-    expect(link).not.toBeNull();
-    expect(clickLink(link!)).toBe(false);
+    const link = addLink(content, "#plugins");
+    expect(clickLink(link)).toBe(false);
     expect(content.querySelector("h1")).toHaveTextContent(
       "Differences from desktop DataLab",
     );
