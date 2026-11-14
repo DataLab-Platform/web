@@ -499,4 +499,31 @@ describe("MacroRuntime", () => {
     expect(macro.isRunning()).toBe(false);
     expect(macro.isPristine()).toBe(true);
   });
+
+  it("runs only the macro started again after a Stop during startup", async () => {
+    const macro = new MacroRuntime(runtime);
+    const finished: string[] = [];
+    const first = macro.run("x = 1", "first", {
+      onFinished: (status) => finished.push(`first:${status}`),
+    });
+    await flush();
+    macro.stop();
+    const second = macro.run("y = 2", "second", {
+      onFinished: (status) => finished.push(`second:${status}`),
+    });
+    await flush();
+    // Both runs wait for the same worker, which kept starting.
+    expect(FakeWorker.instances).toHaveLength(1);
+    const worker = FakeWorker.instances[0];
+    worker.emit({ type: "ready" });
+    await Promise.all([first, second]);
+    const runs = worker.posted.filter(
+      (m) => (m as { type?: string }).type === "run",
+    );
+    expect(runs).toEqual([{ type: "run", code: "y = 2", name: "second" }]);
+    expect(macro.isRunning()).toBe(true);
+    worker.emit({ type: "finished", ok: true });
+    expect(finished).toEqual(["first:stopped", "second:ok"]);
+    expect(macro.isRunning()).toBe(false);
+  });
 });
