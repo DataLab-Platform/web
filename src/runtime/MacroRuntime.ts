@@ -71,6 +71,7 @@ export class MacroRuntime {
   private state: "idle" | "starting" | "running" | "stopping" = "idle";
   /** A macro ran in the live worker (its namespace is not fresh). */
   private used = false;
+  private disposed = false;
 
   constructor(private readonly runtime: RuntimeApi) {}
 
@@ -80,11 +81,17 @@ export class MacroRuntime {
 
   /** Eagerly create & init the worker so the first Run is fast. */
   async preload(): Promise<void> {
+    if (this.disposed) return;
     await this.ensureWorker().catch(ignoreCancelled);
   }
 
   isRunning(): boolean {
     return this.state === "running";
+  }
+
+  /** A macro is executing or waiting for the worker to start. */
+  isExecuting(): boolean {
+    return this.state !== "idle";
   }
 
   /** True while no macro ran in the live worker (fresh namespace). */
@@ -98,6 +105,9 @@ export class MacroRuntime {
     name: string,
     callbacks: MacroRunCallbacks,
   ): Promise<void> {
+    if (this.disposed) {
+      throw new Error("The macro worker has been disposed.");
+    }
     if (this.state !== "idle") {
       throw new Error("A macro is already running. Stop it first.");
     }
@@ -154,15 +164,20 @@ export class MacroRuntime {
 
   /** Terminate every worker (live, starting and spare). */
   dispose(): void {
+    this.disposed = true;
+    const current = this.currentRun;
+    const waiting = this.waitingRun;
+    this.currentRun = null;
+    this.waitingRun = null;
     this.terminateLive();
     if (this.spare) {
       this.spare.abort.abort();
       this.spare.worker.terminate();
       this.spare = null;
     }
-    this.currentRun = null;
-    this.waitingRun = null;
     this.state = "idle";
+    current?.onFinished?.("stopped");
+    waiting?.onFinished?.("stopped");
   }
 
   // ---------------------------------------------------------------------
@@ -381,4 +396,12 @@ export function panelMacroRuntime(
   generation: number,
 ): MacroRuntime {
   return panelWorkers.acquire(runtime, generation);
+}
+
+export function isPanelMacroExecuting(runtime: RuntimeApi): boolean {
+  return panelWorkers.peek(runtime)?.isExecuting() ?? false;
+}
+
+export function disposePanelMacroRuntime(runtime: RuntimeApi): void {
+  panelWorkers.dispose(runtime);
 }

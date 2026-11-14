@@ -9,6 +9,7 @@ DataLab-Web is the **browser-native** sibling of the DataLab desktop application
 - Interact with results via [Plotly.js](https://plotly.com/javascript/) plots (zoom, pan, hover, export to PNG).
 - Organise objects into groups, switch between **Signal** and **Image**
   panels, persist your workspace as an HDF5 file.
+- Start over with **File → New workspace** without reloading the page. You can save the current workspace first; DataLab-Web asks for confirmation before discarding unsaved changes or stopping running Python code.
 - See where each result comes from, check and verify it, and exchange it with DataLab Desktop as a capsule (see [Provenance and capsules](provenance-and-capsules.md)).
 - Automate workflows with **macros** and **notebooks** running in dedicated
   Web Workers so the UI stays responsive.

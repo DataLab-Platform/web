@@ -9,6 +9,7 @@
  */
 
 import type { PanelKind, RuntimeApi } from "./runtime";
+import { workspaceBridgeGate } from "./workspaceBridgeGate";
 
 export interface BridgeExternalCallbacks {
   getSelection?: () => string[];
@@ -29,7 +30,7 @@ export function buildProxyBridge(
   s: RuntimeApi,
   ext: BridgeExternalCallbacks,
 ): Record<string, BridgeMethod> {
-  return {
+  const methods: Record<string, BridgeMethod> = {
     add_signal: async (p: unknown) => {
       const a = p as {
         title: string;
@@ -256,4 +257,11 @@ export function buildProxyBridge(
       return handler(a.name, a.args, a.kwargs);
     },
   };
+  const gate = workspaceBridgeGate(s);
+  return Object.fromEntries(
+    Object.entries(methods).map(([name, method]) => [
+      name,
+      (payload: unknown) => gate.run(() => method(payload)),
+    ]),
+  );
 }

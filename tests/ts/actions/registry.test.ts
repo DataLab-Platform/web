@@ -40,6 +40,7 @@ function makeStaticCallbacks() {
     onOpenDirectory: vi.fn(),
     onSaveFile: vi.fn(),
     onSaveToDirectory: vi.fn(),
+    onNewWorkspace: vi.fn(),
     onOpenWorkspaceHdf5: vi.fn(),
     onSaveWorkspaceHdf5: vi.fn(),
     onImportHdf5: vi.fn(),
@@ -60,6 +61,19 @@ function makeStaticCallbacks() {
 }
 
 describe("buildStaticActions", () => {
+  it("offers a new workspace even when the current workspace is empty", () => {
+    const callbacks = makeStaticCallbacks();
+    const action = buildStaticActions(callbacks).find(
+      (item) => item.id === "file.new_workspace",
+    );
+    expect(action).toBeDefined();
+    expect(action!.menuPath).toBe("File/New workspace");
+    expect(action!.enabled(makeState())).toBe(true);
+    expect(action!.enabled(makeState({ busy: true }))).toBe(false);
+    action!.run();
+    expect(callbacks.onNewWorkspace).toHaveBeenCalledOnce();
+  });
+
   it("uses the current panel kind in the File menu wording", () => {
     const sigActions = buildStaticActions(makeStaticCallbacks());
     const open = sigActions.find((a) => a.id === "file.open");

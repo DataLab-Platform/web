@@ -119,6 +119,11 @@ export class NotebookRuntime {
     return this.status;
   }
 
+  /** A cell is executing, queued, or waiting for the kernel to start. */
+  isExecuting(): boolean {
+    return Boolean(this.currentRun || this.waitingRun || this.queue.length);
+  }
+
   /** True while no cell ran in the kernel (fresh user namespace). */
   isPristine(): boolean {
     return (
@@ -203,10 +208,15 @@ export class NotebookRuntime {
 
   dispose(): void {
     this.disposed = true;
-    this.cancelPendingCells();
-    this.terminateWorker();
+    const current = this.currentRun;
     this.currentRun = null;
+    this.terminateWorker();
     this.status = "idle";
+    if (current) {
+      current.callbacks.onFinished?.("interrupted", 0);
+      current.resolve();
+    }
+    this.cancelPendingCells();
   }
 
   /** Finish the cells waiting for the worker or queued, without running
@@ -430,4 +440,12 @@ export class NotebookRuntime {
   private get bridgeMethods(): Record<string, BridgeMethod> {
     return buildProxyBridge(this.runtime, this.externalCallbacks);
   }
+}
+
+export function isPanelNotebookExecuting(runtime: RuntimeApi): boolean {
+  return panelKernels.peek(runtime)?.isExecuting() ?? false;
+}
+
+export function disposePanelNotebookRuntime(runtime: RuntimeApi): void {
+  panelKernels.dispose(runtime);
 }

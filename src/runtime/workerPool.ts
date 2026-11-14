@@ -25,6 +25,17 @@ export class GenerationPool<K extends object, T extends Disposable> {
 
   constructor(private readonly create: (key: K) => T) {}
 
+  peek(key: K): T | undefined {
+    return this.entries.get(key)?.item;
+  }
+
+  /** Discard even a pristine instance when starting a new workspace. */
+  dispose(key: K): void {
+    const entry = this.entries.get(key);
+    this.entries.delete(key);
+    entry?.item.dispose();
+  }
+
   /** The instance of ``generation`` for ``key``: created on first request;
    *  requesting another generation disposes the previous instance — unless
    *  no user code ran in it yet: it is then as fresh as a new one, and kept
