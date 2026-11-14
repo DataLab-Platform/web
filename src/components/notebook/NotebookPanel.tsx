@@ -69,6 +69,7 @@ import { Cell } from "./Cell";
 import { useConfirm, useMessage } from "../ConfirmDialog";
 import { useToast } from "../Toast";
 import { t } from "../../i18n/translate";
+import { useWorkspace } from "../../runtime/WorkspaceContext";
 import {
   acceptFromExtensions,
   saveBytesToFile,
@@ -180,6 +181,7 @@ export const NotebookPanel = forwardRef<
   const confirm = useConfirm();
   const notify = useMessage();
   const pushToast = useToast();
+  const { markDirty } = useWorkspace();
   // -- Open notebooks (in-memory) --------------------------------------
   const [notebooks, setNotebooks] = useState<NotebookModel[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -270,8 +272,14 @@ export const NotebookPanel = forwardRef<
   // in dev) doesn't race two async restores against each other and
   // accidentally spawn a fresh empty notebook that wins the setState.
   const initStartedRef = useRef(false);
+  const activeRef = useRef(true);
   useEffect(() => {
-    if (initStartedRef.current) return;
+    activeRef.current = true;
+    if (initStartedRef.current) {
+      return () => {
+        activeRef.current = false;
+      };
+    }
     initStartedRef.current = true;
     const r = getNbRuntime();
     setKernelStatus("loading");
@@ -291,13 +299,16 @@ export const NotebookPanel = forwardRef<
       // (and are serialised to the workspace HDF5). IndexedDB is only
       // a roll-over cache surfaced through the "Recent…" menu.
       const recent = await listRecent("notebook").catch(() => []);
+      if (!activeRef.current) return;
       setStoredList(recent);
 
       const metas = await runtime.listNotebooks().catch(() => []);
+      if (!activeRef.current) return;
       const restoredNbs: NotebookModel[] = [];
       for (const meta of metas) {
         try {
           const rec = await runtime.getNotebook(meta.id);
+          if (!activeRef.current) return;
           let nb: NotebookModel;
           if (rec.content && rec.content.length > 0) {
             nb = jsonStringToNotebook(rec.content, rec.title);
@@ -355,6 +366,7 @@ export const NotebookPanel = forwardRef<
             notebookToJsonString(nb),
             { silent: true },
           );
+          if (!activeRef.current) return;
           nb.id = rec.id;
           // Note: we deliberately do NOT seed the Recent… cache here.
           // Pristine, untouched notebooks must not surface in browser
@@ -372,9 +384,14 @@ export const NotebookPanel = forwardRef<
       const initialActive = wantedActive ?? ordered[0];
       setActiveId(initialActive.id);
       setActiveCellId(initialActive.cells[0]?.id ?? null);
-      setStoredList(await listRecent("notebook").catch(() => []));
+      const stored = await listRecent("notebook").catch(() => []);
+      if (!activeRef.current) return;
+      setStoredList(stored);
       setRestored(true);
     })();
+    return () => {
+      activeRef.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -430,6 +447,13 @@ export const NotebookPanel = forwardRef<
     );
   }, []);
   const saveTimers = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
   const scheduleSave = useCallback(
     (nb: NotebookModel) => {
       if (!isNotebookTouched(nb)) return;
@@ -459,6 +483,8 @@ export const NotebookPanel = forwardRef<
   // -- Mutation helpers ----------------------------------------------
   const updateActiveNotebook = useCallback(
     (patch: (n: NotebookModel) => NotebookModel) => {
+      if (!activeRef.current) return;
+      markDirty();
       setNotebooks((prev) =>
         prev.map((n) => {
           if (n.id !== activeId) return n;
@@ -468,7 +494,7 @@ export const NotebookPanel = forwardRef<
         }),
       );
     },
-    [activeId, scheduleSave],
+    [activeId, scheduleSave, markDirty],
   );
 
   const updateCell = useCallback(
@@ -1009,7 +1035,7 @@ export const NotebookPanel = forwardRef<
   // File → Notebook actions even when the notebook panel is hidden.
   // --------------------------------------------------------------------
   useImperativeHandle(
-    ref,
+    restored ? ref : null,
     () => ({
       newNotebook: handleNew,
       newFromQuickstart: handleNewFromQuickstart,

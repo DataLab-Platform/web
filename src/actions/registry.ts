@@ -36,6 +36,7 @@ export interface StaticActionCallbacks {
   onOpenDirectory: () => void;
   onSaveFile: () => void;
   onSaveToDirectory: () => void;
+  onNewWorkspace: () => void;
   onOpenWorkspaceHdf5: () => void;
   onSaveWorkspaceHdf5: () => void;
   /** Open the capsule dialog (export, inspect, replay, revisions). */
@@ -92,6 +93,13 @@ export function buildStaticActions(
           openDir: "Open signals from directory…",
         };
   return [
+    {
+      id: "file.new_workspace",
+      label: t("New workspace"),
+      menuPath: "File/New workspace",
+      enabled: ready,
+      run: cb.onNewWorkspace,
+    },
     {
       id: "file.open",
       label: t(en.open),

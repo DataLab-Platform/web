@@ -74,6 +74,7 @@ import {
   ScientificRefusalError,
   type ScientificRefusal,
 } from "./workerProtocol";
+import { workspaceBridgeGate } from "./workspaceBridgeGate";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -131,6 +132,8 @@ export interface PyProxy {
 
 const PYODIDE_VERSION = "v0.26.4";
 const PYODIDE_INDEX = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`;
+const WORKSPACE_CHANGED_MESSAGE =
+  "Macro execution cancelled because the workspace changed.";
 
 export interface PythonDistributionInfo {
   name: string;
@@ -3411,11 +3414,11 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
   /**
    * Wipe every signal/image/macro/notebook from the in-Pyodide model.
    *
-   * Used by the E2E worker-scoped fixture that reuses a single Pyodide
-   * instance across multiple tests; production UI never calls this.
+   * Pass ``silent`` for a clean workspace transition; remote ``reset_all``
+   * keeps its existing mutation notification.
    */
-  async resetAll(): Promise<void> {
-    await this.callPy("reset_all");
+  async resetAll(options: { silent?: boolean } = {}): Promise<void> {
+    await this.callPy("reset_all", {}, options);
   }
 
   // ------------------------------------------------------------------
@@ -4880,6 +4883,60 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
   private _lastMacroOutput: MacroRunOutput | null = null;
 
   private _macroRuntime: import("./MacroRuntime").MacroRuntime | null = null;
+  private _activeMacroRequests = 0;
+  private _workspaceGeneration = 0;
+  private _workspaceReset: {
+    done: Promise<boolean>;
+    finish: (didReset: boolean) => void;
+  } | null = null;
+
+  /** Reserve a workspace transition without interrupting running macros. */
+  async prepareWorkspaceReset(): Promise<boolean> {
+    if (this._workspaceReset) {
+      throw new Error("A workspace reset is already in progress.");
+    }
+    let finish!: (didReset: boolean) => void;
+    const done = new Promise<boolean>((resolve) => {
+      finish = resolve;
+    });
+    this._workspaceReset = { done, finish };
+    return this._activeMacroRequests > 0;
+  }
+
+  /** Stop the assistant's macro worker and drain its accepted bridge calls. */
+  async stopWorkspaceMacro(): Promise<void> {
+    if (!this._workspaceReset) {
+      throw new Error("No workspace reset is in progress.");
+    }
+    const gate = workspaceBridgeGate(this);
+    const drained = gate.pause();
+    try {
+      this._macroRuntime?.dispose();
+      this._macroRuntime = null;
+      await drained;
+      this._lastMacroOutput = null;
+    } finally {
+      gate.resume();
+    }
+  }
+
+  /** Release macros waiting for the user's reset decision. */
+  async finishWorkspaceReset(didReset: boolean): Promise<void> {
+    const reset = this._workspaceReset;
+    if (!reset) {
+      throw new Error("No workspace reset is in progress.");
+    }
+    if (didReset) this._workspaceGeneration += 1;
+    this._workspaceReset = null;
+    reset.finish(didReset);
+  }
+
+  private async waitForWorkspaceReset(): Promise<void> {
+    const reset = this._workspaceReset;
+    if (reset && (await reset.done)) {
+      throw new Error(WORKSPACE_CHANGED_MESSAGE);
+    }
+  }
 
   private async ensureMacroRuntime(): Promise<
     import("./MacroRuntime").MacroRuntime
@@ -4908,24 +4965,35 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     code: string,
     name = "AI Assistant macro",
   ): Promise<MacroRunOutput> {
-    const macro = await this.ensureMacroRuntime();
-    return new Promise((resolve, reject) => {
-      let stdout = "";
-      let stderr = "";
-      macro
-        .run(code, name, {
-          onStream: (kind, text) => {
-            if (kind === "stdout") stdout += text;
-            else if (kind === "stderr") stderr += text;
-          },
-          onFinished: (status, error) => {
-            const out = { stdout, stderr, status, error };
-            this._lastMacroOutput = out;
-            resolve(out);
-          },
-        })
-        .catch(reject);
-    });
+    if (this._workspaceReset) await this.waitForWorkspaceReset();
+    const generation = this._workspaceGeneration;
+    this._activeMacroRequests += 1;
+    try {
+      const macro = await this.ensureMacroRuntime();
+      if (this._workspaceReset) await this.waitForWorkspaceReset();
+      if (generation !== this._workspaceGeneration) {
+        throw new Error(WORKSPACE_CHANGED_MESSAGE);
+      }
+      return await new Promise((resolve, reject) => {
+        let stdout = "";
+        let stderr = "";
+        macro
+          .run(code, name, {
+            onStream: (kind, text) => {
+              if (kind === "stdout") stdout += text;
+              else if (kind === "stderr") stderr += text;
+            },
+            onFinished: (status, error) => {
+              const out = { stdout, stderr, status, error };
+              this._lastMacroOutput = out;
+              resolve(out);
+            },
+          })
+          .catch(reject);
+      });
+    } finally {
+      this._activeMacroRequests -= 1;
+    }
   }
 
   async listPlugins(): Promise<PluginRecord[]> {

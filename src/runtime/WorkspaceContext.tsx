@@ -25,6 +25,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -40,6 +41,8 @@ export interface WorkspaceState {
 }
 
 export interface WorkspaceContextValue extends WorkspaceState {
+  /** Read the latest dirty state, including edits not rendered yet. */
+  isDirty: () => boolean;
   markDirty: () => void;
   markClean: () => void;
   setFilename: (name: string | null) => void;
@@ -54,18 +57,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     filename: null,
     recovered: false,
   });
+  const dirtyRef = useRef(false);
 
   const markDirty = useCallback(() => {
+    dirtyRef.current = true;
     setState((prev) => (prev.dirty ? prev : { ...prev, dirty: true }));
   }, []);
 
   const markClean = useCallback(() => {
+    dirtyRef.current = false;
     setState((prev) =>
       !prev.dirty && !prev.recovered
         ? prev
         : { ...prev, dirty: false, recovered: false },
     );
   }, []);
+
+  const isDirty = useCallback(() => dirtyRef.current, []);
 
   const setFilename = useCallback((name: string | null) => {
     setState((prev) =>
@@ -82,12 +90,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       ...state,
+      isDirty,
       markDirty,
       markClean,
       setFilename,
       setRecovered,
     }),
-    [state, markDirty, markClean, setFilename, setRecovered],
+    [state, isDirty, markDirty, markClean, setFilename, setRecovered],
   );
 
   return (

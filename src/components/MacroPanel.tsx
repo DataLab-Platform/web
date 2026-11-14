@@ -23,6 +23,7 @@ import {
 } from "react";
 import type { MacroMeta, RuntimeApi } from "../runtime/runtime";
 import { panelMacroRuntime, type MacroRuntime } from "../runtime/MacroRuntime";
+import { useWorkspace } from "../runtime/WorkspaceContext";
 import {
   MacroEditorTabs,
   type MacroTab,
@@ -132,6 +133,8 @@ interface Props {
    * react. Fires once on mount with the initial count.
    */
   onCountChanged?: (count: number) => void;
+  /** Notify the host while a macro is starting or running. */
+  onRunningChanged?: (running: boolean) => void;
   /** "light"|"dark" — pulled from the host theme. */
   theme: "light" | "dark";
   /** Current placement of this panel (``"tab"`` ⇒ central tab,
@@ -175,6 +178,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       onModelChanged,
       onConvertToNotebook,
       onCountChanged,
+      onRunningChanged,
       theme,
       placement,
       onTogglePlacement,
@@ -183,10 +187,12 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
   ) {
     const confirm = useConfirm();
     const pushToast = useToast();
+    const { markDirty } = useWorkspace();
     const [macros, setMacros] = useState<MacroState[]>([]);
     const [openIds, setOpenIds] = useState<string[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [running, setRunning] = useState(false);
+    const runGeneration = useRef(0);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameDraft, setRenameDraft] = useState<string>("");
 
@@ -195,6 +201,20 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     useEffect(() => {
       onCountChanged?.(macros.length);
     }, [macros.length, onCountChanged]);
+    const setRunState = useCallback(
+      (isRunning: boolean) => {
+        onRunningChanged?.(isRunning);
+        setRunning(isRunning);
+      },
+      [onRunningChanged],
+    );
+    useEffect(
+      () => () => {
+        runGeneration.current += 1;
+        onRunningChanged?.(false);
+      },
+      [onRunningChanged],
+    );
     /** ``true`` once the initial load effect has hydrated state from
      *  Python + localStorage.  Used to gate persistence effects so they
      *  don't overwrite saved state with the empty initial values during
@@ -285,6 +305,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         // surfaced only through the "Recent…" menu. The workspace HDF5
         // is the single durable source of truth.
         let metas = await runtime.listMacros();
+        if (cancelled) return;
         if (metas.length === 0) {
           await runtime.createMacro(undefined, undefined, { silent: true });
           metas = await runtime.listMacros();
@@ -379,9 +400,17 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
     // ---------------------------------------------------------------------
 
     const saveTimers = useRef<Map<string, number>>(new Map());
+    useEffect(() => {
+      const timers = saveTimers.current;
+      return () => {
+        for (const timer of timers.values()) window.clearTimeout(timer);
+        timers.clear();
+      };
+    }, []);
 
     const handleCodeChange = useCallback(
       (id: string, code: string) => {
+        markDirty();
         touchedIdsRef.current.add(id);
         setMacros((prev) => {
           const next = prev.map((m) => (m.id === id ? { ...m, code } : m));
@@ -398,7 +427,7 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         }, 500);
         saveTimers.current.set(id, handle);
       },
-      [runtime, persistMirror],
+      [runtime, persistMirror, markDirty],
     );
 
     // ---------------------------------------------------------------------
@@ -663,39 +692,44 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
       const m = macros.find((x) => x.id === activeId);
       if (!m) return;
       const code = m.code ?? "";
-      await flushPendingSave(activeId, code);
-      // Pre-Run lint: abort silently-on-success, loudly-on-failure so
-      // the user gets actionable feedback instead of a confusing Python
-      // traceback (or — worse — a half-applied workspace mutation).
-      const ok = await lintAndReport(code, false);
-      if (!ok) {
-        consoleRef.current?.append(
-          "stderr",
-          t(
-            "✗ Macro not started: fix the issues above (or press ✓ Validate to re-check).",
-          ) + "\n",
-        );
-        return;
-      }
-      setRunning(true);
+      const generation = ++runGeneration.current;
+      setRunState(true);
       try {
+        await flushPendingSave(activeId, code);
+        if (generation !== runGeneration.current) return;
+        // Pre-Run lint: abort silently-on-success, loudly-on-failure so
+        // the user gets actionable feedback instead of a confusing Python
+        // traceback (or — worse — a half-applied workspace mutation).
+        const ok = await lintAndReport(code, false);
+        if (generation !== runGeneration.current) return;
+        if (!ok) {
+          consoleRef.current?.append(
+            "stderr",
+            t(
+              "✗ Macro not started: fix the issues above (or press ✓ Validate to re-check).",
+            ) + "\n",
+          );
+          setRunState(false);
+          return;
+        }
         await rt.run(code, m.title, {
           onStream: (kind, text) => consoleRef.current?.append(kind, text),
-          onFinished: () => setRunning(false),
+          onFinished: () => setRunState(false),
         });
       } catch (err) {
         consoleRef.current?.append(
           "stderr",
           (err instanceof Error ? err.message : String(err)) + "\n",
         );
-        setRunning(false);
+        setRunState(false);
       }
-    }, [activeId, macros, flushPendingSave, lintAndReport]);
+    }, [activeId, macros, flushPendingSave, lintAndReport, setRunState]);
 
     const handleStop = useCallback(() => {
+      runGeneration.current += 1;
       macroRtRef.current?.stop();
-      setRunning(false);
-    }, []);
+      setRunState(false);
+    }, [setRunState]);
 
     const handleValidate = useCallback(async () => {
       if (!activeId) return;

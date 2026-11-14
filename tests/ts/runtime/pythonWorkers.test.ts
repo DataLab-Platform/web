@@ -13,6 +13,7 @@ import {
 import {
   MacroRuntime,
   panelMacroRuntime,
+  type MacroRunCallbacks,
 } from "../../../src/runtime/MacroRuntime";
 import { GenerationPool } from "../../../src/runtime/workerPool";
 import {
@@ -23,7 +24,7 @@ import {
   WORKER_START_ATTEMPTS,
   WorkerStartCancelled,
 } from "../../../src/runtime/workerReady";
-import type { RuntimeApi } from "../../../src/runtime/runtime";
+import { DataLabRuntime, type RuntimeApi } from "../../../src/runtime/runtime";
 
 /** Let pending promise callbacks run. */
 async function flush(): Promise<void> {
@@ -43,6 +44,52 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("assistant macros during a workspace transition", () => {
+  function delayedStartup() {
+    const runtime: DataLabRuntime = Reflect.construct(DataLabRuntime, [{}]);
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const run = vi.fn(
+      async (_code: string, _name: string, callbacks: MacroRunCallbacks) => {
+        callbacks.onFinished?.("ok");
+      },
+    );
+    Reflect.set(runtime, "ensureMacroRuntime", async () => {
+      await ready;
+      return { run };
+    });
+    return { runtime, release, run };
+  }
+
+  it("cancels a request whose startup finishes after a reset", async () => {
+    const { runtime, release, run } = delayedStartup();
+    const pending = runtime.runMacroCode("old workspace");
+    const rejected = expect(pending).rejects.toThrow("workspace changed");
+    await expect(runtime.prepareWorkspaceReset()).resolves.toBe(true);
+    await runtime.stopWorkspaceMacro();
+    await runtime.finishWorkspaceReset(true);
+    release();
+    await rejected;
+    expect(run).not.toHaveBeenCalled();
+    await expect(runtime.runMacroCode("new workspace")).resolves.toMatchObject({
+      status: "ok",
+    });
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("continues a waiting request when the reset is cancelled", async () => {
+    const { runtime, release, run } = delayedStartup();
+    const pending = runtime.runMacroCode("same workspace");
+    await expect(runtime.prepareWorkspaceReset()).resolves.toBe(true);
+    await runtime.finishWorkspaceReset(false);
+    release();
+    await expect(pending).resolves.toMatchObject({ status: "ok" });
+    expect(run).toHaveBeenCalledOnce();
+  });
 });
 
 describe("GenerationPool", () => {
@@ -75,6 +122,21 @@ describe("GenerationPool", () => {
     pristine = false;
     pool.acquire(key, 2);
     expect(item.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("disposes even a pristine instance for an explicit new workspace", () => {
+    const created: Array<{ dispose: () => void }> = [];
+    const pool = new GenerationPool<object, (typeof created)[number]>(() => {
+      const item = { dispose: vi.fn(), isPristine: () => true };
+      created.push(item);
+      return item;
+    });
+    const key = {};
+    const first = pool.acquire(key, 0);
+    pool.dispose(key);
+    expect(first.dispose).toHaveBeenCalledOnce();
+    expect(pool.peek(key)).toBeUndefined();
+    expect(pool.acquire(key, 1)).not.toBe(first);
   });
 });
 
@@ -208,6 +270,29 @@ describe("NotebookRuntime", () => {
     expect(FakeWorker.alive()).toEqual([]);
   });
 
+  it("finishes an active cell when its workspace is disposed", async () => {
+    const kernel = new NotebookRuntime(runtime);
+    const preload = kernel.preload();
+    last().emit({ type: "ready" });
+    await preload;
+    const finished = vi.fn();
+    const cell = kernel.executeCell("c1", "while True: pass", {
+      onFinished: finished,
+    });
+    await flush();
+    expect(last().posted).toContainEqual({
+      type: "exec_cell",
+      cellId: "c1",
+      code: "while True: pass",
+    });
+
+    kernel.dispose();
+    await flush();
+    expect(finished).toHaveBeenCalledExactlyOnceWith("interrupted", 0);
+    await expect(cell).resolves.toBeUndefined();
+    expect(FakeWorker.alive()).toEqual([]);
+  });
+
   it("keeps the panel kernel across remounts until a new generation", async () => {
     const workspace = {} as RuntimeApi;
     const first = panelNotebookRuntime(workspace, 0);
@@ -328,6 +413,31 @@ describe("MacroRuntime", () => {
     expect(FakeWorker.alive()).toHaveLength(2);
     macro.dispose();
     expect(FakeWorker.alive()).toEqual([]);
+  });
+
+  it("reports a running macro as stopped when its workspace is disposed", async () => {
+    const macro = new MacroRuntime(runtime);
+    const preload = macro.preload();
+    last().emit({ type: "ready" });
+    await preload;
+    const finished = vi.fn();
+    await macro.run("while True: pass", "m", { onFinished: finished });
+
+    macro.dispose();
+    expect(finished).toHaveBeenCalledExactlyOnceWith("stopped");
+    expect(FakeWorker.alive()).toEqual([]);
+  });
+
+  it("cancels a macro waiting for startup when its workspace is disposed", async () => {
+    const macro = new MacroRuntime(runtime);
+    const finished = vi.fn();
+    const run = macro.run("x = 1", "m", { onFinished: finished });
+    await flush();
+    macro.dispose();
+    await run;
+    expect(finished).toHaveBeenCalledExactlyOnceWith("stopped");
+    expect(FakeWorker.alive()).toEqual([]);
+    await expect(macro.run("x = 2", "m", {})).rejects.toThrow("disposed");
   });
 
   it("promotes the ready spare worker when a macro is stopped", async () => {

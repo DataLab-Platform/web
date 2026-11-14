@@ -8,13 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useRuntime } from "./runtime/RuntimeContext";
 import { useWorkspace } from "./runtime/WorkspaceContext";
 import { isDiskStorageSupported } from "./runtime/storageCapabilities";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
 import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
+import { workspaceBridgeGate } from "./runtime/workspaceBridgeGate";
 import { registerSelectionSource } from "./runtime/selectionState";
 import type {
   FeatureDescriptor,
@@ -461,6 +462,7 @@ export default function App() {
     dirty: workspaceDirty,
     filename: workspaceFilename,
     recovered: workspaceRecovered,
+    isDirty: isWorkspaceDirty,
     markDirty,
     markClean,
     setFilename: setWorkspaceFilename,
@@ -487,7 +489,9 @@ export default function App() {
   const treeKindRef = useRef<PanelKind>(treeKind);
   treeKindRef.current = treeKind;
   const [centralView, setCentralView] = useState<CentralView>("plot");
-  const notebookPanelRef = useRef<NotebookPanelHandle | null>(null);
+  const [notebookPanel] = useState(
+    () => new PendingHandle<NotebookPanelHandle>("Notebook panel"),
+  );
   const [macroPanel] = useState(
     () => new PendingHandle<MacroPanelHandle>("Macros panel"),
   );
@@ -808,6 +812,18 @@ export default function App() {
   );
   const [features, setFeatures] = useState<FeatureDescriptor[]>([]);
   const [busy, setBusy] = useState(false);
+  const macroRunning = useRef(false);
+  const handleMacroRunningChanged = useCallback((running: boolean) => {
+    macroRunning.current = running;
+  }, []);
+  const [workspaceResetState, setWorkspaceResetState] = useState<
+    "idle" | "checking" | "resetting" | "error"
+  >("idle");
+  const [workspaceResetId, setWorkspaceResetId] = useState(0);
+  const [workspacePanelsSuspended, setWorkspacePanelsSuspended] =
+    useState(false);
+  const workspaceResetPending = useRef(false);
+  const workspaceEpoch = useRef(0);
   /** Live counts of macros / notebooks reported by their panels.
    *  Used to enable "Save HDF5 workspace…" for workspaces that
    *  contain only macros or notebooks (no signals/images). */
@@ -1046,6 +1062,7 @@ export default function App() {
     async (preferredCurrentId?: string | null) => {
       if (!runtime) return;
       const kind = treeKind;
+      const epoch = workspaceEpoch.current;
       const newTree = await runtime.getPanelTree(kind);
       // Staleness guard: if the active panel changed while we were
       // awaiting (e.g. a fire-and-forget ``refresh()`` for the signal
@@ -1054,7 +1071,8 @@ export default function App() {
       // ``currentId`` would point at an object of the *other* kind — which
       // made the central viewer call ``get_image_data`` on a 1-D
       // ``SignalObj`` (``IndexError: tuple index out of range``).
-      if (treeKindRef.current !== kind) return;
+      if (treeKindRef.current !== kind || workspaceEpoch.current !== epoch)
+        return;
       setTree(newTree);
       // A model mutation invalidates any prior group-exclusive selection.
       setSelectedGroupIds([]);
@@ -1083,6 +1101,7 @@ export default function App() {
   const refreshPanelKind = useCallback(
     async (kind: PanelKind, preferredCurrentId?: string | null) => {
       if (!runtime) return;
+      const epoch = workspaceEpoch.current;
       setTreeKind(kind);
       setCentralView("plot");
       // Reset the per-panel selection state *synchronously* with the
@@ -1097,6 +1116,7 @@ export default function App() {
       setSelectedIds([]);
       setSelectedGroupIds([]);
       const newTree = await runtime.getPanelTree(kind);
+      if (workspaceEpoch.current !== epoch) return;
       setTree(newTree);
       const allIds: string[] = [];
       for (const g of newTree.groups)
@@ -3638,19 +3658,168 @@ export default function App() {
     [runtime, pendingRoiGrid, refresh, confirm],
   );
 
+  const handleNewWorkspace = useCallback(async () => {
+    if (!runtime || busy || workspaceResetPending.current) return;
+    workspaceResetPending.current = true;
+    setBusy(true);
+    setWorkspaceResetState("checking");
+    const gate = workspaceBridgeGate(runtime);
+    let prepared = false;
+    let paused = false;
+    let didReset = false;
+    let completed = false;
+    let failure: Error | null = null;
+    try {
+      const [macroWorkers, notebookWorkers] = await Promise.all([
+        import("./runtime/MacroRuntime"),
+        import("./notebook/NotebookRuntime"),
+      ]);
+      const assistantRunning = await runtime.prepareWorkspaceReset();
+      prepared = true;
+      const executing =
+        macroRunning.current ||
+        assistantRunning ||
+        macroWorkers.isPanelMacroExecuting(runtime) ||
+        notebookWorkers.isPanelNotebookExecuting(runtime);
+      let drained: Promise<void> | null = null;
+      if (!isWorkspaceDirty() && !executing) {
+        drained = gate.pause();
+        paused = true;
+        await drained;
+      }
+      if (
+        (isWorkspaceDirty() || executing) &&
+        !(await confirm({
+          title: t("New workspace"),
+          message: t(
+            "Create a new workspace? Unsaved changes will be lost and running Python code will be stopped.",
+          ),
+          confirmLabel: t("Create"),
+          destructive: true,
+        }))
+      ) {
+        return;
+      }
+
+      didReset = true;
+      if (!drained) {
+        drained = gate.pause();
+        paused = true;
+      }
+      workspaceEpoch.current += 1;
+      flushSync(() => {
+        setWorkspaceResetState("resetting");
+        setWorkspacePanelsSuspended(true);
+        setSelectedIds([]);
+        setSelectedGroupIds([]);
+        setCurrentId(null);
+      });
+      macroWorkers.disposePanelMacroRuntime(runtime);
+      notebookWorkers.disposePanelNotebookRuntime(runtime);
+      await Promise.all([drained, runtime.stopWorkspaceMacro()]);
+
+      flushSync(() => {
+        setSelectedIds([]);
+        setSelectedGroupIds([]);
+        setCurrentId(null);
+      });
+      await runtime.resetAll({ silent: true });
+      const [{ emptyNotebook }, { notebookToJsonString }] = await Promise.all([
+        import("./notebook/types"),
+        import("./notebook/nbformat"),
+      ]);
+      const notebook = emptyNotebook();
+      await Promise.all([
+        runtime.createMacro(undefined, undefined, { silent: true }),
+        runtime.createNotebook(notebook.name, notebookToJsonString(notebook), {
+          silent: true,
+        }),
+      ]);
+      flushSync(() => {
+        setTreeKind("signal");
+        setCentralView("plot");
+        setWorkspaceVersion((version) => version + 1);
+        setKernelGeneration((generation) => generation + 1);
+        setWorkspacePanelsSuspended(false);
+      });
+      await Promise.all([
+        macroPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+        notebookPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+      ]);
+      const tree = await runtime.getPanelTree("signal");
+      flushSync(() => {
+        setTree(tree);
+        setSelectedIds([]);
+        setSelectedGroupIds([]);
+        setCurrentId(null);
+        setWorkspaceFilename(null);
+        setRecoveryBanner(null);
+        markClean();
+      });
+      completed = true;
+    } catch (error) {
+      failure = error instanceof Error ? error : new Error(String(error));
+    } finally {
+      if (paused && !didReset) {
+        gate.resume();
+        paused = false;
+      }
+      if (prepared) {
+        try {
+          await runtime.finishWorkspaceReset(didReset);
+        } catch (error) {
+          const cleanupError =
+            error instanceof Error ? error : new Error(String(error));
+          if (failure)
+            console.error("Workspace reset cleanup failed:", cleanupError);
+          else failure = cleanupError;
+        }
+      }
+      if (paused) gate.resume();
+      flushSync(() => {
+        setBusy(false);
+        if (failure) {
+          setWorkspaceResetState("error");
+          if (didReset) {
+            setWorkspacePanelsSuspended(false);
+            markDirty();
+          }
+        } else {
+          setWorkspaceResetState("idle");
+          if (completed) setWorkspaceResetId((id) => id + 1);
+        }
+      });
+      workspaceResetPending.current = false;
+      if (failure) {
+        await notify({
+          kind: "error",
+          title: t("New workspace"),
+          message: t(
+            "Could not create a new workspace. Some data may have changed: {error}",
+            { error: failure.message },
+          ),
+        });
+      }
+    }
+  }, [
+    runtime,
+    busy,
+    isWorkspaceDirty,
+    confirm,
+    setSelectedIds,
+    macroPanel,
+    notebookPanel,
+    setWorkspaceFilename,
+    markClean,
+    markDirty,
+    notify,
+  ]);
+
   const handleSaveWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;
     setBusy(true);
     try {
-      // When no filename has been associated with the session yet
-      // ("Untitled"), suggest a timestamped one. Otherwise keep the
-      // last known name, mirroring desktop "Save" semantics.
-      const suggestedName =
-        workspaceFilename ??
-        `workspace-${new Date()
-          .toISOString()
-          .replace(/[-:T]/g, "")
-          .replace(/\..+$/, "")}.h5`;
+      const suggestedName = workspaceFilename ?? "Untitled.h5";
       // The file is chosen before the workspace is serialised: a long
       // serialisation must not outlast the click that allows the picker.
       const result = await saveGeneratedFile(
@@ -4548,6 +4717,7 @@ export default function App() {
         onOpenDirectory: handleOpenFromDirectory,
         onSaveFile: handleSaveFile,
         onSaveToDirectory: handleSaveToDirectory,
+        onNewWorkspace: handleNewWorkspace,
         onOpenWorkspaceHdf5: handleOpenWorkspaceHdf5,
         onSaveWorkspaceHdf5: handleSaveWorkspaceHdf5,
         onCapsule: () => setCapsuleOpen(true),
@@ -4722,6 +4892,7 @@ export default function App() {
       handleOpenFromDirectory,
       handleSaveFile,
       handleSaveToDirectory,
+      handleNewWorkspace,
       handleOpenWorkspaceHdf5,
       handleSaveWorkspaceHdf5,
       handleImportHdf5,
@@ -4779,7 +4950,16 @@ export default function App() {
       groupIndex={groupIndex}
       navigateToGroup={navigateToGroup}
     >
-      <div className="app" data-runtime-status={status}>
+      <div
+        className="app"
+        data-runtime-status={status}
+        data-workspace-reset-id={workspaceResetId}
+        data-workspace-reset-state={workspaceResetState}
+        inert={
+          workspaceResetState === "checking" ||
+          workspaceResetState === "resetting"
+        }
+      >
         {/*
           Notebook and Macro panels are mounted exactly once (when the
           runtime becomes available) and rendered into a stable
@@ -4792,12 +4972,13 @@ export default function App() {
           remount and lose everything.
         */}
         {runtime &&
+          !workspacePanelsSuspended &&
           notebookPortalEl &&
           createPortal(
             <Suspense fallback={null}>
               <NotebookPanel
                 key={`nb-${workspaceVersion}`}
-                ref={notebookPanelRef}
+                ref={notebookPanel.ref}
                 runtime={runtime}
                 kernelGeneration={kernelGeneration}
                 theme={theme}
@@ -4839,6 +5020,7 @@ export default function App() {
             notebookPortalEl,
           )}
         {runtime &&
+          !workspacePanelsSuspended &&
           macroPortalEl &&
           createPortal(
             <Suspense fallback={null}>
@@ -4848,6 +5030,7 @@ export default function App() {
                 runtime={runtime}
                 kernelGeneration={kernelGeneration}
                 onCountChanged={setMacroCount}
+                onRunningChanged={handleMacroRunningChanged}
                 placement={macroFloating ? "floating" : "tab"}
                 onTogglePlacement={toggleMacroFloating}
                 onSetCurrentPanel={(panel) => {
@@ -4874,7 +5057,12 @@ export default function App() {
                 onConvertToNotebook={(title, code) => {
                   if (notebookFloating) setNotebookFloating(false);
                   setCentralView("notebook");
-                  notebookPanelRef.current?.importMacroAsNotebook(title, code);
+                  void notebookPanel
+                    .wait(MACRO_PANEL_TIMEOUT_MS)
+                    .then((panel) => panel.importMacroAsNotebook(title, code))
+                    .catch((error: unknown) =>
+                      console.error("Failed to open notebook:", error),
+                    );
                 }}
                 theme={theme}
               />

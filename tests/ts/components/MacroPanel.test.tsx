@@ -15,6 +15,8 @@ import type { ReactElement, Ref } from "react";
 vi.mock("../../../src/runtime/MacroRuntime", () => {
   class MacroRuntime {
     externalCallbacks = {};
+    run = vi.fn(async () => undefined);
+    stop = vi.fn();
     preload(): Promise<void> {
       return Promise.resolve();
     }
@@ -30,7 +32,13 @@ import {
 } from "../../../src/components/MacroPanel";
 import { DialogProvider } from "../../../src/components/ConfirmDialog";
 import { ToastProvider } from "../../../src/components/Toast";
-import type { MacroRecord, RuntimeApi } from "../../../src/runtime/runtime";
+import { WorkspaceProvider } from "../../../src/runtime/WorkspaceContext";
+import type {
+  MacroLintResult,
+  MacroRecord,
+  RuntimeApi,
+} from "../../../src/runtime/runtime";
+import { panelMacroRuntime } from "../../../src/runtime/MacroRuntime";
 import { PendingHandle } from "../../../src/utils/pendingHandle";
 
 /**
@@ -75,16 +83,18 @@ describe("MacroPanel — importing a macro", () => {
     render(
       <ToastProvider>
         <DialogProvider>
-          <MacroPanel
-            ref={panel.ref}
-            runtime={runtime}
-            onSetCurrentPanel={() => undefined}
-            getSelection={() => []}
-            getCurrentPanel={() => "signal"}
-            selectObjects={() => undefined}
-            onModelChanged={() => undefined}
-            theme="light"
-          />
+          <WorkspaceProvider>
+            <MacroPanel
+              ref={panel.ref}
+              runtime={runtime}
+              onSetCurrentPanel={() => undefined}
+              getSelection={() => []}
+              getCurrentPanel={() => "signal"}
+              selectObjects={() => undefined}
+              onModelChanged={() => undefined}
+              theme="light"
+            />
+          </WorkspaceProvider>
         </DialogProvider>
       </ToastProvider>,
     );
@@ -158,24 +168,61 @@ function storeRuntime(): RuntimeApi {
 function macroPanel(
   runtime: RuntimeApi,
   ref?: Ref<MacroPanelHandle>,
+  onRunningChanged?: (running: boolean) => void,
 ): ReactElement {
   return (
     <ToastProvider>
       <DialogProvider>
-        <MacroPanel
-          ref={ref}
-          runtime={runtime}
-          onSetCurrentPanel={() => undefined}
-          getSelection={() => []}
-          getCurrentPanel={() => "signal"}
-          selectObjects={() => undefined}
-          onModelChanged={() => undefined}
-          theme="light"
-        />
+        <WorkspaceProvider>
+          <MacroPanel
+            ref={ref}
+            runtime={runtime}
+            onSetCurrentPanel={() => undefined}
+            getSelection={() => []}
+            getCurrentPanel={() => "signal"}
+            selectObjects={() => undefined}
+            onModelChanged={() => undefined}
+            onRunningChanged={onRunningChanged}
+            theme="light"
+          />
+        </WorkspaceProvider>
       </DialogProvider>
     </ToastProvider>
   );
 }
+
+describe("MacroPanel — execution", () => {
+  it("reports a pending run immediately and cancels it during validation", async () => {
+    window.localStorage.clear();
+    const runtime = storeRuntime();
+    let finishLint!: (result: MacroLintResult) => void;
+    runtime.lintMacro = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishLint = resolve;
+        }),
+    );
+    const onRunningChanged = vi.fn();
+    render(macroPanel(runtime, undefined, onRunningChanged));
+    const run = await screen.findByRole("button", { name: /^▶ Run/ });
+    await waitFor(() => expect(run).toBeEnabled());
+    fireEvent.click(run);
+    expect(onRunningChanged).toHaveBeenLastCalledWith(true);
+    await waitFor(() => expect(runtime.lintMacro).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /^■ Stop/ }));
+    expect(onRunningChanged).toHaveBeenLastCalledWith(false);
+    await act(async () => {
+      finishLint({
+        ok: true,
+        syntax_error: null,
+        unknown_methods: [],
+        missing_await: [],
+        proxy_calls: [],
+      });
+    });
+    expect(panelMacroRuntime(runtime, 0).run).not.toHaveBeenCalled();
+  });
+});
 
 describe("MacroPanel — Recent… counter", () => {
   beforeEach(async () => {

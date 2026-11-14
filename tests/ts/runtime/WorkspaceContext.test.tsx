@@ -45,6 +45,16 @@ describe("WorkspaceContext", () => {
     expect(ctx.value!.dirty).toBe(true);
   });
 
+  it("reports edits and clean transitions before React renders", () => {
+    const { ctx } = harness();
+    act(() => {
+      ctx.value!.markDirty();
+      expect(ctx.value!.isDirty()).toBe(true);
+      ctx.value!.markClean();
+      expect(ctx.value!.isDirty()).toBe(false);
+    });
+  });
+
   it("markDirty is idempotent", () => {
     const { ctx } = harness();
     act(() => ctx.value!.markDirty());
