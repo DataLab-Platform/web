@@ -714,6 +714,7 @@ def test_tools_are_listed_in_plugin_records(tools_env) -> None:
             "kind": "instrument",
             "object_type": "signal",
             "selection": "none",
+            "menu": True,
         },
         {
             "id": "double",
@@ -722,8 +723,39 @@ def test_tools_are_listed_in_plugin_records(tools_env) -> None:
             "kind": "launcher",
             "object_type": "signal",
             "selection": "at_least_one",
+            "menu": True,
         },
     ]
+
+
+def test_menu_false_tools_are_flagged_and_still_launchable(
+    tools_env, monkeypatch
+) -> None:
+    # As on DataLab Desktop, the plugin places such a tool in its own menus
+    bootstrap, record = tools_env
+    placed = PluginTool(
+        id="placed",
+        title="Double signals (own menu)...",
+        launcher="double_signals",
+        object_type="signal",
+        menu=False,
+    )
+    monkeypatch.setattr(GenericApplicationPlugin, "TOOLS", (*TOOLS, placed))
+
+    tools = dlw_plugins._record_payload(record)["tools"]
+    assert [(tool["id"], tool["menu"]) for tool in tools] == [
+        ("generator", True),
+        ("double", True),
+        ("placed", False),
+    ]
+    added = asyncio.run(
+        dlw_applications.launch_plugin_tool(
+            PLUGIN_ID, "placed", [_add_input_signal(bootstrap)]
+        )
+    )
+    assert len(added["signal"]) == 1
+    with pytest.raises(TypeError, match="menu flag must be a boolean"):
+        dataclasses.replace(placed, menu="no")
 
 
 def test_launcher_tool_runs_on_the_selection(tools_env) -> None:

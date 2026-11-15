@@ -138,7 +138,7 @@ The Applications dialog presents each recipe as a method card: expected inputs, 
 
 ### Tools and instruments
 
-Application plugins may also declare `TOOLS`, a tuple of `datalab.plugins.tools.PluginTool` values, as on DataLab Desktop. The Applications dialog lists them in a **Tools** section, and the _Plugins_ menu lists them in the plugin's submenu, after its methods and examples. `object_type` places a tool in the signal or image menu (both when `None`), and `selection` (`none`, `exactly_one`, `at_least_one`, `at_least_two`) enables it only when enough objects of that type are selected; otherwise the dialog tells which objects to select.
+Application plugins may also declare `TOOLS`, a tuple of `datalab.plugins.tools.PluginTool` values, as on DataLab Desktop. The Applications dialog lists them in a **Tools** section, and the _Plugins_ menu lists them in the plugin's submenu, after its methods and examples. `object_type` places a tool in the signal or image menu (both when `None`), and `selection` (`none`, `exactly_one`, `at_least_one`, `at_least_two`) enables it only when enough objects of that type are selected; otherwise the dialog tells which objects to select. As on DataLab Desktop, a tool declared with `menu=False` is left out of the plugin's submenu, because the plugin places it itself (for example in one of its own submenus); the Applications dialog still lists it.
 
 A tool is opened in one of two ways:
 
@@ -147,7 +147,7 @@ A tool is opened in one of two ways:
 
 An instrument can override `open()` and `close()` to prepare and release resources. DataLab-Web opens it with the edited settings before the first preview or acquisition, retries a failed opening on the next request, and closes it when the window closes or the plugin is unloaded. Calls are serialized, but a slow call may block the browser when the runtime runs on the main thread. Abrupt page termination cannot guarantee that `close()` runs.
 
-`datalab.plugins.resources` and `datalab.plugins.recipe_binding` are copied from DataLab Desktop into the host shim. The tools shim is based on the Desktop contract but does not support `PluginTool(menu=False)`. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
+`datalab.plugins.resources`, `datalab.plugins.recipe_binding` and `datalab.plugins.tools` are copied from DataLab Desktop into the host shim, so `PluginTool` accepts the same arguments, including `menu`. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
 
 The wheel rules below come from `datalab.plugins.wheels`, also copied verbatim from DataLab Desktop and used by the plugin catalog, so a wheel is judged the same way everywhere; `dlw_wheels.py` only applies them to the `datalab.web_plugins` group. A Python test compares the copy with a sibling DataLab checkout when one is available.
 

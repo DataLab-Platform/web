@@ -31,6 +31,15 @@ export interface DataLabWebClientOptions {
   targetOrigin: string;
   /** Default request timeout in ms. ``0`` disables. Defaults to 30 s. */
   defaultTimeoutMs?: number;
+  /** Transfer the buffers of the typed arrays (and ``ArrayBuffer`` values)
+   *  sent in requests instead of copying them. Defaults to ``false``:
+   *  ``postMessage`` then copies them (structured clone), so the caller's
+   *  arrays remain usable. With ``true``, the buffers move zero-copy to the
+   *  iframe, which saves a copy of large signals and images, but the
+   *  caller's arrays are detached (emptied) once the request is sent: pass
+   *  copies of the data you still need. A buffer shared by several arrays
+   *  is transferred once. */
+  transferArrays?: boolean;
   /** Override ``window`` for tests. */
   win?: Window & typeof globalThis;
 }
@@ -107,6 +116,7 @@ export class DataLabWebClient {
   private readonly win: Window & typeof globalThis;
   private readonly targetOrigin: string;
   private readonly defaultTimeoutMs: number;
+  private readonly transferArrays: boolean;
   private nextId = 1;
   private pending = new Map<number | string, PendingRequest>();
   private listeners = new Map<string, Set<EventListener>>();
@@ -121,6 +131,7 @@ export class DataLabWebClient {
     this.win = options.win ?? (window as Window & typeof globalThis);
     this.targetOrigin = options.targetOrigin;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
+    this.transferArrays = options.transferArrays ?? false;
     this.win.addEventListener("message", this.handleMessage);
   }
 
@@ -239,7 +250,11 @@ export class DataLabWebClient {
   // Low-level RPC
   // ---------------------------------------------------------------------
 
-  /** Send an arbitrary RPC request. Prefer the typed helpers below. */
+  /** Send an arbitrary RPC request. Prefer the typed helpers below.
+   *
+   *  Typed arrays and ``ArrayBuffer`` values found in ``params`` are copied,
+   *  unless the client was created with ``transferArrays: true``: their
+   *  buffers are then transferred, each once, and detached in the caller. */
   call(method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
     if (this.disposed) {
       return Promise.reject(new Error("DataLabWebClient disposed"));
@@ -250,7 +265,10 @@ export class DataLabWebClient {
     }
     const id = this.nextId++;
     const request = { id, type: "request" as const, method, params };
-    const transfer = collectTransferables(request);
+    // A transfer list must not contain the same buffer twice
+    const transfer = this.transferArrays
+      ? [...new Set(collectTransferables(request))]
+      : [];
 
     return new Promise((resolve, reject) => {
       const effectiveTimeout = timeoutMs ?? this.defaultTimeoutMs;
@@ -298,13 +316,14 @@ export class DataLabWebClient {
   /** Push a 1-D signal to DataLab-Web.
    *
    *  ``xdata``/``ydata`` may be a ``Float64Array`` (recommended for
-   *  large signals — passed zero-copy via structured-clone
-   *  transferables and ingested as a numpy view), a
-   *  ``Float32Array`` (widened to float64 in JavaScript), or a plain
-   *  ``number[]`` (slow legacy path, kept for convenience on small signals).
-   *  Transferring a ``Float64Array`` detaches its underlying buffer. Pass
-   *  copies if the caller needs to keep the data, and use distinct buffers
-   *  for ``xdata`` and ``ydata``: shared buffers cause a transfer error. */
+   *  large signals — sent as a binary block and ingested as a numpy
+   *  view), a ``Float32Array`` (widened to float64 in JavaScript), or a
+   *  plain ``number[]`` (slow legacy path, kept for convenience on small
+   *  signals). The arrays are copied, unless the client was created with
+   *  ``transferArrays: true``: a ``Float64Array`` is then transferred
+   *  zero-copy and detached once the request is sent, so pass a copy if
+   *  the caller needs to keep the data. ``Float32Array`` and ``number[]``
+   *  inputs are converted to new arrays and never detached. */
   addSignal(
     title: string,
     xdata: number[] | Float32Array | Float64Array,
@@ -335,9 +354,13 @@ export class DataLabWebClient {
    *
    *  Accepts either:
    *  - a nested ``number[][]`` (legacy, slow but trivially serialisable);
-   *  - a flat typed array + ``{ width, height }`` (fast path:
-   *    zero-copy across iframe and Pyodide).  Use this for any image
+   *  - a flat typed array + ``{ width, height }`` (fast path: the pixels
+   *    are sent as a single binary block).  Use this for any image
    *    larger than a few hundred kB.
+   *
+   *  The flat typed array is copied, unless the client was created with
+   *  ``transferArrays: true``: it is then transferred zero-copy and
+   *  detached once the request is sent.
    */
   addImage(
     title: string,

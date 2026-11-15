@@ -112,7 +112,8 @@ export class DataLabWebService implements OnDestroy {
   }
 
   /** Push a 1-D signal. Pass ``Float64Array`` for the binary fast
-   *  path on large signals (zero-copy across the iframe). */
+   *  path on large signals (copied to the iframe, unless the client is
+   *  created with ``transferArrays: true``). */
   addSignal(
     title: string,
     xdata: number[] | Float32Array | Float64Array,

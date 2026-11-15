@@ -22,6 +22,11 @@
  * bridge inside DataLab-Web will silently drop your postMessage
  * calls — see ``README.md`` for setup details.
  *
+ * Angular only binds trusted resource URLs to an iframe ``src``. The
+ * component marks ``src`` as trusted only after checking that its origin
+ * is in ``TRUSTED_DATALAB_WEB_ORIGINS``, and throws an error otherwise:
+ * never bind a user-controlled string to ``src``.
+ *
  * Drop this file into your Angular app under, e.g.,
  * ``src/app/datalab-web/datalab-web-frame.component.ts``.
  */
@@ -34,10 +39,13 @@ import {
   EventEmitter,
   inject,
   Input,
+  OnChanges,
   OnDestroy,
   Output,
+  SimpleChanges,
   ViewChild,
 } from "@angular/core";
+import { DomSanitizer, SafeResourceUrl } from "@angular/platform-browser";
 
 import { DataLabWebService } from "./datalab-web.service";
 
@@ -49,6 +57,40 @@ export const DATALAB_WEB_URL =
     typeof window === "undefined" ? "" : window.location.origin,
   );
 
+/** Origins trusted to serve DataLab-Web in the iframe: the origin of
+ *  ``src`` must be one of them. Keep only the origins you use, and add
+ *  those of your own deployments, e.g. ``"https://datalab.example.com"``
+ *  or a local development server such as ``"http://localhost:5173"``.
+ *  The SDK sends its requests to this same origin (``targetOrigin``). */
+export const TRUSTED_DATALAB_WEB_ORIGINS: readonly string[] = [
+  // This application, serving the bundle under /datalab-web/ (see
+  // DATALAB_WEB_URL): remove it if this origin also serves untrusted pages
+  ...(typeof window === "undefined" ? [] : [window.location.origin]),
+  // Public deployment (https://datalab-platform.com/web/)
+  "https://datalab-platform.com",
+];
+
+/** Return ``src`` as an absolute URL, after checking that it uses HTTPS
+ *  (or HTTP on a local development host) and a trusted origin. Relative
+ *  URLs are resolved like the iframe would, against the document base. */
+export function trustedDataLabWebUrl(src: string): URL {
+  const url = new URL(src, document.baseURI);
+  const localDevelopment =
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  if (url.protocol !== "https:" && !localDevelopment) {
+    throw new Error(
+      `DataLab-Web URL must use https (or http on localhost): ${url.origin}`,
+    );
+  }
+  if (!TRUSTED_DATALAB_WEB_ORIGINS.includes(url.origin)) {
+    throw new Error(
+      `DataLab-Web origin ${url.origin} is not in TRUSTED_DATALAB_WEB_ORIGINS`,
+    );
+  }
+  return url;
+}
+
 @Component({
   selector: "datalab-web-frame",
   standalone: true,
@@ -56,7 +98,7 @@ export const DATALAB_WEB_URL =
   template: `
     <iframe
       #frame
-      [src]="src"
+      [src]="safeSrc"
       title="DataLab-Web"
       [style.width]="'100%'"
       [style.height]="'100%'"
@@ -73,8 +115,11 @@ export const DATALAB_WEB_URL =
     `,
   ],
 })
-export class DataLabWebFrameComponent implements AfterViewInit, OnDestroy {
-  /** Iframe URL. Defaults to ``DATALAB_WEB_URL``. */
+export class DataLabWebFrameComponent
+  implements OnChanges, AfterViewInit, OnDestroy
+{
+  /** Iframe URL. Defaults to ``DATALAB_WEB_URL``. Its origin must be in
+   *  ``TRUSTED_DATALAB_WEB_ORIGINS``. */
   @Input() src: string = DATALAB_WEB_URL;
 
   /** Emitted with the DataLab-Web version string when the bridge
@@ -89,23 +134,48 @@ export class DataLabWebFrameComponent implements AfterViewInit, OnDestroy {
   private frameRef!: ElementRef<HTMLIFrameElement>;
 
   private readonly dlw = inject(DataLabWebService);
+  private readonly sanitizer = inject(DomSanitizer);
 
-  async ngAfterViewInit(): Promise<void> {
-    const iframe = this.frameRef.nativeElement;
-    // ``targetOrigin`` for postMessage must be the iframe's origin.
-    // ``URL`` resolves relative paths against the document base, so
-    // both same-origin and cross-origin URLs are handled uniformly.
-    const targetOrigin = new URL(iframe.src, window.location.href).origin;
+  /** Validated ``src``: its origin is the ``targetOrigin`` of the SDK. */
+  private url = trustedDataLabWebUrl(this.src);
+
+  /** URL bound to the iframe, trusted only once validated. */
+  protected safeSrc: SafeResourceUrl = this.trust(this.url);
+
+  ngOnChanges(changes: SimpleChanges): void {
+    const change = changes["src"];
+    if (!change) return;
+    this.url = trustedDataLabWebUrl(this.src);
+    this.safeSrc = this.trust(this.url);
+    if (!change.firstChange) {
+      // The new document needs its own bridge handshake
+      this.frameRef.nativeElement.addEventListener(
+        "load",
+        () => void this.connect(),
+        { once: true },
+      );
+    }
+  }
+
+  ngAfterViewInit(): void {
+    void this.connect();
+  }
+
+  ngOnDestroy(): void {
+    this.dlw.detach();
+  }
+
+  private trust(url: URL): SafeResourceUrl {
+    return this.sanitizer.bypassSecurityTrustResourceUrl(url.href);
+  }
+
+  private async connect(): Promise<void> {
     try {
-      await this.dlw.attach(iframe, targetOrigin);
+      await this.dlw.attach(this.frameRef.nativeElement, this.url.origin);
       const v = this.dlw.version();
       this.ready.emit(v ?? "");
     } catch (err) {
       this.failed.emit(err as Error);
     }
-  }
-
-  ngOnDestroy(): void {
-    this.dlw.detach();
   }
 }

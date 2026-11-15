@@ -71,9 +71,11 @@ import with the package name above.
 ## Step 3 — Configure the embed URL
 
 Both the iframe `src` and the SDK's `targetOrigin` must agree on the
-same origin. Edit the `DATALAB_WEB_URL` token at the top of
+same origin: the frame component derives `targetOrigin` from `src`.
+Edit the `DATALAB_WEB_URL` token at the top of
 `datalab-web-frame.component.ts` (or wire it to your environment
-config) to point at the deployed DataLab-Web. Typical values:
+config) to point at the deployed DataLab-Web, and make sure its origin
+is listed in `TRUSTED_DATALAB_WEB_ORIGINS` (see below). Typical values:
 
 ```ts
 // Same origin (Angular dev server proxies /datalab-web to the bundle):
@@ -81,13 +83,23 @@ const DATALAB_WEB_URL =
   "/datalab-web/index.html?allowedOrigins=" +
   encodeURIComponent(window.location.origin);
 
-// Cross-origin deployment:
+// Cross-origin deployment (add "https://datalab.example.com" to
+// TRUSTED_DATALAB_WEB_ORIGINS):
 const DATALAB_WEB_URL =
   "https://datalab.example.com/?allowedOrigins=" +
   encodeURIComponent(window.location.origin);
 ```
 
 The `allowedOrigins` query parameter restricts which parent windows the bridge accepts requests from. **Always set it**: without it, the bridge is not activated.
+
+### Trusted DataLab-Web origins
+
+An iframe `src` is a [resource URL security context](https://angular.dev/best-practices/security#sanitization-and-security-contexts): Angular refuses to bind a plain string to it, and marking an arbitrary string as trusted would let a crafted URL load any page in your application. The frame component therefore validates `src` before trusting it:
+
+- the URL must use `https:`, or `http:` on `localhost` or `127.0.0.1` for development;
+- its origin must be listed in `TRUSTED_DATALAB_WEB_ORIGINS`, at the top of `datalab-web-frame.component.ts`. The list holds the origin of your application, for the same-origin setup, and the public deployment `https://datalab-platform.com`. Add the origins of your own deployments, such as `https://datalab.example.com` or a local development server like `http://localhost:5173`, and remove the entries you do not use.
+
+The component throws an error for any other URL, and only calls `DomSanitizer.bypassSecurityTrustResourceUrl` with a URL that passed these checks: this call disables Angular's protection for the value it receives, so it must never receive an unchecked string. The origin of the validated URL is also the `targetOrigin` given to the SDK, so requests only go to an origin of the allow-list. Never bind a user-controlled string (query parameter, form field, stored setting…) to `src`.
 
 ## Step 4 — Use it
 
@@ -149,7 +161,9 @@ The service uses [signals](https://angular.dev/guide/signals) to expose `ready`,
 
 ## Notes on the binary fast path
 
-`DataLabWebClient` transfers `Float64Array` payloads through `postMessage` without copying them first. Transfer detaches the underlying buffer, so pass a copy if your application still needs the data. Use distinct buffers for signal X and Y: two views of the same buffer currently cause a transfer error. `Float32Array` and plain `number[]` inputs are converted to new `Float64Array` values before transfer.
+`DataLabWebClient` sends `Float64Array` payloads (and the flat typed array of `addImage`) through `postMessage` as binary blocks. By default, `postMessage` copies them, so your application keeps its arrays, even when signal X and Y are two views of the same buffer. `Float32Array` and plain `number[]` inputs are converted to new `Float64Array` values first.
+
+To avoid this copy for large data, create the client with `transferArrays: true` (in `DataLabWebService.attach`: `new DataLabWebClient(iframe, { targetOrigin, transferArrays: true })`): the buffers are then transferred zero-copy, each once, and your arrays are detached (emptied) once the request is sent. Pass copies of the data you still need.
 
 ## Compatibility & versioning
 
@@ -174,6 +188,8 @@ Before shipping the integration to production, verify:
 1. The bundle is served from a stable URL — the bundle uses relative asset URLs (Vite `base: "./"`), so any sub-path works.
 2. The iframe `src` includes `?allowedOrigins=<your-app-origin>` (URL-encoded,
    comma-separated for multiple origins). Never use `*` outside development.
+   Its origin is listed in `TRUSTED_DATALAB_WEB_ORIGINS`, which holds only the
+   origins you use.
 3. The host page's CSP allows `frame-src` for the bundle origin
    (and `worker-src 'self' blob:` if your CSP is strict — Pyodide uses workers).
 4. Static assets under `assets/` are served with long-lived cache headers

@@ -38,6 +38,21 @@ The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` i
 
 The typed helpers mirror DataLab's remote-control API: `getVersion`, `getProtocolVersion`, `addSignal`, `addImage`, `listSignals`, `listImages`, `getObject`, `getObjectUuids`, `deleteObject`, `getSignalXY`, `getImageData`, `applyFeature` (and its alias `calc`), `listFeatures`, `selectObjects`, `getSelection`, `setCurrentPanel`, `getCurrentPanel`, `getCurrentObjectUuid` and `resetAll`. `call(method, params)` sends any other request, and `dispose()` removes the message listener and rejects pending requests.
 
+## Typed arrays
+
+`addSignal` sends `Float64Array` data, and `addImage` a flat `Float32Array` or `Float64Array` with its `width` and `height`, as binary blocks, much faster than plain number arrays for large data. By default, `postMessage` copies the typed arrays of a request (including those passed to `call`), so your application keeps its arrays, even when several of them share the same buffer.
+
+To avoid this copy for large data, create the client with `transferArrays: true`:
+
+```ts
+const client = new DataLabWebClient(iframe, {
+  targetOrigin: "https://datalab.example.com",
+  transferArrays: true,
+});
+```
+
+The buffers are then transferred zero-copy (each buffer once, even when shared by X and Y), and your typed arrays are detached (emptied) once the request is sent: pass copies of the data you still need. `Float32Array` signal data and plain number arrays are first converted to new `Float64Array` values, so they are never detached.
+
 ## Events
 
 `client.on(name, handler)` subscribes to an event sent by the iframe and returns a function that removes the subscription:
