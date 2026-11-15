@@ -768,6 +768,7 @@ def _record_payload(record: PluginRecord) -> dict[str, Any]:
                     None if tool.object_type is None else tool.object_type.value
                 ),
                 "selection": tool.selection.value,
+                "menu": tool.menu,
             }
             for tool in plugin_cls.get_tools()
         ]

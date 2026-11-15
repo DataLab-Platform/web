@@ -696,6 +696,12 @@ export interface PluginToolSummary {
   /** Panel of the objects the tool works on; ``null`` for both panels. */
   object_type: PanelKind | null;
   selection: PluginToolSelection;
+  /**
+   * ``false``: the plugin places the tool itself, so it is left out of the
+   * plugin's submenu of the *Plugins* menu (still listed in the Applications
+   * dialog), as in DataLab Desktop.
+   */
+  menu: boolean;
 }
 
 /** What an instrument window shows when it opens. */

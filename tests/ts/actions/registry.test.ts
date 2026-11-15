@@ -17,6 +17,7 @@ import type { ActionState } from "../../../src/actions/types";
 import type {
   PluginMenuAction,
   PluginRecord,
+  PluginToolSummary,
 } from "../../../src/runtime/runtime";
 
 function makeState(over: Partial<ActionState> = {}): ActionState {
@@ -420,13 +421,24 @@ describe("buildPluginActions", () => {
       ],
       tools: [
         {
+          id: "placed",
+          title: "Placed by the plugin…",
+          description: "",
+          kind: "launcher",
+          object_type: "signal",
+          selection: "none",
+          menu: false,
+        },
+        {
           id: "generator",
           title: "Signal generator…",
           description: "",
           kind: "instrument",
           object_type: "signal",
           selection: "none",
+          menu: true,
         },
+        // A payload without ``menu`` (older runtime) keeps the tool listed
         {
           id: "inspect",
           title: "Inspect signals…",
@@ -434,7 +446,7 @@ describe("buildPluginActions", () => {
           kind: "launcher",
           object_type: "signal",
           selection: "at_least_one",
-        },
+        } as PluginToolSummary,
         {
           id: "frames",
           title: "Frame editor…",
@@ -442,6 +454,7 @@ describe("buildPluginActions", () => {
           kind: "launcher",
           object_type: "image",
           selection: "none",
+          menu: true,
         },
       ],
       operations: {
@@ -504,7 +517,8 @@ describe("buildPluginActions", () => {
       "quickstart",
     );
 
-    // Only the tools of the active panel are listed, after a separator
+    // Only the tools of the active panel are listed, after a separator;
+    // ``menu: false`` tools are placed by the plugin itself
     const tools = actions.filter((action) =>
       action.id.startsWith("plugin.application.tool."),
     );

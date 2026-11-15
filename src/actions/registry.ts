@@ -1351,11 +1351,14 @@ export function buildPluginActions(
           run: () => cb.onOpenApplicationExample(pluginId, example.id),
         }),
       );
-      // Tools follow their panel; tools without object type are in both
+      // Tools follow their panel; tools without object type are in both.
+      // Tools declared with ``menu=False`` are placed by the plugin itself
+      // (a missing flag, from an older payload, means ``true``).
       const tools = record.tools
         .filter(
           (tool) =>
-            tool.object_type === null || tool.object_type === activePanel,
+            tool.menu !== false &&
+            (tool.object_type === null || tool.object_type === activePanel),
         )
         .map<ActionDescriptor>((tool, index) => ({
           id: `plugin.application.tool.${pluginId}.${tool.id}`,

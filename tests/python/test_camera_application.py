@@ -324,6 +324,7 @@ def test_camera_simulator_acquires_frames_ready_for_the_methods(
             "kind": "instrument",
             "object_type": "image",
             "selection": "none",
+            "menu": True,
         }
     ]
 

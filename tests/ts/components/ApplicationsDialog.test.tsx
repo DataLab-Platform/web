@@ -264,7 +264,9 @@ describe("ApplicationsDialog", () => {
             kind: "instrument",
             object_type: "image",
             selection: "none",
+            menu: true,
           },
+          // Tools left out of the Plugins menu are still listed here
           {
             id: "inspect",
             title: "Frame inspector…",
@@ -272,6 +274,7 @@ describe("ApplicationsDialog", () => {
             kind: "launcher",
             object_type: "image",
             selection: "at_least_two",
+            menu: false,
           },
         ],
       },

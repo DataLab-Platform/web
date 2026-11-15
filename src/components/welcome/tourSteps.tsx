@@ -142,7 +142,7 @@ export function buildDefaultTourSteps(ctx: TourContext): TourStep[] {
       body: (
         <p>
           {t(
-            "Import and export signals individually (CSV, NPY, …) or save and restore the whole workspace as an HDF5 file. The browser stores recent workspaces in IndexedDB.",
+            "Import and export signals individually (CSV, NPY, …) or save and restore the whole workspace as an HDF5 file. The browser only keeps recent macros and notebooks: save the workspace to keep your signals and images.",
           )}
         </p>
       ),

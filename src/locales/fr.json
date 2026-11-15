@@ -595,7 +595,7 @@
   "Implementation": "Implémentation",
   "Import .ipynb file from disk": "Importer un fichier .ipynb depuis le disque",
   "Import .py file from disk": "Importer un fichier .py depuis le disque",
-  "Import and export signals individually (CSV, NPY, …) or save and restore the whole workspace as an HDF5 file. The browser stores recent workspaces in IndexedDB.": "Importez et exportez les signaux individuellement (CSV, NPY, …) ou enregistrez et restaurez l'intégralité de l'espace de travail sous forme de fichier HDF5. Le navigateur conserve les espaces de travail récents dans IndexedDB.",
+  "Import and export signals individually (CSV, NPY, …) or save and restore the whole workspace as an HDF5 file. The browser only keeps recent macros and notebooks: save the workspace to keep your signals and images.": "Importez et exportez les signaux individuellement (CSV, NPY, …) ou enregistrez et restaurez l'intégralité de l'espace de travail sous forme de fichier HDF5. Le navigateur ne conserve que les macros et notebooks récents : enregistrez l'espace de travail pour conserver vos signaux et images.",
   "Import metadata": "Importer les métadonnées",
   "Import metadata…": "Importer les métadonnées…",
   "Import ROI…": "Importer une ROI…",

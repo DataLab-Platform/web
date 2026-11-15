@@ -18,9 +18,18 @@ interface FakeIframe {
   contentWindow: { postMessage: ReturnType<typeof vi.fn> };
 }
 
+/** The fake iframe clones each message like a browser: transferred buffers
+ *  are detached, and a transfer list repeating a buffer throws a
+ *  ``DataCloneError``. */
 function makeFakeIframe(): FakeIframe {
   return {
-    contentWindow: { postMessage: vi.fn() },
+    contentWindow: {
+      postMessage: vi.fn(
+        (message: unknown, _origin: string, transfer?: Transferable[]) => {
+          structuredClone(message, { transfer });
+        },
+      ),
+    },
   };
 }
 
@@ -240,6 +249,90 @@ describe("DataLabWebClient", () => {
     const id = (request as { id: number }).id;
     reply(iframe, { id, type: "response", result: "img-1" });
     await expect(promise).resolves.toBe("img-1");
+  });
+
+  /** Reply ``result`` to the ``index``-th request posted to ``target``. */
+  function replyTo(target: FakeIframe, index: number, result: unknown): void {
+    const { id } = target.contentWindow.postMessage.mock.calls[index][0] as {
+      id: number;
+    };
+    reply(target, { id, type: "response", result });
+  }
+
+  it("copies arrays by default, leaving the caller's arrays usable", async () => {
+    const xs = new Float64Array([0, 1, 2, 3]);
+    const ys = new Float64Array([10, 11, 12, 13]);
+    const pixels = new Float32Array(2 * 3);
+    // Two views of one buffer, e.g. X and Y stored together by the caller
+    const shared = new Float64Array(8);
+    const promises = [
+      client.addSignal("Probe", xs, ys),
+      client.addImage("Img", { width: 3, height: 2, data: pixels }),
+      client.addSignal("Shared", shared.subarray(0, 4), shared.subarray(4)),
+    ];
+    const calls = iframe.contentWindow.postMessage.mock.calls;
+    expect(calls.map((call) => call[2])).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect([xs.length, ys.length, pixels.length, shared.length]).toEqual([
+      4, 4, 6, 8,
+    ]);
+    promises.forEach((_promise, index) =>
+      replyTo(iframe, index, `obj-${index}`),
+    );
+    await expect(Promise.all(promises)).resolves.toEqual([
+      "obj-0",
+      "obj-1",
+      "obj-2",
+    ]);
+  });
+
+  describe("with transferArrays", () => {
+    let transferIframe: FakeIframe;
+    let transferClient: DataLabWebClient;
+
+    beforeEach(() => {
+      transferIframe = makeFakeIframe();
+      transferClient = new DataLabWebClient(
+        transferIframe as unknown as HTMLIFrameElement,
+        { targetOrigin: "http://iframe.test", transferArrays: true },
+      );
+    });
+
+    afterEach(() => {
+      transferClient.dispose();
+    });
+
+    it("transfers a buffer shared by X and Y once", async () => {
+      const buffer = new ArrayBuffer(8 * Float64Array.BYTES_PER_ELEMENT);
+      const xs = new Float64Array(buffer, 0, 4);
+      const ys = new Float64Array(buffer, 4 * Float64Array.BYTES_PER_ELEMENT);
+      const promise = transferClient.addSignal("Shared", xs, ys);
+      const [, , transfer] = transferIframe.contentWindow.postMessage.mock
+        .calls[0] as [unknown, string, Transferable[]];
+      expect(transfer).toHaveLength(1);
+      expect(transfer[0]).toBe(buffer);
+      expect(xs.length).toBe(0);
+      replyTo(transferIframe, 0, "obj-1");
+      await expect(promise).resolves.toBe("obj-1");
+    });
+
+    it("transfers every distinct buffer", async () => {
+      const xs = new Float64Array([0, 1, 2, 3]);
+      const ys = new Float64Array([10, 11, 12, 13]);
+      const buffers = [xs.buffer, ys.buffer];
+      const promise = transferClient.addSignal("Probe", xs, ys);
+      const [, , transfer] = transferIframe.contentWindow.postMessage.mock
+        .calls[0] as [unknown, string, Transferable[]];
+      expect(transfer).toHaveLength(2);
+      expect(transfer).toContain(buffers[0]);
+      expect(transfer).toContain(buffers[1]);
+      expect([xs.length, ys.length]).toEqual([0, 0]);
+      replyTo(transferIframe, 0, "obj-1");
+      await expect(promise).resolves.toBe("obj-1");
+    });
   });
 
   it("getSignalXY decodes binary float64 payloads zero-copy", async () => {
