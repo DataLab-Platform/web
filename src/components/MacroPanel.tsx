@@ -714,9 +714,13 @@ export const MacroPanel = forwardRef<MacroPanelHandle, Props>(
         }
         await rt.run(code, m.title, {
           onStream: (kind, text) => consoleRef.current?.append(kind, text),
-          onFinished: () => setRunState(false),
+          onFinished: () => {
+            if (generation === runGeneration.current) setRunState(false);
+          },
         });
       } catch (err) {
+        // A stopped run must not report on, nor end, the next one.
+        if (generation !== runGeneration.current) return;
         consoleRef.current?.append(
           "stderr",
           (err instanceof Error ? err.message : String(err)) + "\n",
