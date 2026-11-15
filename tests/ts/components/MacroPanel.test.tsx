@@ -10,6 +10,7 @@ import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import type { ReactElement, Ref } from "react";
+import { EditorView } from "@codemirror/view";
 
 // The macro worker plays no part in restoring or importing macros.
 vi.mock("../../../src/runtime/MacroRuntime", () => {
@@ -221,6 +222,44 @@ describe("MacroPanel — execution", () => {
       });
     });
     expect(panelMacroRuntime(runtime, 0).run).not.toHaveBeenCalled();
+  });
+
+  it("ignores the failure of a stopped run once another run started", async () => {
+    window.localStorage.clear();
+    const runtime = storeRuntime();
+    let failSave!: (error: Error) => void;
+    runtime.setMacroCode = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          failSave = reject;
+        }),
+    );
+    // The second run stays in its pre-run validation.
+    runtime.lintMacro = vi.fn(() => new Promise<MacroLintResult>(() => {}));
+    const onRunningChanged = vi.fn();
+    const { container } = render(
+      macroPanel(runtime, undefined, onRunningChanged),
+    );
+    const run = await screen.findByRole("button", { name: /^▶ Run/ });
+    await waitFor(() => expect(run).toBeEnabled());
+    // An edit leaves a pending save, which the first run waits for.
+    const view = EditorView.findFromDOM(
+      container.querySelector(".cm-editor") as HTMLElement,
+    );
+    act(() => {
+      view!.dispatch({ changes: { from: 0, insert: "x = 1\n" } });
+    });
+    fireEvent.click(run);
+    await waitFor(() => expect(runtime.setMacroCode).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /^■ Stop/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^▶ Run/ }));
+    await waitFor(() => expect(runtime.lintMacro).toHaveBeenCalledOnce());
+    await act(async () => {
+      failSave(new Error("stale save failure"));
+    });
+    expect(onRunningChanged).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole("button", { name: /^■ Stop/ })).toBeInTheDocument();
+    expect(screen.queryByText(/stale save failure/)).not.toBeInTheDocument();
   });
 });
 
