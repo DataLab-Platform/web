@@ -113,8 +113,7 @@ flowchart LR
   dispatch through `src/actions/`. Depending on the façade — not the
   concrete class — is what lets the runtime run either in-thread or in a
   Dedicated Web Worker without touching any call site.
-- Python helpers return **JSON-friendly dicts / lists** (`tolist()` on
-  arrays), never live PyProxies, to keep the bridge cheap.
+- Python helpers return bridge-compatible values rather than live PyProxies: JSON-friendly dictionaries and lists for metadata, and binary payloads where supported for array data.
 - The pinned `PYODIDE_VERSION` in `runtime.ts` and `workerBase.ts` and the `<script>` tag in `index.html` must always match — the wheel index is version-specific.
 
 ---

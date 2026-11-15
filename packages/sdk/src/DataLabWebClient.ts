@@ -300,9 +300,11 @@ export class DataLabWebClient {
    *  ``xdata``/``ydata`` may be a ``Float64Array`` (recommended for
    *  large signals — passed zero-copy via structured-clone
    *  transferables and ingested as a numpy view), a
-   *  ``Float32Array`` (will be widened to float64 on the Python
-   *  side), or a plain ``number[]`` (slow legacy path, kept for
-   *  convenience on small signals). */
+   *  ``Float32Array`` (widened to float64 in JavaScript), or a plain
+   *  ``number[]`` (slow legacy path, kept for convenience on small signals).
+   *  Transferring a ``Float64Array`` detaches its underlying buffer. Pass
+   *  copies if the caller needs to keep the data, and use distinct buffers
+   *  for ``xdata`` and ``ydata``: shared buffers cause a transfer error. */
   addSignal(
     title: string,
     xdata: number[] | Float32Array | Float64Array,

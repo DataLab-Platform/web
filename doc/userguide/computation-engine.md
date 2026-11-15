@@ -1,6 +1,6 @@
 # Computation engine (Sigima)
 
-The engine that actually computes signals and images is [**Sigima**](https://github.com/DataLab-Platform/Sigima), a headless Python library shared between desktop DataLab and DataLab-Web. Whatever the host application, the algorithms and parameters are the same, and the results are numerically equivalent (exact, or within the tolerance declared by the contract of the operation).
+The engine that computes signals and images is [**Sigima**](https://github.com/DataLab-Platform/Sigima), a headless Python library shared between desktop DataLab and DataLab-Web. Compatible versions use the same algorithms and parameters, but numerical equivalence across hosts depends on the inputs and numerical environment. Some operation contracts declare an exact or tolerance-based replay comparison; others have no declared comparison rule.
 
 ## Where the documentation lives
 
