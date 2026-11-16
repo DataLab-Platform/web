@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794486492611,
+  "lastUpdate": 1794807684321,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -4035,6 +4035,155 @@ window.BENCHMARK_DATA = {
           {
             "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
             "value": 54.1,
+            "unit": "MiB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick main/ram]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick main/ram]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · ledger capsule archive [quick main/ram]",
+            "value": 0.208,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick main/disk]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick main/disk]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick worker/ram]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick worker/ram]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · ledger capsule archive [quick worker/ram]",
+            "value": 0.208,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick worker/disk]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick worker/disk]",
+            "value": 8.438,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "a493f6c0cd6eb70e3e1b5517d9212f457697ba08",
+          "message": "v0.12.0",
+          "timestamp": "2026-11-16T06:33:53+01:00",
+          "tree_id": "39da2c7032e2cb9bc214c54c33d89f377cb06978",
+          "url": "https://github.com/DataLab-Platform/web/commit/a493f6c0cd6eb70e3e1b5517d9212f457697ba08"
+        },
+        "date": 1794807683623,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 16.777,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · payload [10000 pts]",
+            "value": 0.16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [10000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [100000 pts]",
+            "value": 1.6,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [100000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [500000 pts]",
+            "value": 8,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [500000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [1000000 pts]",
+            "value": 16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [1000000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 54.1,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 54.3,
             "unit": "MiB"
           },
           {
