@@ -6,16 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-## [0.12.0] - 2026-11-16
-
-### Added in 0.12.0
+### Added
 
 - **New workspace:** **File → New workspace** starts a clean, untitled workspace without reloading DataLab-Web. Unsaved changes and running Python code are confirmed before they are discarded or stopped; saved files and recent macros and notebooks are kept (closes [Issue #102](https://github.com/DataLab-Platform/web/issues/102)).
 - **X-ray Radiography & NDT application:** DataLab-Web bundles the X-ray Radiography & NDT plugin: radiographic display, magnifications of several object planes, detector corrections, physical quantities, enhancement filters, image quality (SNR, CNR, duplex IQI) and NDT measurements (tangential wall thickness, indication detection), with simulated and real-data examples and a radiography simulator.
 - **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
 - **Plugin instruments — restore defaults:** the window of a plugin instrument, e.g. the camera, oscilloscope or radiography simulators, has a new **Restore defaults** button, which sets the settings of the instrument back to their default values and refreshes the view ([#110](https://github.com/DataLab-Platform/web/issues/110)).
 
-### Fixed in 0.12.0
+### Fixed
 
 - **Documentation:** the user guide and SDK documentation now describe storage and transfer limits, plugin reload, notebook operations and cross-host comparison more accurately; the plugin link in the in-app guide works again (fixes [Issue #116](https://github.com/DataLab-Platform/web/issues/116)).
 - **Desktop-generated plugins:** a processing plugin created by DataLab Desktop could load without adding its menu action. Compatible plugins now expose and run their registered processings and analyses, including after reload; unsupported Desktop recipe launchers are reported, and ignored welcome tiles are identified in the plugin manager (fixes [Issue #94](https://github.com/DataLab-Platform/web/issues/94)).
@@ -26,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Plugin tools — `menu=False`:** a plugin declaring a tool with `PluginTool(..., menu=False)`, as DataLab Desktop allows, failed to load. As in DataLab Desktop, such a tool is now left out of the plugin's submenu of the _Plugins_ menu, the plugin placing it itself, and is still listed in the Applications dialog ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 - **Angular integration example:** the frame component bound its URL to the iframe as a plain string, which Angular refuses for an iframe `src`. It now marks the URL as trusted only after checking that it targets one of the trusted DataLab-Web origins listed in the component, so a crafted URL cannot load another page ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 
-### Changed in 0.12.0
+### Changed
 
 - **JavaScript SDK — typed arrays are copied by default:** `addSignal`, `addImage` and `call` no longer detach (empty) the typed arrays of the host page: they are copied, so the page can keep using them, and two arrays sharing one buffer (e.g. X and Y views of the same buffer) no longer fail with a `DataCloneError`. The new `transferArrays: true` client option keeps the zero-copy transfer for large data: the arrays are then detached once sent, and a shared buffer is transferred once ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 
@@ -417,8 +415,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.12.0...HEAD
-[0.12.0]: https://github.com/DataLab-Platform/web/compare/v0.11.1...v0.12.0
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.11.1...HEAD
 [0.11.1]: https://github.com/DataLab-Platform/web/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/DataLab-Platform/web/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/DataLab-Platform/web/compare/v0.9.0...v0.10.0
