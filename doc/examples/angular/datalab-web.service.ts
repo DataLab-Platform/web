@@ -59,7 +59,8 @@ export class DataLabWebService implements OnDestroy {
 
   /** Bind the service to a freshly mounted iframe. Called from
    *  ``DataLabWebFrameComponent.ngAfterViewInit`` — you should not
-   *  need to call this from feature components. */
+   *  need to call this from feature components. A replaced or detached
+   *  attachment rejects instead of reporting a stale success. */
   async attach(iframe: HTMLIFrameElement, targetOrigin: string): Promise<void> {
     if (this.client) {
       // The frame component re-attaches on hot-reload — release the
@@ -69,15 +70,21 @@ export class DataLabWebService implements OnDestroy {
     const client = new DataLabWebClient(iframe, { targetOrigin });
     this.client = client;
     this.offModelChanged = client.on("model-changed", () => {
-      void this.refreshCount();
+      void this.refreshCount(client);
     });
     try {
       const v = await client.ready(180_000);
+      if (this.client !== client) {
+        throw new Error("DataLab-Web attachment superseded");
+      }
       this.version.set(v);
       this.ready.set(true);
-      await this.refreshCount();
+      await this.refreshCount(client);
+      if (this.client !== client) {
+        throw new Error("DataLab-Web attachment superseded");
+      }
     } catch (err) {
-      this.lastError.set(err as Error);
+      if (this.client === client) this.lastError.set(err as Error);
       throw err;
     }
   }
@@ -201,18 +208,21 @@ export class DataLabWebService implements OnDestroy {
   // Private helpers.
   // -------------------------------------------------------------------
 
-  private async refreshCount(): Promise<void> {
-    if (!this.client) return;
+  private async refreshCount(client: DataLabWebClient): Promise<void> {
+    if (this.client !== client) return;
     try {
       const [sigs, imgs] = await Promise.all([
-        this.client.listSignals(),
-        this.client.listImages(),
+        client.listSignals(),
+        client.listImages(),
       ]);
-      this.objectsCount.set(sigs.length + imgs.length);
+      if (this.client === client)
+        this.objectsCount.set(sigs.length + imgs.length);
     } catch (err) {
       // ``model-changed`` can fire while the bridge is mid-shutdown
       // — swallow rather than spam the error signal.
-      console.warn("[datalab-web] refreshCount failed", err);
+      if (this.client === client) {
+        console.warn("[datalab-web] refreshCount failed", err);
+      }
     }
   }
 
@@ -220,10 +230,11 @@ export class DataLabWebService implements OnDestroy {
     if (!this.client) {
       throw new Error("DataLab-Web bridge is not attached yet");
     }
+    const client = this.client;
     try {
-      return await fn(this.client);
+      return await fn(client);
     } catch (err) {
-      this.lastError.set(err as Error);
+      if (this.client === client) this.lastError.set(err as Error);
       throw err;
     }
   }

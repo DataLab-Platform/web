@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- **JavaScript SDK and Angular integration:** changing an iframe URL while connecting could report an obsolete connection failure or accept a response from an earlier client. Pending connections are now cancelled when replaced, and only the current connection updates the Angular example's state (fixes [Issue #128](https://github.com/DataLab-Platform/web/issues/128)).
 - **Documentation:** the user guide and SDK documentation now describe storage and transfer limits, plugin reload, notebook operations and cross-host comparison more accurately; the plugin link in the in-app guide works again (fixes [Issue #116](https://github.com/DataLab-Platform/web/issues/116)).
 - **Desktop-generated plugins:** a processing plugin created by DataLab Desktop could load without adding its menu action. Compatible plugins now expose and run their registered processings and analyses, including after reload; unsupported Desktop recipe launchers are reported, and ignored welcome tiles are identified in the plugin manager (fixes [Issue #94](https://github.com/DataLab-Platform/web/issues/94)).
 - **Application recipes — optional inputs:** a recipe could not be started when its proposed inputs left an optional slot empty, even when those inputs were valid. The input dialog now lets you confirm valid bindings without assigning an optional input ([#113](https://github.com/DataLab-Platform/web/issues/113)).
