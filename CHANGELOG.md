@@ -26,6 +26,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Processing — Sigima 1.4.1:** the browser uses the published Sigima 1.4.1 release, so these operations now give the same results as in DataLab Desktop 1.4.1 (fixes [Issue #121](https://github.com/DataLab-Platform/web/issues/121)):
+  - **X-Y mode** uses only the common interval of the two signals (non-overlapping signals are refused), keeps only the samples within the region of interest of the first signal, takes the labels and units of the Y axes, refuses signals with different X units and pairs signals sharing the same X grid without interpolation; **Replace X by other signal's Y** also keeps only the samples within the region of interest;
+  - **quadratic interpolation and resampling** pass through the samples;
+  - the **enclosing circle** contains all the selected pixel centers, in physical coordinates; on signed integer images with a wide range of values, the enclosing circle, contour detection and 2D peak detection no longer give wrong results;
+  - the **pulse features** of a negative pulse report the signed offset; the **flat-field correction** of an integer image gives floating-point values, and fails explicitly when a pixel to be corrected has a zero flat-field value;
+  - the **magnitude spectrum and power spectral density of images in decibel** no longer depend on the unit of the image; the **Absolute value** option of the **Gaussian frequency filter** is applied; the **cardinal sine** signal uses the definition `sin(u)/u`.
+
+  Calls of these operations recorded with Sigima 1.4.0 in workspaces or capsules are reported as not verifiable instead of being replayed with different results; stored data is not changed.
+
 - **JavaScript SDK — typed arrays are copied by default:** `addSignal`, `addImage` and `call` no longer detach (empty) the typed arrays of the host page: they are copied, so the page can keep using them, and two arrays sharing one buffer (e.g. X and Y views of the same buffer) no longer fail with a `DataCloneError`. The new `transferArrays: true` client option keeps the zero-copy transfer for large data: the arrays are then detached once sent, and a shared buffer is transferred once ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 
 ## [0.11.1] - 2026-11-12
