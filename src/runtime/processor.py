@@ -202,6 +202,10 @@ SIGNAL_OVERRIDES: dict[str, FeatureOverride] = {
     # Processing / Level adjustment --------------------------------------
     "normalize": FeatureOverride("Normalize…", "Processing/Level adjustment/Normalize"),
     "clip": FeatureOverride("Clipping…", "Processing/Level adjustment/Clipping"),
+    "replace_special_values": FeatureOverride(
+        "Replace special values…",
+        "Processing/Level adjustment/Replace special values",
+    ),
     "offset_correction": FeatureOverride(
         "Offset correction", "Processing/Level adjustment/Offset correction"
     ),
@@ -424,6 +428,10 @@ IMAGE_OVERRIDES: dict[str, FeatureOverride] = {
     # Processing / Level adjustment --------------------------------------
     "normalize": FeatureOverride("Normalize…", "Processing/Level adjustment/Normalize"),
     "clip": FeatureOverride("Clipping…", "Processing/Level adjustment/Clipping"),
+    "replace_special_values": FeatureOverride(
+        "Replace special values…",
+        "Processing/Level adjustment/Replace special values",
+    ),
     "offset_correction": FeatureOverride(
         "Offset correction", "Processing/Level adjustment/Offset correction"
     ),
@@ -829,6 +837,7 @@ _FEATURE_ICON_DEFAULTS: dict[str, str] = {
     # Processing / Level adjustment --------------------------------------
     "normalize": "normalize.svg",
     "clip": "clip.svg",
+    "replace_special_values": "replace_nan.svg",
     "offset_correction": "offset_correction.svg",
     # Processing / Noise addition ----------------------------------------
     "add_gaussian_noise": "noise_addition.svg",
