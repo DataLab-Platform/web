@@ -117,6 +117,8 @@ export class DataLabWebClient {
   private readonly targetOrigin: string;
   private readonly defaultTimeoutMs: number;
   private readonly transferArrays: boolean;
+  private readonly requestPrefix: string;
+  private readonly readyAbort = new AbortController();
   private nextId = 1;
   private pending = new Map<number | string, PendingRequest>();
   private listeners = new Map<string, Set<EventListener>>();
@@ -132,6 +134,11 @@ export class DataLabWebClient {
     this.targetOrigin = options.targetOrigin;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000;
     this.transferArrays = options.transferArrays ?? false;
+    // Namespace requests so a late reply cannot match a replacement client.
+    this.requestPrefix = Array.from(
+      this.win.crypto.getRandomValues(new Uint32Array(4)),
+      (value) => value.toString(16).padStart(8, "0"),
+    ).join("");
     this.win.addEventListener("message", this.handleMessage);
   }
 
@@ -153,6 +160,9 @@ export class DataLabWebClient {
    *  reports a MAJOR incompatible with this SDK (see
    *  ``SUPPORTED_PROTOCOL_MAJOR``). */
   ready(timeoutMs = 60_000): Promise<string> {
+    if (this.disposed) {
+      return Promise.reject(new Error("DataLabWebClient disposed"));
+    }
     if (!this.readyPromise) {
       this.readyPromise = this.pollReady(timeoutMs);
     }
@@ -199,9 +209,13 @@ export class DataLabWebClient {
               `compatible pair.`,
           );
         }
+        if (this.disposed) throw new Error("DataLabWebClient disposed");
         this._protocolVersion = proto;
         return version;
       } catch (err) {
+        if (this.disposed) {
+          throw new Error("DataLabWebClient disposed", { cause: err });
+        }
         // Protocol-mismatch errors are terminal — no point retrying.
         if (
           err instanceof Error &&
@@ -210,7 +224,18 @@ export class DataLabWebClient {
           throw err;
         }
         lastErr = err;
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise<void>((resolve, reject) => {
+          const signal = this.readyAbort.signal;
+          const onAbort = () => {
+            clearTimeout(timer);
+            reject(new Error("DataLabWebClient disposed"));
+          };
+          const timer = setTimeout(() => {
+            signal.removeEventListener("abort", onAbort);
+            resolve();
+          }, 250);
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
       }
     }
     throw new Error(
@@ -223,6 +248,7 @@ export class DataLabWebClient {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.readyAbort.abort();
     this.win.removeEventListener("message", this.handleMessage);
     for (const pending of this.pending.values()) {
       if (pending.timer) clearTimeout(pending.timer);
@@ -263,7 +289,7 @@ export class DataLabWebClient {
     if (!target) {
       return Promise.reject(new Error("iframe has no contentWindow"));
     }
-    const id = this.nextId++;
+    const id = `${this.requestPrefix}:${this.nextId++}`;
     const request = { id, type: "request" as const, method, params };
     // A transfer list must not contain the same buffer twice
     const transfer = this.transferArrays

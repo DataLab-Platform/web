@@ -34,9 +34,11 @@ const data = await client.getSignalXY(ids[0]);
 
 The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` in its URL (or `?allowedOrigins=*` for development) so the bridge accepts incoming messages.
 
-`targetOrigin` must be the origin of the iframe document: the client only accepts responses and events coming from the iframe window **and** from that origin, so that another document loaded in the iframe (after a navigation) cannot answer in its place. `targetOrigin: "*"` accepts any origin and is intended for local development only. Likewise, the bridge sends its responses and events to each host window with the origin of its requests.
+`targetOrigin` must be the origin of the iframe document: the client only accepts responses and events coming from the iframe window **and** from that origin, so that a document from another origin loaded after navigation cannot answer in its place. These checks do not distinguish two documents from the same origin. `targetOrigin: "*"` accepts any origin and is intended for local development only. Likewise, the bridge sends its responses and events to each host window with the origin of its requests.
 
 The typed helpers mirror DataLab's remote-control API: `getVersion`, `getProtocolVersion`, `addSignal`, `addImage`, `listSignals`, `listImages`, `getObject`, `getObjectUuids`, `deleteObject`, `getSignalXY`, `getImageData`, `applyFeature` (and its alias `calc`), `listFeatures`, `selectObjects`, `getSelection`, `setCurrentPanel`, `getCurrentPanel`, `getCurrentObjectUuid` and `resetAll`. `call(method, params)` sends any other request, and `dispose()` removes the message listener and rejects pending requests.
+
+When navigating the iframe, dispose the old client before changing its URL and create a new client after the new document loads. Disposal also promptly rejects a pending `ready()` call; a disposed client cannot be reused. Random per-client request IDs prevent a late response to an old request from resolving a new client's request. Events have no request ID and do not identify the document that sent them.
 
 ## Typed arrays
 

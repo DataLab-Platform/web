@@ -68,7 +68,7 @@ describe("DataLabWebClient", () => {
       type: "request",
       method: "get_version",
     });
-    const id = (request as { id: number }).id;
+    const id = (request as { id: string }).id;
 
     reply(iframe, { id, type: "response", result: "9.9.9" });
     await expect(promise).resolves.toBe("9.9.9");
@@ -77,7 +77,7 @@ describe("DataLabWebClient", () => {
   it("rejects with DataLabWebRemoteError when the response carries an error", async () => {
     const promise = client.call("nope");
     const id = (
-      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: string }
     ).id;
     reply(iframe, {
       id,
@@ -92,10 +92,10 @@ describe("DataLabWebClient", () => {
     const p1 = client.call("a");
     const p2 = client.call("b");
     const id1 = (
-      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: string }
     ).id;
     const id2 = (
-      iframe.contentWindow.postMessage.mock.calls[1][0] as { id: number }
+      iframe.contentWindow.postMessage.mock.calls[1][0] as { id: string }
     ).id;
     expect(id1).not.toBe(id2);
 
@@ -121,7 +121,7 @@ describe("DataLabWebClient", () => {
   it("ignores messages whose source isn't the iframe", async () => {
     const promise = client.call("a");
     const id = (
-      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: string }
     ).id;
 
     // Replay from a *different* source — must be ignored.
@@ -154,7 +154,7 @@ describe("DataLabWebClient", () => {
     // document: its messages must also come from the expected origin.
     const promise = client.call("a");
     const id = (
-      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+      iframe.contentWindow.postMessage.mock.calls[0][0] as { id: string }
     ).id;
     const cb = vi.fn();
     client.on("model-changed", cb);
@@ -185,7 +185,7 @@ describe("DataLabWebClient", () => {
     try {
       const promise = anyClient.call("a");
       const id = (
-        anyIframe.contentWindow.postMessage.mock.calls[0][0] as { id: number }
+        anyIframe.contentWindow.postMessage.mock.calls[0][0] as { id: string }
       ).id;
       window.dispatchEvent(
         new MessageEvent("message", {
@@ -208,6 +208,67 @@ describe("DataLabWebClient", () => {
     await expect(client.call("again")).rejects.toThrow(/disposed/);
   });
 
+  it("does not accept an old client's response for its replacement", async () => {
+    const oldRequest = client.getVersion();
+    const oldId = (
+      iframe.contentWindow.postMessage.mock.calls[0][0] as {
+        id: number | string;
+      }
+    ).id;
+    const oldRejection = expect(oldRequest).rejects.toThrow(/disposed/);
+    client.dispose();
+    await oldRejection;
+
+    const replacement = new DataLabWebClient(
+      iframe as unknown as HTMLIFrameElement,
+      { targetOrigin: "http://iframe.test" },
+    );
+    try {
+      const currentRequest = replacement.getVersion();
+      const currentId = (
+        iframe.contentWindow.postMessage.mock.calls[1][0] as {
+          id: number | string;
+        }
+      ).id;
+      const settled = vi.fn();
+      void currentRequest.then(settled);
+      reply(iframe, { id: oldId, type: "response", result: "obsolete" });
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+      reply(iframe, { id: currentId, type: "response", result: "current" });
+      await expect(currentRequest).resolves.toBe("current");
+    } finally {
+      replacement.dispose();
+    }
+  });
+
+  it("isolates concurrent clients connected to the same iframe", async () => {
+    const other = new DataLabWebClient(iframe as unknown as HTMLIFrameElement, {
+      targetOrigin: "http://iframe.test",
+    });
+    try {
+      const first = client.getVersion();
+      const second = other.getVersion();
+      const firstId = (
+        iframe.contentWindow.postMessage.mock.calls[0][0] as {
+          id: string;
+        }
+      ).id;
+      const secondId = (
+        iframe.contentWindow.postMessage.mock.calls[1][0] as {
+          id: string;
+        }
+      ).id;
+      expect(firstId).not.toBe(secondId);
+      reply(iframe, { id: secondId, type: "response", result: "second" });
+      reply(iframe, { id: firstId, type: "response", result: "first" });
+      await expect(first).resolves.toBe("first");
+      await expect(second).resolves.toBe("second");
+    } finally {
+      other.dispose();
+    }
+  });
+
   it("addSignal forwards Float64Array payloads without copying to JS lists", async () => {
     // The legacy implementation called ``Array.from`` on each input,
     // boxing every sample into a ``Number`` — at 1 M samples that
@@ -223,7 +284,7 @@ describe("DataLabWebClient", () => {
       .params;
     expect(params.xdata).toBeInstanceOf(Float64Array);
     expect(params.ydata).toBeInstanceOf(Float64Array);
-    const id = (request as { id: number }).id;
+    const id = (request as { id: string }).id;
     reply(iframe, { id, type: "response", result: "obj-1" });
     await expect(promise).resolves.toBe("obj-1");
   });
@@ -246,7 +307,7 @@ describe("DataLabWebClient", () => {
     expect(params.width).toBe(3);
     expect(params.height).toBe(2);
     expect(params.dtype).toBe("float32");
-    const id = (request as { id: number }).id;
+    const id = (request as { id: string }).id;
     reply(iframe, { id, type: "response", result: "img-1" });
     await expect(promise).resolves.toBe("img-1");
   });
@@ -254,7 +315,7 @@ describe("DataLabWebClient", () => {
   /** Reply ``result`` to the ``index``-th request posted to ``target``. */
   function replyTo(target: FakeIframe, index: number, result: unknown): void {
     const { id } = target.contentWindow.postMessage.mock.calls[index][0] as {
-      id: number;
+      id: string;
     };
     reply(target, { id, type: "response", result });
   }
@@ -342,7 +403,7 @@ describe("DataLabWebClient", () => {
     const [request] = iframe.contentWindow.postMessage.mock.calls[0];
     const params = (request as { params: { encoding?: string } }).params;
     expect(params.encoding).toBe("bytes");
-    const id = (request as { id: number }).id;
+    const id = (request as { id: string }).id;
     reply(iframe, {
       id,
       type: "response",
@@ -371,6 +432,56 @@ describe("DataLabWebClient", () => {
     for (let i = 0; i < 20; i++) await Promise.resolve();
   }
 
+  it.each(["pending request", "retry delay"])(
+    "cancels ready() promptly on disposal during %s",
+    async (stage) => {
+      vi.useFakeTimers();
+      try {
+        const rejected = vi.fn();
+        void client.ready(60_000).catch(rejected);
+        if (stage === "retry delay") {
+          const id = (
+            iframe.contentWindow.postMessage.mock.calls[0][0] as {
+              id: number | string;
+            }
+          ).id;
+          reply(iframe, {
+            id,
+            type: "response",
+            error: { code: "method_error", message: "not ready" },
+          });
+          await pump();
+        }
+        client.dispose();
+        await pump();
+        expect(rejected).toHaveBeenCalledOnce();
+        expect(rejected.mock.calls[0][0]).toMatchObject({
+          message: expect.stringMatching(/disposed/),
+        });
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("rejects ready() immediately when already disposed", async () => {
+    vi.useFakeTimers();
+    try {
+      client.dispose();
+      const rejected = vi.fn();
+      void client.ready().catch(rejected);
+      await pump();
+      expect(rejected).toHaveBeenCalledOnce();
+      expect(rejected.mock.calls[0][0]).toMatchObject({
+        message: expect.stringMatching(/disposed/),
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   /** Drive the ``ready()`` polling loop with scripted iframe responses.
    *  Returns when both ``get_version`` and ``get_protocol_version`` (or
    *  the version-only path, for the legacy fallback) have been served.
@@ -386,7 +497,7 @@ describe("DataLabWebClient", () => {
     await pump();
     // First request is always ``get_version``.
     const versionCall = iframe.contentWindow.postMessage.mock.calls[0][0] as {
-      id: number;
+      id: string;
       method: string;
     };
     expect(versionCall.method).toBe("get_version");
@@ -398,7 +509,7 @@ describe("DataLabWebClient", () => {
     await pump();
     // Second request is ``get_protocol_version``.
     const protoCall = iframe.contentWindow.postMessage.mock.calls[1][0] as {
-      id: number;
+      id: string;
       method: string;
     };
     expect(protoCall.method).toBe("get_protocol_version");
@@ -416,6 +527,14 @@ describe("DataLabWebClient", () => {
     await driveReady("9.9.9", () => ({ result: "1.0" }));
     await expect(promise).resolves.toBe("9.9.9");
     expect(client.protocolVersion).toBe("1.0");
+  });
+
+  it("does not reuse a completed ready() promise after disposal", async () => {
+    const promise = client.ready(5_000);
+    await driveReady("9.9.9", () => ({ result: "1.0" }));
+    await expect(promise).resolves.toBe("9.9.9");
+    client.dispose();
+    await expect(client.ready()).rejects.toThrow(/disposed/);
   });
 
   it("ready() accepts forward-compatible MINOR bumps within MAJOR 1", async () => {

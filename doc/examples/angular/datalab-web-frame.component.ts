@@ -142,40 +142,58 @@ export class DataLabWebFrameComponent
   /** URL bound to the iframe, trusted only once validated. */
   protected safeSrc: SafeResourceUrl = this.trust(this.url);
 
+  private generation = 0;
+  private pendingLoad: (() => void) | null = null;
+
   ngOnChanges(changes: SimpleChanges): void {
     const change = changes["src"];
     if (!change) return;
     this.url = trustedDataLabWebUrl(this.src);
     this.safeSrc = this.trust(this.url);
     if (!change.firstChange) {
-      // The new document needs its own bridge handshake
-      this.frameRef.nativeElement.addEventListener(
-        "load",
-        () => void this.connect(),
-        { once: true },
-      );
+      const generation = ++this.generation;
+      this.dlw.detach();
+      this.removePendingLoad();
+      this.pendingLoad = () => {
+        this.pendingLoad = null;
+        void this.connect(generation);
+      };
+      this.frameRef.nativeElement.addEventListener("load", this.pendingLoad, {
+        once: true,
+      });
     }
   }
 
   ngAfterViewInit(): void {
-    void this.connect();
+    void this.connect(this.generation);
   }
 
   ngOnDestroy(): void {
+    this.generation++;
+    this.removePendingLoad();
     this.dlw.detach();
+  }
+
+  private removePendingLoad(): void {
+    if (this.pendingLoad) {
+      this.frameRef.nativeElement.removeEventListener("load", this.pendingLoad);
+      this.pendingLoad = null;
+    }
   }
 
   private trust(url: URL): SafeResourceUrl {
     return this.sanitizer.bypassSecurityTrustResourceUrl(url.href);
   }
 
-  private async connect(): Promise<void> {
+  private async connect(generation: number): Promise<void> {
+    if (generation !== this.generation) return;
     try {
       await this.dlw.attach(this.frameRef.nativeElement, this.url.origin);
+      if (generation !== this.generation) return;
       const v = this.dlw.version();
       this.ready.emit(v ?? "");
     } catch (err) {
-      this.failed.emit(err as Error);
+      if (generation === this.generation) this.failed.emit(err as Error);
     }
   }
 }

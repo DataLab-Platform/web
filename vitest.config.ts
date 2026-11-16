@@ -24,6 +24,17 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
+    alias: {
+      "@angular/core": fileURLToPath(
+        new URL("./tests/ts/angular/core.ts", import.meta.url),
+      ),
+      "@angular/platform-browser": fileURLToPath(
+        new URL("./tests/ts/angular/platform-browser.ts", import.meta.url),
+      ),
+      "@datalab-platform/web-sdk": fileURLToPath(
+        new URL("./packages/sdk/src/index.ts", import.meta.url),
+      ),
+    },
   },
   // Same Vite plumbing as the app, so ``?raw`` imports of .py files work
   // when components/runtime modules are imported transitively.
