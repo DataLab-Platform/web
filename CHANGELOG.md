@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **X-ray Radiography & NDT application:** DataLab-Web bundles the X-ray Radiography & NDT plugin: radiographic display, magnifications of several object planes, detector corrections, physical quantities, enhancement filters, image quality (SNR, CNR, duplex IQI) and NDT measurements (tangential wall thickness, indication detection), with simulated and real-data examples and a radiography simulator.
 - **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.
 - **Plugin instruments — restore defaults:** the window of a plugin instrument, e.g. the camera, oscilloscope or radiography simulators, has a new **Restore defaults** button, which sets the settings of the instrument back to their default values and refreshes the view ([#110](https://github.com/DataLab-Platform/web/issues/110)).
+- **Replace special values:** **Processing → Level adjustment → Replace special values…** replaces the NaN, +Inf and −Inf values of signals and images, each with its own strategy (zero, constant, minimum, maximum, mean or median; interpolation, fill or deletion for signals; statistics of the neighboring pixels for images), as in DataLab Desktop (closes [Issue #122](https://github.com/DataLab-Platform/web/issues/122)).
 
 ### Fixed
 
@@ -25,6 +26,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Angular integration example:** the frame component bound its URL to the iframe as a plain string, which Angular refuses for an iframe `src`. It now marks the URL as trusted only after checking that it targets one of the trusted DataLab-Web origins listed in the component, so a crafted URL cannot load another page ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 
 ### Changed
+
+- **Processing — Sigima 1.4.1:** the browser uses the published Sigima 1.4.1 release, so these operations now give the same results as in DataLab Desktop 1.4.1 (fixes [Issue #121](https://github.com/DataLab-Platform/web/issues/121)):
+  - **X-Y mode** uses only the common interval of the two signals (non-overlapping signals are refused), keeps only the samples within the region of interest of the first signal, takes the labels and units of the Y axes, refuses signals with different X units and pairs signals sharing the same X grid without interpolation; **Replace X by other signal's Y** also keeps only the samples within the region of interest;
+  - **quadratic interpolation and resampling** pass through the samples;
+  - the **enclosing circle** contains all the selected pixel centers, in physical coordinates; on signed integer images with a wide range of values, the enclosing circle, contour detection and 2D peak detection no longer give wrong results;
+  - the **pulse features** of a negative pulse report the signed offset; the **flat-field correction** of an integer image gives floating-point values, and fails explicitly when a pixel to be corrected has a zero flat-field value;
+  - the **magnitude spectrum and power spectral density of images in decibel** no longer depend on the unit of the image; the **Absolute value** option of the **Gaussian frequency filter** is applied; the **cardinal sine** signal uses the definition `sin(u)/u`.
+
+  Calls of these operations recorded with Sigima 1.4.0 in workspaces or capsules are reported as not verifiable instead of being replayed with different results; stored data is not changed.
 
 - **JavaScript SDK — typed arrays are copied by default:** `addSignal`, `addImage` and `call` no longer detach (empty) the typed arrays of the host page: they are copied, so the page can keep using them, and two arrays sharing one buffer (e.g. X and Y views of the same buffer) no longer fail with a `DataCloneError`. The new `transferArrays: true` client option keeps the zero-copy transfer for large data: the arrays are then detached once sent, and a shared buffer is transferred once ([#119](https://github.com/DataLab-Platform/web/issues/119)).
 

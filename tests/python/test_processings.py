@@ -136,6 +136,47 @@ def test_apply_normalize_returns_new_signal(fresh_bootstrap):
     assert min(payload["y"]) == pytest.approx(0.0, abs=1e-6)
 
 
+def test_replace_special_values_in_signals_and_images(fresh_bootstrap):
+    """NaN, +Inf and -Inf values are replaced with their own strategy."""
+    bs = fresh_bootstrap
+    features = {item["id"]: item for item in bs.list_features()}
+    for feature_id in ("replace_special_values", "image:replace_special_values"):
+        feature = features[feature_id]
+        assert feature["menu_path"] == (
+            "Processing/Level adjustment/Replace special values"
+        )
+        assert feature["icon"] == "replace_nan.svg"
+
+    y = np.array([1.0, np.nan, 3.0, np.inf, -np.inf, 2.0])
+    src = bs.add_signal_from_arrays("raw", np.arange(y.size, dtype=float), y)
+    assert bs.get_feature_schema("replace_special_values", src) is not None
+    params = {
+        "nan_strategy": "constant",
+        "nan_constant_value": 5.0,
+        "posinf_strategy": "constant",
+        "posinf_constant_value": 9.0,
+        "neginf_strategy": "zero",
+    }
+    (new_oid,) = bs.apply_feature("replace_special_values", [src], params=params)
+    np.testing.assert_allclose(
+        bs.get_signal_xy(new_oid)["y"], [1.0, 5.0, 3.0, 9.0, 0.0, 2.0]
+    )
+
+    data = np.array([[1.0, np.nan], [np.inf, -np.inf]])
+    img = bs.add_image_from_array("image", data)
+    params = {
+        "nan_strategy": "constant",
+        "nan_constant_value": -1.0,
+        "posinf_strategy": "zero",
+        "neginf_strategy": "constant",
+        "neginf_constant_value": 7.0,
+    }
+    (new_oid,) = bs.apply_feature("image:replace_special_values", [img], params=params)
+    np.testing.assert_allclose(
+        np.asarray(bs.get_image_data(new_oid)["data"]), [[1.0, -1.0], [0.0, 7.0]]
+    )
+
+
 def test_preview_feature_is_private_and_non_mutating(fresh_bootstrap):
     bs = fresh_bootstrap
     src = bs.add_signal_from_arrays(
