@@ -1047,6 +1047,8 @@
   "Rename": "Renommer",
   "Rename the selected conversation (F2)": "Renommer la conversation sélectionnée (F2)",
   "Rename, duplicate, regroup or delete the selected signals. Multi-selection works everywhere in the tree.": "Renommez, dupliquez, regroupez ou supprimez les signaux sélectionnés. La sélection multiple fonctionne partout dans l'arbre.",
+  "Replace special values": "Remplacer les valeurs spéciales",
+  "Replace special values…": "Remplacer les valeurs spéciales…",
   "Replace X by other signal's Y": "Remplacer X par le Y d'un autre signal",
   "Replay": "Rejouer",
   "replayable": "rejouable",
