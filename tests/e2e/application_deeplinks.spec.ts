@@ -21,7 +21,7 @@ function applicationUrl(values: {
 
 const CAMERA_LINK = {
   plugin: "org.datalab.camera-characterization",
-  pluginVersion: "0.2.1",
+  pluginVersion: "0.3.0",
   recipe: "org.datalab.camera-characterization:relative-dn-characterization",
   recipeVersion: "1.1.0",
   example: "quickstart",
@@ -98,7 +98,7 @@ test("Pulse deep link validates the bundle and opens its visible demo", async ({
   ).toHaveCount(0);
 });
 
-for (const pluginVersion of ["0.2.0", "9.0.0"]) {
+for (const pluginVersion of ["0.2.1", "9.0.0"]) {
   test(`deep link rejects plugin version ${pluginVersion} absent from the bundle`, async ({
     page,
   }) => {
@@ -107,7 +107,7 @@ for (const pluginVersion of ["0.2.0", "9.0.0"]) {
     await waitForRuntimeReady(page);
 
     await expect(page.locator(".toast-error")).toContainText(
-      `requested pluginVersion ${pluginVersion}, but this bundle provides 0.2.1`,
+      `requested pluginVersion ${pluginVersion}, but this bundle provides 0.3.0`,
     );
     await expect(page.locator(".object-tree-item")).toHaveCount(0);
     expect(

@@ -21,6 +21,7 @@ const METHODS: MethodCase[] = [
   {
     plugin: CAMERA,
     recipe: "photon-transfer",
+    pluginVersion: "0.3.0",
     title: "Photon transfer curve",
     example: "photon-transfer",
     created: 5,
@@ -29,9 +30,10 @@ const METHODS: MethodCase[] = [
   {
     plugin: CAMERA,
     recipe: "dark-current",
+    pluginVersion: "0.3.0",
     title: "Dark current and hot pixels",
     example: "dark-ramp",
-    created: 6,
+    created: 7,
     output: "Dark signal ramp",
   },
   {

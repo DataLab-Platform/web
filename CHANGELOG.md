@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- **Camera characterization:** the bundled plugin is now 0.3.0. Camera results display LSB; photon transfer distinguishes measured saturation from a lower bound, and the dark ramp shows which pixels contribute to the summary. Recipe versions are unchanged.
+
 ### Added
 
 - **New workspace:** **File → New workspace** starts a clean, untitled workspace without reloading DataLab-Web. Unsaved changes and running Python code are confirmed before they are discarded or stopped; saved files and recent macros and notebooks are kept (closes [Issue #102](https://github.com/DataLab-Platform/web/issues/102)).
