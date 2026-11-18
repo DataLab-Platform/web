@@ -19,6 +19,7 @@ Select an object and open the **Provenance** tab of the side panel:
 - **Go to object** selects the object that holds an input or a result today.
 - **Details** shows the context of the step (options, X alignment, metadata read) and the software versions.
 - **Records of an old workspace** shows what older versions stored in the object metadata. These records are shown as stored and are never replayed.
+- **Method run** shows, for a result of an application method (e.g. _Dark current and hot pixels_), the run recorded by the method: the method and its plugin with their versions, its parameters, its inputs and all its results, with **Go to object**. When a processing is applied to such a result, **▸ Show method run** under its input shows this run. The method records it outside the provenance record, even when provenance is not available: its data cannot be checked and the run cannot be verified. A copy of a result is not attributed to the method.
 
 Consulting reads the record only. It never computes, never loads data and never changes the workspace. The view is bounded and long values are abbreviated: a truncated view does not mean that the record was removed.
 

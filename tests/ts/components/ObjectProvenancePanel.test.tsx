@@ -10,6 +10,7 @@ import type {
   ProvenanceActivity,
   ProvenanceDescription,
   ProvenanceReport,
+  RecipeRunDescription,
 } from "../../../src/runtime/runtime";
 import type { RuntimeApi } from "../../../src/runtime/RuntimeApi";
 
@@ -331,6 +332,144 @@ describe("ObjectProvenancePanel", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText("DataLab-Capsule is not installed")).toBeTruthy();
+  });
+});
+
+describe("ObjectProvenancePanel — method runs", () => {
+  const run: RecipeRunDescription = {
+    version: 1,
+    status: "ok",
+    run_id: "run-1",
+    plugin_id: "org.example.camera",
+    plugin_version: "0.2.1",
+    recipe_id: "org.example.camera:dark-current",
+    recipe_version: "1.0.0",
+    title: "Dark current and hot pixels",
+    role: "dark_ramp",
+    started_at: "2026-10-16T00:00:00Z",
+    finished_at: "2026-10-16T00:00:01Z",
+    datalab_version: "1.4.1",
+    sigima_version: "1.4.2",
+    parameters: [{ name: "threshold", label: "Threshold", value: 5 }],
+    inputs: [
+      {
+        role: "dark_frames",
+        position: 0,
+        object_uuid: "u1",
+        id: "i1",
+        title: "Dark 1",
+        object_kind: "image",
+        recipe_run: null,
+      },
+    ],
+    outputs: [
+      {
+        role: "dark_ramp",
+        object_uuid: "u2",
+        id: "s2",
+        title: "Ramp",
+        object_kind: "signal",
+        is_self: true,
+      },
+      {
+        role: "hot_pixels",
+        object_uuid: "u3",
+        id: "i3",
+        title: "Hot pixels",
+        object_kind: "image",
+        is_self: false,
+      },
+    ],
+  };
+
+  function runtimeOf(value: ProvenanceDescription): RuntimeApi {
+    return {
+      describeObjectProvenance: vi.fn(async () => value),
+    } as unknown as RuntimeApi;
+  }
+
+  it("shows the run of a result without recorded production", async () => {
+    const onSelectObject = vi.fn();
+    render(
+      <ObjectProvenancePanel
+        runtime={runtimeOf(description({ production: null, recipe_run: run }))}
+        oid="s2"
+        refreshNonce={0}
+        onSelectObject={onSelectObject}
+      />,
+    );
+    expect(await screen.findByTestId("provenance-recipe-run")).toBeTruthy();
+    expect(screen.getByText("Dark current and hot pixels")).toBeTruthy();
+    expect(screen.getByText("Threshold")).toBeTruthy();
+    expect(screen.getByText("(this object)")).toBeTruthy();
+    expect(
+      screen.queryByText("No provenance is recorded for this object."),
+    ).toBeNull();
+    expect(screen.queryByText("Verify computation")).toBeNull();
+    const goTo = screen.getAllByText("Go to object");
+    expect(goTo).toHaveLength(2);
+    fireEvent.click(goTo[0]);
+    expect(onSelectObject).toHaveBeenCalledWith("i1", "image");
+    fireEvent.click(goTo[1]);
+    expect(onSelectObject).toHaveBeenCalledWith("i3", "image");
+  });
+
+  it("shows the run even when provenance is not available", async () => {
+    render(
+      <ObjectProvenancePanel
+        runtime={runtimeOf({ available: false, recipe_run: run })}
+        oid="s2"
+        refreshNonce={0}
+      />,
+    );
+    expect(await screen.findByTestId("provenance-recipe-run")).toBeTruthy();
+  });
+
+  it("leads from the input of a processing back to the method", async () => {
+    const input = {
+      ...activity({}).inputs[0],
+      produced_by: null,
+      has_ancestors: false,
+      recipe_run: run,
+    };
+    render(
+      <ObjectProvenancePanel
+        runtime={runtimeOf(
+          description({ production: activity({ inputs: [input] }) }),
+        )}
+        oid="s5"
+        refreshNonce={0}
+      />,
+    );
+    fireEvent.click(await screen.findByText("▸ Show method run"));
+    expect(screen.getByTestId("provenance-recipe-run")).toBeTruthy();
+    fireEvent.click(screen.getByText("▾ Hide method run"));
+    expect(screen.queryByTestId("provenance-recipe-run")).toBeNull();
+  });
+
+  it("reports a record of an unknown schema", async () => {
+    render(
+      <ObjectProvenancePanel
+        runtime={runtimeOf(
+          description({
+            production: null,
+            recipe_run: {
+              version: 1,
+              status: "unsupported",
+              schema_version: 2,
+              recipe_id: "org.example.camera:dark-current",
+            },
+          }),
+        )}
+        oid="s2"
+        refreshNonce={0}
+      />,
+    );
+    expect(
+      await screen.findByText(
+        "Method record written by a newer version of DataLab (schema 2): it cannot be shown",
+      ),
+    ).toBeTruthy();
   });
 });
 

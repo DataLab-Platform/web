@@ -516,6 +516,47 @@ export interface ProvenanceObjectName {
   object_kind?: "signal" | "image" | null;
 }
 
+/** Input of a recipe run, named by the runtime. */
+export interface RecipeRunInput extends ProvenanceObjectName {
+  role: string;
+  position: number;
+  /** Run of the method that produced this input, when it was recorded. */
+  recipe_run?: RecipeRunDescription | null;
+}
+
+/** Result of a recipe run, named by the runtime. */
+export interface RecipeRunOutput extends ProvenanceObjectName {
+  role: string;
+  /** True for the described object. */
+  is_self: boolean;
+}
+
+/** Run of an application method (plugin recipe) recorded in the metadata of
+ *  its results (``datalab.plugins.recipe_provenance``): it is outside the
+ *  provenance ledger, so it cannot be checked or recomputed. */
+export interface RecipeRunDescription {
+  version: number;
+  /** ``unsupported`` when the record was written with an unknown schema. */
+  status: "ok" | "unsupported";
+  schema_version?: number;
+  run_id?: string;
+  plugin_id?: string;
+  plugin_version?: string;
+  recipe_id: string | null;
+  recipe_version?: string;
+  /** Title of the method, when its plugin is loaded. */
+  title?: string | null;
+  role?: string;
+  started_at?: string;
+  finished_at?: string;
+  datalab_version?: string;
+  sigima_version?: string;
+  /** Recorded parameters, or ``null`` when they cannot be read. */
+  parameters?: { name: string; label: string | null; value: unknown }[] | null;
+  inputs?: RecipeRunInput[];
+  outputs?: RecipeRunOutput[];
+}
+
 /** One input of a recorded activity (``inspection`` projection). */
 export interface ProvenanceInput extends ProvenanceObjectName {
   position: number;
@@ -530,6 +571,9 @@ export interface ProvenanceInput extends ProvenanceObjectName {
   /** ``unchecked`` until the data are checked, then ``available``,
    *  ``changed``, ``altered``, ``missing``, ``unavailable``... */
   data: string;
+  /** Run of the application method that produced this input, when the
+   *  ledger records no production of it. */
+  recipe_run?: RecipeRunDescription | null;
 }
 
 /** One recorded output of an activity: a state or an analysis result. */
@@ -586,6 +630,9 @@ export interface ProvenanceDescription {
   legacy?: ProvenanceActivity[];
   analyses?: ProvenanceActivity[];
   limits?: string[];
+  /** Run of the application method recorded in the metadata of the object
+   *  (described object only, even without provenance). */
+  recipe_run?: RecipeRunDescription | null;
 }
 
 export type Pattern = "1_to_1" | "2_to_1" | "n_to_1";

@@ -5173,8 +5173,84 @@ def _named(description: dict[str, Any]) -> dict[str, Any]:
     }
     for key in ("object", "production", "legacy", "analyses", "activity"):
         if key in description:
+            _add_input_recipe_runs(description[key], oid_of)
+    for key in (
+        "object",
+        "production",
+        "legacy",
+        "analyses",
+        "activity",
+        "recipe_run",
+    ):
+        if key in description:
             _name_objects(description[key], oid_of)
     return description
+
+
+#: Maximum number of chained recipe run descriptions under one input
+_RECIPE_RUN_DEPTH = 8
+
+
+def _resolve_recipe(plugin_id: str, recipe_id: str) -> Any:
+    """Return the descriptor of a recipe of a loaded plugin."""
+    import dlw_plugins  # noqa: WPS433 - intentionally lazy
+
+    plugin_cls = dlw_plugins.get_plugin_class(plugin_id, require_enabled=False)
+    return plugin_cls.get_recipe(recipe_id)
+
+
+def _recipe_run_of(
+    obj: Any, oid_of: dict[str, str], seen: frozenset[str] = frozenset()
+) -> dict[str, Any] | None:
+    """Describe the recipe run recorded in the metadata of an object.
+
+    The inputs of the run that were themselves produced by a recipe hold the
+    description of their run (``recipe_run``), up to a bounded depth and
+    without cycles.
+    """
+    from datalab.plugins.recipe_provenance import describe_recipe_run
+    from datalab.plugins.recipes import RECIPE_RUN_RECORD_OPTION
+
+    if obj is None:
+        return None
+    # ``get_metadata_option`` would store its default in the object.
+    payload = obj.metadata.get(f"__{RECIPE_RUN_RECORD_OPTION}")
+    run = describe_recipe_run(_object_uuid(obj), payload, _resolve_recipe)
+    if run is None or run["status"] != "ok":
+        return run
+    seen = seen | {run["run_id"]}
+    for entry in run["inputs"]:
+        entry["recipe_run"] = None
+        oid = oid_of.get(entry["object_uuid"])
+        if oid is None or len(seen) >= _RECIPE_RUN_DEPTH:
+            continue
+        upstream = _recipe_run_of(_MODEL.get(oid), oid_of, seen)
+        if upstream is not None and upstream.get("run_id") not in seen:
+            entry["recipe_run"] = upstream
+    return run
+
+
+def _add_input_recipe_runs(node: Any, oid_of: dict[str, str]) -> None:
+    """Add the recipe run of inputs without recorded production.
+
+    A result of an application method has no production in the ledger: the
+    input of a later processing then holds the description of the recipe run
+    that produced it (``recipe_run``, None if there is none).
+    """
+    if isinstance(node, list):
+        for value in node:
+            _add_input_recipe_runs(value, oid_of)
+        return
+    if not isinstance(node, dict):
+        return
+    for entry in node.get("inputs") or []:
+        if not isinstance(entry, dict) or "state_id" not in entry:
+            continue
+        oid = oid_of.get(entry.get("object_uuid"))
+        if entry.get("produced_by") or not entry.get("object_present") or not oid:
+            entry["recipe_run"] = None
+        else:
+            entry["recipe_run"] = _recipe_run_of(_MODEL.get(oid), oid_of)
 
 
 def describe_object_provenance(
@@ -5202,20 +5278,32 @@ def describe_object_provenance(
 
     Returns:
         The description, or ``{"available": False, "reason": ...}`` without
-        DataLab-Capsule.
+        DataLab-Capsule. Without *state_id*, ``recipe_run`` describes the
+        recipe run recorded in the metadata of the object (None if there is
+        none), even without DataLab-Capsule.
     """
-    if not _PROVENANCE.available:
-        return {"available": False, "reason": _prov.UNAVAILABLE_REASON}
     if hasattr(trail, "to_py"):
         trail = trail.to_py()
-    if state_id is not None:
+    if not _PROVENANCE.available:
+        description = {"available": False, "reason": _prov.UNAVAILABLE_REASON}
+    elif state_id is not None:
         description = _PROVENANCE.describe_state(
             state_id, bool(check_data), list(trail or [])
         )
+        description["available"] = True
     else:
         object_uuid = _object_uuid(_MODEL.get(object_id))
         description = _PROVENANCE.describe_object(object_uuid, bool(check_data))
-    description["available"] = True
+        description["available"] = True
+    if state_id is None:
+        oid_of = {
+            _object_uuid(entry.obj): oid
+            for oid, entry in _MODEL._objects.items()  # noqa: SLF001
+        }
+        entry = _MODEL._objects.get(object_id)  # noqa: SLF001
+        description["recipe_run"] = _recipe_run_of(
+            entry.obj if entry is not None else None, oid_of
+        )
     return _named(description)
 
 

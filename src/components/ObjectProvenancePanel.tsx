@@ -20,6 +20,7 @@ import type {
   ProvenanceDescription,
   ProvenanceInput,
   ProvenanceReport,
+  RecipeRunDescription,
 } from "../runtime/runtime";
 import type { RuntimeApi } from "../runtime/RuntimeApi";
 import { t } from "../i18n/translate";
@@ -334,12 +335,24 @@ export function ObjectProvenancePanel({
   }
   if (!description.available) {
     return (
-      <div className="provenance-panel side-panel-info">
-        {t(
-          "Provenance is not available in this session: processing works as usual.",
-        )}
-        {description.reason && (
-          <div className="provenance-muted">{description.reason}</div>
+      <div className="provenance-panel">
+        <div className="side-panel-info">
+          {t(
+            "Provenance is not available in this session: processing works as usual.",
+          )}
+          {description.reason && (
+            <div className="provenance-muted">{description.reason}</div>
+          )}
+        </div>
+        {description.recipe_run && (
+          <section className="provenance-section">
+            <h4>{t("Method run")}</h4>
+            <RecipeRunView
+              run={description.recipe_run}
+              oid={oid}
+              onSelectObject={onSelectObject}
+            />
+          </section>
         )}
       </div>
     );
@@ -364,12 +377,29 @@ export function ObjectProvenancePanel({
             {t("The saved data of this object were altered in the file.")}
           </div>
         )}
-        {!production && description.state && (
+        {!production && description.state && !description.recipe_run && (
           <div>
             {t("This state was observed, without recorded production.")}
           </div>
         )}
+        {!production && description.recipe_run && (
+          <div>
+            {t(
+              "The workspace provenance does not record this result: the application method that produced it recorded its run.",
+            )}
+          </div>
+        )}
       </div>
+      {!production && description.recipe_run && (
+        <section className="provenance-section">
+          <h4>{t("Method run")}</h4>
+          <RecipeRunView
+            run={description.recipe_run}
+            oid={oid}
+            onSelectObject={onSelectObject}
+          />
+        </section>
+      )}
       {production && (
         <section className="provenance-section">
           <h4>{t("Production")}</h4>
@@ -408,6 +438,7 @@ export function ObjectProvenancePanel({
         </details>
       )}
       {!production &&
+        !description.recipe_run &&
         (description.analyses ?? []).length === 0 &&
         (description.legacy ?? []).length === 0 && (
           <div className="side-panel-info">
@@ -571,6 +602,7 @@ function InputView({
   shared: Shared;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [runShown, setRunShown] = useState(false);
   const [ancestor, setAncestor] = useState<ProvenanceDescription | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const { runtime, oid, onSelectObject, checked } = shared;
@@ -625,6 +657,16 @@ function InputView({
             : `▸ ${t("Show recorded step")}`}
         </button>
       )}
+      {input.recipe_run && (
+        <button
+          type="button"
+          className="provenance-link"
+          aria-expanded={runShown}
+          onClick={() => setRunShown((value) => !value)}
+        >
+          {runShown ? `▾ ${t("Hide method run")}` : `▸ ${t("Show method run")}`}
+        </button>
+      )}{" "}
       {input.id && input.object_present && onSelectObject && (
         <button
           type="button"
@@ -655,6 +697,192 @@ function InputView({
           {t("Observed state, without recorded production")}
         </div>
       )}
+      {runShown && input.recipe_run && (
+        <RecipeRunView
+          run={input.recipe_run}
+          oid={oid}
+          onSelectObject={onSelectObject}
+        />
+      )}
     </li>
+  );
+}
+
+/** Button selecting an object of a recipe run in its panel. */
+function GoToButton({
+  id,
+  kind,
+  onSelectObject,
+}: {
+  id: string;
+  kind: "signal" | "image" | null | undefined;
+  onSelectObject: NonNullable<Props["onSelectObject"]>;
+}) {
+  return (
+    <button
+      type="button"
+      className="provenance-link"
+      title={t("Show this object in the signal or image panel")}
+      onClick={() => onSelectObject(id, kind === "image" ? "image" : "signal")}
+    >
+      {t("Go to object")}
+    </button>
+  );
+}
+
+/** Run of an application method recorded in the metadata of its results
+ *  (outside the provenance ledger: nothing can be checked or recomputed). */
+export function RecipeRunView({
+  run,
+  oid,
+  onSelectObject,
+}: {
+  run: RecipeRunDescription;
+  /** Object shown by the panel ("this object"). */
+  oid: string;
+  onSelectObject?: Props["onSelectObject"];
+}) {
+  const [shown, setShown] = useState<Record<number, boolean>>({});
+  if (run.status !== "ok") {
+    return (
+      <div className="provenance-activity" data-testid="provenance-recipe-run">
+        <div className="provenance-activity-title">
+          <strong>{run.recipe_id ?? t("Application method")}</strong>{" "}
+          <span className="provenance-muted">{t("Application method")}</span>
+        </div>
+        <div className="provenance-muted">
+          {t(
+            "Method record written by a newer version of DataLab (schema {schema}): it cannot be shown",
+            { schema: run.schema_version ?? "?" },
+          )}
+        </div>
+      </div>
+    );
+  }
+  const inputs = run.inputs ?? [];
+  return (
+    <div className="provenance-activity" data-testid="provenance-recipe-run">
+      <div className="provenance-activity-title">
+        <strong>{run.title || run.recipe_id}</strong>{" "}
+        <span className="provenance-muted">
+          {[
+            t("Application method"),
+            `${run.plugin_id} ${run.plugin_version}`,
+            shortDate(run.finished_at),
+          ]
+            .filter(Boolean)
+            .join(" — ")}
+        </span>
+      </div>
+      <div>
+        {t("Method: {id}, version {version}", {
+          id: run.recipe_id ?? "?",
+          version: run.recipe_version ?? "?",
+        })}
+      </div>
+      <div className="provenance-muted">
+        {t(
+          "Recorded by the method, outside the workspace provenance: its data cannot be checked or recomputed",
+        )}
+      </div>
+      {run.parameters === null && (
+        <div className="provenance-muted">{t("Parameters: not recorded")}</div>
+      )}
+      {(run.parameters ?? []).length > 0 && (
+        <table className="provenance-parameters">
+          <tbody>
+            {(run.parameters ?? []).map((parameter) => (
+              <tr key={parameter.name}>
+                <th scope="row">{parameter.label || parameter.name}</th>
+                <td>{formatParameterValue(parameter.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {inputs.length > 0 && (
+        <ol className="provenance-inputs" aria-label={t("Inputs")}>
+          {inputs.map((input, index) => (
+            <li
+              key={`${input.role}:${input.position}`}
+              data-testid="provenance-recipe-input"
+            >
+              <span>
+                {input.role}: {input.title ?? t("Original input missing")}
+              </span>{" "}
+              {input.recipe_run && (
+                <button
+                  type="button"
+                  className="provenance-link"
+                  aria-expanded={Boolean(shown[index])}
+                  onClick={() =>
+                    setShown((value) => ({ ...value, [index]: !value[index] }))
+                  }
+                >
+                  {shown[index]
+                    ? `▾ ${t("Hide method run")}`
+                    : `▸ ${t("Show method run")}`}
+                </button>
+              )}{" "}
+              {input.id && input.id !== oid && onSelectObject && (
+                <GoToButton
+                  id={input.id}
+                  kind={input.object_kind}
+                  onSelectObject={onSelectObject}
+                />
+              )}
+              {shown[index] && input.recipe_run && (
+                <RecipeRunView
+                  run={input.recipe_run}
+                  oid={oid}
+                  onSelectObject={onSelectObject}
+                />
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+      <div>
+        <strong>{t("Results")}</strong>
+      </div>
+      <ul className="provenance-outputs">
+        {(run.outputs ?? []).map((output) => (
+          <li
+            key={`${output.role}:${output.object_uuid}`}
+            data-testid="provenance-recipe-output"
+          >
+            {output.role}: {output.title ?? t("Object no longer exists")}
+            {output.id === oid && (
+              <span className="provenance-muted"> {t("(this object)")}</span>
+            )}{" "}
+            {output.id && output.id !== oid && onSelectObject && (
+              <GoToButton
+                id={output.id}
+                kind={output.object_kind}
+                onSelectObject={onSelectObject}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+      <details className="provenance-details">
+        <summary>{t("Details")}</summary>
+        <ul>
+          <li>
+            {t("Software")}: DataLab {run.datalab_version}
+          </li>
+          <li>sigima: {run.sigima_version}</li>
+          <li>
+            {t("Run ID")}: {run.run_id}
+          </li>
+          <li>
+            {t("Started at")}: {run.started_at}
+          </li>
+          <li>
+            {t("Finished at")}: {run.finished_at}
+          </li>
+        </ul>
+      </details>
+    </div>
   );
 }
