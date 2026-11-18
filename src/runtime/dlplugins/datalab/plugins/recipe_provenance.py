@@ -70,6 +70,9 @@ def _parameter_labels(descriptor: RecipeDescriptor | None) -> dict[str, str]:
     labels = {}
     for item in instance.get_items():
         label = item.get_prop_value("display", instance, "label")
+        if not label:
+            # A checkbox can have a caption without a separate field label.
+            label = item.get_prop_value("display", instance, "text", "")
         if isinstance(label, str) and label:
             labels[item.get_name()] = label
     return labels
