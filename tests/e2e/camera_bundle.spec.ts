@@ -135,7 +135,7 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
 
   expect(result.plugin).toMatchObject({
     plugin_id: CAMERA_PLUGIN_ID,
-    version: "0.2.1",
+    version: "0.3.0",
     source: "bundled-wheel",
     trust: "verified",
     enabled: true,
@@ -186,7 +186,9 @@ test("bundled Camera workflow renders curve, map, and metrics within budget", as
   await expect(page.locator(".result-card-title")).toHaveText(
     "Relative Camera characterization metrics",
   );
-  await expect(page.locator(".result-card-table tbody tr")).toHaveCount(11);
+  await expect(page.locator(".result-card-table")).toContainText(
+    "Dark correction",
+  );
   await expect(page.locator(".result-card-table")).toContainText(
     "Response slope",
   );

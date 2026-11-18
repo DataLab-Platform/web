@@ -101,6 +101,8 @@ An iframe `src` is a [resource URL security context](https://angular.dev/best-pr
 
 The component throws an error for any other URL, and only calls `DomSanitizer.bypassSecurityTrustResourceUrl` with a URL that passed these checks: this call disables Angular's protection for the value it receives, so it must never receive an unchecked string. The origin of the validated URL is also the `targetOrigin` given to the SDK, so requests only go to an origin of the allow-list. Never bind a user-controlled string (query parameter, form field, stored setting…) to `src`.
 
+When `src` changes, the component disconnects the previous client immediately and reconnects after the iframe loads. Until the new handshake succeeds, `ready()` is false. If the iframe does not respond, the current connection reports a timeout through `failed` and `lastError`; browsers can fire the iframe's `load` event even when its navigation fails, so a loading error may only be reported after the handshake timeout.
+
 ## Step 4 — Use it
 
 ```html

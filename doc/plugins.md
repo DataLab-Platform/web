@@ -147,7 +147,7 @@ A tool is opened in one of two ways:
 
 An instrument can override `open()` and `close()` to prepare and release resources. DataLab-Web opens it with the edited settings before the first preview or acquisition, retries a failed opening on the next request, and closes it when the window closes or the plugin is unloaded. Calls are serialized, but a slow call may block the browser when the runtime runs on the main thread. Abrupt page termination cannot guarantee that `close()` runs.
 
-`datalab.plugins.resources`, `datalab.plugins.recipe_binding` and `datalab.plugins.tools` are copied from DataLab Desktop into the host shim, so `PluginTool` accepts the same arguments, including `menu`. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
+`datalab.plugins.resources`, `datalab.plugins.recipe_binding`, `datalab.plugins.recipe_provenance` and `datalab.plugins.tools` are copied from DataLab Desktop into the host shim, so `PluginTool` accepts the same arguments, including `menu`, and the Provenance panel describes the run recorded with the results of a recipe as DataLab Desktop does. The portable `datalab.plugins.instruments` module mirrors the Desktop contract and adds browser session management.
 
 The wheel rules below come from `datalab.plugins.wheels`, also copied verbatim from DataLab Desktop and used by the plugin catalog, so a wheel is judged the same way everywhere; `dlw_wheels.py` only applies them to the `datalab.web_plugins` group. A Python test compares the copy with a sibling DataLab checkout when one is available.
 

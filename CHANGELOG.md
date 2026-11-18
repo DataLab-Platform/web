@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed
+
+- **Camera characterization:** the bundled plugin is now 0.3.0. Camera results display LSB; photon transfer distinguishes measured saturation from a lower bound, and the dark ramp shows which pixels contribute to the summary. Recipe versions are unchanged.
+
+### Fixed
+
+- **Provenance of application methods:** the Provenance panel now shows the method, plugin, parameters, inputs and other outputs of a recipe result. The provenance of a subsequent processing links back to that method (fixes [Issue #131](https://github.com/DataLab-Platform/web/issues/131)).
+- **JavaScript SDK and Angular integration:** changing an iframe URL while connecting could report an obsolete connection failure or accept a response from an earlier client. Pending connections are now cancelled when replaced, and only the current connection updates the Angular example's state (fixes [Issue #128](https://github.com/DataLab-Platform/web/issues/128)).
+
 ## [0.12.0] - 2026-11-16
 
 ### Added in 0.12.0
