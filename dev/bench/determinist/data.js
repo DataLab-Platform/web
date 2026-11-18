@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794812512139,
+  "lastUpdate": 1795022388092,
   "repoUrl": "https://github.com/DataLab-Platform/web",
   "entries": {
     "DataLab-Web perf (deterministic)": [
@@ -4556,6 +4556,155 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/DataLab-Platform/web/commit/320ecd88ef9569db03be594ecbd7d5c4089996b8"
         },
         "date": 1794812511045,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "image_perf · payload (4 imgs)",
+            "value": 16.777,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · payload [10000 pts]",
+            "value": 0.16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [10000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [100000 pts]",
+            "value": 1.6,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [100000 pts]",
+            "value": 1061,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [500000 pts]",
+            "value": 8,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [500000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "signal_perf · payload [1000000 pts]",
+            "value": 16,
+            "unit": "MB"
+          },
+          {
+            "name": "signal_perf · Plotly points [1000000 pts]",
+            "value": 1062,
+            "unit": "points"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_storage · disk Δheap [2048² ×8 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [1024² ×16 float64]",
+            "value": 0,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · async Δheap [2048² ×8 float64]",
+            "value": 54.1,
+            "unit": "MiB"
+          },
+          {
+            "name": "opfs_worker · sync Δheap [2048² ×8 float64]",
+            "value": 54.1,
+            "unit": "MiB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick main/ram]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick main/ram]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · ledger capsule archive [quick main/ram]",
+            "value": 0.208,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick main/disk]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick main/disk]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick worker/ram]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick worker/ram]",
+            "value": 8.438,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · ledger capsule archive [quick worker/ram]",
+            "value": 0.208,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · workspace HDF5 [quick worker/disk]",
+            "value": 8.426,
+            "unit": "MB"
+          },
+          {
+            "name": "provenance · capsule archive [quick worker/disk]",
+            "value": 8.438,
+            "unit": "MB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "committer": {
+            "email": "1311787+PierreRaybaut@users.noreply.github.com",
+            "name": "Pierre Raybaut",
+            "username": "PierreRaybaut"
+          },
+          "distinct": true,
+          "id": "fadfd856e26726c7f3d3a44b41566df5abc0310e",
+          "message": "chore(release): publish DataLab Web 0.12.1\n\nAssisted-by: GPT-6.2 Astra",
+          "timestamp": "2026-11-18T18:13:46+01:00",
+          "tree_id": "da0d59aeb6f6311a233d34e6a4f104d0d859327d",
+          "url": "https://github.com/DataLab-Platform/web/commit/fadfd856e26726c7f3d3a44b41566df5abc0310e"
+        },
+        "date": 1795022387489,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
