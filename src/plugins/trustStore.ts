@@ -7,7 +7,9 @@
  * by a stable plugin identifier (filename + SHA-256 of the source).
  */
 
-const STORAGE_KEY = "datalab-web/trusted-plugins";
+import { storageName } from "../storage/profile";
+
+const STORAGE_KEY = storageName("datalab-web/trusted-plugins");
 
 export interface TrustEntry {
   filename: string;

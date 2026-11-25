@@ -23,6 +23,7 @@ import { getIoIconUrl } from "../../assets/ioIcons";
 import { getHelpIconUrl } from "../../assets/helpIcons";
 import { getH5IconUrl } from "../../assets/h5Icons";
 import { t } from "../../i18n/translate";
+import { storageName } from "../../storage/profile";
 
 type Kind = "signal" | "image";
 
@@ -36,7 +37,7 @@ const KIND_ICON: Record<Kind, string> = {
   image: "image.svg",
 };
 
-const SHOW_ON_STARTUP_KEY = "datalab-web.welcome.showOnStartup";
+const SHOW_ON_STARTUP_KEY = storageName("datalab-web.welcome.showOnStartup");
 
 export interface WelcomeViewProps {
   appVersion: string;
@@ -58,7 +59,7 @@ export interface WelcomeViewProps {
   onOpenUserGuide: () => void;
   onOpenReleaseNotes: () => void;
   /** Open (and expand) the AI Assistant panel. */
-  onOpenAIAssistant: () => void;
+  onOpenAIAssistant?: () => void;
 }
 
 interface QuickAction {
@@ -143,14 +144,18 @@ export function WelcomeView({
   ];
 
   const walkthroughActions: QuickAction[] = [
-    {
-      iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
-      label: t("Ask the AI assistant"),
-      description: t(
-        "Chat with the built-in assistant to inspect, create and process your data.",
-      ),
-      onClick: onOpenAIAssistant,
-    },
+    ...(onOpenAIAssistant
+      ? [
+          {
+            iconUrl: getHelpIconUrl("libre-gui-questions.svg"),
+            label: t("Ask the AI assistant"),
+            description: t(
+              "Chat with the built-in assistant to inspect, create and process your data.",
+            ),
+            onClick: onOpenAIAssistant,
+          },
+        ]
+      : []),
     {
       iconUrl: getRootIconUrl("visualization.svg"),
       label: t("Take the guided tour"),

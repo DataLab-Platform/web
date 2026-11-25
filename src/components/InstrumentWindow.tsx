@@ -9,6 +9,7 @@ import {
 
 import { getRootIconUrl } from "../assets/rootIcons";
 import { t } from "../i18n/translate";
+import { storageName } from "../storage/profile";
 import { useRuntime } from "../runtime/RuntimeContext";
 import type {
   PluginInstrumentAcquisition,
@@ -24,7 +25,7 @@ const REFRESH_DELAY_MS = 150;
 
 /** Storage key of the "New group" option chosen for an instrument. */
 function newGroupStorageKey(pluginId: string, toolId: string): string {
-  return `datalab-web.instrument-new-group.${pluginId}/${toolId}`;
+  return storageName(`datalab-web.instrument-new-group.${pluginId}/${toolId}`);
 }
 
 /** Return the "New group" option chosen for an instrument, or null. */

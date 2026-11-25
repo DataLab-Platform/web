@@ -62,9 +62,9 @@ function imageRows(
     [t("dtype"), s.dtype],
     [t("Min"), fmt(s.min)],
     [t("Max"), fmt(s.max)],
-    [t("Mean"), fmt(s.mean)],
-    [t("Std"), fmt(s.std)],
-    [t("Median"), fmt(s.median)],
+    [t("Mean"), s.bounded ? t("Not calculated") : fmt(s.mean)],
+    [t("Std"), s.bounded ? t("Not calculated") : fmt(s.std)],
+    [t("Median"), s.bounded ? t("Not calculated") : fmt(s.median)],
   ];
 }
 

@@ -19,6 +19,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { storageName } from "./profile";
 
 export type RecentKind = "macro" | "notebook";
 
@@ -35,7 +36,7 @@ export interface RecentEntry {
   lastSeen: number;
 }
 
-const DB_NAME = "datalab-web.recent";
+const DB_NAME = storageName("datalab-web.recent");
 const DB_VERSION = 1;
 const STORE = "entries";
 

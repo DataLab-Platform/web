@@ -19,7 +19,9 @@ import { saveApiKey } from "./secureStorage";
 import type { ProviderKind, ProviderSettings } from "./types";
 import { t } from "../i18n/translate";
 
-const STORAGE_KEY = "datalab-web.aiassistant.settings";
+import { storageName } from "../storage/profile";
+
+const STORAGE_KEY = storageName("datalab-web.aiassistant.settings");
 
 export const DEFAULT_SETTINGS: ProviderSettings = {
   provider: "openai",

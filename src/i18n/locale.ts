@@ -17,6 +17,8 @@
  * registry, the Pyodide boot in ``runtime.ts``) can read the active locale.
  */
 
+import { storageName } from "../storage/profile";
+
 /** Locales shipped with DataLab-Web. English is the source language. */
 export const SUPPORTED_LOCALES = ["en", "fr"] as const;
 
@@ -31,7 +33,7 @@ export const LOCALE_LABELS: Record<SupportedLocale, string> = {
   fr: "Français",
 };
 
-const STORAGE_KEY = "datalab-web:lang";
+const STORAGE_KEY = storageName("datalab-web:lang");
 
 function isSupported(code: string): code is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(code);

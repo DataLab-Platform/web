@@ -12,8 +12,10 @@
 
 import { t } from "../i18n/translate";
 
-const ADDRESS_KEY = "datalab-web.capsuleRegistry.address";
-const TOKEN_KEY = "datalab-web.capsuleRegistry.token";
+import { storageName } from "./profile";
+
+const ADDRESS_KEY = storageName("datalab-web.capsuleRegistry.address");
+const TOKEN_KEY = storageName("datalab-web.capsuleRegistry.token");
 
 export interface RegistrySettings {
   /** Base address (``https://…``), or "" when no registry is used. */

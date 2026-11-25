@@ -25,6 +25,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { paintImageData } from "../utils/colormap";
 import { axisToPhysical } from "../utils/pixelCenters";
 import type { ImageData } from "../runtime/runtime";
+import { t } from "../i18n/translate";
 
 /** Maximum number of images rendered in the grid.  Each image's pixels
  *  are JSON-serialised across the Pyodide bridge, so the cap is mostly
@@ -175,12 +176,31 @@ function MiniImageImpl({ image }: { image: ImageData }) {
     setHover({ x, y, z });
   };
 
-  const aspectRatio = (image.height * image.dy) / (image.width * image.dx);
+  const aspectRatio = Math.abs(
+    (image.height * image.dy) / (image.width * image.dx),
+  );
   return (
     <div className="multi-image-cell">
       <div className="multi-image-title" title={image.title}>
         {image.title || image.id}
       </div>
+      {image.preview && (
+        <div data-testid="bounded-preview" data-oid={image.id}>
+          <strong>{t("Read-only preview")}</strong>{" "}
+          {image.preview.native_shape.join(" × ")} {image.preview.native_dtype}
+          {" → "}
+          {image.height} × {image.width} {image.preview.raster_dtype}
+          <div>
+            x: {image.preview.x_edges.join(" … ")} {image.xunit}; y:{" "}
+            {image.preview.y_edges.join(" … ")} {image.yunit}
+          </div>
+          <small>
+            {t(
+              "Sampled contrast. Pixel inspection, profiles, area statistics, ROI editing, pixel zoom and data copying are unavailable in this preview.",
+            )}
+          </small>
+        </div>
+      )}
       <div
         className="multi-image-canvas-wrap"
         style={{ aspectRatio: `${1 / aspectRatio}` }}
@@ -188,10 +208,10 @@ function MiniImageImpl({ image }: { image: ImageData }) {
         <canvas
           ref={canvasRef}
           className="multi-image-canvas"
-          onMouseMove={handleMouseMove}
+          onMouseMove={image.preview ? undefined : handleMouseMove}
           onMouseLeave={() => setHover(null)}
         />
-        {hover && (
+        {hover && !image.preview && (
           <div className="multi-image-hover">
             {image.xlabel || "x"}: {formatNum(hover.x)} · {image.ylabel || "y"}:{" "}
             {formatNum(hover.y)} · {image.zlabel || "z"}: {formatNum(hover.z)}

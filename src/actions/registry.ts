@@ -498,6 +498,7 @@ export interface ViewActionCallbacks {
   /** True when the Notebook panel is currently detached as a
    *  floating overlay. */
   notebookFloating: boolean;
+  scriptPanelsUnavailable?: boolean;
   /** Toggle the Notebook panel placement (tab ⇄ floating). */
   onToggleNotebookFloating: () => void;
   /** True when the Macro panel is currently detached as a floating
@@ -594,14 +595,14 @@ export function buildViewActions(cb: ViewActionCallbacks): ActionDescriptor[] {
       label: `${notebookPrefix}${t("Detach Notebooks panel")}`,
       menuPath: `View/${notebookPrefix}Detach Notebooks panel`,
       beginGroup: true,
-      enabled: always,
+      enabled: () => !cb.scriptPanelsUnavailable,
       run: cb.onToggleNotebookFloating,
     },
     {
       id: "view.macro_floating",
       label: `${macroPrefix}${t("Detach Macros panel")}`,
       menuPath: `View/${macroPrefix}Detach Macros panel`,
-      enabled: always,
+      enabled: () => !cb.scriptPanelsUnavailable,
       run: cb.onToggleMacroFloating,
     },
     ...cb.availableLocales.map((loc, index) => ({

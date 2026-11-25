@@ -20,6 +20,8 @@ The HDF5 workspace file is the only durable artifact (see
 
 ## 1. General architecture
 
+The stable distribution uses Pyodide. The separate [WASM64 demonstration](../tests/wasm64/README.md) instead starts a module worker with a locked, locally served CPython environment. Its backend adapts the same `DataLabRuntime` methods, dataset dialogs, HDF5 format and provenance; it does not replace the scientific processor. On the demo, `?engine=pyodide` starts a new session rather than migrating a live workspace. Both demo engines use a browser-storage namespace distinct from the stable site. Neither the scientific bundle nor the private large-memory test generator is part of the stable distribution.
+
 ```mermaid
 flowchart TB
     Host["Host page <i>(optional)</i><br/>@datalab-platform/web-sdk"]

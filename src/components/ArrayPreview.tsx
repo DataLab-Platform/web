@@ -288,7 +288,7 @@ function ImageArrayPreview({
   const [height, width] = stats.shape;
   // The editor materialises a full string grid; only offer it for images
   // at/under the cell cap. Larger images remain viewable on the main canvas.
-  const editable = width * height <= MAX_EDITABLE_CELLS;
+  const editable = !stats.bounded && width * height <= MAX_EDITABLE_CELLS;
 
   const handleEdit = useCallback(() => {
     setError(null);

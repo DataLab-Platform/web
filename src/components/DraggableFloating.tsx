@@ -20,6 +20,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { storageName } from "../storage/profile";
 
 export interface DraggableFloatingProps {
   storageKey: string;
@@ -41,7 +42,7 @@ interface PersistedRect {
 
 function loadRect(key: string): PersistedRect | null {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(storageName(key));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedRect>;
     if (
@@ -60,7 +61,7 @@ function loadRect(key: string): PersistedRect | null {
 
 function saveRect(key: string, rect: PersistedRect): void {
   try {
-    localStorage.setItem(key, JSON.stringify(rect));
+    localStorage.setItem(storageName(key), JSON.stringify(rect));
   } catch {
     /* ignore */
   }

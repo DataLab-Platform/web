@@ -69,6 +69,7 @@ import { Cell } from "./Cell";
 import { useConfirm, useMessage } from "../ConfirmDialog";
 import { useToast } from "../Toast";
 import { t } from "../../i18n/translate";
+import { storageName } from "../../storage/profile";
 import { useWorkspace } from "../../runtime/WorkspaceContext";
 import {
   acceptFromExtensions,
@@ -130,8 +131,8 @@ export interface NotebookPanelHandle {
   importMacroAsNotebook: (title: string, source: string) => void;
 }
 
-const LS_OPEN_NB_IDS = "datalab-web.notebooks.openIds";
-const LS_ACTIVE_NB_ID = "datalab-web.notebooks.activeId";
+const LS_OPEN_NB_IDS = storageName("datalab-web.notebooks.openIds");
+const LS_ACTIVE_NB_ID = storageName("datalab-web.notebooks.activeId");
 const AUTOSAVE_DELAY_MS = 600;
 
 /**

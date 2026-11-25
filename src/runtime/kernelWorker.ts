@@ -21,7 +21,14 @@
  */
 import { DataLabRuntime, type PyodideLoader } from "./runtime";
 import type { RuntimeLabels } from "./runtimeLabels";
+import benchmarkSource from "../../tests/wasm64/benchmark/workspace.py?raw";
+import {
+  benchmarkBuild,
+  localBenchmarkBuild,
+  recordResult,
+} from "./benchmarkTransfer";
 import { PYODIDE_INDEX } from "./workerBase";
+import { bootWasmBackend } from "./wasmBackend";
 import { collectTransferables, ScientificRefusalError } from "./workerProtocol";
 import type {
   KernelEvent,
@@ -70,16 +77,27 @@ function snapshot(rt: DataLabRuntime): KernelMirror {
   };
 }
 
-async function boot(lang: string, labels: RuntimeLabels): Promise<void> {
+async function boot(
+  lang: string,
+  labels: RuntimeLabels,
+  wasmAssetRoot?: string,
+): Promise<void> {
   if (runtime || booting) return;
   booting = true;
   try {
+    if (wasmAssetRoot && import.meta.env.VITE_WASM64_DEMO !== "1")
+      throw new Error("This build does not contain WASM64.");
+    const wasm =
+      import.meta.env.VITE_WASM64_DEMO === "1" && wasmAssetRoot
+        ? await bootWasmBackend(wasmAssetRoot)
+        : undefined;
     const rt = await DataLabRuntime.load(
       (message) => post({ type: "progress", message }),
       {
         loadPyodide: workerPyodideLoader,
         lang,
         labels,
+        wasm,
       },
     );
     // Forward workspace mutations so the main thread can flip its dirty flag.
@@ -95,8 +113,22 @@ async function boot(lang: string, labels: RuntimeLabels): Promise<void> {
           post({ type: "dialog-request", id, kind, payload });
         }),
     );
+    if (benchmarkBuild && wasm && localBenchmarkBuild()) {
+      await wasm.runPythonAsync(
+        benchmarkSource +
+          `
+_qualification = Qualification(globals())
+benchmark_prepare = _qualification.prepare
+benchmark_verify = _qualification.verify
+`,
+      );
+    }
     runtime = rt;
-    post({ type: "ready", mirror: snapshot(rt) });
+    post({
+      type: "ready",
+      engine: wasm ? "wasm64" : "pyodide",
+      mirror: snapshot(rt),
+    });
   } catch (err) {
     post({ type: "boot-error", error: errMessage(err) });
   } finally {
@@ -132,6 +164,7 @@ async function handleCall(
     // payloads (image/signal bytes, HDF5 workspace, …) are freshly built
     // by the runtime (Python ``.tobytes()`` → a new JS ArrayBuffer), so
     // moving them back to the main thread zero-copy is always safe.
+    if (benchmarkBuild) recordResult("worker", method, value);
     post({ type: "result", id, ok: true, value }, collectTransferables(value));
   } catch (err) {
     post({ type: "mirror", mirror: snapshot(runtime) });
@@ -145,7 +178,7 @@ ctx.onmessage = (ev: MessageEvent<KernelRequest>) => {
   const msg = ev.data;
   switch (msg.type) {
     case "init":
-      void boot(msg.lang, msg.labels);
+      void boot(msg.lang, msg.labels, msg.wasmAssetRoot);
       break;
     case "call":
       void handleCall(msg.id, msg.method, msg.args);

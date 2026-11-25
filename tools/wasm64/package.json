@@ -1,0 +1,9 @@
+{
+  "name": "datalab-web-wasm64-environment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@derthorsten/pyjs": "5.2.0"
+  }
+}

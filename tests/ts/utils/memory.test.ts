@@ -75,6 +75,13 @@ describe("memoryLevel", () => {
 });
 
 describe("readWasmHeapBytes", () => {
+  it("reads the full linear memory without applying wasm32 colours or truncation", () => {
+    const wasmBytes = readWasmHeapBytes({
+      HEAPU8: { length: 1024, buffer: { byteLength: 5 * GiB } },
+    });
+    expect(wasmBytes).toBe(5 * GiB);
+    expect(memoryLevel({ ...usage(wasmBytes), memory64: true })).toBe("ok");
+  });
   it("returns null for an undefined module", () => {
     expect(readWasmHeapBytes(undefined)).toBeNull();
   });

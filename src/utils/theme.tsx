@@ -21,11 +21,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { storageName } from "../storage/profile";
 
 export type ThemeMode = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
-const STORAGE_KEY = "datalab-web:theme";
+const STORAGE_KEY = storageName("datalab-web:theme");
 
 function readStoredMode(): ThemeMode {
   try {

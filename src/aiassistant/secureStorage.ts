@@ -22,7 +22,9 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
-const DB_NAME = "datalab-web.aiassistant.secrets";
+import { storageName } from "../storage/profile";
+
+const DB_NAME = storageName("datalab-web.aiassistant.secrets");
 const DB_VERSION = 1;
 const STORE = "kv";
 

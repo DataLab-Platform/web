@@ -73,6 +73,10 @@ export class WorkerRuntimeProxy {
   private resolveReady!: () => void;
   private rejectReady!: (err: unknown) => void;
   private settledReady = false;
+  private terminalError: Error | null = null;
+  private started = false;
+  private wasmRequested = false;
+  private timeout?: ReturnType<typeof setTimeout>;
 
   /** Lazily-built ``RuntimeApi`` façade (a ``Proxy`` over this client). */
   private runtimeFacade: RuntimeApi | null = null;
@@ -80,6 +84,7 @@ export class WorkerRuntimeProxy {
   constructor(
     private readonly worker: WorkerLike,
     private readonly onProgress?: (message: string) => void,
+    private readonly onFatal?: (message: string) => void,
   ) {
     this.readyPromise = new Promise<void>((resolve, reject) => {
       this.resolveReady = resolve;
@@ -95,21 +100,38 @@ export class WorkerRuntimeProxy {
       const detail = ev.message
         ? `${ev.message}${ev.filename ? ` (${ev.filename})` : ""}`
         : "runtime worker failed to start";
-      if (!this.settledReady) {
-        this.settledReady = true;
-        this.rejectReady(new Error(detail));
-      } else {
-        console.error("[workerRuntime] worker error:", detail);
-        // An uncaught error may have stopped the call in progress: its result
-        // will never come, so the calls waiting for one fail now.
-        this.rejectPending(new Error(`runtime worker error: ${detail}`));
-      }
+      this.fail(
+        new Error(
+          this.settledReady ? `runtime worker error: ${detail}` : detail,
+        ),
+      );
     });
   }
 
   /** Send the boot request. Resolves once the worker reports ``ready``. */
-  init(lang: string, labels: RuntimeLabels): Promise<void> {
-    this.post({ type: "init", lang, labels });
+  init(
+    lang: string,
+    labels: RuntimeLabels,
+    wasmAssetRoot?: string,
+  ): Promise<void> {
+    if (this.terminalError) return Promise.reject(this.terminalError);
+    if (this.started) return this.readyPromise;
+    this.started = true;
+    this.wasmRequested = !!wasmAssetRoot;
+    this.timeout = setTimeout(
+      () => this.fail(new Error("Runtime worker startup timed out")),
+      300_000,
+    );
+    try {
+      this.post({
+        type: "init",
+        lang,
+        labels,
+        ...(wasmAssetRoot ? { wasmAssetRoot } : {}),
+      });
+    } catch (error) {
+      this.fail(error instanceof Error ? error : new Error(String(error)));
+    }
     return this.readyPromise;
   }
 
@@ -123,8 +145,17 @@ export class WorkerRuntimeProxy {
 
   /** Tear down the worker and reject any in-flight calls. */
   dispose(): void {
-    this.rejectPending(new Error("runtime worker disposed"));
+    this.fail(new Error("runtime worker disposed"), false);
+  }
+
+  private fail(error: Error, notify = true): void {
+    if (this.terminalError) return;
+    this.terminalError = error;
+    clearTimeout(this.timeout);
+    if (this.started && !this.settledReady) this.rejectReady(error);
+    this.rejectPending(error);
     this.worker.terminate();
+    if (notify && this.settledReady) this.onFatal?.(error.message);
   }
 
   // --- Internals ---------------------------------------------------------
@@ -206,6 +237,7 @@ export class WorkerRuntimeProxy {
   }
 
   private call(method: string, args: unknown[]): Promise<unknown> {
+    if (this.terminalError) return Promise.reject(this.terminalError);
     const id = this.nextCallId++;
     // Transfer (not clone) any ArrayBuffers in the arguments: binary inputs
     // (image/signal arrays, file bytes) are moved into the runtime, so this
@@ -250,11 +282,17 @@ export class WorkerRuntimeProxy {
   }
 
   private handleEvent(event: KernelEvent): void {
+    if (this.terminalError) return;
     switch (event.type) {
       case "progress":
         this.onProgress?.(event.message);
         break;
       case "ready":
+        if ((event.engine === "wasm64") !== this.wasmRequested) {
+          this.fail(new Error("Worker started with the wrong engine"));
+          break;
+        }
+        clearTimeout(this.timeout);
         this.mirror = event.mirror;
         if (!this.settledReady) {
           this.settledReady = true;
@@ -262,10 +300,7 @@ export class WorkerRuntimeProxy {
         }
         break;
       case "boot-error":
-        if (!this.settledReady) {
-          this.settledReady = true;
-          this.rejectReady(new Error(event.error));
-        }
+        this.fail(new Error(event.error));
         break;
       case "result": {
         const pending = this.pending.get(event.id);
@@ -308,8 +343,10 @@ export class WorkerRuntimeProxy {
     }
     try {
       const value = await this.dialogHandler(kind, payload);
+      if (this.terminalError) return;
       this.post({ type: "dialog-response", id, ok: true, value });
     } catch (err) {
+      if (this.terminalError) return;
       this.post({
         type: "dialog-response",
         id,
@@ -335,6 +372,9 @@ export async function createWorkerRuntime(
     worker?: WorkerLike;
     lang?: string;
     labels?: RuntimeLabels;
+    wasmAssetRoot?: string;
+    onFatal?: (message: string) => void;
+    signal?: AbortSignal;
   },
 ): Promise<RuntimeApi> {
   const worker: WorkerLike =
@@ -342,11 +382,15 @@ export async function createWorkerRuntime(
     (new Worker(new URL("./kernelWorker.ts", import.meta.url), {
       type: "module",
     }) as unknown as WorkerLike);
-  const proxy = new WorkerRuntimeProxy(worker, onProgress);
+  const proxy = new WorkerRuntimeProxy(worker, onProgress, deps?.onFatal);
+  deps?.signal?.addEventListener("abort", () => proxy.dispose(), {
+    once: true,
+  });
+  if (deps?.signal?.aborted) proxy.dispose();
   // Compute locale-derived values on the main thread (the DOM-less worker
   // cannot) and pass them to the kernel boot.
   const lang = deps?.lang ?? pyodideLang();
   const labels = deps?.labels ?? currentRuntimeLabels();
-  await proxy.init(lang, labels);
+  await proxy.init(lang, labels, deps?.wasmAssetRoot);
   return proxy.asRuntime();
 }

@@ -7,6 +7,12 @@
  */
 
 import bootstrapSource from "./bootstrap.py?raw";
+import {
+  benchmarkBuild,
+  localBenchmarkBuild,
+  beginRecording,
+  transferReport,
+} from "./benchmarkTransfer";
 import processorSource from "./processor.py?raw";
 import dlwMainSource from "./dlw_main.py?raw";
 import dlwPluginsSource from "./dlw_plugins.py?raw";
@@ -75,6 +81,7 @@ import {
   type ScientificRefusal,
 } from "./workerProtocol";
 import { workspaceBridgeGate } from "./workspaceBridgeGate";
+import type { WasmBackend } from "./wasmBackend";
 
 // Re-export the structural runtime contract so consumers can keep their
 // existing ``from "../runtime/runtime"`` import path while depending on
@@ -1157,6 +1164,16 @@ export type ImageRoiSegment =
 /** Image data payload returned by ``get_image_data``. */
 export interface ImageData {
   id: string;
+  /** Read-only calibrated raster, never an exact pixel matrix. */
+  preview?: {
+    native_shape: [number, number];
+    native_dtype: string;
+    raster_dtype: "float32";
+    rows: number[];
+    cols: number[];
+    x_edges: [number, number];
+    y_edges: [number, number];
+  } | null;
   title: string;
   width: number;
   height: number;
@@ -1423,6 +1440,7 @@ export type ObjectStats =
   | {
       kind: "image";
       shape: number[];
+      bounded?: boolean;
       dtype: string;
       min: number | null;
       max: number | null;
@@ -1821,6 +1839,7 @@ export type PyodideLoader = (opts: { indexURL: string }) => Promise<unknown>;
  * ``i18n`` layer cannot compute on its own.
  */
 export interface RuntimeLoadOptions {
+  wasm?: WasmBackend;
   /** Pyodide loader; defaults to ``window.loadPyodide``. */
   loadPyodide?: PyodideLoader;
   /** ``LANG`` for the Pyodide environment; defaults to ``pyodideLang()``. */
@@ -1833,7 +1852,7 @@ export interface RuntimeLoadOptions {
 
 export class DataLabRuntime {
   private constructor(
-    private readonly py: PyodideAPI,
+    private readonly py: PyodideAPI | WasmBackend,
     private readonly pluginWheelStore: PluginWheelStore | null = null,
   ) {}
 
@@ -1894,28 +1913,28 @@ export class DataLabRuntime {
     onProgress?: (msg: string) => void,
     opts: RuntimeLoadOptions = {},
   ): Promise<DataLabRuntime> {
-    // The Pyodide loader is injectable so the runtime can boot both on the
-    // main thread (where ``window.loadPyodide`` is provided by the
-    // index.html <script>) and inside a Dedicated Web Worker (where the
-    // ``kernelWorker`` passes a dynamic-``import()`` loader for the ESM
-    // Pyodide build — there is no ``window`` there). Default preserves the
-    // historical main-thread behaviour exactly.
+    // The worker supplies its loader; main-thread Pyodide loads its ESM
+    // entry point on demand unless the embedder has already supplied one.
     const loadPyodide =
       opts.loadPyodide ??
       (typeof window !== "undefined" ? window.loadPyodide : undefined);
-    if (typeof loadPyodide !== "function") {
-      throw new Error(
-        "Pyodide failed to load from the CDN. Check the browser console " +
-          "and your network / Content-Security-Policy settings.",
-      );
-    }
-    onProgress?.(t("Loading Pyodide runtime…"));
-    const py = (await loadPyodide({
-      indexURL: PYODIDE_INDEX,
-    })) as PyodideAPI;
+    if (!opts.wasm) onProgress?.(t("Loading Pyodide runtime…"));
+    const py =
+      opts.wasm ??
+      ((await (
+        loadPyodide ??
+        (async (options) => {
+          const loader = await import(
+            /* @vite-ignore */ `${PYODIDE_INDEX}pyodide.mjs`
+          );
+          return loader.loadPyodide(options);
+        })
+      )({
+        indexURL: PYODIDE_INDEX,
+      })) as PyodideAPI);
     let pluginWheelStore: PluginWheelStore | null = null;
     const storedPluginWheels: StoredPluginWheel[] = [];
-    if (PluginWheelStore.isSupported()) {
+    if (!opts.wasm && PluginWheelStore.isSupported()) {
       try {
         pluginWheelStore = new PluginWheelStore();
         await pluginWheelStore.init();
@@ -1976,34 +1995,36 @@ os.environ["LANG"] = ${JSON.stringify(lang)}
 os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
 `);
 
-    onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
-    // Retried on a transient download failure (cold cache, see
-    // ``packageRetry.ts``), as the installation below.
-    await loadPackagesWithRetry(
-      py,
-      ["numpy", "scipy", "h5py", "pandas", "pillow", "micropip"],
-      { label: "[runtime]" },
-    );
+    if (!("kind" in py)) {
+      onProgress?.(t("Loading scientific stack (numpy, scipy, h5py)…"));
+      // Retried on a transient download failure (cold cache, see
+      // ``packageRetry.ts``), as the installation below.
+      await loadPackagesWithRetry(
+        py,
+        ["numpy", "scipy", "h5py", "pandas", "pillow", "micropip"],
+        { label: "[runtime]" },
+      );
 
-    onProgress?.(t("Installing Sigima…"));
-    // Pyodide's ``scikit-image`` package omits Pillow and tifffile from its
-    // dependency metadata even though ``skimage.io`` imports both. Pillow is
-    // loaded from the Pyodide distribution above; ``tifffile`` is pulled from
-    // PyPI explicitly so importing Sigima and TIFF read/write both work.
-    // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
-    // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
-    // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
-    // DataLab-Capsule (provenance) is optional and only needed by the runtime
-    // that owns the workspace (main thread or kernel worker).
-    const bootRequirements = [
-      SIGIMA_INSTALL_SPEC,
-      GUIDATA_INSTALL_SPEC,
-      "tifffile<2025",
-      ...(DATALAB_CAPSULE_INSTALL_SPEC ? [DATALAB_CAPSULE_INSTALL_SPEC] : []),
-    ];
-    await micropipInstallWithRetry(py, bootRequirements, {
-      label: "[runtime]",
-    });
+      onProgress?.(t("Installing Sigima…"));
+      // Pyodide's ``scikit-image`` package omits Pillow and tifffile from its
+      // dependency metadata even though ``skimage.io`` imports both. Pillow is
+      // loaded from the Pyodide distribution above; ``tifffile`` is pulled from
+      // PyPI explicitly so importing Sigima and TIFF read/write both work.
+      // Capped ``<2025`` because tifffile 2025+ requires ``numpy>=2.1`` while
+      // the pinned Pyodide (0.26.4) ships numpy 1.26.4 — lift the cap when
+      // ``PYODIDE_VERSION`` bumps to a build with numpy>=2.1.
+      // DataLab-Capsule (provenance) is optional and only needed by the runtime
+      // that owns the workspace (main thread or kernel worker).
+      const bootRequirements = [
+        SIGIMA_INSTALL_SPEC,
+        GUIDATA_INSTALL_SPEC,
+        "tifffile<2025",
+        ...(DATALAB_CAPSULE_INSTALL_SPEC ? [DATALAB_CAPSULE_INSTALL_SPEC] : []),
+      ];
+      await micropipInstallWithRetry(py, bootRequirements, {
+        label: "[runtime]",
+      });
+    }
 
     onProgress?.(t("Initialising Sigima namespace…"));
     await py.runPythonAsync(guidataJsonSchemaShim);
@@ -2012,7 +2033,9 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     // Verified pure-Python plugin wheels are explicit build assets. They are
     // added directly to ``sys.path``; no package index or Desktop entry point
     // discovery participates in browser startup.
-    const bundledPluginWheels = await fetchBundledPluginWheels();
+    const bundledPluginWheels = opts.wasm
+      ? []
+      : await fetchBundledPluginWheels();
     py.FS.mkdirTree?.("/home/pyodide/plugin-wheels");
     const bundledWheelSpecs = bundledPluginWheels.map(({ wheel, bytes }) => {
       const path = `/home/pyodide/plugin-wheels/${wheel.sha256}.whl`;
@@ -2043,7 +2066,8 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     py.FS.writeFile("/home/pyodide/macro_proxy.py", macroProxySource);
     py.FS.writeFile("/home/pyodide/dlw_macro_lint.py", dlwMacroLintSource);
     await py.runPythonAsync(bootstrapSource);
-    await py.runPythonAsync(`
+    await py.runPythonAsync(
+      `
   import dlw_plugins
   for _wheel in ${JSON.stringify(bundledWheelSpecs)}:
     dlw_plugins.load_plugin_wheel(
@@ -2094,7 +2118,8 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     resolve_plugin_recipe_choices,
     run_plugin_recipe,
   )
-  `);
+  `.replace(/^ {2}/gm, ""),
+    );
 
     // Bridge DataLab-Web's own (non-gettext) strings into Python: the "Group"
     // prefix for auto-created groups, the "Untitled" macro/notebook title and
@@ -2111,16 +2136,22 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     );
     // Passed as an argument, not inlined in source code: Pyodide cannot
     // tokenize a line as long as a whole catalog (MemoryError).
-    const setWebTranslations = py.globals.get("set_web_translations");
-    if (!setWebTranslations) {
-      throw new Error("bootstrap.py does not define set_web_translations");
-    }
-    try {
-      (setWebTranslations as unknown as (t: Record<string, string>) => void)(
-        labels.translations,
-      );
-    } finally {
-      setWebTranslations.destroy?.();
+    if ("kind" in py) {
+      await py.call("set_web_translations", {
+        translations: labels.translations,
+      });
+    } else {
+      const setWebTranslations = py.globals.get("set_web_translations");
+      if (!setWebTranslations) {
+        throw new Error("bootstrap.py does not define set_web_translations");
+      }
+      try {
+        (setWebTranslations as unknown as (t: Record<string, string>) => void)(
+          labels.translations,
+        );
+      } finally {
+        setWebTranslations.destroy?.();
+      }
     }
     await py.runPythonAsync(
       `set_provenance_edition_version(${JSON.stringify(
@@ -2131,7 +2162,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     onProgress?.(t("Ready."));
     const runtime = new DataLabRuntime(py, pluginWheelStore);
     runtime.installDialogBridge();
-    await runtime.installBuiltinPlugins(builtinPluginSources);
+    if (!opts.wasm) await runtime.installBuiltinPlugins(builtinPluginSources);
     return runtime;
   }
 
@@ -2143,7 +2174,7 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
    * ``./dlplugins/`` and write to ``/home/pyodide/<rest>``.
    */
   private static installShim(
-    py: PyodideAPI,
+    py: Pick<PyodideAPI, "FS">,
     sources: Record<string, string>,
   ): void {
     const seenDirs = new Set<string>();
@@ -2187,6 +2218,10 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
       }
       return fn(String(kind), data);
     };
+    if ("kind" in this.py) {
+      this.py.setDialog(handler);
+      return;
+    }
     const setBridge = this.py.globals.get("set_dialog_bridge");
     if (setBridge) {
       try {
@@ -2284,35 +2319,44 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     options: { silent?: boolean } = {},
   ): Promise<T> {
     const refusable = REFUSABLE.has(name);
-    const fn = this.py.globals.get(refusable ? `bridge_${name}` : name);
-    if (!fn) {
-      throw new Error(`Python function not found: ${name}`);
-    }
-    if (typeof fn.callKwargs !== "function") {
-      fn.destroy?.();
-      throw new Error(
-        `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
-      );
-    }
+    const target = refusable ? `bridge_${name}` : name;
+    const invoke = async () => {
+      if ("kind" in this.py) return this.py.call(target, kwargs);
+      const fn = this.py.globals.get(target);
+      if (!fn) {
+        throw new Error(`Python function not found: ${name}`);
+      }
+      if (typeof fn.callKwargs !== "function") {
+        fn.destroy?.();
+        throw new Error(
+          `PyProxy for ${name} does not support callKwargs — Pyodide >= 0.22 required.`,
+        );
+      }
+      try {
+        // In Pyodide, callKwargs must receive the kwargs dict as its LAST
+        // argument.  All our helpers in bootstrap.py are called with kwargs
+        // only, so the kwargs dict is also the only argument.
+        const result = fn.callKwargs(kwargs);
+        // ``result`` may be: (a) a plain JS value, (b) a JS Promise, or
+        // (c) a Pyodide PyProxy of a coroutine (when the bootstrap
+        // function is ``async def``).  The latter is "thenable" but is
+        // **not** an ``instanceof Promise``, so we must detect it via
+        // duck typing on ``.then`` to await it correctly — otherwise we
+        // end up running ``toJs`` on the live coroutine proxy, which
+        // gets destroyed mid-conversion and throws "Object has already
+        // been destroyed".
+        const isThenable =
+          result != null &&
+          (result instanceof Promise ||
+            typeof (result as { then?: unknown }).then === "function");
+        const awaited = isThenable ? await result : result;
+        return toJs(awaited);
+      } finally {
+        fn.destroy?.();
+      }
+    };
     try {
-      // In Pyodide, callKwargs must receive the kwargs dict as its LAST
-      // argument.  All our helpers in bootstrap.py are called with kwargs
-      // only, so the kwargs dict is also the only argument.
-      const result = fn.callKwargs(kwargs);
-      // ``result`` may be: (a) a plain JS value, (b) a JS Promise, or
-      // (c) a Pyodide PyProxy of a coroutine (when the bootstrap
-      // function is ``async def``).  The latter is "thenable" but is
-      // **not** an ``instanceof Promise``, so we must detect it via
-      // duck typing on ``.then`` to await it correctly — otherwise we
-      // end up running ``toJs`` on the live coroutine proxy, which
-      // gets destroyed mid-conversion and throws "Object has already
-      // been destroyed".
-      const isThenable =
-        result != null &&
-        (result instanceof Promise ||
-          typeof (result as { then?: unknown }).then === "function");
-      const awaited = isThenable ? await result : result;
-      let value = toJs(awaited) as T;
+      let value = (await invoke()) as T;
       if (refusable) {
         const reply = value as { value?: T; refused?: ScientificRefusal };
         if (reply.refused) throw new ScientificRefusalError(reply.refused);
@@ -2331,8 +2375,6 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
         console.error(`[runtime] ${name} failed`, err);
       }
       throw err;
-    } finally {
-      fn.destroy?.();
     }
   }
 
@@ -2690,6 +2732,8 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
    * every array resident (see {@link revertSpillAllDirect}).
    */
   async setStorageMode(mode: StorageMode): Promise<void> {
+    if ("kind" in this.py && mode !== "ram")
+      throw new Error("WASM64 supports RAM storage only.");
     if (mode === this.storageMode) return;
     if (mode === "disk" && !OpfsObjectStore.isSupported()) {
       throw new Error(
@@ -4207,6 +4251,45 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
     )) as string;
   }
 
+  async prepareQualification(tier: string, consent: string): Promise<string[]> {
+    if (
+      !benchmarkBuild ||
+      !localBenchmarkBuild() ||
+      !("kind" in this.py) ||
+      this.py.kind !== "wasm64" ||
+      this.getStorageMode() !== "ram" ||
+      !["smoke", "2048", "8192", "18432"].includes(tier) ||
+      consent !== `DEDICATED:${tier}`
+    )
+      throw new Error(
+        "Fixed qualification requires local WASM64, RAM and explicit consent.",
+      );
+    beginRecording();
+    return (await this.callPy("benchmark_prepare", {
+      tier,
+      consent,
+    })) as string[];
+  }
+
+  async qualificationDiagnostics(verify: boolean) {
+    if (
+      !benchmarkBuild ||
+      !localBenchmarkBuild() ||
+      !("kind" in this.py) ||
+      this.py.kind !== "wasm64" ||
+      this.getStorageMode() !== "ram" ||
+      this.getSpilledCount() !== 0
+    )
+      throw new Error("Local resident WASM64 required.");
+    const oracle = verify ? await this.callPy("benchmark_verify") : null;
+    return {
+      oracle,
+      dataBytes: await this.getDataMemoryBytes(),
+      heapBytes: this.getMemoryUsage().wasmBytes,
+      transfers: transferReport(),
+    };
+  }
+
   async getImageData(oid: string): Promise<ImageData> {
     const raw = (await this.callPy("get_image_data", {
       oid,
@@ -5005,6 +5088,11 @@ os.environ["LANGUAGE"] = ${JSON.stringify(lang)}
   private async ensureMacroRuntime(): Promise<
     import("./MacroRuntime").MacroRuntime
   > {
+    // This can run inside the kernel worker, which does not have the page URL.
+    if ("kind" in this.py && this.py.kind === "wasm64")
+      throw new Error(
+        t("Unavailable in WASM64. Restart in Pyodide to use this feature."),
+      );
     if (this._macroRuntime) return this._macroRuntime;
     const { MacroRuntime } = await import("./MacroRuntime");
     this._macroRuntime = new MacroRuntime(this);
@@ -5360,10 +5448,18 @@ _CATALOG.update(dlw_processor.build_signal_catalog())
    * call queue, so it is safe to poll on a timer without serialising
    * behind in-flight computations.
    */
+  private sampledDataBytes: number | null = null;
+
   getMemoryUsage(): MemoryUsage {
     const wasmBytes = readWasmHeapBytes(this.py._module);
     const { jsUsedBytes, jsLimitBytes } = readJsMemory();
-    return { wasmBytes, dataBytes: null, jsUsedBytes, jsLimitBytes };
+    return {
+      wasmBytes,
+      dataBytes: this.sampledDataBytes,
+      jsUsedBytes,
+      jsLimitBytes,
+      ...("kind" in this.py ? { memory64: true } : {}),
+    };
   }
 
   /**
@@ -5376,10 +5472,19 @@ _CATALOG.update(dlw_processor.build_signal_catalog())
   async getDataMemoryBytes(): Promise<number | null> {
     try {
       const r = (await this.callPy("get_data_memory")) as {
-        data_bytes?: number;
+        data_bytes?: number | bigint;
       };
-      return typeof r?.data_bytes === "number" ? r.data_bytes : null;
+      const bytes =
+        typeof r?.data_bytes === "bigint"
+          ? Number(r.data_bytes)
+          : r?.data_bytes;
+      this.sampledDataBytes =
+        typeof bytes === "number" && Number.isSafeInteger(bytes) && bytes >= 0
+          ? bytes
+          : null;
+      return this.sampledDataBytes;
     } catch {
+      this.sampledDataBytes = null;
       return null;
     }
   }

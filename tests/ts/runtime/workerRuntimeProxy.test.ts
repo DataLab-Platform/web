@@ -392,6 +392,7 @@ describe("WorkerRuntimeProxy", () => {
     vi.spyOn(worker, "postMessage").mockImplementationOnce(() => {
       throw new Error("DataCloneError");
     });
+
     const call = runtime.listImages as () => Promise<unknown>;
     await expect(call()).rejects.toThrow("DataCloneError");
     // The next call is unaffected and resolves normally.
@@ -404,5 +405,19 @@ describe("WorkerRuntimeProxy", () => {
     });
     await expect(next).resolves.toEqual([1]);
     error.mockRestore();
+  });
+
+  it("rejects future calls after a failed engine handshake", async () => {
+    const { worker, proxy, runtime } = setup();
+    const boot = proxy.init(
+      "C",
+      { group: "G", untitled: "U", translations: {} },
+      "https://example.org/web-wasm64/",
+    );
+    worker.emit({ type: "ready", engine: "pyodide", mirror: MIRROR });
+    await expect(boot).rejects.toThrow("wrong engine");
+    await expect(runtime.listImages()).rejects.toThrow("wrong engine");
+    expect(worker.terminated).toBe(true);
+    expect(worker.sent).toHaveLength(1);
   });
 });

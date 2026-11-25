@@ -32,6 +32,7 @@ when it changes.  We therefore preserve the live :data:`_MODEL` and
 from __future__ import annotations
 
 import math
+import sys
 import uuid
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -1717,7 +1718,20 @@ def get_object_stats(oid: str) -> dict[str, Any]:
     Mirrors the "Statistics" panel of DataLab desktop — a compact
     read-only dashboard shown above the editable Properties form.
     """
-    return dict(_get_data_summary(oid)["stats"])
+    summary = _get_data_summary(oid)
+    if "stats" not in summary:
+        data = _MODEL.get(oid).data
+        summary["stats"] = {
+            "kind": "image",
+            "shape": list(data.shape),
+            "dtype": str(data.dtype),
+            "min": _safe_stat(np.min, data),
+            "max": _safe_stat(np.max, data),
+            "mean": _safe_stat(np.mean, data),
+            "std": _safe_stat(np.std, data),
+            "median": _safe_stat(np.median, data),
+        }
+    return dict(summary["stats"])
 
 
 # Internal metadata keys that should not be shown to the user.
@@ -3574,6 +3588,35 @@ def _eliminate_outliers_range(
 
 def _build_image_display_summary(data: "np.ndarray") -> dict[str, Any]:
     """Return the data range, histogram and default LUT for an image array."""
+    if _requires_preview(data):
+        # nditer also bounds temporaries for strided arrays and very wide rows.
+        low, high = math.inf, -math.inf
+        for block in np.nditer(
+            data, flags=["external_loop", "buffered", "zerosize_ok"], buffersize=65536
+        ):
+            finite = block[np.isfinite(block)]
+            if finite.size:
+                low = min(low, float(finite.min()))
+                high = max(high, float(finite.max()))
+        if low > high:
+            low = high = float("nan")
+        sample = _maybe_downsample(data, _PREVIEW_SIDE)
+        finite = sample[np.isfinite(sample)]
+        hist = (
+            np.histogram(finite, bins=_LUT_HIST_BINS)
+            if finite.size and finite.min() < finite.max()
+            else (np.array([], dtype=np.int64), np.array([], dtype=float))
+        )
+        return {
+            "data_min": low,
+            "data_max": high,
+            "histogram": hist,
+            "lut_default": (
+                _eliminate_outliers_range(sample, low, high, histogram=hist)
+                if hist[0].size
+                else (low, high)
+            ),
+        }
     finite = data[np.isfinite(data)]
     if finite.size:
         data_min = float(np.min(finite))
@@ -3600,7 +3643,7 @@ def _build_image_display_summary(data: "np.ndarray") -> dict[str, Any]:
 
 
 def _build_data_summary(oid: str) -> dict[str, Any]:
-    """Build the complete data-derived summary for *oid*."""
+    """Build a revision's display summary, without triggering exact image statistics."""
     obj = _MODEL.get(oid)
     kind = _MODEL.kind_of(oid)
     if kind == "signal":
@@ -3623,19 +3666,26 @@ def _build_data_summary(oid: str) -> dict[str, Any]:
 
     data = obj.data
     display = _build_image_display_summary(data)
-    return {
-        **display,
-        "stats": {
-            "kind": "image",
-            "shape": list(data.shape),
-            "dtype": str(data.dtype),
-            "min": _safe_stat(np.min, data),
-            "max": _safe_stat(np.max, data),
-            "mean": _safe_stat(np.mean, data),
-            "std": _safe_stat(np.std, data),
-            "median": _safe_stat(np.median, data),
-        },
-    }
+    if _requires_preview(data):
+        return {
+            **display,
+            "stats": {
+                "kind": "image",
+                "shape": list(data.shape),
+                "dtype": str(data.dtype),
+                "bounded": True,
+                "min": display["data_min"]
+                if math.isfinite(display["data_min"])
+                else None,
+                "max": display["data_max"]
+                if math.isfinite(display["data_max"])
+                else None,
+                "mean": None,
+                "std": None,
+                "median": None,
+            },
+        }
+    return display
 
 
 def _get_data_summary(oid: str) -> dict[str, Any]:
@@ -3647,6 +3697,39 @@ def _get_data_summary(oid: str) -> dict[str, Any]:
     summary = _build_data_summary(oid)
     _DATA_SUMMARY_CACHE[oid] = (revision, summary)
     return summary
+
+
+_WASM64_VIEW = sys.platform == "emscripten" and np.dtype(np.intp).itemsize == 8
+_PREVIEW_SIDE = 512
+
+
+def _requires_preview(data: np.ndarray) -> bool:
+    return _WASM64_VIEW and max(data.shape) > _PREVIEW_SIDE
+
+
+def _preview_axis(size, limit, origin, spacing, coords):
+    """Rasterize across native outer edges; retain source index of each sample."""
+    n = min(size, limit)
+    if coords is None or size == 1:
+        origin = float(coords[0]) if coords is not None else origin
+        first, last = origin - spacing / 2, origin + (size - 0.5) * spacing
+        indices = ((2 * np.arange(n) + 1) * size) // (2 * n)
+    else:
+        import bisect
+
+        first = float(coords[0]) - (float(coords[1]) - float(coords[0])) / 2
+        last = float(coords[-1]) + (float(coords[-1]) - float(coords[-2])) / 2
+        ascending = last > first
+        centres = coords if ascending else coords[::-1]
+        indices = []
+        for i in range(n):
+            v = first + (i + 0.5) * (last - first) / n
+            j = min(max(bisect.bisect_left(centres, v), 1), size - 1)
+            j -= int(v - centres[j - 1] < centres[j] - v)
+            indices.append(j if ascending else size - 1 - j)
+        indices = np.asarray(indices, dtype=np.intp)
+    step = (last - first) / n
+    return indices, first + step / 2, step, [first, last]
 
 
 def _maybe_downsample(data: "np.ndarray", max_size: int | None) -> "np.ndarray":
@@ -3691,6 +3774,9 @@ def _image_data_payload(
 ) -> dict[str, Any]:
     """Return a plotting payload for a resident image object."""
     raw = obj.data
+    bounded = _requires_preview(raw)
+    if bounded and (type(max_size) is not int or not 1 <= max_size <= _PREVIEW_SIDE):
+        raise ValueError("Full image access is unavailable for a WASM64 preview.")
     md = getattr(obj, "metadata", None) or {}
     colormap = _display_option(md, "colormap", "colourmap", "__colormap")
     invert_cm = _display_option(
@@ -3715,7 +3801,26 @@ def _image_data_payload(
     y0 = float(getattr(obj, "y0", 0.0) or 0.0) + 0.5 * (preview_dy - dy)
     xcoords: list[float] = []
     ycoords: list[float] = []
-    if not is_uniform:
+    preview = None
+    if bounded:
+        cols, x0, preview_dx, xedges = _preview_axis(
+            raw.shape[1], max_size, obj.x0, dx, None if is_uniform else obj.xcoords
+        )
+        rows, y0, preview_dy, yedges = _preview_axis(
+            raw.shape[0], max_size, obj.y0, dy, None if is_uniform else obj.ycoords
+        )
+        data = raw[np.ix_(rows, cols)]
+        preview = {
+            "native_shape": list(raw.shape),
+            "native_dtype": str(raw.dtype),
+            "raster_dtype": "float32",
+            "rows": rows.tolist(),
+            "cols": cols.tolist(),
+            "x_edges": xedges,
+            "y_edges": yedges,
+        }
+        is_uniform = True  # raster axes, not a claim about the source
+    elif not is_uniform:
         xc = getattr(obj, "xcoords", None)
         yc = getattr(obj, "ycoords", None)
         if xc is not None and yc is not None and len(xc) and len(yc):
@@ -3724,6 +3829,7 @@ def _image_data_payload(
             xcoords = np.asarray(xc, dtype=float)[::xstride].tolist()
             ycoords = np.asarray(yc, dtype=float)[::ystride].tolist()
     payload: dict[str, Any] = {
+        "preview": preview,
         "id": oid,
         "title": obj.title or "",
         "width": int(data.shape[1]),
@@ -3785,6 +3891,10 @@ def get_image_data(
             payload from Python).
     """
     obj = _MODEL.get(oid)
+    if _requires_preview(obj.data) and (
+        type(max_size) is not int or not 1 <= max_size <= _PREVIEW_SIDE
+    ):
+        raise ValueError("Full image access is unavailable for a WASM64 preview.")
     return _image_data_payload(
         obj,
         oid,
@@ -5469,7 +5579,10 @@ def preview_feature(
     if hasattr(params, "to_py"):
         params = params.to_py()
     params = _proc.filter_transient_params(spec, params)
-    source = deepcopy(_MODEL.get(source_id))
+    resident = _MODEL.get(source_id)
+    if spec.object_kind == "image" and _requires_preview(resident.data):
+        raise ValueError("Live processing preview is unavailable for large images.")
+    source = deepcopy(resident)
     context = _proc.ApplyContext(feature=spec, sources=[source], params=params)
     result = _proc.BaseProcessor(spec.object_kind).apply(context, [source_id])
     if len(result.items) != 1:
@@ -6486,7 +6599,13 @@ def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
             "menu_path": e.get("menu_path"),
         }
         for e in catalog.values()
+        if not (e.get("requires_pkg") and _wasm64_analysis_runtime())
     ]
+
+
+def _wasm64_analysis_runtime() -> bool:
+    """The locked WASM64 environment cannot install Pyodide packages."""
+    return sys.platform == "emscripten" and np.dtype(np.intp).itemsize == 8
 
 
 def _get_or_create_analysis_param(kind: str, oid: str, func_id: str) -> Any:
@@ -6794,6 +6913,11 @@ async def _ensure_pyodide_pkg(name: str) -> None:
     """
     import importlib
 
+    if _wasm64_analysis_runtime():
+        raise RuntimeError(
+            _web("Unavailable in WASM64. Restart in Pyodide to use this feature.")
+        )
+
     # Map PyPI dist name → top-level import name.
     import_name = {"opencv-python": "cv2"}.get(name, name)
     try:
@@ -6969,13 +7093,22 @@ def get_image_view_snapshot(
 ) -> dict[str, Any]:
     """Return every payload needed to render the selected image view.
 
-    The current image keeps its full resolution so viewport LOD can recover
-    native pixels when zooming. In a multi-selection, only the remaining
-    images use bounded previews.
+    WASM64 bounds every image before crossing the bridge. The stable viewer
+    keeps its native current image for viewport LOD.
     """
     ordered = _ordered_selection(current_oid, selected_oids)
     is_multi = len(ordered) > 1
-    images = [get_image_data(current_oid, encoding=encoding)]
+    if _WASM64_VIEW and (
+        type(max_size) is not int
+        or not 1 <= max_size <= _PREVIEW_SIDE
+        or len(ordered) > 6
+    ):
+        raise ValueError("Invalid WASM64 preview budget")
+    images = [
+        get_image_data(
+            current_oid, max_size=max_size if _WASM64_VIEW else None, encoding=encoding
+        )
+    ]
     if is_multi:
         images.extend(
             get_images_data(ordered[1:], max_size=max_size, encoding=encoding)
@@ -7147,6 +7280,25 @@ _H5_MACRO_PREFIX = "DataLab_Mac"
 # DataLab-Web specific: notebooks have no equivalent in Qt DataLab so we
 # pick a fresh prefix (Qt readers will simply ignore the unknown group).
 _H5_NOTEBOOK_PREFIX = "DataLab_Nb"
+_WASM64_H5_BUDGET = 64 * 1024**2
+
+
+def _check_wasm64_workspace_size(h5: Any) -> None:
+    """Check declared array sizes before guidata reads compressed datasets."""
+    import h5py
+
+    total = 0
+
+    def count(_name: str, node: Any) -> None:
+        nonlocal total
+        if isinstance(node, h5py.Dataset):
+            total += node.nbytes
+            if total > _WASM64_H5_BUDGET:
+                raise ValueError(
+                    "Workspace exceeds the WASM64 HDF5 demo budget (64 MiB)."
+                )
+
+    h5.visititems(count)
 
 
 def _h5_sanitize_name(short_id: str, title: str) -> str:
@@ -7169,6 +7321,8 @@ def save_workspace_to_bytes() -> bytes:
 
     from guidata.io import HDF5Writer
 
+    if _WASM64_VIEW and get_data_memory()["data_bytes"] > _WASM64_H5_BUDGET:
+        raise ValueError("Workspace exceeds the WASM64 HDF5 demo budget (64 MiB).")
     tmpdir = tempfile.mkdtemp(prefix="dlw_h5save_")
     path = os.path.join(tmpdir, "workspace.h5")
     try:
@@ -7299,6 +7453,8 @@ def open_workspace_from_bytes(
         except OSError as exc:
             raise ValueError(f"Not a valid HDF5 file: {exc}") from exc
         try:
+            if _WASM64_VIEW:
+                _check_wasm64_workspace_size(reader.h5)
             if _H5_DATALAB_VERSION_KEY not in reader.h5:
                 raise ValueError(
                     "Not a DataLab HDF5 workspace "
