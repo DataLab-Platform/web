@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- **DataLab logo:** on systems without the Century Gothic font, such as a fresh Windows 11 installation without Microsoft Office, the logo of the welcome screen and of the About dialog was displayed with another font. It now looks the same on every system (fixes [Issue #137](https://github.com/DataLab-Platform/web/issues/137)).
+
 - **Camera characterization:** the bundled plugin is now 0.3.0. Camera results display LSB; photon transfer distinguishes measured saturation from a lower bound, and the dark ramp shows which pixels contribute to the summary. Recipe versions are unchanged.
 
 ### Added
