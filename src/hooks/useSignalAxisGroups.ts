@@ -6,7 +6,11 @@ import {
 } from "../components/signalPlotLayout";
 import type { SignalData } from "../runtime/runtime";
 
-export const SIGNAL_AXIS_GROUPS_STORAGE_KEY = "datalab-web.signal-axis-groups";
+import { storageName } from "../storage/profile";
+
+export const SIGNAL_AXIS_GROUPS_STORAGE_KEY = storageName(
+  "datalab-web.signal-axis-groups",
+);
 
 const STORAGE_VERSION = 1;
 const MAX_STORED_VIEWS = 24;

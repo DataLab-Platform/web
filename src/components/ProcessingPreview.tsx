@@ -327,6 +327,10 @@ export const ProcessingPreview = forwardRef<ProcessingPreviewHandle, Props>(
               name="preview_enabled"
               type="checkbox"
               checked={enabled}
+              disabled={
+                sourceResult?.kind === "image" &&
+                Boolean(sourceResult.data.preview)
+              }
               onChange={(event) => toggle(event.target.checked)}
             />
             <span>{t("Preview")}</span>

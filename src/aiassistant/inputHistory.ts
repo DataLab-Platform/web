@@ -7,6 +7,8 @@
  * (DataLab Qt uses an on-disk text file).
  */
 
+import { storageName } from "../storage/profile";
+
 const STORAGE_KEY = "datalab-web.aiassistant.inputHistory";
 
 export class InputHistory {
@@ -22,7 +24,7 @@ export class InputHistory {
 
   constructor(maxSize = 500, storageKey = STORAGE_KEY) {
     this.maxSize = Math.max(1, Math.floor(maxSize));
-    this.storageKey = storageKey;
+    this.storageKey = storageName(storageKey);
     this.load();
   }
 

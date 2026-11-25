@@ -12,6 +12,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { storageName } from "../storage/profile";
 import type { ChatMessage, TokenUsage } from "./types";
 
 /** Lightweight metadata for the History dialog (no message payload). */
@@ -35,7 +36,7 @@ export interface Conversation {
   usage?: TokenUsage;
 }
 
-const DB_NAME = "datalab-web.aiassistant";
+const DB_NAME = storageName("datalab-web.aiassistant");
 const DB_VERSION = 1;
 const STORE = "conversations";
 

@@ -20,9 +20,11 @@
  *   3. ``VITE_RUNTIME_WORKER`` build-time env (``"0"``/``"false"`` → main).
  *   4. Default: worker.
  */
+import { storageName } from "../storage/profile";
+
 export type RuntimeMode = "main" | "worker";
 
-const STORAGE_KEY = "datalab-web:runtime";
+const STORAGE_KEY = storageName("datalab-web:runtime");
 
 function fromUrl(): RuntimeMode | null {
   try {

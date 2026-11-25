@@ -20,6 +20,8 @@ import {
   WorkerStartCancelled,
 } from "./workerReady";
 import { pyodideLang } from "../i18n/locale";
+import { t } from "../i18n/translate";
+import { restrictedWasm64 } from "./demoCapabilities";
 
 export type MacroStreamKind = "stdout" | "stderr" | "system";
 
@@ -203,6 +205,12 @@ export class MacroRuntime {
   /** Start the live worker (with a fresh one if it fails to start, see
    *  ``workerReady.ts``), then a spare one. */
   private ensureWorker(): Promise<void> {
+    if (restrictedWasm64)
+      return Promise.reject(
+        new Error(
+          t("Unavailable in WASM64. Restart in Pyodide to use this feature."),
+        ),
+      );
     if (this.worker && this.workerReady) return Promise.resolve();
     if (!this.starting) {
       const abort = new AbortController();

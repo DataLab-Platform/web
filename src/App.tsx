@@ -72,6 +72,11 @@ import {
   type CentralView,
 } from "./components/CentralViewSwitcher";
 import { MultiImagePlot, MULTI_IMAGE_LIMIT } from "./components/MultiImagePlot";
+import { QualificationPanel } from "./components/QualificationPanel";
+import {
+  benchmarkBuild,
+  localBenchmarkBuild,
+} from "./runtime/benchmarkTransfer";
 import {
   bundleSignalResults,
   normalizeSignalLayoutMode,
@@ -97,7 +102,6 @@ import { ProcessingDataSetDialog } from "./components/ProcessingDataSetDialog";
 import type { ProfileFeatureId } from "./components/ProfileDefinitionDialog";
 import { OperandPicker } from "./components/OperandPicker";
 import { HelpDialog, type HelpView } from "./components/HelpDialog";
-import { ReleaseNotesDialog } from "./components/releasenotes/ReleaseNotesDialog";
 import {
   markConsoleErrorsSeen,
   useConsoleErrorTitlePrefix,
@@ -169,6 +173,8 @@ import { formatBytes } from "./utils/memory";
 import { imageCenter, imageExtent } from "./utils/pixelCenters";
 import { PendingHandle } from "./utils/pendingHandle";
 import { listRecent } from "./storage/recentStore";
+import { storageName } from "./storage/profile";
+import { restrictedWasm64 } from "./runtime/demoCapabilities";
 import type {
   AnalysisResult,
   GraphicalAnnotationsBundle,
@@ -188,6 +194,11 @@ import type {
 // loading their chunk lazily keeps CodeMirror out of the initial bundle
 // at no perceived cost: the chunk is fetched during/after boot, well
 // before the user can open an editor.
+const ReleaseNotesDialog = lazy(() =>
+  import("./components/releasenotes/ReleaseNotesDialog").then((m) => ({
+    default: m.ReleaseNotesDialog,
+  })),
+);
 const MacroPanel = lazy(() =>
   import("./components/MacroPanel").then((m) => ({ default: m.MacroPanel })),
 );
@@ -353,9 +364,10 @@ function buildPlotResultsSchema(
 /** Persist a numeric layout dimension to localStorage so it survives a
  *  page reload. */
 function usePersistedSize(
-  key: string,
+  name: string,
   defaultValue: number,
 ): [number, (next: number) => void, (next: number) => void] {
+  const key = storageName(name);
   const [value, setValue] = useState<number>(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -382,7 +394,7 @@ function usePersistedSize(
 const SHOW_RESULTS_OVERLAY_KEY = "datalab-web.show-results-overlay";
 const SHOW_GRAPHICAL_TITLES_KEY = "datalab-web.show-graphical-titles";
 const SHOW_TOOLBAR_KEY = "datalab-web.show-toolbar";
-const SIGNAL_LAYOUT_MODE_KEY = "datalab-web.signal-layout-mode";
+const SIGNAL_LAYOUT_MODE_KEY = storageName("datalab-web.signal-layout-mode");
 // Multi-image view mode: ``false`` = read-only CSS grid (default),
 // ``true`` = spatial overlay honouring each image's x0/y0/dx/dy.
 const MULTI_IMAGE_SPATIAL_KEY = "datalab-web.multi-image-spatial";
@@ -397,9 +409,10 @@ function collectSupportedH5NodeIds(
 
 /** Persist a boolean preference to localStorage. */
 function usePersistedBool(
-  key: string,
+  name: string,
   defaultValue: boolean,
 ): [boolean, (next: boolean) => void] {
+  const key = storageName(name);
   const [value, setValue] = useState<boolean>(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -448,7 +461,8 @@ function usePersistedSignalLayoutMode(): [
 }
 
 export default function App() {
-  const { runtime, status, message, error, previewAvailable } = useRuntime();
+  const { runtime, status, message, error, previewAvailable, engine } =
+    useRuntime();
   const workspace = useWorkspace();
   const confirm = useConfirm();
   const notify = useMessage();
@@ -838,6 +852,24 @@ export default function App() {
    * the previous workspace's tabs.
    */
   const [workspaceVersion, setWorkspaceVersion] = useState(0);
+  // Without mounted editors a scripts-only HDF5 must still be saveable.
+  // These calls read metadata, not code or notebook content.
+  useEffect(() => {
+    if (!restrictedWasm64 || !runtime) return;
+    let cancelled = false;
+    void Promise.all([runtime.listMacros(), runtime.listNotebooks()]).then(
+      ([macros, notebooks]) => {
+        if (cancelled) return;
+        setMacroCount(macros.length);
+        setNotebookCount(notebooks.length);
+      },
+      (error: unknown) =>
+        console.error("Cannot count workspace scripts:", error),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, workspaceVersion]);
   /**
    * Generation of the Python workers of the Macro and Notebook panels
    * (notebook kernel, macro workers). Their successive mounts share the
@@ -1234,7 +1266,7 @@ export default function App() {
   // the single durable source of truth.
   useEffect(() => {
     if (status !== "ready") return;
-    if (recoveryEvaluated.current) return;
+    if (restrictedWasm64 || recoveryEvaluated.current) return;
     if (workspaceFilename !== null) return;
     recoveryEvaluated.current = true;
     let cancelled = false;
@@ -1286,12 +1318,14 @@ export default function App() {
     runtime.listImageAnalysis().then((v) => {
       if (!cancelled) setImageAnalysisEntries(v);
     });
-    runtime.listPluginMenuActions().then((v) => {
-      if (!cancelled) setPluginActions(v);
-    });
-    runtime.listPlugins().then((v) => {
-      if (!cancelled) setPluginRecords(v);
-    });
+    if (!restrictedWasm64) {
+      runtime.listPluginMenuActions().then((v) => {
+        if (!cancelled) setPluginActions(v);
+      });
+      runtime.listPlugins().then((v) => {
+        if (!cancelled) setPluginRecords(v);
+      });
+    }
     runtime.listInteractiveFits().then((v) => {
       if (!cancelled) setInteractiveFits(v);
     });
@@ -1401,6 +1435,7 @@ export default function App() {
 
   const handleCentralViewChange = useCallback(
     (view: CentralView) => {
+      if (restrictedWasm64 && view !== "plot") return;
       // Clicking a detached tab re-docks it as the central view, so
       // users always have a discoverable way back to the tab layout
       // (in addition to the panel's own "↙ Dock" toolbar button).
@@ -1589,8 +1624,7 @@ export default function App() {
       // the plot data and the tree (title / size may have changed).
       try {
         if (treeKind === "image") {
-          const updated = await runtime.getImageData(oid);
-          setImageData(updated);
+          setPlotRefreshNonce((n) => n + 1);
         } else {
           const updated = await runtime.getSignalData(oid);
           setData(updated);
@@ -2327,7 +2361,7 @@ export default function App() {
   const [storeOnDisk, setStoreOnDisk] = useState(false);
   const [storageBusy, setStorageBusy] = useState(false);
   const handleToggleStoreOnDisk = useCallback(async () => {
-    if (!runtime || storageBusy) return;
+    if (restrictedWasm64 || !runtime || storageBusy) return;
     const next = !storeOnDisk;
     setStorageBusy(true);
     try {
@@ -3031,8 +3065,7 @@ export default function App() {
       await runtime.setObjectMeta(currentId, values);
       setEditingMeta(null);
       if (treeKind === "image") {
-        const updated = await runtime.getImageData(currentId);
-        setImageData(updated);
+        setPlotRefreshNonce((n) => n + 1);
       } else {
         const updated = await runtime.getSignalData(currentId);
         setData(updated);
@@ -3531,12 +3564,7 @@ export default function App() {
    *  change (distribute on a grid / reset positions). */
   const reloadCurrentImage = useCallback(async () => {
     if (!runtime || !currentId || treeKind !== "image") return;
-    try {
-      const updated = await runtime.getImageData(currentId);
-      setImageData(updated);
-    } catch {
-      /* ignore — object may have been deleted */
-    }
+    setPlotRefreshNonce((n) => n + 1);
   }, [runtime, currentId, treeKind]);
 
   const imageLayoutSourceIds = useCallback((): string[] => {
@@ -3725,17 +3753,22 @@ export default function App() {
         setCurrentId(null);
       });
       await runtime.resetAll({ silent: true });
-      const [{ emptyNotebook }, { notebookToJsonString }] = await Promise.all([
-        import("./notebook/types"),
-        import("./notebook/nbformat"),
-      ]);
-      const notebook = emptyNotebook();
-      await Promise.all([
-        runtime.createMacro(undefined, undefined, { silent: true }),
-        runtime.createNotebook(notebook.name, notebookToJsonString(notebook), {
-          silent: true,
-        }),
-      ]);
+      if (!restrictedWasm64) {
+        const [{ emptyNotebook }, { notebookToJsonString }] = await Promise.all(
+          [import("./notebook/types"), import("./notebook/nbformat")],
+        );
+        const notebook = emptyNotebook();
+        await Promise.all([
+          runtime.createMacro(undefined, undefined, { silent: true }),
+          runtime.createNotebook(
+            notebook.name,
+            notebookToJsonString(notebook),
+            {
+              silent: true,
+            },
+          ),
+        ]);
+      }
       flushSync(() => {
         setTreeKind("signal");
         setCentralView("plot");
@@ -3743,10 +3776,12 @@ export default function App() {
         setKernelGeneration((generation) => generation + 1);
         setWorkspacePanelsSuspended(false);
       });
-      await Promise.all([
-        macroPanel.wait(MACRO_PANEL_TIMEOUT_MS),
-        notebookPanel.wait(MACRO_PANEL_TIMEOUT_MS),
-      ]);
+      if (!restrictedWasm64) {
+        await Promise.all([
+          macroPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+          notebookPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+        ]);
+      }
       const tree = await runtime.getPanelTree("signal");
       flushSync(() => {
         setTree(tree);
@@ -3842,6 +3877,12 @@ export default function App() {
       // image of the in-memory state.
       setWorkspaceFilename(result.filename);
       markClean();
+    } catch (error) {
+      await notify({
+        kind: "error",
+        title: t("Save to HDF5 file"),
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setBusy(false);
     }
@@ -3851,6 +3892,7 @@ export default function App() {
     setWorkspaceFilename,
     markClean,
     toastDownloaded,
+    notify,
   ]);
 
   const refreshImportedObjects = useCallback(
@@ -3875,6 +3917,15 @@ export default function App() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      if (restrictedWasm64 && file.size > 64 * 1024 ** 2) {
+        await notify({
+          kind: "warning",
+          message: t(
+            "The WASM64 demo accepts small HDF5 workspaces only (64 MiB limit).",
+          ),
+        });
+        return;
+      }
       setBusy(true);
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -3889,7 +3940,10 @@ export default function App() {
           // (matches Qt's ``File > Open HDF5 files...`` with import_all=True).
           // The H5 browser remains available via ``File > Import from
           // HDF5...`` (handleImportHdf5).
-          if (msg.includes("Not a DataLab HDF5 workspace")) {
+          if (
+            !restrictedWasm64 &&
+            msg.includes("Not a DataLab HDF5 workspace")
+          ) {
             let opened: H5BrowserFile | null = null;
             try {
               // ``bytes`` was *transferred* (detached) by the failed
@@ -3970,10 +4024,19 @@ export default function App() {
   ]);
 
   const handleImportHdf5 = useCallback(() => {
+    if (restrictedWasm64) {
+      pushToast({
+        kind: "warning",
+        message: t(
+          "Use Open HDF5 files for small DataLab workspaces. Restart in Pyodide to browse arbitrary HDF5 datasets.",
+        ),
+      });
+      return;
+    }
     // Open the H5 browser dialog with no preloaded file; the user picks
     // a file from inside the dialog (matches Qt's File > Import HDF5).
     setH5BrowserFiles([]);
-  }, []);
+  }, [pushToast]);
 
   /** A capsule's workspace replaced the current one (same transition as
    *  opening an HDF5 workspace file). */
@@ -4000,6 +4063,15 @@ export default function App() {
     const parsed = parseApplicationDeepLink(window.location.search);
     if (parsed.kind === "none") return;
     applicationDeepLinkDone.current = true;
+    if (restrictedWasm64) {
+      pushToast({
+        kind: "error",
+        message: t(
+          "Unavailable in WASM64. Restart in Pyodide to use this feature.",
+        ),
+      });
+      return;
+    }
     if (parsed.kind === "invalid") {
       pushToast({
         kind: "error",
@@ -4087,6 +4159,15 @@ export default function App() {
     const url = resolvePreloadUrl(window.location.search, document.baseURI);
     if (!url) return;
     preloadDone.current = true;
+    if (restrictedWasm64) {
+      pushToast({
+        kind: "warning",
+        message: t(
+          "Use Open HDF5 files for small DataLab workspaces. Restart in Pyodide to browse arbitrary HDF5 datasets.",
+        ),
+      });
+      return;
+    }
     const filename = preloadFilename(url);
     void (async () => {
       setBusy(true);
@@ -4767,17 +4848,20 @@ export default function App() {
         hasSelection: selectedIds.length > 0 || currentId !== null,
         notebookFloating,
         onToggleNotebookFloating: toggleNotebookFloating,
+        scriptPanelsUnavailable: restrictedWasm64,
         macroFloating,
         onToggleMacroFloating: toggleMacroFloating,
         locale,
         availableLocales,
         onSetLocale: setLocale,
       }),
-      ...buildAIAssistantActions({
-        visible: aiPanelVisible,
-        onTogglePanel: toggleAIPanel,
-        onOpenSettings: () => setShowAISettings(true),
-      }),
+      ...(restrictedWasm64
+        ? []
+        : buildAIAssistantActions({
+            visible: aiPanelVisible,
+            onTogglePanel: toggleAIPanel,
+            onOpenSettings: () => setShowAISettings(true),
+          })),
       ...(treeKind === "signal"
         ? buildSignalCreationActions(signalTypes, handleCreateTyped)
         : buildImageCreationActions(imageTypes, handleCreateImageTyped)),
@@ -4791,7 +4875,7 @@ export default function App() {
             onResetPositions: handleResetImagePositions,
           })
         : []),
-      ...(treeKind === "image"
+      ...(treeKind === "image" && !imageData?.preview
         ? buildImageEraseActions({ onErase: handleOpenErase })
         : []),
       ...(treeKind === "signal"
@@ -4830,42 +4914,47 @@ export default function App() {
             onRemoveAt: handleRoiRemoveAt,
             onRemoveAll: handleRoiRemoveAll,
           })
-        : buildImageRoiActions(imageRoi, imageRoiEditMode, hasRoiClipboard, {
-            onToggleEditMode: handleToggleImageRoiEditMode,
-            onAddRectangle: handleImageAddRectangle,
-            onAddCircle: handleImageAddCircle,
-            onCreateGrid: handleCreateRoiGrid,
-            onExtractEach: handleImageRoiExtractEach,
-            onExtractMerged: handleImageRoiExtractMerged,
-            onCopy: handleImageRoiCopy,
-            onPaste: handleImageRoiPaste,
-            onImport: handleImageRoiImport,
-            onExport: handleImageRoiExport,
-            onRemoveAt: handleImageRoiRemoveAt,
-            onRemoveAll: handleImageRoiRemoveAll,
+        : imageData?.preview
+          ? []
+          : buildImageRoiActions(imageRoi, imageRoiEditMode, hasRoiClipboard, {
+              onToggleEditMode: handleToggleImageRoiEditMode,
+              onAddRectangle: handleImageAddRectangle,
+              onAddCircle: handleImageAddCircle,
+              onCreateGrid: handleCreateRoiGrid,
+              onExtractEach: handleImageRoiExtractEach,
+              onExtractMerged: handleImageRoiExtractMerged,
+              onCopy: handleImageRoiCopy,
+              onPaste: handleImageRoiPaste,
+              onImport: handleImageRoiImport,
+              onExport: handleImageRoiExport,
+              onRemoveAt: handleImageRoiRemoveAt,
+              onRemoveAll: handleImageRoiRemoveAll,
+            })),
+      ...(restrictedWasm64
+        ? []
+        : buildPluginActions(pluginActions, pluginRecords, treeKind, {
+            onTrigger: handleTriggerPluginAction,
+            onApplyFeature: handleApplyFeature,
+            onRunAnalysis: handleAnalysis,
+            onOpenApplications: () => {
+              setApplicationTarget(null);
+              setApplicationsOpen(true);
+            },
+            onOpenApplicationRecipe: handleOpenApplicationRecipe,
+            onOpenApplicationExample: (pluginId, exampleId) => {
+              void handleOpenApplicationExample(pluginId, exampleId);
+            },
+            onLaunchApplicationTool: (pluginId, toolId) => {
+              void handleLaunchApplicationTool(pluginId, toolId);
+            },
+            onOpenManager: () => setPluginManagerOpen(true),
+            onReloadAll: handleReloadPlugins,
           })),
-      ...buildPluginActions(pluginActions, pluginRecords, treeKind, {
-        onTrigger: handleTriggerPluginAction,
-        onApplyFeature: handleApplyFeature,
-        onRunAnalysis: handleAnalysis,
-        onOpenApplications: () => {
-          setApplicationTarget(null);
-          setApplicationsOpen(true);
-        },
-        onOpenApplicationRecipe: handleOpenApplicationRecipe,
-        onOpenApplicationExample: (pluginId, exampleId) => {
-          void handleOpenApplicationExample(pluginId, exampleId);
-        },
-        onLaunchApplicationTool: (pluginId, toolId) => {
-          void handleLaunchApplicationTool(pluginId, toolId);
-        },
-        onOpenManager: () => setPluginManagerOpen(true),
-        onReloadAll: handleReloadPlugins,
-      }),
     ],
     [
       treeKind,
       visibleFeatures,
+      imageData?.preview,
       signalTypes,
       imageTypes,
       analysisEntries,
@@ -4973,6 +5062,7 @@ export default function App() {
       <div
         className="app"
         data-runtime-status={status}
+        data-engine={status === "ready" ? engine : undefined}
         data-workspace-reset-id={workspaceResetId}
         data-workspace-reset-state={workspaceResetState}
         inert={
@@ -4980,6 +5070,30 @@ export default function App() {
           workspaceResetState === "resetting"
         }
       >
+        {import.meta.env.VITE_WASM64_DEMO === "1" && (
+          <div className="wasm64-demo-banner">
+            {t("WASM64 prototype")} ·{" "}
+            {t(
+              "Tested with 1 GiB of arrays. Operation above 4 GiB has not been verified.",
+            )}{" "}
+            ·{" "}
+            <a href="https://datalab-platform.com/web/">
+              {t("Stable version")}
+            </a>
+            {" · "}
+            <a href="?engine=pyodide">{t("Restart in Pyodide")}</a>
+            {" — "}
+            {t("Save your workspace before restarting.")}
+            {restrictedWasm64 && (
+              <>
+                {" "}
+                {t(
+                  "Use small, trusted HDF5 workspaces only. Compressed data may require much more memory than the file size.",
+                )}
+              </>
+            )}
+          </div>
+        )}
         {/*
           Notebook and Macro panels are mounted exactly once (when the
           runtime becomes available) and rendered into a stable
@@ -4991,7 +5105,8 @@ export default function App() {
           tab/floating toggle, where a naive conditional render would
           remount and lose everything.
         */}
-        {runtime &&
+        {!restrictedWasm64 &&
+          runtime &&
           !workspacePanelsSuspended &&
           notebookPortalEl &&
           createPortal(
@@ -5039,7 +5154,8 @@ export default function App() {
             </Suspense>,
             notebookPortalEl,
           )}
-        {runtime &&
+        {!restrictedWasm64 &&
+          runtime &&
           !workspacePanelsSuspended &&
           macroPortalEl &&
           createPortal(
@@ -5101,12 +5217,12 @@ export default function App() {
             onFreeMemory={handleFreeMemory}
             storeOnDisk={storeOnDisk}
             storageBusy={storageBusy}
-            diskStorageSupported={isDiskStorageSupported()}
+            diskStorageSupported={!restrictedWasm64 && isDiskStorageSupported()}
             onToggleStoreOnDisk={() => {
               void handleToggleStoreOnDisk();
             }}
             aiPanelVisible={aiPanelVisible}
-            onToggleAIPanel={toggleAIPanel}
+            onToggleAIPanel={restrictedWasm64 ? undefined : toggleAIPanel}
             onOpenCommandPalette={() => setCommandPaletteOpen(true)}
           />
         </div>
@@ -5160,8 +5276,18 @@ export default function App() {
             ariaLabel={t("Resize left panel")}
           />
           <main className="plot-area" data-tour="plot-host">
+            {benchmarkBuild &&
+              localBenchmarkBuild() &&
+              engine === "wasm64" &&
+              runtime && (
+                <QualificationPanel
+                  runtime={runtime}
+                  onCreated={(oid) => refreshPanelKind("image", oid)}
+                />
+              )}
             <div data-tour="central-view-switcher">
               <CentralViewSwitcher
+                scriptPanelsUnavailable={restrictedWasm64}
                 active={centralView}
                 onChange={handleCentralViewChange}
                 disabled={status !== "ready" || busy}
@@ -5303,7 +5429,9 @@ export default function App() {
                       }}
                       onOpenUserGuide={() => setUserGuideOpen(true)}
                       onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
-                      onOpenAIAssistant={openAIPanel}
+                      onOpenAIAssistant={
+                        restrictedWasm64 ? undefined : openAIPanel
+                      }
                     />
                   );
                 }
@@ -5342,6 +5470,17 @@ export default function App() {
             {centralView === "plot" &&
               treeKind === "image" &&
               imageData &&
+              (imageData.preview || extraImages.some((img) => img.preview)) && (
+                <MultiImagePlot
+                  images={[imageData, ...extraImages]}
+                  totalSelected={selectedIds.length}
+                />
+              )}
+            {centralView === "plot" &&
+              treeKind === "image" &&
+              imageData &&
+              !imageData.preview &&
+              !extraImages.some((img) => img.preview) &&
               extraImages.length > 0 && (
                 <div className="multi-image-host">
                   <div className="multi-image-modebar">
@@ -5382,6 +5521,7 @@ export default function App() {
             {centralView === "plot" &&
               treeKind === "image" &&
               imageData &&
+              !imageData.preview &&
               extraImages.length === 0 && (
                 <Suspense fallback={null}>
                   <ImagePlot
@@ -5480,6 +5620,7 @@ export default function App() {
             ((treeKind === "signal" && data && roiEditMode) ||
               (treeKind === "image" &&
                 imageData &&
+                !imageData.preview &&
                 extraImages.length === 0 &&
                 (imageRoiEditMode || imageEraseMode))) && (
               <DraggableFloating
@@ -5539,55 +5680,63 @@ export default function App() {
                 />
               </DraggableFloating>
             )}
-          {runtime && aiPanelVisible && aiPanelCollapsed && (
-            <button
-              type="button"
-              className="ai-floating-pill"
-              data-tour="ai-assistant"
-              onClick={() => setAIPanelCollapsed(false)}
-              title={t("Expand AI Assistant")}
-              aria-label={t("Expand AI Assistant")}
-            >
-              AI
-            </button>
-          )}
-          {runtime && aiPanelVisible && !aiPanelCollapsed && (
-            <DraggableFloating
-              storageKey="datalab-web.aiPanelFloating"
-              defaultWidth={400}
-              minWidth={300}
-              minHeight={260}
-              className="floating-dock-host"
-            >
-              <div
+          {!restrictedWasm64 &&
+            runtime &&
+            aiPanelVisible &&
+            aiPanelCollapsed && (
+              <button
+                type="button"
+                className="ai-floating-pill"
                 data-tour="ai-assistant"
-                style={{ width: "100%", height: "100%" }}
+                onClick={() => setAIPanelCollapsed(false)}
+                title={t("Expand AI Assistant")}
+                aria-label={t("Expand AI Assistant")}
               >
-                <AIAssistantPanel
-                  runtime={runtime}
-                  onSaveMacro={saveMacroFromAssistant}
-                  onMinimize={() => setAIPanelCollapsed(true)}
-                  onClose={() => setAIPanelVisible(false)}
-                />
-              </div>
-            </DraggableFloating>
-          )}
-          {runtime && (notebookFloating || macroFloating) && (
-            <FloatingDockStack>
-              {notebookFloating && (
+                AI
+              </button>
+            )}
+          {!restrictedWasm64 &&
+            runtime &&
+            aiPanelVisible &&
+            !aiPanelCollapsed && (
+              <DraggableFloating
+                storageKey="datalab-web.aiPanelFloating"
+                defaultWidth={400}
+                minWidth={300}
+                minHeight={260}
+                className="floating-dock-host"
+              >
                 <div
-                  ref={setNotebookFloatingHost}
-                  className="floating-dock-host floating-dock-host--notebook"
-                />
-              )}
-              {macroFloating && (
-                <div
-                  ref={setMacroFloatingHost}
-                  className="floating-dock-host floating-dock-host--macro"
-                />
-              )}
-            </FloatingDockStack>
-          )}
+                  data-tour="ai-assistant"
+                  style={{ width: "100%", height: "100%" }}
+                >
+                  <AIAssistantPanel
+                    runtime={runtime}
+                    onSaveMacro={saveMacroFromAssistant}
+                    onMinimize={() => setAIPanelCollapsed(true)}
+                    onClose={() => setAIPanelVisible(false)}
+                  />
+                </div>
+              </DraggableFloating>
+            )}
+          {!restrictedWasm64 &&
+            runtime &&
+            (notebookFloating || macroFloating) && (
+              <FloatingDockStack>
+                {notebookFloating && (
+                  <div
+                    ref={setNotebookFloatingHost}
+                    className="floating-dock-host floating-dock-host--notebook"
+                  />
+                )}
+                {macroFloating && (
+                  <div
+                    ref={setMacroFloatingHost}
+                    className="floating-dock-host floating-dock-host--macro"
+                  />
+                )}
+              </FloatingDockStack>
+            )}
           {userGuideOpen && (
             <div className="userguide-floating-host">
               <Suspense fallback={null}>
@@ -5601,7 +5750,7 @@ export default function App() {
           steps={tourSteps}
           onClose={handleCloseTour}
         />
-        {showAISettings && (
+        {!restrictedWasm64 && showAISettings && (
           <AISettingsDialog onClose={() => setShowAISettings(false)} />
         )}
         {pendingOperand && (
@@ -5735,7 +5884,7 @@ export default function App() {
             }
           />
         )}
-        {pendingRoiGrid && imageData && (
+        {pendingRoiGrid && imageData && !imageData.preview && (
           <Suspense fallback={null}>
             <RoiGridDialog
               imageData={imageData}
@@ -5786,7 +5935,9 @@ export default function App() {
           </Suspense>
         )}
         {releaseNotesOpen && (
-          <ReleaseNotesDialog onClose={() => setReleaseNotesOpen(false)} />
+          <Suspense fallback={null}>
+            <ReleaseNotesDialog onClose={() => setReleaseNotesOpen(false)} />
+          </Suspense>
         )}
         {h5BrowserFiles !== null && (
           <Suspense fallback={null}>
@@ -5875,7 +6026,11 @@ export default function App() {
                 extraSignals,
                 extraResults,
               };
-            } else if (treeKind === "image" && imageData) {
+            } else if (
+              treeKind === "image" &&
+              imageData &&
+              !imageData.preview
+            ) {
               content = {
                 kind: "image",
                 data: imageData,

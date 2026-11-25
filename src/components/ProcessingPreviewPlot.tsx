@@ -16,6 +16,7 @@ import {
 import { imageExtent } from "../utils/pixelCenters";
 import { usePlotlyTheme } from "../utils/plotlyTheme";
 import { reduceSignalForPlot } from "../utils/signalLod";
+import { MultiImagePlot } from "./MultiImagePlot";
 
 interface Props {
   result: ProcessingPreviewResult;
@@ -189,6 +190,8 @@ function ImagePreviewPlot({ result }: { result: ImagePreviewResult }) {
 export default function ProcessingPreviewPlot({ result }: Props) {
   return result.kind === "signal" ? (
     <SignalPreviewPlot result={result} />
+  ) : result.data.preview ? (
+    <MultiImagePlot images={[result.data]} totalSelected={1} />
   ) : (
     <ImagePreviewPlot result={result} />
   );

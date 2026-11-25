@@ -1,0 +1,4 @@
+msgpack==1.2.4
+packaging==26.4
+py-rattler==0.29.0
+zstandard==0.25.0

@@ -1,0 +1,21 @@
+DataLab Web - experimental WASM64 distribution
+
+DataLab Web's own license is included at LICENSE.txt. This does not
+relicense third-party software. See package-inventory.json for exact
+versions, builds, origins and checksums of the scientific environment.
+
+pyjs: https://github.com/derthorsten/pyjs
+The original runtime license is served at pyjs/LICENSE. The embedded
+Python environment is distributed as supplied by the pinned npm package.
+CPython license and third-party notices: https://docs.python.org/3.14/license.html
+
+The conda packages under conda/ are unchanged upstream archives. Their
+metadata and bundled notices, where supplied, remain inside each archive.
+The pure Python distributions under archives/ retain their .dist-info
+trees (including bundled license files), data files and vendored notices.
+Their original wheels and SHA-256 digests are listed in the inventory.
+The kiwisolver metadata exception changes no distributed package bytes.
+
+The demo uses the same frontend dependencies as DataLab Web. For the
+web source, dependency lock and build instructions see:
+https://github.com/DataLab-Platform/web

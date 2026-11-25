@@ -88,6 +88,7 @@ export interface InitRequest {
   type: "init";
   lang: string;
   labels: RuntimeLabels;
+  wasmAssetRoot?: string;
 }
 
 /** Invoke ``runtime[method](...args)`` in the worker. */
@@ -121,6 +122,7 @@ export interface ProgressEvent {
 export interface ReadyEvent {
   type: "ready";
   mirror: KernelMirror;
+  engine?: "wasm64" | "pyodide";
 }
 
 /** Boot failed; the ``ready`` promise rejects with this message. */

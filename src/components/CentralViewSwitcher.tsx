@@ -9,6 +9,7 @@ export interface CentralViewSwitcherProps {
   active: CentralView;
   onChange: (view: CentralView) => void;
   disabled?: boolean;
+  scriptPanelsUnavailable?: boolean;
   /** Map of views currently rendered as floating overlays.  Detached
    *  tabs render a small "↗" glyph and call ``onChange`` even when
    *  clicked while active — the host uses this to focus / un-collapse
@@ -47,6 +48,7 @@ export function CentralViewSwitcher({
   active,
   onChange,
   disabled,
+  scriptPanelsUnavailable,
   detached,
 }: CentralViewSwitcherProps): ReactElement {
   return (
@@ -68,7 +70,14 @@ export function CentralViewSwitcher({
             aria-label={
               isDetached ? t("{label} (detached)", { label: tLabel }) : tLabel
             }
-            disabled={disabled}
+            disabled={disabled || (scriptPanelsUnavailable && view !== "plot")}
+            title={
+              scriptPanelsUnavailable && view !== "plot"
+                ? t(
+                    "Unavailable in WASM64. Restart in Pyodide to use this feature.",
+                  )
+                : undefined
+            }
             className={`central-view-switcher-tab${isActive ? " active" : ""}`}
             onClick={() => onChange(view)}
           >

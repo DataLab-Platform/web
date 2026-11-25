@@ -23,6 +23,8 @@ export default [
       "test-results/**",
       ".cache/**",
       ".venv/**",
+      "tools/wasm64/.venv/**",
+      "tools/wasm64/.cache/**",
       "**/*.d.ts",
       "vite.config.js",
       "vite.config.d.ts",
@@ -78,11 +80,22 @@ export default [
   },
   {
     // Node-side build/release scripts — pure Node ESM, no TS, no DOM.
-    files: ["scripts/**/*.{mjs,cjs,js}", "tests/benchmark/**/*.{mjs,cjs,js}"],
+    files: [
+      "scripts/**/*.{mjs,cjs,js}",
+      "tests/benchmark/**/*.{mjs,cjs,js}",
+      "tools/wasm64/*.mjs",
+      "tests/wasm64/benchmark/*.mjs",
+    ],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
       globals: { ...globals.node },
+    },
+  },
+  {
+    files: ["tests/wasm64/*.mjs"],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser, ...globals.worker },
     },
   },
 ];

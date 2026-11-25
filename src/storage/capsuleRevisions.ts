@@ -9,6 +9,7 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import { storageName } from "./profile";
 
 export interface CapsuleRevision {
   /** Manifest fingerprint (``sha256:…``). */
@@ -24,7 +25,7 @@ export interface CapsuleRevision {
   manifest: Record<string, unknown>;
 }
 
-const DB_NAME = "datalab-web.capsules";
+const DB_NAME = storageName("datalab-web.capsules");
 const DB_VERSION = 1;
 const STORE = "revisions";
 /** Largest number of revisions kept; the oldest are dropped first. */

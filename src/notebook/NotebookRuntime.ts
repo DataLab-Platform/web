@@ -20,6 +20,8 @@ import {
 import { GenerationPool } from "../runtime/workerPool";
 import { startWorker, WorkerStartCancelled } from "../runtime/workerReady";
 import { pyodideLang } from "../i18n/locale";
+import { t } from "../i18n/translate";
+import { restrictedWasm64 } from "../runtime/demoCapabilities";
 
 /** Outputs are MIME bundles, exactly like Jupyter ``display_data``. */
 export type MimeBundle = Record<string, unknown>;
@@ -251,6 +253,12 @@ export class NotebookRuntime {
   }
 
   private ensureWorker(): Promise<void> {
+    if (restrictedWasm64)
+      return Promise.reject(
+        new Error(
+          t("Unavailable in WASM64. Restart in Pyodide to use this feature."),
+        ),
+      );
     if (this.worker && this.workerReady) return Promise.resolve();
     if (!this.starting) {
       const abort = new AbortController();

@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import type { RuntimeApi } from "./runtime";
 import { createWorkerRuntime } from "./WorkerRuntimeProxy";
 import { getRuntimeMode } from "./runtimeMode";
-import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
+import { selectEngine, type Engine } from "./runtimeEngine";
+import type { RemoteBridgeHandle } from "./remoteBridge";
 import { getCurrentPanel, getSelection } from "./selectionState";
 import { t } from "../i18n/translate";
 
@@ -13,12 +14,20 @@ interface RuntimeContextValue {
   message: string;
   error: string | null;
   previewAvailable: boolean;
+  engine: Engine;
 }
 
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
-  const [runtimeMode] = useState(getRuntimeMode);
+  const [launch] = useState(() =>
+    selectEngine(
+      import.meta.env.VITE_WASM64_DEMO === "1",
+      window.location.search,
+      getRuntimeMode(),
+    ),
+  );
+  const runtimeMode = launch.placement;
   const [runtime, setRuntime] = useState<RuntimeApi | null>(null);
   const [status, setStatus] =
     useState<RuntimeContextValue["status"]>("loading");
@@ -34,14 +43,30 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     const onProgress = (msg: string) => {
       if (!cancelled) setMessage(msg);
     };
-    const boot =
-      runtimeMode === "worker"
-        ? createWorkerRuntime(onProgress)
+    const controller = new AbortController();
+    const onFatal = (detail: string) => {
+      if (!cancelled) {
+        setRuntime(null);
+        setError(detail);
+        setStatus("error");
+      }
+    };
+    const boot = launch.error
+      ? Promise.reject(new Error(launch.error))
+      : runtimeMode === "worker"
+        ? createWorkerRuntime(onProgress, {
+            wasmAssetRoot:
+              launch.engine === "wasm64"
+                ? new URL("./", document.baseURI).href
+                : undefined,
+            signal: controller.signal,
+            onFatal,
+          })
         : import("./runtime").then(({ DataLabRuntime }) =>
             DataLabRuntime.load(onProgress),
           );
     boot
-      .then((rt) => {
+      .then(async (rt) => {
         if (cancelled) return;
         setRuntime(rt);
         setStatus("ready");
@@ -50,11 +75,18 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         // otherwise — the standalone app is unaffected. The handle is
         // disposed by the cleanup function below.
         try {
-          remoteBridgeHandle = activateRemoteBridge(rt, {
-            version: import.meta.env.VITE_APP_VERSION,
-            getSelection,
-            getCurrentPanel,
-          });
+          if (
+            launch.engine !== "wasm64" &&
+            new URLSearchParams(location.search).has("allowedOrigins")
+          ) {
+            const { activateRemoteBridge } = await import("./remoteBridge");
+            if (cancelled) return;
+            remoteBridgeHandle = activateRemoteBridge(rt, {
+              version: import.meta.env.VITE_APP_VERSION,
+              getSelection,
+              getCurrentPanel,
+            });
+          }
           if (remoteBridgeHandle && import.meta.env.DEV) {
             console.info(
               "%c[remoteBridge] active for origins: " +
@@ -85,10 +117,11 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      controller.abort();
       remoteBridgeHandle?.dispose();
       remoteBridgeHandle = null;
     };
-  }, [runtimeMode]);
+  }, [runtimeMode, launch]);
 
   // Hot-reload: a small Vite plugin (build-plugins/vite-plugin-python-hmr.ts)
   // watches .py files and pushes the new source via a custom HMR event.
@@ -117,8 +150,9 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       message,
       error,
       previewAvailable: runtimeMode === "worker",
+      engine: launch.engine,
     }),
-    [runtime, status, message, error, runtimeMode],
+    [runtime, status, message, error, runtimeMode, launch],
   );
 
   return (

@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n/translate";
+import { restrictedWasm64 } from "../runtime/demoCapabilities";
 import { reportDetails, reportSummary } from "./ProvenanceVerdict";
 import type {
   CapsuleDiff,
@@ -145,8 +146,9 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<ProvenanceLedgerInfo | null>(null);
   const [revisions, setRevisions] = useState<CapsuleRevision[]>([]);
-  const [registry, setRegistry] =
-    useState<RegistrySettings>(loadRegistrySettings);
+  const [registry, setRegistry] = useState<RegistrySettings>(() =>
+    restrictedWasm64 ? { address: "", token: "" } : loadRegistrySettings(),
+  );
   const refreshGeneration = useRef(0);
 
   const refreshInfo = useCallback(async () => {
@@ -194,8 +196,8 @@ export function CapsuleDialog(props: CapsuleDialogProps) {
     ["inspect", t("Inspect")],
     ["replay", t("Local replay")],
     ["revisions", t("Revisions")],
-    ["registry", t("Registry")],
   ];
+  if (!restrictedWasm64) tabs.push(["registry", t("Registry")]);
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">

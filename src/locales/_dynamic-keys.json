@@ -1,4 +1,5 @@
 [
+  "Unavailable in WASM64. Restart in Pyodide to use this feature.",
   "(default)",
   "{count} macro",
   "{count} macros",

@@ -19,6 +19,8 @@ import { t } from "../i18n/translate";
 
 /** A snapshot of the runtime's memory footprint. */
 export interface MemoryUsage {
+  /** wasm32 threshold colours have no physical meaning on Memory64. */
+  memory64?: boolean;
   /** Pyodide WASM linear-heap size in bytes (``HEAPU8.length``). This is
    *  the figure most predictive of an out-of-memory crash, and it is
    *  available in every browser. Emscripten never returns this heap to
@@ -54,7 +56,7 @@ export const WASM_CRITICAL_BYTES = 2.5 * 1024 * 1024 * 1024;
 
 /** Minimal shape of the Pyodide Emscripten module we depend on. */
 export interface PyodideModuleLike {
-  HEAPU8?: { length: number };
+  HEAPU8?: { length: number; buffer?: { byteLength: number } };
 }
 
 /** Non-standard ``performance.memory`` (Chromium). */
@@ -70,8 +72,13 @@ interface PerformanceMemory {
 export function readWasmHeapBytes(
   module: PyodideModuleLike | undefined,
 ): number | null {
-  const length = module?.HEAPU8?.length;
-  return typeof length === "number" && Number.isFinite(length) ? length : null;
+  const heap = module?.HEAPU8;
+  const length = heap?.buffer?.byteLength ?? heap?.length;
+  return typeof length === "number" &&
+    Number.isSafeInteger(length) &&
+    length >= 0
+    ? length
+    : null;
 }
 
 /**
@@ -101,7 +108,7 @@ export function readJsMemory(): {
  */
 export function memoryLevel(usage: MemoryUsage): MemoryLevel {
   const bytes = usage.wasmBytes;
-  if (bytes === null) return "ok";
+  if (bytes === null || usage.memory64) return "ok";
   if (bytes >= WASM_CRITICAL_BYTES) return "critical";
   if (bytes >= WASM_WARN_BYTES) return "warn";
   return "ok";

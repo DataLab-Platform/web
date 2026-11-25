@@ -1,6 +1,8 @@
 /** Persistent OPFS store for user-installed DataLab-Web plugin wheels. */
 
-export const PLUGIN_WHEEL_STORE_DIR = "dlw-plugin-wheels";
+import { storageName } from "./profile";
+
+export const PLUGIN_WHEEL_STORE_DIR = storageName("dlw-plugin-wheels");
 const INDEX_FILE = "index.json";
 const NEXT_INDEX_FILE = "index.next.json";
 const SCHEMA_VERSION = 1;

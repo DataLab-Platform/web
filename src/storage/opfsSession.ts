@@ -11,13 +11,15 @@
  * nothing tells them apart from those of running sessions.
  */
 
+import { storageName } from "./profile";
+
 /** Parent of the session directories, under the OPFS root. Distinct from the
  *  shared directory of earlier versions (``dlw-object-store``), which an
  *  earlier version still open in another tab may clear at any time. */
-export const SESSIONS_DIR = "dlw-object-sessions";
+export const SESSIONS_DIR = storageName("dlw-object-sessions");
 
 /** Prefix of the Web Lock owning a session directory. */
-export const SESSION_LOCK_PREFIX = "dlw-object-session:";
+export const SESSION_LOCK_PREFIX = storageName("dlw-object-session:");
 
 /** Subset of the Web Locks API used here. */
 interface LockManagerLike {

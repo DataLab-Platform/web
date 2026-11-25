@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- **Experimental WASM64 build:** a separate browser build can run Sigima in a 64-bit worker. The normal application continues to use Pyodide and does not ship the experimental engine (closes [Issue #139](https://github.com/DataLab-Platform/web/issues/139)).
+
 - **New workspace:** **File → New workspace** starts a clean, untitled workspace without reloading DataLab-Web. Unsaved changes and running Python code are confirmed before they are discarded or stopped; saved files and recent macros and notebooks are kept (closes [Issue #102](https://github.com/DataLab-Platform/web/issues/102)).
 - **X-ray Radiography & NDT application:** DataLab-Web bundles the X-ray Radiography & NDT plugin: radiographic display, magnifications of several object planes, detector corrections, physical quantities, enhancement filters, image quality (SNR, CNR, duplex IQI) and NDT measurements (tangential wall thickness, indication detection), with simulated and real-data examples and a radiography simulator.
 - **Plugin analyses:** plugins can register analyses with `register_1_to_0`, as in DataLab Desktop: the menu lists them at their menu path (in the **Analysis** menu without one), and their result tables are attached to the object.

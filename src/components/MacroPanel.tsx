@@ -34,6 +34,7 @@ import { Splitter } from "./Splitter";
 import { useConfirm } from "./ConfirmDialog";
 import { useToast } from "./Toast";
 import { t } from "../i18n/translate";
+import { storageName } from "../storage/profile";
 import { acceptFromExtensions, saveBytesToFile } from "../utils/saveFile";
 import simpleTemplate from "../macros/templates/simple_macro.py?raw";
 import imageprocTemplate from "../macros/templates/imageproc_macro.py?raw";
@@ -104,9 +105,9 @@ const TEMPLATES: Array<{ label: string; description: string; code: string }> = [
   },
 ];
 
-const LS_LAST_ACTIVE = "datalab-web.macros.activeId";
-const LS_OPEN_TABS = "datalab-web.macros.openTabIds";
-const LS_EDITOR_HEIGHT = "datalab-web.macros.editorHeight";
+const LS_LAST_ACTIVE = storageName("datalab-web.macros.activeId");
+const LS_OPEN_TABS = storageName("datalab-web.macros.openTabIds");
+const LS_EDITOR_HEIGHT = storageName("datalab-web.macros.editorHeight");
 
 interface Props {
   runtime: RuntimeApi;

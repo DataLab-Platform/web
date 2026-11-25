@@ -98,6 +98,30 @@ class _ModuleIndex:
         }
         for module, tree in trees.items():
             self._index_module(module, tree, set(trees))
+        # Index the actual bound Qualification methods installed by the private
+        # kernel. Do not accept arbitrary benchmark_* names or look in this
+        # module when resolving ordinary bootstrap functions.
+        path = RUNTIME_DIR.parents[1] / "tests/wasm64/benchmark/workspace.py"
+        benchmark = ast.parse(path.read_text(encoding="utf-8"))
+        (cls,) = (
+            n
+            for n in benchmark.body
+            if isinstance(n, ast.ClassDef) and n.name == "Qualification"
+        )
+        self._index_module(
+            "qualification", ast.Module(body=cls.body, type_ignores=[]), set()
+        )
+        kernel = (RUNTIME_DIR / "kernelWorker.ts").read_text(encoding="utf-8")
+        bindings = re.findall(
+            r"^(benchmark_\w+) = _qualification\.(\w+)$", kernel, re.M
+        )
+        assert {name for name, _ in bindings} == {
+            "benchmark_prepare",
+            "benchmark_verify",
+        }
+        for name, method in bindings:
+            assert ("qualification", method) in self.calls
+            self.calls[("private_worker", name)] = {("qualification", method)}
 
     def _index_module(self, module: str, tree: ast.Module, modules: set[str]) -> None:
         aliases: dict[str, str] = {}
@@ -182,7 +206,7 @@ class _ModuleIndex:
         """Return the function a ``callPy`` name designates in Pyodide."""
         # ``bootstrap`` globals come first; ``runtime.ts`` then imports the
         # public functions of ``dlw_applications`` into them.
-        for module in ("bootstrap", "dlw_applications"):
+        for module in ("bootstrap", "dlw_applications", "private_worker"):
             if (module, name) in self.calls:
                 return (module, name)
         return None
@@ -221,11 +245,13 @@ def test_audit_detects_known_model_mutations():
         ("dlw_applications", "run_plugin_recipe"),
         ("dlw_applications", "open_plugin_example"),
         ("bootstrap", "commit_interactive_fit"),
+        ("private_worker", "benchmark_prepare"),
     ]:
         assert key in mutating, key
     for key in [
         ("bootstrap", "get_signal_view_snapshot"),
         ("bootstrap", "h5_browser_preview"),
+        ("private_worker", "benchmark_verify"),
     ]:
         assert key not in mutating, key
 

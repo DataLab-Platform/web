@@ -34,6 +34,8 @@ export const MUTATING_PY_FUNCTIONS: ReadonlySet<string> = new Set<string>([
   "create_signal_typed",
   "create_image",
   "create_image_typed",
+  // Fixed private-build generator. Uses the same post-success notification.
+  "benchmark_prepare",
   "add_signal_from_arrays",
   "add_image_from_array",
   "duplicate_object",

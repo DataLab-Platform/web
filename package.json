@@ -6,6 +6,10 @@
   "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
+    "wasm64:build": "tsc -b && node tools/wasm64/app-build.mjs",
+    "wasm64:serve": "vite preview --outDir build/wasm64/demo --base /web-wasm64/ --host 127.0.0.1",
+    "wasm64:test:a": "playwright test --config tests/wasm64/playwright.config.ts",
+    "wasm64:test:b": "node tests/wasm64/benchmark/run.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/check-bundle-budget.mjs",
     "build:release": "tsc -b && vite build --mode release && node scripts/check-bundle-budget.mjs",

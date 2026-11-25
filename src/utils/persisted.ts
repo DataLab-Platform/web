@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { storageName } from "../storage/profile";
 
 /**
  * ``useState`` variant backed by ``localStorage`` for a boolean view
@@ -14,7 +15,7 @@ export function usePersistedBool(
 ): [boolean, (next: boolean) => void] {
   const [value, setValue] = useState<boolean>(() => {
     try {
-      const raw = window.localStorage.getItem(key);
+      const raw = window.localStorage.getItem(storageName(key));
       if (raw === null) return defaultValue;
       return raw === "true";
     } catch {
@@ -25,7 +26,7 @@ export function usePersistedBool(
     (next: boolean) => {
       setValue(next);
       try {
-        window.localStorage.setItem(key, String(next));
+        window.localStorage.setItem(storageName(key), String(next));
       } catch {
         /* ignore quota / disabled storage */
       }
