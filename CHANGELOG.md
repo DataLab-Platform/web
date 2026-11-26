@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-26
+
+### Fixed in 0.12.2
+
+- **DataLab logo:** on systems without the Century Gothic font, such as a fresh Windows 11 installation without Microsoft Office, the logo of the welcome screen and of the About dialog was displayed with another font. It now looks the same on every system (fixes [Issue #137](https://github.com/DataLab-Platform/web/issues/137)).
+
 ## [0.12.1] - 2026-11-18
 
 ### Changed in 0.12.1
@@ -438,7 +444,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - Welcome page surfacing the most common startup actions.
 - Remote-control / proxy bridges for host page integration.
 
-[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/DataLab-Platform/web/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/DataLab-Platform/web/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/DataLab-Platform/web/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/DataLab-Platform/web/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/DataLab-Platform/web/compare/v0.11.0...v0.11.1
