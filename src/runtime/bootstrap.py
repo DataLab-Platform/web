@@ -4891,7 +4891,10 @@ def commit_text_import(
 
 def list_features() -> list[dict[str, Any]]:
     """Return the full feature catalogue (signals + images + plugins)."""
-    return _proc.serialize_catalog(_full_catalog_with_plugins())
+    features = _proc.serialize_catalog(_full_catalog_with_plugins())
+    for feature in features:
+        feature["builtin"] = feature["id"] in _CATALOG
+    return features
 
 
 def get_feature_schema(
@@ -6484,6 +6487,7 @@ def _list_analysis_for_kind(kind: str) -> list[dict[str, Any]]:
             "has_params": e["paramclass"] is not None,
             "submenu": e.get("submenu"),
             "menu_path": e.get("menu_path"),
+            "builtin": e["id"] in _ANALYSIS_CATALOG[kind],
         }
         for e in catalog.values()
     ]
@@ -7157,6 +7161,21 @@ def _h5_sanitize_name(short_id: str, title: str) -> str:
     return f"{short_id}: {safe}".rstrip(": ").rstrip()
 
 
+def _h5_member_order_key(name: str) -> tuple[int, str, int]:
+    """Sort key restoring the panel order of numbered members.
+
+    h5py lists the members of a group by name: numbered names such as
+    ``"i001: ..."`` (Qt DataLab and DataLab-Web) are read in their numeric order,
+    including beyond 999. Other names keep their alphabetical order, after them.
+    """
+    import re
+
+    match = re.match(r"([a-z]+)(\d+)(?::|$)", name)
+    if match is None:
+        return (1, name, 0)
+    return (0, match.group(1), int(match.group(2)))
+
+
 def save_workspace_to_bytes() -> bytes:
     """Serialise the full object model to a DataLab-compatible HDF5 file.
 
@@ -7181,9 +7200,15 @@ def save_workspace_to_bytes() -> bytes:
                 panel = _MODEL._panels[kind]  # noqa: SLF001
                 if not panel.groups:
                     continue
+                # Numbered names, as in Qt DataLab, keep the panel order:
+                # h5py reads the members of a group by name.
+                obj_prefix = "s" if kind == "signal" else "i"
+                number = 0
                 with writer.group(prefix):
-                    for group in panel.groups:
-                        group_name = _h5_sanitize_name(group.gid, group.name)
+                    for group_number, group in enumerate(panel.groups, start=1):
+                        group_name = _h5_sanitize_name(
+                            f"g{obj_prefix}{group_number:03d}", group.name
+                        )
                         with writer.group(group_name):
                             with writer.group("title"):
                                 writer.write_str(group.name)
@@ -7191,8 +7216,10 @@ def save_workspace_to_bytes() -> bytes:
                                 if oid not in _MODEL._objects:  # noqa: SLF001
                                     continue
                                 entry = _MODEL._objects[oid]  # noqa: SLF001
+                                number += 1
                                 obj_name = _h5_sanitize_name(
-                                    oid, getattr(entry.obj, "title", "") or ""
+                                    f"{obj_prefix}{number:03d}",
+                                    getattr(entry.obj, "title", "") or "",
                                 )
                                 with writer.group(obj_name):
                                     entry.obj.serialize(writer)
@@ -7316,7 +7343,9 @@ def open_workspace_from_bytes(
                     continue
                 klass = klass_for_kind[kind]
                 with reader.group(prefix):
-                    for group_name in list(reader.h5[prefix]):
+                    for group_name in sorted(
+                        reader.h5[prefix], key=_h5_member_order_key
+                    ):
                         with reader.group(group_name):
                             try:
                                 with reader.group("title"):
@@ -7325,7 +7354,10 @@ def open_workspace_from_bytes(
                                 grp_title = group_name
                             objs: list[Any] = []
                             groups.append((kind, grp_title, objs))
-                            for obj_name in list(reader.h5[f"{prefix}/{group_name}"]):
+                            for obj_name in sorted(
+                                reader.h5[f"{prefix}/{group_name}"],
+                                key=_h5_member_order_key,
+                            ):
                                 if obj_name == "title":
                                     continue
                                 with reader.group(obj_name):

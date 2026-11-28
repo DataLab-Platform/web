@@ -49,6 +49,7 @@ const feature = {
   object_kind: "signal",
   output_kind: "signal",
   preview_enabled: true,
+  builtin: true,
 } satisfies FeatureDescriptor;
 
 const runtime = {

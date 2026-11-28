@@ -77,6 +77,41 @@ export interface ImageData2D {
   shape: [number, number];
 }
 
+export interface RemoteFile {
+  name: string;
+  bytes: ArrayBuffer | Uint8Array;
+}
+
+export interface RemoteOpenResult {
+  files: {
+    name: string;
+    ids: string[];
+    panel?: "signal" | "image";
+    workspace?: boolean;
+    error?: string;
+    warning?: string;
+  }[];
+  selectionError?: string;
+}
+
+export interface ExternalToolDescriptor {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  readonly: boolean;
+}
+
+export interface ExternalToolResult {
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+  imageDataUrl?: string;
+}
+
+export interface WorkspaceStatus {
+  dirty: boolean;
+}
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (err: unknown) => void;
@@ -337,6 +372,53 @@ export class DataLabWebClient {
    *  returned by :meth:`getVersion`. */
   getProtocolVersion(): Promise<string> {
     return this.call("get_protocol_version") as Promise<string>;
+  }
+
+  /** Discover the safe agent-facing tools provided by the iframe. */
+  listTools(): Promise<ExternalToolDescriptor[]> {
+    return this.call("list_tools") as Promise<ExternalToolDescriptor[]>;
+  }
+
+  getWorkspaceStatus(): Promise<WorkspaceStatus> {
+    return this.call("get_workspace_status") as Promise<WorkspaceStatus>;
+  }
+
+  /** Invoke a discovered tool; images are returned as PNG data URLs. */
+  callTool(
+    name: string,
+    args: Record<string, unknown> = {},
+    timeoutMs = 120_000,
+  ): Promise<ExternalToolResult> {
+    return this.call(
+      "call_tool",
+      { name, args },
+      timeoutMs,
+    ) as Promise<ExternalToolResult>;
+  }
+
+  /** Apply a temporary host theme without changing the saved preference. */
+  setTheme(theme: "light" | "dark"): Promise<null> {
+    return this.call("set_theme", { theme }) as Promise<null>;
+  }
+
+  /** Open at most one workspace, then import accompanying data files. */
+  openFiles(
+    files: RemoteFile[],
+    kind?: "signal" | "image",
+  ): Promise<RemoteOpenResult> {
+    return this.call("open_files", {
+      files,
+      kind,
+    }) as Promise<RemoteOpenResult>;
+  }
+
+  /** Serialize the current workspace as an HDF5 file, without marking it clean. */
+  async saveWorkspace(): Promise<ArrayBuffer> {
+    const bytes = await this.call("save_workspace", {}, 120_000);
+    if (!(bytes instanceof ArrayBuffer)) {
+      throw new Error("DataLab returned invalid workspace bytes");
+    }
+    return bytes;
   }
 
   /** Push a 1-D signal to DataLab-Web.

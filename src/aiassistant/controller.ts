@@ -15,7 +15,7 @@
  */
 
 import type { RuntimeApi } from "../runtime/runtime";
-import { REMOTE_MODEL_CHANGED_EVENT } from "../runtime/remoteBridge";
+import { REMOTE_MODEL_CHANGED_EVENT } from "../runtime/modelEvents";
 import { chatCompletions } from "./provider";
 import { callTool, indexTools } from "./tools";
 import type {

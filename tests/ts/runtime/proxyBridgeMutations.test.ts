@@ -18,6 +18,12 @@ function makeRuntime() {
     deleteObject: vi.fn(async () => {}),
     resetAll: vi.fn(async () => {}),
     createGroup: vi.fn(async () => "gid"),
+    applyFeature: vi.fn(async () => ["new-oid"]),
+    getObject: vi.fn(async () => ({
+      id: "new-oid",
+      kind: "signal",
+      title: "Projection",
+    })),
   };
   return runtime;
 }
@@ -61,6 +67,43 @@ describe("macro bridge mutations", () => {
     expect(runtime.createGroup).toHaveBeenNthCalledWith(1, "image", "Results");
     expect(runtime.createGroup).toHaveBeenNthCalledWith(2, "signal", "Signals");
     expect(runtime.runPython).not.toHaveBeenCalled();
+  });
+
+  it("reports that an object was created if selecting it fails", async () => {
+    const runtime = makeRuntime();
+    const bridge = buildProxyBridge(runtime as unknown as RuntimeApi, {
+      selectObjects: async () => {
+        throw new Error("panel unavailable");
+      },
+    });
+    await expect(
+      bridge.add_object({ pickled_b64: "AAA", kind: "image" }),
+    ).rejects.toThrow(
+      "The mutation succeeded (new-oid), but selection failed: panel unavailable",
+    );
+    expect(runtime.addObjectPickled).toHaveBeenCalledOnce();
+  });
+
+  it("selects a cross-panel processing result through the runtime", async () => {
+    const runtime = makeRuntime();
+    const selectObjects = vi.fn();
+    const onModelChanged = vi.fn();
+    const bridge = buildProxyBridge(runtime as unknown as RuntimeApi, {
+      selectObjects,
+      onModelChanged,
+    });
+    await expect(
+      bridge.apply_feature({
+        feature_id: "image:horizontal_projection",
+        params: null,
+        sources: ["image-oid"],
+        operand: null,
+      }),
+    ).resolves.toEqual(["new-oid"]);
+    expect(runtime.getObject).toHaveBeenCalledWith("new-oid");
+    expect(runtime.runPython).not.toHaveBeenCalled();
+    expect(selectObjects).toHaveBeenCalledWith(["new-oid"], "signal");
+    expect(onModelChanged).toHaveBeenCalledWith("signal");
   });
 
   it("drains accepted bridge calls and rejects new ones while resetting", async () => {

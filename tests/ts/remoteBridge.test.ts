@@ -16,6 +16,7 @@ import type { DataLabRuntime } from "../../src/runtime/runtime";
 // actually touches in the methods exercised by these tests.
 function makeRuntimeStub(): DataLabRuntime {
   const runtime: Partial<DataLabRuntime> = {
+    onWorkspaceMutation: vi.fn(() => () => {}),
     addSignalFromArrays: vi.fn(async () => "sig-id-1"),
     addImageFromArray: vi.fn(async () => "img-id-1"),
     listSignals: vi.fn(async () => [
@@ -119,7 +120,111 @@ describe("activateRemoteBridge", () => {
       allowedOriginsSource: "",
       win,
     });
+
     expect(handle).toBeNull();
+  });
+
+  it("notifies connected peers of workspace mutations and unsubscribes", async () => {
+    let mutationListener: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    vi.mocked(runtime.onWorkspaceMutation).mockImplementation((listener) => {
+      mutationListener = () => listener("mutation");
+      return unsubscribe;
+    });
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=https://allowed.example.com",
+      win,
+    });
+    const peer: MockPeer = { postMessage: vi.fn() };
+    win.dispatchEvent(
+      fakeMessageEvent({
+        origin: "https://allowed.example.com",
+        source: peer,
+        data: { id: 1, type: "request", method: "get_version" },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    peer.postMessage.mockClear();
+    mutationListener?.();
+    expect(peer.postMessage).toHaveBeenCalledWith(
+      { type: "event", name: "workspace-changed" },
+      "https://allowed.example.com",
+      undefined,
+    );
+    handle?.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("reports workspace status and sends clean and dirty transitions", async () => {
+    let statusListener: ((status: { dirty: boolean }) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=https://allowed.example.com",
+      win,
+      getWorkspaceStatus: () => ({ dirty: true }),
+      subscribeWorkspaceStatus: (listener) => {
+        statusListener = listener;
+        return unsubscribe;
+      },
+    });
+    const peer: MockPeer = { postMessage: vi.fn() };
+    win.dispatchEvent(
+      fakeMessageEvent({
+        origin: "https://allowed.example.com",
+        source: peer,
+        data: { id: 1, type: "request", method: "get_workspace_status" },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(peer.postMessage.mock.calls[0][0]).toMatchObject({
+      id: 1,
+      result: { dirty: true },
+    });
+    statusListener?.({ dirty: false });
+    expect(peer.postMessage.mock.calls[1][0]).toEqual({
+      type: "event",
+      name: "workspace-state-changed",
+      payload: { dirty: false },
+    });
+    handle?.dispose();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("exposes the external tool registry and reports invalid calls", async () => {
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=*",
+      win,
+    });
+    const peer: MockPeer = { postMessage: vi.fn() };
+    for (const [id, method, params] of [
+      [1, "list_tools", {}],
+      [2, "call_tool", { name: "not_a_tool", args: {} }],
+      [3, "call_tool", { name: "get_selection" }],
+    ] as const) {
+      win.dispatchEvent(
+        fakeMessageEvent({
+          origin: "https://anything.test",
+          source: peer,
+          data: { id, type: "request", method, params },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await vi.waitFor(() => {
+      expect(peer.postMessage).toHaveBeenCalledTimes(3);
+    });
+    const responses = peer.postMessage.mock.calls
+      .map((call) => call[0])
+      .sort((a, b) => a.id - b.id);
+    expect(
+      responses[0].result.map((item: { name: string }) => item.name),
+    ).toContain("apply_operation");
+    expect(responses[1].result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Unknown external tool"),
+    });
+    expect(responses[2].error).toMatchObject({ code: "method_error" });
+    handle?.dispose();
   });
 
   it("ignores messages whose origin is not whitelisted", async () => {
@@ -171,6 +276,54 @@ describe("activateRemoteBridge", () => {
       result: "1.2.3",
     });
     handle?.dispose();
+  });
+
+  it("applies only valid host themes and reports an unavailable theme UI", async () => {
+    const setTheme = vi.fn();
+    const handle = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=*",
+      win,
+      setTheme,
+    });
+    const peer: MockPeer = { postMessage: vi.fn() };
+    const request = async (id: number, params: unknown) => {
+      win.dispatchEvent(
+        fakeMessageEvent({
+          origin: "https://anything.test",
+          source: peer,
+          data: { id, type: "request", method: "set_theme", params },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return peer.postMessage.mock.calls.at(-1)?.[0];
+    };
+    expect(await request(1, { theme: "dark" })).toMatchObject({
+      id: 1,
+      result: null,
+    });
+    expect(setTheme).toHaveBeenCalledExactlyOnceWith("dark");
+    expect(await request(2, { theme: "system" })).toMatchObject({
+      id: 2,
+      error: {
+        code: "method_error",
+        message: expect.stringContaining("Theme"),
+      },
+    });
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    handle?.dispose();
+
+    const unavailable = activateRemoteBridge(runtime, {
+      allowedOriginsSource: "?allowedOrigins=*",
+      win,
+    });
+    expect(await request(3, { theme: "light" })).toMatchObject({
+      id: 3,
+      error: {
+        code: "method_error",
+        message: expect.stringContaining("not ready"),
+      },
+    });
+    unavailable?.dispose();
   });
 
   it("returns an error response for unknown methods", async () => {

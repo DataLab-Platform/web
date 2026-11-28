@@ -13,6 +13,49 @@ import { waitForRuntimeReady } from "./fixtures";
  */
 
 test.describe("Remote control via postMessage", () => {
+  test("host theme changes preserve the workspace and saved preference", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("datalab-web:theme", "light");
+    });
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      {
+        timeout: 180_000,
+      },
+    );
+    const id = await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      return window.__client.addSignal("Theme probe", [0, 1], [1, 2]);
+    });
+    await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      await window.__client.setTheme("dark");
+    });
+    const iframe = page.frameLocator("#dlw");
+    await expect(iframe.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(iframe.locator(".object-tree-item")).toContainText(
+      "Theme probe",
+    );
+    const state = await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      const selection = await window.__client.getSelection();
+      return {
+        selection,
+        savedTheme: localStorage.getItem("datalab-web:theme"),
+      };
+    });
+    expect(state).toEqual({ selection: [id], savedTheme: "light" });
+    await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      await window.__client.setTheme("light");
+    });
+    await expect(iframe.locator("html")).toHaveAttribute("data-theme", "light");
+  });
+
   test("host page can push, calc and read back signals", async ({ page }) => {
     await page.goto("/remote-host-example.html");
 
@@ -83,6 +126,319 @@ test.describe("Remote control via postMessage", () => {
       return list.length;
     }, pushed.id);
     expect(afterDelete).toBe(calcOutcome.count - 1);
+  });
+
+  test("remote selection switches panels and rejects unknown objects", async ({
+    page,
+  }) => {
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      {
+        timeout: 180_000,
+      },
+    );
+
+    const ids = await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      const first = await window.__client.addSignal("First", [0, 1], [1, 2]);
+      // @ts-expect-error injected by the demo page
+      const second = await window.__client.addSignal("Second", [0, 1], [2, 3]);
+      // @ts-expect-error injected by the demo page
+      const image = await window.__client.addImage("Image", [
+        [1, 2],
+        [3, 4],
+      ]);
+      return { first, second, image };
+    });
+    const selection = () =>
+      page.evaluate(async () => {
+        // @ts-expect-error injected by the demo page
+        return await window.__client.getSelection();
+      });
+    const panel = () =>
+      page.evaluate(async () => {
+        // @ts-expect-error injected by the demo page
+        return await window.__client.getCurrentPanel();
+      });
+    await expect.poll(panel).toBe("image");
+    await expect.poll(selection).toEqual([ids.image]);
+
+    const projection = await page.evaluate(async (image) => {
+      // @ts-expect-error injected by the demo page
+      return await window.__client.calc("image:horizontal_projection", null, [
+        image,
+      ]);
+    }, ids.image);
+    expect(projection).toHaveLength(1);
+    await expect.poll(panel).toBe("signal");
+    await expect.poll(selection).toEqual(projection);
+
+    const selected = await page.evaluate(async ({ first, second }) => {
+      // @ts-expect-error injected by the demo page
+      await window.__client.selectObjects([first, second], "signal");
+      // @ts-expect-error injected by the demo page
+      return await window.__client.getSelection();
+    }, ids);
+    expect(selected).toEqual([ids.first, ids.second]);
+    await expect.poll(selection).toEqual([ids.first, ids.second]);
+    await expect(
+      page.frameLocator("#dlw").locator(".object-tree-item"),
+    ).toContainText(["First", "Second"]);
+    const error = await page.evaluate(async () => {
+      try {
+        // @ts-expect-error injected by the demo page
+        await window.__client.selectObjects(["missing"], "image");
+        return null;
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
+    });
+    expect(error).toContain("Objects not found");
+    await expect.poll(panel).toBe("signal");
+    await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      await window.__client.setCurrentPanel("macro");
+    });
+    await expect.poll(panel).toBe("macro");
+
+    await page.evaluate(() => {
+      // @ts-expect-error injected by the demo page
+      window.__client.on("workspace-changed", () => {
+        document.body.dataset.workspaceChanged = "1";
+      });
+    });
+    const frame = page
+      .frames()
+      .find((item) => item.url().includes("/index.html?"));
+    if (!frame) throw new Error("DataLab iframe not found");
+    await frame.evaluate(async () => {
+      // @ts-expect-error runtime is exposed by the app for browser tests
+      await window.runtime.createSignalTyped("sine");
+    });
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-workspace-changed",
+      "1",
+    );
+  });
+
+  test("imports binary data and exports an HDF5 workspace without replacing it", async ({
+    page,
+  }) => {
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      {
+        timeout: 180_000,
+      },
+    );
+    const outcome = await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      const client = window.__client;
+      const csv = new TextEncoder().encode("x,y\n0,1\n1,2\n2,3\n");
+      const imported = await client.openFiles(
+        [{ name: "probe.csv", bytes: csv }],
+        "signal",
+      );
+      const id = imported.files[0].ids[0];
+      const values = await client.getSignalXY(id);
+      const iframe = document.querySelector<HTMLIFrameElement>("#dlw");
+      if (!iframe?.contentWindow) throw new Error("iframe unavailable");
+      // @ts-expect-error runtime is exposed by the app for browser tests
+      const runtime = iframe.contentWindow.runtime;
+      const before = await runtime.getPanelTree("signal");
+      const uuid = before.groups
+        .flatMap(
+          (group: { objects: { id: string; uuid: string }[] }) => group.objects,
+        )
+        .find((object: { id: string }) => object.id === id)?.uuid;
+      const snapshot = await client.saveWorkspace();
+      const signature = Array.from(new Uint8Array(snapshot, 0, 8));
+      const size = snapshot.byteLength;
+      await runtime.openWorkspaceHdf5(
+        "probe.h5",
+        new Uint8Array(snapshot),
+        true,
+      );
+      const after = await runtime.getPanelTree("signal");
+      const restored = after.groups
+        .flatMap(
+          (group: { objects: { id: string; uuid: string }[] }) => group.objects,
+        )
+        .find((object: { uuid: string }) => object.uuid === uuid);
+      const restoredValues = await runtime.getSignalData(restored.id);
+      return {
+        imported,
+        x: Array.from(values.x),
+        y: Array.from(values.y),
+        signature,
+        size,
+        uuid,
+        restoredUuid: restored.uuid,
+        restoredY: Array.from(restoredValues.y),
+      };
+    });
+    expect(outcome.imported.files[0].error).toBeUndefined();
+    expect(outcome.x).toEqual([0, 1, 2]);
+    expect(outcome.y).toEqual([1, 2, 3]);
+    expect(outcome.signature).toEqual([137, 72, 68, 70, 13, 10, 26, 10]);
+    expect(outcome.size).toBeGreaterThan(1000);
+    expect(outcome.uuid).toBeTruthy();
+    expect(outcome.restoredUuid).toBe(outcome.uuid);
+    expect(outcome.restoredY).toEqual([1, 2, 3]);
+  });
+
+  test("workspace opening confirms replacement and imports accompanying files", async ({
+    page,
+  }) => {
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      {
+        timeout: 180_000,
+      },
+    );
+    await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      const client = window.__client;
+      await client.addSignal("Saved signal", [0, 1], [1, 2]);
+      // @ts-expect-error test-owned value in this isolated page
+      window.__workspaceBytes = await client.saveWorkspace();
+      await client.addSignal("Unsaved signal", [0, 1], [3, 4]);
+    });
+    const request = () =>
+      page.evaluate(() => {
+        // @ts-expect-error test-owned value in this isolated page
+        window.__openResult = window.__client.openFiles([
+          {
+            name: "extra.csv",
+            bytes: new TextEncoder().encode("x,y\n0,2\n1,3\n"),
+          },
+          // @ts-expect-error test-owned value in this isolated page
+          { name: "saved.h5", bytes: window.__workspaceBytes },
+        ]);
+      });
+    const result = () =>
+      page.evaluate(async () => {
+        // @ts-expect-error test-owned value in this isolated page
+        return await window.__openResult;
+      });
+    const iframe = page.frameLocator("#dlw");
+    const dialog = iframe
+      .getByRole("dialog")
+      .filter({ hasText: "Open workspace" });
+    await request();
+    await expect(dialog).toContainText("Unsaved changes will be lost");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    const cancelled = await result();
+    expect(cancelled.files[0].error).toContain("Not imported");
+    expect(cancelled.files[1].error).toContain("cancelled");
+    await expect(iframe.locator(".object-tree-item")).toContainText([
+      "Saved signal",
+      "Unsaved signal",
+    ]);
+
+    await request();
+    await dialog.getByRole("button", { name: "Open", exact: true }).click();
+    const opened = await result();
+    expect(opened.files[0].error).toBeUndefined();
+    expect(opened.files[1]).toMatchObject({ workspace: true });
+    expect(opened.files[1].error).toBeUndefined();
+    await expect(iframe.locator(".object-tree-item")).toContainText([
+      "Saved signal",
+      "extra",
+    ]);
+    await expect(
+      iframe.locator(".object-tree-item").filter({ hasText: "Unsaved signal" }),
+    ).toHaveCount(0);
+    await expect(iframe.locator(".app")).toHaveAttribute(
+      "data-workspace-reset-state",
+      "idle",
+    );
+  });
+
+  test("external tools process imported data, show results and retain provenance", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto("/remote-host-example.html");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-remote-ready",
+      "1",
+      { timeout: 180_000 },
+    );
+    const outcome = await page.evaluate(async () => {
+      // @ts-expect-error injected by the demo page
+      const client = window.__client;
+      const rows = ["x,y"];
+      for (let i = 0; i <= 100; i++) {
+        const x = (i - 50) / 10;
+        rows.push(`${x},${Math.exp(-0.5 * x * x)}`);
+      }
+      const imported = await client.openFiles(
+        [
+          {
+            name: "gaussian.csv",
+            bytes: new TextEncoder().encode(rows.join("\n")),
+          },
+        ],
+        "signal",
+      );
+      const id = imported.files[0].ids[0];
+      const tools = await client.listTools();
+      const schema = await client.callTool("list_available_operations", {
+        panel: "signal",
+        name: "normalize",
+        target_uuid: id,
+      });
+      const processed = await client.callTool("apply_operation", {
+        name: "normalize",
+        target_uuid: id,
+      });
+      const created = processed.data?.created?.[0];
+      if (!created) return { imported, tools, schema, processed };
+      const analysis = await client.callTool("apply_operation", {
+        name: "fwhm",
+        target_uuid: created.uuid,
+        parameters: { method: "gauss" },
+      });
+      const results = await client.callTool("get_results", {
+        panel: "signal",
+        uuids: [created.uuid],
+      });
+      return { imported, tools, schema, processed, analysis, results, created };
+    });
+    expect(outcome.imported.files[0].error).toBeUndefined();
+    expect(outcome.tools.map((tool: { name: string }) => tool.name)).toContain(
+      "apply_operation",
+    );
+    expect(outcome.schema.ok).toBe(true);
+    expect(outcome.processed.ok).toBe(true);
+    expect(outcome.created.uuid).toBeTruthy();
+    expect(outcome.created.uuid).not.toBe(outcome.created.id);
+    expect(outcome.analysis.ok).toBe(true);
+    expect(outcome.results.ok).toBe(true);
+    expect(outcome.results.data.results[0].results.length).toBeGreaterThan(0);
+
+    const iframe = page.frameLocator("#dlw");
+    await expect(
+      iframe
+        .locator(".object-tree-item")
+        .filter({ hasText: outcome.created.title }),
+    ).toBeVisible({ timeout: 15_000 });
+    await iframe
+      .getByRole("tab", { name: "Provenance" })
+      .click({ timeout: 15_000 });
+    const provenance = iframe.getByTestId("provenance-panel");
+    await expect(
+      provenance.getByTestId("provenance-activity").first(),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(provenance).toContainText(/normaliz/i);
   });
 
   test("the iframe ignores messages from a non-whitelisted origin", async ({

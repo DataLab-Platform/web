@@ -16,6 +16,11 @@ export {
 export type {
   DataLabWebClientOptions,
   DataLabWebRpcError,
+  ExternalToolDescriptor,
+  ExternalToolResult,
   ImageData2D,
+  RemoteFile,
+  RemoteOpenResult,
   SignalXY,
+  WorkspaceStatus,
 } from "./DataLabWebClient";

@@ -487,6 +487,14 @@ iframe → host       {     type: "event",    name, payload?   }
 Synthetic method `get_protocol_version` lets clients negotiate
 compatibility independently of the application version.
 
+The React app publishes selection and panel actions through `selectionState.ts`; remote selection validates object IDs against the target tree before changing the visible panel. Since protocol 1.1, the bridge also forwards runtime workspace-mutation notifications to connected peers as `workspace-changed`. This invalidation event covers interactive mutations as well as RPC calls, but not clean workspace replacements.
+
+The remote `open_files` and `save_workspace` methods use `workspaceBridgeGate` and the runtime's existing data import and HDF5 serialization paths. When one HDF5 workspace or capsule is supplied, `open_files` delegates replacement to the same guarded workspace-reset flow as the app and imports accompanying files only after it succeeds. Export returns binary bytes without marking the workspace clean. The host can query `get_workspace_status` and subscribe to `workspace-state-changed` to invalidate its status after clean replacements as well as dirty-state changes.
+
+`list_tools` and `call_tool` expose the bounded scientific tool catalogue in `externalToolManifest.ts` and `externalTools.ts`. The host must confirm mutations; the catalogue excludes arbitrary code, plugins and macros. Processing and analysis use the existing runtime and provenance paths rather than a second computation implementation.
+
+The host can apply `set_theme` with `light` or `dark` without reloading or changing the persisted theme preference. React's shared theme context updates the app and plots; the user can still override the current theme with the app's toggle.
+
 ---
 
 ## 5. End-to-end flows

@@ -22,12 +22,44 @@ export interface SelectionSnapshot {
 }
 
 export type SelectionSource = () => SelectionSnapshot;
+export type SelectionAction = (
+  ids: string[],
+  panel: "signal" | "image" | null,
+) => Promise<void>;
 
 let source: SelectionSource | null = null;
+let selectionAction: SelectionAction | null = null;
+let panelAction: ((panel: string) => Promise<void>) | null = null;
 
 /** Publish the selection snapshot getter (idempotent — last writer wins). */
 export function registerSelectionSource(getter: SelectionSource | null): void {
   source = getter;
+}
+
+/** Publish the UI's selection action for remote-control clients. */
+export function registerSelectionAction(action: SelectionAction | null): void {
+  selectionAction = action;
+}
+
+export function registerPanelAction(
+  action: ((panel: string) => Promise<void>) | null,
+): void {
+  panelAction = action;
+}
+
+export async function setCurrentPanel(panel: string): Promise<void> {
+  if (!panelAction) throw new Error("The DataLab panel UI is not ready.");
+  await panelAction(panel);
+}
+
+/** Select objects in the UI, or report that the UI is not available. */
+export async function selectObjects(
+  ids: string[],
+  panel: "signal" | "image" | null,
+): Promise<void> {
+  if (!selectionAction)
+    throw new Error("The DataLab selection UI is not ready.");
+  await selectionAction(ids, panel);
 }
 
 /** Return the current selection ids, or ``[]`` when no source is wired.

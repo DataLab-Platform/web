@@ -110,6 +110,7 @@ def test_radiography_registry_contract(radiography_application) -> None:
         f"{PLUGIN_MENU}/Enhancement/Flatten background"
     )
     assert features[f"{PLUGIN_ID}:robust-average"]["pattern"] == "n_to_1"
+    assert features[f"{PLUGIN_ID}:robust-average"]["builtin"] is False
     assert f"{PLUGIN_ID}:snr" not in features
     analyses = {
         entry["id"]: entry
@@ -121,6 +122,7 @@ def test_radiography_registry_contract(radiography_application) -> None:
         f"{PLUGIN_ID}:snr",
         f"{PLUGIN_ID}:cnr",
     }
+    assert all(entry["builtin"] is False for entry in analyses.values())
     assert analyses[f"{PLUGIN_ID}:snr"]["menu_path"] == (
         f"{PLUGIN_MENU}/Image quality/Signal-to-noise ratio"
     )

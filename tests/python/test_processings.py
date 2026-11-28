@@ -15,9 +15,11 @@ def test_list_features_returns_metadata_records(bootstrap_module):
     feats = bs.list_features()
     assert feats
     sample = feats[0]
-    for key in ("id", "label", "menu_path", "pattern", "preview_enabled"):
+    for key in ("id", "label", "menu_path", "pattern", "preview_enabled", "builtin"):
         assert key in sample
 
+    assert sample["builtin"] is True
+    assert all(entry["builtin"] is True for entry in bs.list_signal_analysis())
     assert all(
         feature["preview_enabled"] is False
         for feature in feats

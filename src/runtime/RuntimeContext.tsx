@@ -3,9 +3,20 @@ import type { ReactNode } from "react";
 import type { RuntimeApi } from "./runtime";
 import { createWorkerRuntime } from "./WorkerRuntimeProxy";
 import { getRuntimeMode } from "./runtimeMode";
-import { activateRemoteBridge, type RemoteBridgeHandle } from "./remoteBridge";
-import { getCurrentPanel, getSelection } from "./selectionState";
+import type { RemoteBridgeHandle } from "./remoteBridge";
+import {
+  getCurrentPanel,
+  getSelection,
+  selectObjects,
+  setCurrentPanel,
+} from "./selectionState";
 import { t } from "../i18n/translate";
+import { useTheme } from "../utils/theme";
+import {
+  getWorkspaceStatus,
+  openWorkspaceFile,
+  subscribeWorkspaceStatus,
+} from "./workspaceActions";
 
 interface RuntimeContextValue {
   runtime: RuntimeApi | null;
@@ -18,6 +29,7 @@ interface RuntimeContextValue {
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
+  const { setHostTheme } = useTheme();
   const [runtimeMode] = useState(getRuntimeMode);
   const [runtime, setRuntime] = useState<RuntimeApi | null>(null);
   const [status, setStatus] =
@@ -41,7 +53,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
             DataLabRuntime.load(onProgress),
           );
     boot
-      .then((rt) => {
+      .then(async (rt) => {
         if (cancelled) return;
         setRuntime(rt);
         setStatus("ready");
@@ -50,17 +62,34 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         // otherwise — the standalone app is unaffected. The handle is
         // disposed by the cleanup function below.
         try {
-          remoteBridgeHandle = activateRemoteBridge(rt, {
-            version: import.meta.env.VITE_APP_VERSION,
-            getSelection,
-            getCurrentPanel,
-          });
-          if (remoteBridgeHandle && import.meta.env.DEV) {
-            console.info(
-              "%c[remoteBridge] active for origins: " +
-                remoteBridgeHandle.allowedOrigins.join(", "),
-              "color:#0e639c;font-weight:bold",
-            );
+          if (
+            new URLSearchParams(window.location.search).has("allowedOrigins")
+          ) {
+            const { activateRemoteBridge } = await import("./remoteBridge");
+            if (cancelled) return;
+            remoteBridgeHandle = activateRemoteBridge(rt, {
+              version: import.meta.env.VITE_APP_VERSION,
+              getSelection,
+              getCurrentPanel,
+              selectObjects: async (ids, panel) => {
+                if (panel !== null && panel !== "signal" && panel !== "image") {
+                  throw new Error(`Unknown DataLab panel: ${panel}`);
+                }
+                await selectObjects(ids, panel);
+              },
+              setCurrentPanel,
+              setTheme: setHostTheme,
+              openWorkspace: openWorkspaceFile,
+              getWorkspaceStatus,
+              subscribeWorkspaceStatus,
+            });
+            if (remoteBridgeHandle && import.meta.env.DEV) {
+              console.info(
+                "%c[remoteBridge] active for origins: " +
+                  remoteBridgeHandle.allowedOrigins.join(", "),
+                "color:#0e639c;font-weight:bold",
+              );
+            }
           }
         } catch (err) {
           console.error("[remoteBridge] activation failed", err);
@@ -88,7 +117,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       remoteBridgeHandle?.dispose();
       remoteBridgeHandle = null;
     };
-  }, [runtimeMode]);
+  }, [runtimeMode, setHostTheme]);
 
   // Hot-reload: a small Vite plugin (build-plugins/vite-plugin-python-hmr.ts)
   // watches .py files and pushes the new source via a custom HMR event.

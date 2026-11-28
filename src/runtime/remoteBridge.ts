@@ -27,6 +27,13 @@
 import { buildProxyBridge, type BridgeMethod } from "./proxyBridge";
 import { collectTransferables } from "./workerProtocol";
 import type { RuntimeApi } from "./runtime";
+import { workspaceBridgeGate } from "./workspaceBridgeGate";
+import type { RemoteFile } from "./remoteFiles";
+import type { ResolvedTheme } from "../utils/theme";
+import type { WorkspaceStatus } from "./workspaceActions";
+import { REMOTE_MODEL_CHANGED_EVENT } from "./modelEvents";
+
+export { REMOTE_MODEL_CHANGED_EVENT } from "./modelEvents";
 
 export interface RemoteBridgeOptions {
   /** Initial selection / panel callbacks reused from the existing
@@ -34,8 +41,14 @@ export interface RemoteBridgeOptions {
    *  for a headless embedding. */
   getSelection?: () => string[];
   getCurrentPanel?: () => string;
-  setCurrentPanel?: (panel: string) => void;
-  selectObjects?: (ids: string[], panel: string | null) => void;
+  setCurrentPanel?: (panel: string) => void | Promise<void>;
+  selectObjects?: (ids: string[], panel: string | null) => void | Promise<void>;
+  setTheme?: (theme: ResolvedTheme) => void | Promise<void>;
+  openWorkspace?: (file: RemoteFile) => Promise<string[]>;
+  getWorkspaceStatus?: () => WorkspaceStatus;
+  subscribeWorkspaceStatus?: (
+    listener: (status: WorkspaceStatus) => void,
+  ) => () => void;
   /** Called whenever a remote RPC mutates the in-memory object model.
    *  Wired by ``RuntimeContext`` to dispatch a ``CustomEvent`` so
    *  ``App.tsx`` can refresh the panel tree without RuntimeContext
@@ -55,8 +68,6 @@ export interface RemoteBridgeOptions {
 /** Name of the ``CustomEvent`` dispatched on ``window`` whenever a
  *  remote RPC mutates the object model. ``event.detail`` is
  *  ``{ panel: "signal" | "image" | null }``. */
-export const REMOTE_MODEL_CHANGED_EVENT = "datalab-web:remote-model-changed";
-
 /** Version of the host ↔ iframe wire protocol (semver MAJOR.MINOR).
  *
  *  This is **distinct** from the application version (``get_version``):
@@ -72,7 +83,7 @@ export const REMOTE_MODEL_CHANGED_EVENT = "datalab-web:remote-model-changed";
  *  Exposed to clients via the synthetic ``get_protocol_version``
  *  bridge method (see :class:`DataLabWebClient` for the negotiation
  *  logic). */
-export const RPC_PROTOCOL_VERSION = "1.0";
+export const RPC_PROTOCOL_VERSION = "1.1";
 
 interface RpcRequest {
   id: number | string;
@@ -204,10 +215,12 @@ export function activateRemoteBridge(
   // ``CustomEvent`` on ``window`` so the React app can refresh its
   // panel tree, and (b) an outbound RPC ``event`` so the host page can
   // react too (``client.on("model-changed", …)``).
-  const notifyModelChanged = (panel: string | null) => {
+  const notifyModelChanged = (panel: string | null, resultIds?: string[]) => {
     try {
       win.dispatchEvent(
-        new CustomEvent(REMOTE_MODEL_CHANGED_EVENT, { detail: { panel } }),
+        new CustomEvent(REMOTE_MODEL_CHANGED_EVENT, {
+          detail: { panel, resultIds },
+        }),
       );
     } catch (err) {
       console.warn("[remoteBridge] dispatchEvent failed", err);
@@ -240,6 +253,67 @@ export function activateRemoteBridge(
     // Synthetic method — wire-protocol version (independent of the app
     // version). Clients negotiate compatibility on this value.
     get_protocol_version: async () => RPC_PROTOCOL_VERSION,
+    get_workspace_status: async () => {
+      if (!options.getWorkspaceStatus)
+        throw new Error("The DataLab workspace UI is not ready.");
+      return options.getWorkspaceStatus();
+    },
+    list_tools: async () =>
+      (await import("../aiassistant/externalTools")).listExternalTools(),
+    call_tool: async (payload) => {
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        !("name" in payload) ||
+        typeof payload.name !== "string" ||
+        !("args" in payload)
+      ) {
+        throw new Error("Provide a tool name and an args object.");
+      }
+      const { name, args } = payload;
+      const { callExternalTool } = await import("../aiassistant/externalTools");
+      return workspaceBridgeGate(runtime).run(() =>
+        callExternalTool(
+          runtime,
+          {
+            getSelection: options.getSelection,
+            getCurrentPanel: options.getCurrentPanel,
+            selectObjects: options.selectObjects,
+            onModelChanged: notifyModelChanged,
+          },
+          name,
+          args,
+        ),
+      );
+    },
+    set_theme: async (payload) => {
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        !("theme" in payload) ||
+        (payload.theme !== "light" && payload.theme !== "dark")
+      ) {
+        throw new Error("Theme must be 'light' or 'dark'");
+      }
+      if (!options.setTheme)
+        throw new Error("The DataLab theme UI is not ready.");
+      await options.setTheme(payload.theme);
+      return null;
+    },
+    open_files: async (payload) =>
+      (await import("./remoteFiles")).openRemoteFiles(runtime, payload, {
+        getCurrentPanel: options.getCurrentPanel,
+        selectObjects: options.selectObjects,
+        openWorkspace: options.openWorkspace,
+        onModelChanged: notifyModelChanged,
+        runDataImport: (operation) =>
+          workspaceBridgeGate(runtime).run(operation),
+      }),
+    save_workspace: async () =>
+      workspaceBridgeGate(runtime).run(async () => {
+        const bytes = await runtime.saveWorkspaceHdf5();
+        return new Uint8Array(bytes).buffer;
+      }),
   };
 
   post = (
@@ -313,11 +387,25 @@ export function activateRemoteBridge(
   };
 
   win.addEventListener("message", listener);
+  const unsubscribe = runtime.onWorkspaceMutation(() => {
+    const event: RpcEvent = { type: "event", name: "workspace-changed" };
+    for (const [peer, origin] of peers) post(peer, origin, event, false);
+  });
+  const unsubscribeStatus = options.subscribeWorkspaceStatus?.((status) => {
+    const event: RpcEvent = {
+      type: "event",
+      name: "workspace-state-changed",
+      payload: status,
+    };
+    for (const [peer, origin] of peers) post(peer, origin, event, false);
+  });
 
   return {
     allowedOrigins,
     dispose() {
       win.removeEventListener("message", listener);
+      unsubscribe();
+      unsubscribeStatus?.();
       peers.clear();
     },
     emit(name, payload) {

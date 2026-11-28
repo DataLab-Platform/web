@@ -653,6 +653,8 @@ export interface FeatureDescriptor {
   output_kind: PanelKind;
   /** Whether the feature can run speculatively on a private source copy. */
   preview_enabled: boolean;
+  /** False for features registered by plugins. */
+  builtin: boolean;
 }
 
 /** Temporary, non-published result returned by ``preview_feature``. */
@@ -1522,6 +1524,8 @@ export interface SignalAnalysisDescriptor {
   separator_before: boolean;
   /** ``true`` when the analysis exposes a parameter DataSet. */
   has_params: boolean;
+  /** False for analyses registered by plugins. */
+  builtin: boolean;
   /** Optional submenu (folder) this entry belongs to, e.g. ``"Blob
    *  detection"``; ``null``/absent for top-level Analysis entries. */
   submenu?: string | null;

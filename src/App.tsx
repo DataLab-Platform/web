@@ -14,9 +14,19 @@ import { useWorkspace } from "./runtime/WorkspaceContext";
 import { isDiskStorageSupported } from "./runtime/storageCapabilities";
 import { useBeforeUnloadGuard } from "./runtime/useBeforeUnloadGuard";
 import { useDocumentTitle } from "./runtime/useDocumentTitle";
-import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/remoteBridge";
+import { REMOTE_MODEL_CHANGED_EVENT } from "./runtime/modelEvents";
 import { workspaceBridgeGate } from "./runtime/workspaceBridgeGate";
-import { registerSelectionSource } from "./runtime/selectionState";
+import {
+  publishWorkspaceStatus,
+  registerOpenWorkspaceAction,
+  registerWorkspaceStatusAction,
+} from "./runtime/workspaceActions";
+import type { RemoteFile } from "./runtime/remoteFiles";
+import {
+  registerPanelAction,
+  registerSelectionAction,
+  registerSelectionSource,
+} from "./runtime/selectionState";
 import type {
   FeatureDescriptor,
   H5BrowserFile,
@@ -1141,8 +1151,18 @@ export default function App() {
   useEffect(() => {
     if (!runtime) return;
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ panel: string | null }>).detail;
+      const detail = (
+        e as CustomEvent<{ panel: string | null; resultIds?: string[] }>
+      ).detail;
       const target = detail?.panel;
+      if (
+        target === treeKind &&
+        currentId &&
+        detail.resultIds?.includes(currentId)
+      ) {
+        requestSideTab("results", currentId);
+        setSideRefreshNonce((n) => n + 1);
+      }
       // ``refresh()`` only re-reads the tree/selection. When a
       // remote/macro/notebook/AI call mutates the *current* object's
       // metadata (title, axis labels/units, ROIs…) without changing
@@ -1170,7 +1190,7 @@ export default function App() {
     return () => {
       window.removeEventListener(REMOTE_MODEL_CHANGED_EVENT, handler);
     };
-  }, [runtime, treeKind, refresh]);
+  }, [runtime, treeKind, currentId, refresh, requestSideTab]);
 
   // Workspace-dirty tracking.
   //
@@ -1190,6 +1210,15 @@ export default function App() {
     });
     return unsubscribe;
   }, [runtime, markDirty]);
+
+  useEffect(() => {
+    registerWorkspaceStatusAction(() => ({ dirty: isWorkspaceDirty() }));
+    return () => registerWorkspaceStatusAction(null);
+  }, [isWorkspaceDirty]);
+
+  useEffect(() => {
+    publishWorkspaceStatus({ dirty: workspaceDirty });
+  }, [workspaceDirty, workspaceVersion]);
 
   // In on-disk storage mode, objects that could not be stored on disk after
   // an operation (storage quota exceeded, write error) stay in memory: the
@@ -1399,6 +1428,44 @@ export default function App() {
     [treeKind, setSelectedIds],
   );
 
+  const remoteSelectionRevision = useRef(0);
+  useEffect(() => {
+    if (!runtime) return;
+    registerSelectionAction(async (ids, panel) => {
+      const kind = panel ?? treeKind;
+      const epoch = workspaceEpoch.current;
+      const revision = ++remoteSelectionRevision.current;
+      const targetTree = await runtime.getPanelTree(kind);
+      if (
+        workspaceEpoch.current !== epoch ||
+        treeKindRef.current !== treeKind ||
+        remoteSelectionRevision.current !== revision
+      ) {
+        throw new Error(
+          "The DataLab selection changed while the request was pending.",
+        );
+      }
+      const availableIds = new Set(
+        targetTree.groups.flatMap((group) =>
+          group.objects.map((obj) => obj.id),
+        ),
+      );
+      const missing = ids.filter((id) => !availableIds.has(id));
+      if (missing.length) {
+        throw new Error(
+          `Objects not found in ${kind} panel: ${missing.join(", ")}`,
+        );
+      }
+      setTreeKind(kind);
+      setCentralView("plot");
+      setTree(targetTree);
+      setSelectedIds(ids);
+      setCurrentId(ids[0] ?? null);
+      setSelectedGroupIds([]);
+    });
+    return () => registerSelectionAction(null);
+  }, [runtime, treeKind, setSelectedIds]);
+
   const handleCentralViewChange = useCallback(
     (view: CentralView) => {
       // Clicking a detached tab re-docks it as the central view, so
@@ -1425,6 +1492,24 @@ export default function App() {
       setMacroFloating,
     ],
   );
+
+  useEffect(() => {
+    if (!runtime) return;
+    registerPanelAction(async (panel) => {
+      if (panel === "signal" || panel === "image") {
+        if (panel === treeKind) {
+          handleCentralViewChange("plot");
+        } else {
+          await refreshPanelKind(panel);
+        }
+      } else if (panel === "macro" || panel === "notebook") {
+        handleCentralViewChange(panel);
+      } else {
+        throw new Error(`Unknown DataLab panel: ${panel}`);
+      }
+    });
+    return () => registerPanelAction(null);
+  }, [runtime, treeKind, refreshPanelKind, handleCentralViewChange]);
 
   // Keep ``inactiveTree`` in sync with the panel the user *isn't*
   // looking at, so :class:`TitleWithLinks` can resolve cross-panel
@@ -3659,162 +3744,230 @@ export default function App() {
     [runtime, pendingRoiGrid, refresh, confirm],
   );
 
-  const handleNewWorkspace = useCallback(async () => {
-    if (!runtime || busy || workspaceResetPending.current) return;
-    workspaceResetPending.current = true;
-    setBusy(true);
-    setWorkspaceResetState("checking");
-    const gate = workspaceBridgeGate(runtime);
-    let prepared = false;
-    let paused = false;
-    let didReset = false;
-    let completed = false;
-    let failure: Error | null = null;
-    try {
-      const [macroWorkers, notebookWorkers] = await Promise.all([
-        import("./runtime/MacroRuntime"),
-        import("./notebook/NotebookRuntime"),
-      ]);
-      const assistantRunning = await runtime.prepareWorkspaceReset();
-      prepared = true;
-      const executing =
-        macroRunning.current ||
-        assistantRunning ||
-        macroWorkers.isPanelMacroExecuting(runtime) ||
-        notebookWorkers.isPanelNotebookExecuting(runtime);
-      let drained: Promise<void> | null = null;
-      if (!isWorkspaceDirty() && !executing) {
-        drained = gate.pause();
-        paused = true;
-        await drained;
+  const replaceWorkspace = useCallback(
+    async (file?: RemoteFile): Promise<string[] | null> => {
+      if (!runtime || busy || workspaceResetPending.current) {
+        if (file) throw new Error("The DataLab workspace is busy.");
+        return null;
       }
-      if (
-        (isWorkspaceDirty() || executing) &&
-        !(await confirm({
-          title: t("New workspace"),
-          message: t(
-            "Create a new workspace? Unsaved changes will be lost and running Python code will be stopped.",
-          ),
-          confirmLabel: t("Create"),
-          destructive: true,
-        }))
-      ) {
-        return;
-      }
-
-      didReset = true;
-      if (!drained) {
-        drained = gate.pause();
-        paused = true;
-      }
-      workspaceEpoch.current += 1;
-      flushSync(() => {
-        setWorkspaceResetState("resetting");
-        setWorkspacePanelsSuspended(true);
-        setSelectedIds([]);
-        setSelectedGroupIds([]);
-        setCurrentId(null);
-      });
-      macroWorkers.disposePanelMacroRuntime(runtime);
-      notebookWorkers.disposePanelNotebookRuntime(runtime);
-      await Promise.all([drained, runtime.stopWorkspaceMacro()]);
-
-      flushSync(() => {
-        setSelectedIds([]);
-        setSelectedGroupIds([]);
-        setCurrentId(null);
-      });
-      await runtime.resetAll({ silent: true });
-      const [{ emptyNotebook }, { notebookToJsonString }] = await Promise.all([
-        import("./notebook/types"),
-        import("./notebook/nbformat"),
-      ]);
-      const notebook = emptyNotebook();
-      await Promise.all([
-        runtime.createMacro(undefined, undefined, { silent: true }),
-        runtime.createNotebook(notebook.name, notebookToJsonString(notebook), {
-          silent: true,
-        }),
-      ]);
-      flushSync(() => {
-        setTreeKind("signal");
-        setCentralView("plot");
-        setWorkspaceVersion((version) => version + 1);
-        setKernelGeneration((generation) => generation + 1);
-        setWorkspacePanelsSuspended(false);
-      });
-      await Promise.all([
-        macroPanel.wait(MACRO_PANEL_TIMEOUT_MS),
-        notebookPanel.wait(MACRO_PANEL_TIMEOUT_MS),
-      ]);
-      const tree = await runtime.getPanelTree("signal");
-      flushSync(() => {
-        setTree(tree);
-        setSelectedIds([]);
-        setSelectedGroupIds([]);
-        setCurrentId(null);
-        setWorkspaceFilename(null);
-        setRecoveryBanner(null);
-        markClean();
-      });
-      completed = true;
-    } catch (error) {
-      failure = error instanceof Error ? error : new Error(String(error));
-    } finally {
-      if (paused && !didReset) {
-        gate.resume();
-        paused = false;
-      }
-      if (prepared) {
-        try {
-          await runtime.finishWorkspaceReset(didReset);
-        } catch (error) {
-          const cleanupError =
-            error instanceof Error ? error : new Error(String(error));
-          if (failure)
-            console.error("Workspace reset cleanup failed:", cleanupError);
-          else failure = cleanupError;
+      workspaceResetPending.current = true;
+      setBusy(true);
+      setWorkspaceResetState("checking");
+      const gate = workspaceBridgeGate(runtime);
+      let prepared = false;
+      let paused = false;
+      let didReset = false;
+      let completed = false;
+      let failure: Error | null = null;
+      let objectIds: string[] = [];
+      try {
+        const [macroWorkers, notebookWorkers] = await Promise.all([
+          import("./runtime/MacroRuntime"),
+          import("./notebook/NotebookRuntime"),
+        ]);
+        const assistantRunning = await runtime.prepareWorkspaceReset();
+        prepared = true;
+        const executing =
+          macroRunning.current ||
+          assistantRunning ||
+          macroWorkers.isPanelMacroExecuting(runtime) ||
+          notebookWorkers.isPanelNotebookExecuting(runtime);
+        let drained: Promise<void> | null = null;
+        if (!isWorkspaceDirty() && !executing) {
+          drained = gate.pause();
+          paused = true;
+          await drained;
         }
-      }
-      if (paused) gate.resume();
-      flushSync(() => {
-        setBusy(false);
-        if (failure) {
-          setWorkspaceResetState("error");
-          if (didReset) {
-            setWorkspacePanelsSuspended(false);
-            markDirty();
-          }
-        } else {
-          setWorkspaceResetState("idle");
-          if (completed) setWorkspaceResetId((id) => id + 1);
+        if (
+          (isWorkspaceDirty() || executing) &&
+          !(await confirm({
+            title: file ? t("Open workspace") : t("New workspace"),
+            message: file
+              ? t(
+                  "Open this workspace? Unsaved changes will be lost and running Python code will be stopped.",
+                )
+              : t(
+                  "Create a new workspace? Unsaved changes will be lost and running Python code will be stopped.",
+                ),
+            confirmLabel: file ? t("Open") : t("Create"),
+            destructive: true,
+          }))
+        ) {
+          return null;
         }
-      });
-      workspaceResetPending.current = false;
-      if (failure) {
-        await notify({
-          kind: "error",
-          title: t("New workspace"),
-          message: t(
-            "Could not create a new workspace. Some data may have changed: {error}",
-            { error: failure.message },
-          ),
+
+        didReset = true;
+        if (!drained) {
+          drained = gate.pause();
+          paused = true;
+        }
+        workspaceEpoch.current += 1;
+        flushSync(() => {
+          setWorkspaceResetState("resetting");
+          setWorkspacePanelsSuspended(true);
+          setSelectedIds([]);
+          setSelectedGroupIds([]);
+          setCurrentId(null);
         });
+        macroWorkers.disposePanelMacroRuntime(runtime);
+        notebookWorkers.disposePanelNotebookRuntime(runtime);
+        await Promise.all([drained, runtime.stopWorkspaceMacro()]);
+
+        flushSync(() => {
+          setSelectedIds([]);
+          setSelectedGroupIds([]);
+          setCurrentId(null);
+        });
+        let panel: PanelKind = "signal";
+        if (file) {
+          const bytes =
+            file.bytes instanceof Uint8Array
+              ? new Uint8Array(file.bytes)
+              : new Uint8Array(file.bytes.slice(0));
+          const loaded = /\.dlcapsule$/i.test(file.name)
+            ? await runtime.openWorkspaceCapsule(file.name, bytes, true)
+            : await runtime.openWorkspaceHdf5(file.name, bytes, true, {
+                silent: true,
+              });
+          if (loaded.signals === 0 && loaded.images > 0) panel = "image";
+          const trees = await Promise.all([
+            runtime.getPanelTree("signal"),
+            runtime.getPanelTree("image"),
+          ]);
+          objectIds = trees.flatMap((item) =>
+            item.groups.flatMap((group) =>
+              group.objects.map((object) => object.id),
+            ),
+          );
+        } else {
+          await runtime.resetAll({ silent: true });
+          const [{ emptyNotebook }, { notebookToJsonString }] =
+            await Promise.all([
+              import("./notebook/types"),
+              import("./notebook/nbformat"),
+            ]);
+          const notebook = emptyNotebook();
+          await Promise.all([
+            runtime.createMacro(undefined, undefined, { silent: true }),
+            runtime.createNotebook(
+              notebook.name,
+              notebookToJsonString(notebook),
+              {
+                silent: true,
+              },
+            ),
+          ]);
+        }
+        flushSync(() => {
+          setTreeKind(panel);
+          setCentralView("plot");
+          setWorkspaceVersion((version) => version + 1);
+          setKernelGeneration((generation) => generation + 1);
+          setWorkspacePanelsSuspended(false);
+        });
+        await Promise.all([
+          macroPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+          notebookPanel.wait(MACRO_PANEL_TIMEOUT_MS),
+        ]);
+        const tree = await runtime.getPanelTree(panel);
+        flushSync(() => {
+          setTree(tree);
+          setSelectedIds([]);
+          setSelectedGroupIds([]);
+          setCurrentId(
+            file
+              ? (tree.groups.flatMap((group) => group.objects)[0]?.id ?? null)
+              : null,
+          );
+          setWorkspaceFilename(
+            file ? file.name.replace(/\.dlcapsule$/i, ".h5") : null,
+          );
+          setRecoveryBanner(null);
+          markClean();
+        });
+        completed = true;
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
+      } finally {
+        if (paused && !didReset) {
+          gate.resume();
+          paused = false;
+        }
+        if (prepared) {
+          try {
+            await runtime.finishWorkspaceReset(didReset);
+          } catch (error) {
+            const cleanupError =
+              error instanceof Error ? error : new Error(String(error));
+            if (failure)
+              console.error("Workspace reset cleanup failed:", cleanupError);
+            else failure = cleanupError;
+          }
+        }
+        if (paused) gate.resume();
+        flushSync(() => {
+          setBusy(false);
+          if (failure) {
+            setWorkspaceResetState("error");
+            if (didReset) {
+              setWorkspacePanelsSuspended(false);
+              markDirty();
+            }
+          } else {
+            setWorkspaceResetState("idle");
+            if (completed) setWorkspaceResetId((id) => id + 1);
+          }
+        });
+        workspaceResetPending.current = false;
+        if (failure) {
+          if (!file) {
+            await notify({
+              kind: "error",
+              title: t("New workspace"),
+              message: t(
+                "Could not create a new workspace. Some data may have changed: {error}",
+                { error: failure.message },
+              ),
+            });
+          }
+        }
       }
-    }
-  }, [
-    runtime,
-    busy,
-    isWorkspaceDirty,
-    confirm,
-    setSelectedIds,
-    macroPanel,
-    notebookPanel,
-    setWorkspaceFilename,
-    markClean,
-    markDirty,
-    notify,
-  ]);
+      if (failure && file) {
+        throw new Error(
+          didReset
+            ? `Workspace opening failed; the workspace or running processes may have changed: ${failure.message}`
+            : failure.message,
+        );
+      }
+      return completed ? objectIds : null;
+    },
+    [
+      runtime,
+      busy,
+      isWorkspaceDirty,
+      confirm,
+      setSelectedIds,
+      macroPanel,
+      notebookPanel,
+      setWorkspaceFilename,
+      markClean,
+      markDirty,
+      notify,
+    ],
+  );
+
+  const handleNewWorkspace = useCallback(async () => {
+    await replaceWorkspace();
+  }, [replaceWorkspace]);
+
+  useEffect(() => {
+    registerOpenWorkspaceAction(async (file) => {
+      const ids = await replaceWorkspace(file);
+      if (ids === null) throw new Error("Workspace opening was cancelled.");
+      return ids;
+    });
+    return () => registerOpenWorkspaceAction(null);
+  }, [replaceWorkspace]);
 
   const handleSaveWorkspaceHdf5 = useCallback(async () => {
     if (!runtime) return;

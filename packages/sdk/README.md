@@ -38,6 +38,8 @@ The DataLab-Web iframe **must** be loaded with `?allowedOrigins=<host-origin>` i
 
 The typed helpers mirror DataLab's remote-control API: `getVersion`, `getProtocolVersion`, `addSignal`, `addImage`, `listSignals`, `listImages`, `getObject`, `getObjectUuids`, `deleteObject`, `getSignalXY`, `getImageData`, `applyFeature` (and its alias `calc`), `listFeatures`, `selectObjects`, `getSelection`, `setCurrentPanel`, `getCurrentPanel`, `getCurrentObjectUuid` and `resetAll`. `call(method, params)` sends any other request, and `dispose()` removes the message listener and rejects pending requests.
 
+Despite the historical `getObjectUuids` and `getCurrentObjectUuid` names, these helpers and `getSelection` return the Web model's short object IDs, not the persistent UUIDs stored in object metadata and used by provenance. Do not treat these two identifiers as interchangeable.
+
 When navigating the iframe, dispose the old client before changing its URL and create a new client after the new document loads. Disposal also promptly rejects a pending `ready()` call; a disposed client cannot be reused. Random per-client request IDs prevent a late response to an old request from resolving a new client's request. Events have no request ID and do not identify the document that sent them.
 
 ## Typed arrays
@@ -55,6 +57,22 @@ const client = new DataLabWebClient(iframe, {
 
 The buffers are then transferred zero-copy (each buffer once, even when shared by X and Y), and your typed arrays are detached (emptied) once the request is sent: pass copies of the data you still need. `Float32Array` signal data and plain number arrays are first converted to new `Float64Array` values, so they are never detached.
 
+## Import and workspace snapshots
+
+With a bundle that implements protocol 1.1 file methods, `openFiles([{ name, bytes }], kind?)` imports signal or image data from binary `ArrayBuffer` or `Uint8Array` values. It infers the panel from the extension, then the optional `kind` or the current panel. At most one HDF5 workspace or `.dlcapsule` may be included: it is opened first, through the app's workspace-reset and unsaved-changes confirmation, before any accompanying data files. If opening it fails or is cancelled, the other files are not imported. The result reports IDs, warnings and errors per file, plus any selection error.
+
+`saveWorkspace()` returns an `ArrayBuffer` containing an HDF5 snapshot. It does not write a file or mark the DataLab-Web workspace clean; the host must write the bytes and report any failure. The methods are gated during workspace resets. `transferArrays: true` also applies to the inputs of `openFiles`, so callers must not reuse transferred buffers.
+
+## Host theme
+
+`setTheme("light" | "dark")` changes the current app theme without reloading or overwriting its saved preference. The app's own theme toggle remains available and saves the user's choice; a later host request can change the active theme again. The method fails explicitly if the theme UI is unavailable.
+
+## External scientific tools
+
+`listTools()` returns the descriptors and JSON schemas of the built-in external tools. `callTool(name, args)` executes one of them and returns a bounded JSON result; `capture_view` can also return a PNG data URL. These tools list and select objects, discover supported Sigima operations and parameters, apply them, read results and create synthetic objects. They do not execute arbitrary code or expose plugin and macro operations. Use persistent UUIDs from the returned object references to disambiguate objects.
+
+The host is responsible for obtaining user confirmation before mutations, handling partial failures and respecting data confidentiality: object titles, metadata, numerical results and captures sent to an AI tool may be transmitted to its model provider.
+
 ## Events
 
 `client.on(name, handler)` subscribes to an event sent by the iframe and returns a function that removes the subscription:
@@ -67,7 +85,13 @@ const off = client.on("model-changed", (payload) => {
 // later: off();
 ```
 
-The bridge currently emits a single event, `"model-changed"`, after each workspace change requested through the bridge (adding, replacing or deleting objects, adding groups, applying a processing, resetting the workspace), whichever host window requested it. Its payload is `{ panel }`: `"signal"` or `"image"` when the change concerns that panel, `null` when the bridge does not name one (for example after a deletion or a reset). Changes made interactively inside DataLab-Web do not emit it. Events are sent to the host windows that have already sent a request, such as the one sent by `client.ready()`.
+The `"model-changed"` event is emitted after each model change requested through the bridge (adding, replacing or deleting objects, adding groups, applying a processing, resetting the workspace), whichever host window requested it. Its payload is `{ panel }`: `"signal"` or `"image"` when the change concerns that panel, `null` when the bridge does not name one. Changes made interactively inside DataLab-Web do not emit it.
+
+Since protocol `1.1`, `"workspace-changed"` is emitted without a payload when the runtime reports a durable workspace mutation, including mutations initiated in the DataLab-Web interface. It is an invalidation notification, not a complete change log: opening or replacing a workspace and marking it clean are not covered. Both events are sent only to host windows that have already sent a request, such as the one sent by `client.ready()`.
+
+`getWorkspaceStatus()` returns `{ dirty }`. `"workspace-state-changed"` reports changes to that status and workspace replacement, including clean replacements; it is an invalidation event rather than a history of edits.
+
+`selectObjects` updates the visible selection, switching between the signal and image panels as necessary. Unknown object IDs are rejected without changing the selection. `setCurrentPanel` also supports the macro panel.
 
 ## Wire-protocol versioning
 

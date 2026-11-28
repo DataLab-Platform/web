@@ -30,6 +30,7 @@ const feature: FeatureDescriptor = {
   object_kind: "image",
   output_kind: "signal",
   preview_enabled: true,
+  builtin: true,
 };
 
 const imageData: ImageData = {

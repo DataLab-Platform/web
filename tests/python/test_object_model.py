@@ -55,6 +55,60 @@ def test_workspace_roundtrip_preserves_object_uuid(fresh_bootstrap):
     assert restored_uuid == original_uuid
 
 
+def _image_tree_titles(bs) -> list[tuple[str, list[str]]]:
+    return [
+        (group["name"], [obj["title"] for obj in group["objects"]])
+        for group in bs.get_panel_tree("image")["groups"]
+    ]
+
+
+def test_workspace_roundtrip_preserves_group_and_object_order(fresh_bootstrap):
+    """HDF5 member names follow the panel order, as in DataLab Desktop."""
+    import io
+
+    import h5py
+
+    bs = fresh_bootstrap
+    titles = [f"Image {letter}" for letter in "MZAKCXBQ"]
+    for title in titles[:5]:
+        bs.add_image_from_array(title, np.zeros((2, 2)))
+    gid = bs.create_group("image", "Second")
+    for title in titles[5:]:
+        bs.add_image_from_array(title, np.zeros((2, 2)), group_id=gid)
+    expected = _image_tree_titles(bs)
+
+    payload = bs.save_workspace_to_bytes()
+    with h5py.File(io.BytesIO(payload), "r") as h5:
+        groups = list(h5["DataLab_Ima"])
+        assert [name.split(":")[0] for name in groups] == ["gi001", "gi002"]
+        members = [name for name in h5["DataLab_Ima"][groups[1]] if name != "title"]
+        assert [name.split(":")[0] for name in members] == ["i006", "i007", "i008"]
+    bs.open_workspace_from_bytes("workspace.h5", payload, replace=True)
+
+    assert _image_tree_titles(bs) == expected
+
+
+def test_workspace_open_orders_numbered_members_numerically(fresh_bootstrap):
+    """Members numbered beyond 999 do not sort before lower numbers."""
+    import io
+
+    import h5py
+
+    bs = fresh_bootstrap
+    for title in ("A", "B", "C"):
+        bs.add_image_from_array(title, np.zeros((2, 2)))
+    buffer = io.BytesIO(bs.save_workspace_to_bytes())
+    with h5py.File(buffer, "r+") as h5:
+        [group] = list(h5["DataLab_Ima"])
+        members = h5["DataLab_Ima"][group]
+        members.move("i002: B", "i999: B")
+        members.move("i003: C", "i1000: C")
+
+    bs.open_workspace_from_bytes("workspace.h5", buffer.getvalue(), replace=True)
+
+    assert _image_tree_titles(bs)[0][1] == ["A", "B", "C"]
+
+
 def test_workspace_open_migrates_desktop_plotpy_annotations(fresh_bootstrap):
     """Desktop ``plotpy_json`` annotations become visible Web overlays."""
     bs = fresh_bootstrap

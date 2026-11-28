@@ -14,8 +14,8 @@ import { workspaceBridgeGate } from "./workspaceBridgeGate";
 export interface BridgeExternalCallbacks {
   getSelection?: () => string[];
   getCurrentPanel?: () => string;
-  setCurrentPanel?: (panel: string) => void;
-  selectObjects?: (ids: string[], panel: string | null) => void;
+  setCurrentPanel?: (panel: string) => void | Promise<void>;
+  selectObjects?: (ids: string[], panel: string | null) => void | Promise<void>;
   onModelChanged?: (panel: string | null) => void;
   callMethod?: (
     name: string,
@@ -30,6 +30,21 @@ export function buildProxyBridge(
   s: RuntimeApi,
   ext: BridgeExternalCallbacks,
 ): Record<string, BridgeMethod> {
+  const selectAfterMutation = async (
+    ids: string[],
+    panel: string,
+    createdIds: string[],
+  ) => {
+    try {
+      await ext.selectObjects?.(ids, panel);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `The mutation succeeded (${createdIds.join(", ")}), but selection failed: ${message}`,
+        { cause: error },
+      );
+    }
+  };
   const methods: Record<string, BridgeMethod> = {
     add_signal: async (p: unknown) => {
       const a = p as {
@@ -55,7 +70,7 @@ export function buildProxyBridge(
         dtype: a.dtype,
       });
       ext.onModelChanged?.("signal");
-      ext.selectObjects?.([oid], "signal");
+      await selectAfterMutation([oid], "signal", [oid]);
       return oid;
     },
     add_image: async (p: unknown) => {
@@ -88,7 +103,7 @@ export function buildProxyBridge(
         dtype: a.dtype,
       });
       ext.onModelChanged?.("image");
-      ext.selectObjects?.([oid], "image");
+      await selectAfterMutation([oid], "image", [oid]);
       return oid;
     },
     list_signals: async () => s.listSignals(),
@@ -116,7 +131,7 @@ export function buildProxyBridge(
       );
       ext.onModelChanged?.(a.kind);
       if (a.set_current !== false) {
-        ext.selectObjects?.([oid], a.kind);
+        await selectAfterMutation([oid], a.kind, [oid]);
       }
       return oid;
     },
@@ -138,7 +153,7 @@ export function buildProxyBridge(
       const gid = await s.createGroup(panel, a.title);
       ext.onModelChanged?.(panel);
       if (a.select) {
-        ext.selectObjects?.([], panel);
+        await selectAfterMutation([], panel, [gid]);
       }
       return gid;
     },
@@ -159,7 +174,7 @@ export function buildProxyBridge(
       const oids = (await s.runPython(
         `resolve_group_oids(${JSON.stringify(panel)}, ${sel})`,
       )) as string[];
-      ext.selectObjects?.(oids, panel);
+      await ext.selectObjects?.(oids, panel);
       return oids;
     },
     get_group_titles_with_object_info: async (p: unknown) => {
@@ -210,11 +225,9 @@ export function buildProxyBridge(
       // ``1_to_n`` patterns the last result is the one selected.
       if (ids.length > 0) {
         const lastId = ids[ids.length - 1];
-        const kind = (await s.runPython(
-          `_MODEL.kind_of(${JSON.stringify(lastId)})`,
-        )) as string;
+        const { kind } = await s.getObject(lastId);
         ext.onModelChanged?.(kind);
-        ext.selectObjects?.([lastId], kind);
+        await selectAfterMutation([lastId], kind, ids);
       } else {
         ext.onModelChanged?.(null);
       }
@@ -224,12 +237,12 @@ export function buildProxyBridge(
     get_current_panel: async () => ext.getCurrentPanel?.() ?? "signal",
     set_current_panel: async (p: unknown) => {
       const panel = (p as { panel: string }).panel;
-      ext.setCurrentPanel?.(panel);
+      await ext.setCurrentPanel?.(panel);
       return null;
     },
     select_objects: async (p: unknown) => {
       const a = p as { oids: string[]; panel: string | null };
-      ext.selectObjects?.(a.oids, a.panel);
+      await ext.selectObjects?.(a.oids, a.panel);
       return null;
     },
     /** Return the id list currently selected on the active panel.

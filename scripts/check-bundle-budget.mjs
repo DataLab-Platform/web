@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DIST = resolve(ROOT, "dist");
+const DIST = resolve(ROOT, process.argv[2] ?? "dist");
 const ASSETS = resolve(DIST, "assets");
 // React 19's react-dom adds ~23 KiB gzip over React 18.
 const INITIAL_JS_GZIP_BUDGET = 400 * 1024;

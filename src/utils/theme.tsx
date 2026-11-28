@@ -60,6 +60,7 @@ interface ThemeContextValue {
   mode: ThemeMode;
   theme: ResolvedTheme;
   setMode: (mode: ThemeMode) => void;
+  setHostTheme: (theme: ResolvedTheme) => void;
   toggle: () => void;
 }
 
@@ -101,6 +102,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setModeState(next);
   }, []);
 
+  // Host preferences must not overwrite the standalone app's stored preference.
+  const setHostTheme = useCallback((next: ResolvedTheme) => {
+    setModeState(next);
+  }, []);
+
   // Toggle cycles light ↔ dark (and exits "system" mode on first click).
   const toggle = useCallback(() => {
     const current: ResolvedTheme = resolve(mode);
@@ -108,8 +114,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [mode, setMode]);
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ mode, theme, setMode, toggle }),
-    [mode, theme, setMode, toggle],
+    () => ({ mode, theme, setMode, setHostTheme, toggle }),
+    [mode, theme, setMode, setHostTheme, toggle],
   );
 
   return (
